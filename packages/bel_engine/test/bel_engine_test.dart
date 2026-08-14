@@ -28,10 +28,41 @@ const _toneRmsDb = -9.030899869;
 /// genuinely wrong meter cannot slip through.
 const _toleranceDb = 0.1;
 
-/// Let the engine run long enough for a 300 ms averager to settle. Five time
-/// constants leaves under 1% of the step remaining.
-Future<void> _settle() =>
-    Future<void>.delayed(const Duration(milliseconds: 1600));
+/// Wait until the engine has *measured* [seconds] of signal.
+///
+/// Deliberately not a fixed wall-clock delay. `elapsedSeconds` counts samples,
+/// not wall time — a file analysed at 200x real time has to produce the same
+/// numbers as the same file played live, which is the whole reason the engine
+/// never consults a clock to decide what it has measured.
+///
+/// The synthetic source paces itself against a monotonic clock, and
+/// `nanosleep` only ever guarantees *at least* the delay it is given. On a
+/// contended machine every block overshoots, and the source falls behind real
+/// time — on a CI runner it was observed at a third of real speed. A test that
+/// slept for 1.6 s and then asserted on a 300 ms averager having settled was
+/// therefore asserting something about the runner's scheduler.
+///
+/// Times out, so an engine that has genuinely stalled still fails rather than
+/// hanging the suite.
+Future<void> _measure(
+  BelEngine engine,
+  double seconds, {
+  Duration timeout = const Duration(seconds: 40),
+}) async {
+  final deadline = DateTime.now().add(timeout);
+  while (DateTime.now().isBefore(deadline)) {
+    await Future<void>.delayed(const Duration(milliseconds: 25));
+    engine.refresh();
+    if (engine.elapsedSeconds >= seconds) return;
+  }
+  fail(
+    'engine measured only ${engine.elapsedSeconds}s of signal within $timeout',
+  );
+}
+
+/// Enough signal for a 300 ms averager to settle: five time constants leaves
+/// under 1% of the step remaining.
+const _settleSeconds = 1.6;
 
 void main() {
   test('bindings match the compiled ABI', () {
@@ -43,13 +74,12 @@ void main() {
     final engine = BelEngine.start(source: BelSource.testTone);
     addTearDown(engine.dispose);
 
-    await _settle();
-    expect(engine.refresh(), isTrue, reason: 'engine published nothing');
+    await _measure(engine, _settleSeconds);
 
     expect(engine.sampleRate, 48000);
     expect(engine.channels, 2);
     expect(engine.isRunning, isTrue);
-    expect(engine.elapsedSeconds, greaterThan(1.0));
+    expect(engine.elapsedSeconds, greaterThanOrEqualTo(_settleSeconds));
 
     expect(engine.peak[0], closeTo(_tonePeakDb, _toleranceDb));
     expect(engine.rms[0], closeTo(_toneRmsDb, _toleranceDb));
@@ -62,8 +92,7 @@ void main() {
     final engine = BelEngine.start(source: BelSource.testTone);
     addTearDown(engine.dispose);
 
-    await _settle();
-    engine.refresh();
+    await _measure(engine, _settleSeconds);
 
     expect(engine.hasLoudness, isFalse);
     expect(engine.hasSpectrum, isFalse);
@@ -121,8 +150,7 @@ void main() {
     final engine = BelEngine.start(source: BelSource.silence);
     addTearDown(engine.dispose);
 
-    await _settle();
-    engine.refresh();
+    await _measure(engine, _settleSeconds);
 
     expect(engine.peak[0], closeTo(kBelDbFloor, 0.001));
     expect(engine.rms[0], closeTo(kBelDbFloor, 0.001));
@@ -136,17 +164,28 @@ void main() {
     final engine = BelEngine.start(source: BelSource.testTone);
     addTearDown(engine.dispose);
 
-    await _settle();
-    engine.refresh();
-    expect(engine.elapsedSeconds, greaterThan(1.0));
+    await _measure(engine, _settleSeconds);
+    final before = engine.elapsedSeconds;
+    expect(before, greaterThanOrEqualTo(_settleSeconds));
 
     engine.reset();
 
     // The reset is honoured by the analysis thread at a block boundary, so it
-    // is not instantaneous — give it a few blocks.
-    await Future<void>.delayed(const Duration(milliseconds: 200));
-    engine.refresh();
-    expect(engine.elapsedSeconds, lessThan(1.0));
+    // is not instantaneous. Poll for the elapsed clock going *backwards*
+    // rather than for it landing under some absolute figure — how much signal
+    // the engine has measured again by the time we look is a property of the
+    // host, not of reset.
+    final deadline = DateTime.now().add(const Duration(seconds: 10));
+    var cleared = false;
+    while (DateTime.now().isBefore(deadline)) {
+      await Future<void>.delayed(const Duration(milliseconds: 25));
+      engine.refresh();
+      if (engine.elapsedSeconds < before) {
+        cleared = true;
+        break;
+      }
+    }
+    expect(cleared, isTrue, reason: 'reset did not clear the elapsed clock');
   });
 
   test('unimplemented sources fail loudly', () {

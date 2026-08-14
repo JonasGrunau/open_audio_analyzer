@@ -43,6 +43,16 @@ meters do not exist yet. See the [roadmap](README.md#roadmap).
   serialisation that skips module kinds a build does not have.
 - Number Box module and the application shell.
 
+### 🐛 Fixed
+
+- The analysis loop no longer runs progressively slower than real time on a
+  loaded machine. `nanosleep` only guarantees *at least* the delay requested, so
+  every block overshoots slightly under contention; the loop discarded that
+  error on each iteration instead of absorbing it, and on an oversubscribed
+  host it settled at about a third of real speed. Lateness up to 250 ms is now
+  made up one block at a time, and only a longer stall — a laptop waking from
+  sleep, a debugger — resynchronises.
+
 ### 🚧 Internal
 
 - Native code builds through a Dart build hook on all five platforms. There is

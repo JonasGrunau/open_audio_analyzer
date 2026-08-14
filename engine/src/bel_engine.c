@@ -39,6 +39,12 @@
  * nobody will ever see. */
 #define BEL_DEFAULT_BLOCK_FRAMES 1024u
 
+/* How much lateness the analysis loop will make up before giving up and
+ * resynchronising. Roughly a dozen blocks: enough to absorb ordinary scheduler
+ * jitter and a slow host, far short of replaying a backlog after a laptop
+ * wakes from sleep. */
+#define BEL_MAX_CATCHUP_SECONDS 0.25
+
 /* ------------------------------------------------------------------------ */
 /* OS primitives                                                             */
 /* ------------------------------------------------------------------------ */
@@ -207,14 +213,25 @@ static void *bel_analysis_thread(void *raw) {
 
     deadline += block_seconds;
     const double now = bel_now_seconds();
+
     if (deadline > now) {
       bel_sleep_seconds(deadline - now);
-    } else {
-      /* Fell behind. Resynchronise rather than trying to catch up: a burst of
-       * back-to-back blocks after a scheduling hiccup would show up as a
-       * meaningless spike on every meter. */
+    } else if (now - deadline > BEL_MAX_CATCHUP_SECONDS) {
+      /* Too far behind to be worth making up — the machine slept, or the
+       * process was stopped in a debugger. Drop the debt and carry on from
+       * here, because replaying minutes of backlog as fast as the CPU allows
+       * would spin without ever catching up. */
       deadline = now;
     }
+    /* Otherwise keep the debt. The next iteration's sleep computes as
+     * non-positive and returns immediately, so the loop makes the time up one
+     * block at a time. That matters more than it looks: `bel_sleep_seconds`
+     * only guarantees *at least* the requested delay, and on a contended host
+     * every block overshoots by a few milliseconds. Resetting the deadline on
+     * each overshoot — which this loop used to do — discards that error
+     * instead of absorbing it, and the engine then runs persistently slower
+     * than real time. On an oversubscribed CI runner that came to a third of
+     * real speed. */
   }
 
   bel_atomic_store_release(&engine->thread_alive, 0);
