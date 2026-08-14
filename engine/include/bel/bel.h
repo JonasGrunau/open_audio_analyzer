@@ -111,7 +111,17 @@ typedef enum {
   BEL_SOURCE_DEVICE = 2,
 
   /* Decoded from a file, driven as fast as the CPU allows. Phase 5. */
-  BEL_SOURCE_FILE = 3
+  BEL_SOURCE_FILE = 3,
+
+  /* The caller supplies the audio, synchronously, via bel_engine_push().
+   *
+   * No thread is started and nothing is paced against a clock: a push returns
+   * once the block has been measured. That makes the engine a pure function of
+   * the samples it was given, which is what lets the conformance suite feed it
+   * a signal it constructed and assert on the result — no device, no timing,
+   * no flakiness. It is also the shape file analysis needs, so Phase 5 decodes
+   * into this rather than growing a second path. */
+  BEL_SOURCE_PUSH = 4
 } bel_source_kind;
 
 /* ------------------------------------------------------------------------ */
@@ -268,6 +278,26 @@ BEL_API const bel_snapshot *bel_snapshot_buffer(bel_engine *engine);
  * which is the caller's cue to skip repainting.
  */
 BEL_API uint64_t bel_snapshot_acquire(bel_engine *engine);
+
+/* ------------------------------------------------------------------------ */
+/* Pushing audio                                                             */
+/* ------------------------------------------------------------------------ */
+
+/*
+ * Measure `frames` frames of interleaved float audio and publish the result.
+ *
+ * Only valid when the engine was created with BEL_SOURCE_PUSH; anything else
+ * returns BEL_ERR_WRONG_STATE rather than quietly mixing pushed audio into a
+ * stream that a device is already driving.
+ *
+ * Synchronous: on return the snapshot reflects these samples. Any block size is
+ * accepted, and the measurements do not depend on it — the 400 ms and 3 s
+ * windows are counted in samples internally, so pushing an hour in one call and
+ * pushing it in 512-frame chunks produce identical readings. The conformance
+ * suite relies on exactly that.
+ */
+BEL_API int32_t bel_engine_push(bel_engine *engine, const float *interleaved,
+                                uint32_t frames);
 
 /* ------------------------------------------------------------------------ */
 /* Array addresses                                                           */

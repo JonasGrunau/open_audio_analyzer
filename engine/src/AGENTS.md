@@ -6,7 +6,10 @@
 | `bel_internal.h` | The engine struct and the two OS primitives. Nothing here is ABI. |
 | `bel_snapshot.c` | The seqlock. Wait-free for the writer; the *reader* retries. |
 | `bel_source.c` | Where blocks of audio come from. Phase 0: silence and the test tone. |
-| `bel_analysis.c` | The meters. Peak, RMS, VU, clip, correlation, balance. |
+| `bel_kweight.h/.c` | The BS.1770-4 K-weighting biquads, **designed at the stream's sample rate** rather than tabulated, plus the channel weight table. |
+| `bel_loudness.h/.c` | Sub-block accumulation, R128 gating, momentary/short-term/integrated, and the LRA histogram. |
+| `bel_truepeak.h/.c` | The BS.1770-4 Annex 2 4x polyphase oversampler. |
+| `bel_analysis.c` | One pass over a block: the simple meters inline, the two standards-defined ones driven. |
 | `bel_engine.c` | Lifecycle, the analysis thread, and the OS shims. |
 
 ## Rules
@@ -26,6 +29,14 @@
   and never fixed.
 - **Ballistics constants are named and commented with their standard.** A magic
   `0.0651f` in a VU meter is unreviewable.
+- **Anything with a standard cites it, by clause.** The magic numbers in
+  `bel_kweight.c` and the FIR table in `bel_truepeak.c` are only reviewable
+  against the document they came from, so the document is named next to them
+  and the digits are not rounded.
+- **A change to any measurement needs a conformance run and a CHANGELOG entry
+  under the 📐 section.** Users make delivery decisions from these numbers; a
+  reading that moves without being announced silently invalidates somebody's
+  master.
 - **When an approximation is used, say so and say what is missing.** See the VU
   comment in `bel_analysis.c`: a one-pole matches the 300 ms figure and has none
   of the overshoot that makes a VU meter feel like one. Do not let a comment

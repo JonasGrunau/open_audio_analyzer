@@ -88,29 +88,39 @@ void main() {
     expect(engine.peak[0] - engine.rms[0], closeTo(3.0103, _toleranceDb));
   });
 
-  test('unmeasured quantities are NaN, not zero', () async {
+  test('measured quantities are measured, unmeasured ones say so', () async {
     final engine = BelEngine.start(source: BelSource.testTone);
     addTearDown(engine.dispose);
 
-    await _measure(engine, _settleSeconds);
+    // Long enough for short-term loudness, whose window is 3 s. Momentary
+    // needs only 400 ms, and integrated needs one gating block above the
+    // absolute gate — the three become defined at different times, which is
+    // itself worth exercising here.
+    await _measure(engine, 3.5);
 
-    expect(engine.hasLoudness, isFalse);
-    expect(engine.hasSpectrum, isFalse);
-
-    // The distinction this test defends: a UI that treated these as 0.0 would
-    // display "0.0 LUFS", which is both a valid-looking reading and wildly
-    // wrong.
-    expect(engine.lufsMomentary.isNaN, isTrue);
-    expect(engine.lufsShort.isNaN, isTrue);
-    expect(engine.lufsIntegrated.isNaN, isTrue);
-    expect(engine.loudnessRange.isNaN, isTrue);
-    expect(engine.truePeak.isNaN, isTrue);
-    expect(engine.truePeakMax.isNaN, isTrue);
-
-    // Measured, so emphatically not NaN.
+    // Loudness landed together with the conformance suite that proves it —
+    // see conformance_test.dart. The flag stays in the ABI as the mechanism
+    // for saying "not measured here", and consumers must keep checking it; it
+    // is simply not set by this build.
+    expect(engine.hasLoudness, isTrue);
+    expect(engine.lufsMomentary.isNaN, isFalse);
+    expect(engine.lufsShort.isNaN, isFalse);
+    expect(engine.truePeak.isNaN, isFalse);
+    expect(engine.truePeakMax.isNaN, isFalse);
     expect(engine.samplePeakMax.isNaN, isFalse);
     expect(engine.crestFactor.isNaN, isFalse);
     expect(engine.correlation.isNaN, isFalse);
+
+    // A true peak below the sample peak is impossible — the interpolated
+    // waveform passes through every sample.
+    expect(engine.truePeakMax, greaterThanOrEqualTo(engine.samplePeakMax));
+
+    // The spectrum is still unmeasured, and says so rather than publishing an
+    // array of zeroes, which would draw as a flat line at full scale.
+    expect(engine.hasSpectrum, isFalse);
+    for (final band in engine.spectrum) {
+      expect(band, kBelDbFloor);
+    }
   });
 
   test(

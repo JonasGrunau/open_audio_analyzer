@@ -47,7 +47,13 @@ enum BelSource {
   device(2),
 
   /// A decoded file, run as fast as the CPU allows. Not implemented yet.
-  file(3);
+  file(3),
+
+  /// The caller supplies audio through [BelEngine.push]. No thread, no clock,
+  /// no device — the engine becomes a pure function of the samples given to
+  /// it, which is what the conformance suite needs and what file analysis will
+  /// be built on.
+  push(4);
 
   const BelSource(this.value);
   final int value;
@@ -66,8 +72,11 @@ class BelEngineException implements Exception {
 /// Create one with [BelEngine.start] and [dispose] it when done. Instances own
 /// a native thread, so leaking one leaks a thread.
 class BelEngine {
-  BelEngine._(this._handle, Pointer<native.bel_snapshot> snapshot)
-    : _snapshot = snapshot.ref,
+  BelEngine._(
+    this._handle,
+    Pointer<native.bel_snapshot> snapshot,
+    this._channels,
+  ) : _snapshot = snapshot.ref,
       peak = native.bel_snapshot_peak(snapshot).asTypedList(kBelMaxChannels),
       rms = native.bel_snapshot_rms(snapshot).asTypedList(kBelMaxChannels),
       vu = native.bel_snapshot_vu(snapshot).asTypedList(kBelMaxChannels),
@@ -164,7 +173,7 @@ class BelEngine {
       }
 
       final snapshot = native.bel_snapshot_buffer(handle);
-      final engine = BelEngine._(handle, snapshot);
+      final engine = BelEngine._(handle, snapshot, channels);
 
       final status = native.bel_engine_start(handle);
       if (status != 0) {
@@ -191,6 +200,50 @@ class BelEngine {
     _generation = generation;
     return true;
   }
+
+  /// Measure [interleaved] and publish the result, synchronously.
+  ///
+  /// Only valid for [BelSource.push]. On return the readings reflect these
+  /// samples — there is no thread and no clock, which is what makes a pushed
+  /// engine a pure function of the audio it was given.
+  ///
+  /// Block size does not affect the result. The gating windows are counted in
+  /// samples internally, so pushing an hour in one call and pushing it in
+  /// 512-frame chunks produce identical numbers; the conformance suite pushes
+  /// in one-second chunks purely to keep peak memory down.
+  void push(Float32List interleaved) {
+    if (interleaved.isEmpty) return;
+
+    // Grown rather than allocated per call. A conformance run pushes a few
+    // hundred blocks and an offline file analysis will push tens of thousands,
+    // and none of them should be paying for a malloc and a free each time.
+    if (_pushCapacity < interleaved.length) {
+      if (_pushBuffer != nullptr) calloc.free(_pushBuffer);
+      _pushBuffer = calloc<Float>(interleaved.length);
+      _pushCapacity = interleaved.length;
+    }
+    _pushBuffer.asTypedList(interleaved.length).setAll(0, interleaved);
+
+    final frames = interleaved.length ~/ channelsRequested;
+    final status = native.bel_engine_push(_handle, _pushBuffer, frames);
+    if (status != 0) {
+      throw BelEngineException(
+        'push failed ($status) — is this engine BelSource.push?',
+      );
+    }
+    refresh();
+  }
+
+  Pointer<Float> _pushBuffer = nullptr;
+  int _pushCapacity = 0;
+
+  /// The channel count this engine was created with.
+  ///
+  /// Read from the config rather than the snapshot, because [push] needs it to
+  /// turn a sample count into a frame count *before* anything has been
+  /// measured — and the snapshot's channel field is zero until then.
+  int get channelsRequested => _channels;
+  final int _channels;
 
   /// Clear every integrating measurement and restart the elapsed clock.
   void reset() => native.bel_engine_reset(_handle);
@@ -249,5 +302,10 @@ class BelEngine {
     }
     _disposed = true;
     native.bel_engine_destroy(_handle);
+    if (_pushBuffer != nullptr) {
+      calloc.free(_pushBuffer);
+      _pushBuffer = nullptr;
+      _pushCapacity = 0;
+    }
   }
 }

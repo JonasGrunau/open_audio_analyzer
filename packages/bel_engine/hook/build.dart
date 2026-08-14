@@ -31,8 +31,11 @@ import 'package:native_toolchain_c/native_toolchain_c.dart';
 const _engineSources = <String>[
   '../../engine/src/bel_analysis.c',
   '../../engine/src/bel_engine.c',
+  '../../engine/src/bel_kweight.c',
+  '../../engine/src/bel_loudness.c',
   '../../engine/src/bel_snapshot.c',
   '../../engine/src/bel_source.c',
+  '../../engine/src/bel_truepeak.c',
 ];
 
 /// Feature-test macros, which must be defined before any system header is

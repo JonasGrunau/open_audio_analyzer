@@ -9,10 +9,14 @@
  * about to paint. Everything downstream of that — no isolates, no channels, no
  * per-frame allocation — falls out of this one thread existing.
  *
- * In Phase 0 it also *generates* the signal, because there is no capture device
- * yet. From Phase 1 a real-time audio callback fills a ring buffer and this
- * thread drains it; the loop below is already shaped for that, which is why it
- * paces itself against a monotonic clock rather than simply spinning.
+ * It also *generates* the signal for the synthetic sources, because there is no
+ * capture device yet. When one arrives, a real-time audio callback fills a ring
+ * buffer and this thread drains it; the loop below is already shaped for that,
+ * which is why it paces itself against a monotonic clock rather than spinning.
+ *
+ * BEL_SOURCE_PUSH has no thread at all — the caller's thread does the work
+ * inside bel_engine_push(). Everything the thread would have done in a given
+ * iteration happens there instead, in the same order.
  */
 
 #include "bel_internal.h"
@@ -28,7 +32,7 @@
 #include <time.h>
 #endif
 
-#define BEL_VERSION_STRING "0.1.0-phase0"
+#define BEL_VERSION_STRING "0.2.0-phase1"
 
 #define BEL_DEFAULT_SAMPLE_RATE 48000u
 #define BEL_DEFAULT_CHANNELS 2u
@@ -145,6 +149,8 @@ void bel_sleep_seconds(double seconds) {
 
 static void bel_clear_measurements(bel_engine *engine) {
   memset(engine->channel, 0, sizeof(engine->channel));
+  bel_loudness_reset(&engine->loudness);
+  bel_truepeak_reset(&engine->truepeak);
   engine->frames_done = 0;
   engine->sample_peak_max_linear = 0.0f;
   engine->corr_sum_lr = 0.0;
@@ -155,7 +161,7 @@ static void bel_clear_measurements(bel_engine *engine) {
   s->elapsed_seconds = 0.0;
   s->sample_rate = engine->cfg.sample_rate;
   s->channels = engine->cfg.channels;
-  s->flags = BEL_FLAG_LOUDNESS_UNAVAILABLE | BEL_FLAG_SPECTRUM_UNAVAILABLE;
+  s->flags = BEL_FLAG_SPECTRUM_UNAVAILABLE;
 
   s->lufs_momentary = NAN;
   s->lufs_short = NAN;
@@ -208,7 +214,7 @@ static void *bel_analysis_thread(void *raw) {
     }
 
     bel_source_render(engine, engine->cfg.block_frames);
-    bel_analyse_block(engine, engine->cfg.block_frames);
+    bel_analyse(engine, engine->block, engine->cfg.block_frames);
     bel_snapshot_publish(engine);
 
     deadline += block_seconds;
@@ -279,7 +285,8 @@ bel_engine *bel_engine_create(const bel_config *cfg) {
    * Failing loudly beats silently substituting the test tone and letting
    * somebody believe they are metering their soundcard. */
   if (resolved.source != BEL_SOURCE_SILENCE &&
-      resolved.source != BEL_SOURCE_TEST_TONE) {
+      resolved.source != BEL_SOURCE_TEST_TONE &&
+      resolved.source != BEL_SOURCE_PUSH) {
     return NULL;
   }
 
@@ -295,6 +302,9 @@ bel_engine *bel_engine_create(const bel_config *cfg) {
     free(engine);
     return NULL;
   }
+
+  bel_loudness_init(&engine->loudness, resolved.channels, resolved.sample_rate);
+  bel_truepeak_init(&engine->truepeak, resolved.channels, resolved.sample_rate);
 
   bel_clear_measurements(engine);
 
@@ -324,6 +334,15 @@ int32_t bel_engine_start(bel_engine *engine) {
     return BEL_ERR_WRONG_STATE;
   }
 
+  if (engine->cfg.source == BEL_SOURCE_PUSH) {
+    /* Nothing to start. A pushed source has no clock of its own — the caller
+     * is the clock — so spawning a thread here would produce an engine that
+     * measured silence in between the caller's pushes. */
+    engine->staging.flags |= (uint32_t)BEL_FLAG_RUNNING;
+    bel_snapshot_publish(engine);
+    return BEL_OK;
+  }
+
   bel_atomic_store_release(&engine->should_run, 1);
   bel_atomic_store_release(&engine->thread_alive, 1);
 
@@ -349,6 +368,29 @@ int32_t bel_engine_stop(bel_engine *engine) {
   bel_thread_join(engine->thread);
 
   engine->staging.flags &= ~(uint32_t)BEL_FLAG_RUNNING;
+  bel_snapshot_publish(engine);
+  return BEL_OK;
+}
+
+int32_t bel_engine_push(bel_engine *engine, const float *interleaved,
+                        uint32_t frames) {
+  if (engine == NULL || interleaved == NULL) {
+    return BEL_ERR_INVALID_ARGUMENT;
+  }
+  if (engine->cfg.source != BEL_SOURCE_PUSH) {
+    return BEL_ERR_WRONG_STATE;
+  }
+  if (frames == 0) {
+    return BEL_OK;
+  }
+
+  if (bel_atomic_load_acquire(&engine->reset_pending)) {
+    bel_clear_measurements(engine);
+    bel_atomic_store_release(&engine->reset_pending, 0);
+  }
+
+  bel_analyse(engine, interleaved, frames);
+  engine->staging.flags |= (uint32_t)BEL_FLAG_RUNNING;
   bel_snapshot_publish(engine);
   return BEL_OK;
 }

@@ -1,20 +1,24 @@
 /*
- * bel_analysis.c — the meters that exist in Phase 0.
+ * bel_analysis.c — one pass over a block, driving every meter.
  *
  * SPDX-License-Identifier: MIT
  *
- * What is here is only what can be computed correctly from a block of samples
- * with no filter design and no FFT: sample peak with hold, RMS with decay, a
- * VU deflection, clip detection, inter-channel correlation and stereo balance.
+ * This file owns the meters that are only a few lines of arithmetic — sample
+ * peak with hold, RMS with decay, a VU deflection, clip detection,
+ * inter-channel correlation and stereo balance — and it *drives* the two that
+ * are not: `bel_loudness` and `bel_truepeak`, each of which lives in its own
+ * file next to the standard it implements.
  *
- * What is deliberately *not* here is every loudness quantity. K-weighting,
- * R128 gating, LRA and true-peak oversampling land in Phase 1 together with the
- * EBU conformance suite that proves them, and not one release earlier. A
- * loudness meter that has never been run against the reference vectors is a
- * number generator, and shipping one would undermine the only thing this
- * project actually has to be good at. Until then those fields are NaN and
- * BEL_FLAG_LOUDNESS_UNAVAILABLE is set, so the UI renders a dash rather than
- * inventing a reading.
+ * The dynamics figures at the bottom are where the two halves meet. They are
+ * differences of a peak and a loudness, so they only become defined once both
+ * of their operands are, and each one propagates NaN rather than substituting a
+ * floor. That is deliberate: DR-I is meaningless before there is an integrated
+ * loudness to subtract from, and a plausible-looking number there would be
+ * worse than a dash.
+ *
+ * Still not measured here: the spectrum. Those bands stay at the floor behind
+ * BEL_FLAG_SPECTRUM_UNAVAILABLE until the FFT lands with the analyser module
+ * that draws it.
  */
 
 #include "bel_internal.h"
@@ -78,13 +82,22 @@ static float bel_smoothing(float dt, float tau) {
 
 /* --- The pass ------------------------------------------------------------ */
 
-void bel_analyse_block(bel_engine *engine, uint32_t frames) {
+void bel_analyse(bel_engine *engine, const float *interleaved,
+                 uint32_t frames) {
   if (frames == 0) {
     return;
   }
 
   const uint32_t channels = engine->cfg.channels;
-  const float *in = engine->block;
+  const float *in = interleaved;
+
+  /* The two standards-defined measurements run over the whole buffer first.
+   * Both keep their own sub-block cadence internally, because a 400 ms gating
+   * window has nothing to do with however many frames a device happens to hand
+   * us. */
+  bel_loudness_process(&engine->loudness, in, frames);
+  bel_truepeak_process(&engine->truepeak, in, frames);
+
   const float dt = (float)frames / (float)engine->cfg.sample_rate;
 
   const float rms_coefficient = bel_smoothing(dt, BEL_RMS_TAU_SECONDS);
@@ -182,9 +195,10 @@ void bel_analyse_block(bel_engine *engine, uint32_t frames) {
 
   /* --- Stereo field ----------------------------------------------------- */
   if (channels >= 2) {
-    /* Pearson correlation over the block. A proper sliding window with running
-     * sums replaces this in Phase 1; per block plus smoothing is honest at
-     * this block size and costs nothing to read. */
+    /* Pearson correlation over the block, then smoothed. A true sliding window
+     * with running sums would be more faithful at very short block sizes; at
+     * the sizes a real device delivers, this and the 200 ms smoother are
+     * indistinguishable on screen. */
     const double denominator = sqrt(sum_ll * sum_rr);
     const float block_correlation =
         denominator > 1e-20 ? (float)(sum_lr / denominator) : 0.0f;
@@ -201,17 +215,27 @@ void bel_analyse_block(bel_engine *engine, uint32_t frames) {
     out->balance = 0.0f;
   }
 
-  /* --- Not measured yet -------------------------------------------------- */
-  out->lufs_momentary = NAN;
-  out->lufs_short = NAN;
-  out->lufs_integrated = NAN;
-  out->lra = NAN;
-  out->true_peak = NAN;
-  out->true_peak_max = NAN;
-  out->dr_short = NAN;
-  out->dr_integrated = NAN;
-  out->plr = NAN;
-  out->psr = NAN;
+  /* --- Loudness and true peak -------------------------------------------- */
+  out->lufs_momentary = (float)bel_loudness_momentary(&engine->loudness);
+  out->lufs_short = (float)bel_loudness_shortterm(&engine->loudness);
+  out->lufs_integrated = (float)bel_loudness_integrated(&engine->loudness);
+  out->lra = (float)bel_loudness_range(&engine->loudness);
+
+  out->true_peak = bel_db_from_linear(
+      (float)bel_truepeak_windowed(&engine->truepeak));
+  out->true_peak_max =
+      bel_db_from_linear((float)bel_truepeak_max(&engine->truepeak));
+
+  /* --- Dynamics ----------------------------------------------------------- */
+  /* Differences of the above, so undefined whenever either operand is. The
+   * arithmetic propagates NaN on its own; the point of writing it out is that
+   * nobody later "fixes" a dash by clamping one of these to zero. See
+   * docs/METRICS.md for the definitions — none of these is Decibel's TrueDyn,
+   * and none of them pretends to be. */
+  out->dr_short = out->true_peak - out->lufs_short;
+  out->dr_integrated = out->true_peak_max - out->lufs_integrated;
+  out->plr = out->true_peak_max - out->lufs_integrated;
+  out->psr = out->true_peak - out->lufs_short;
 
   /* --- Housekeeping ------------------------------------------------------ */
   engine->frames_done += frames;
@@ -219,6 +243,5 @@ void bel_analyse_block(bel_engine *engine, uint32_t frames) {
       (double)engine->frames_done / (double)engine->cfg.sample_rate;
   out->sample_rate = engine->cfg.sample_rate;
   out->channels = channels;
-  out->flags = BEL_FLAG_RUNNING | BEL_FLAG_LOUDNESS_UNAVAILABLE |
-               BEL_FLAG_SPECTRUM_UNAVAILABLE;
+  out->flags = BEL_FLAG_RUNNING | BEL_FLAG_SPECTRUM_UNAVAILABLE;
 }

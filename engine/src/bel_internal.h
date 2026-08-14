@@ -13,6 +13,8 @@
 
 #include "bel/bel.h"
 #include "bel_atomic.h"
+#include "bel_loudness.h"
+#include "bel_truepeak.h"
 
 #include <stdint.h>
 
@@ -91,6 +93,12 @@ struct bel_engine {
 
   /* --- Analysis state, never published directly ------------------------- */
   bel_channel_state channel[BEL_MAX_CHANNELS];
+
+  /* The two measurements with their own standard. Kept as whole objects rather
+   * than folded into this struct so that each can be unit tested — and read —
+   * against the document that defines it. */
+  bel_loudness loudness;
+  bel_truepeak truepeak;
   float *block;         /* interleaved scratch, block_frames * channels */
   double tone_phase;    /* radians, kept in [0, 2pi) to stay precise */
   double tone_time;     /* seconds of generated signal, for the modulators */
@@ -107,8 +115,11 @@ struct bel_engine {
 /* Fill `frames` frames of interleaved audio into engine->block. */
 void bel_source_render(bel_engine *engine, uint32_t frames);
 
-/* Run the meters over engine->block and fold the result into engine->shared. */
-void bel_analyse_block(bel_engine *engine, uint32_t frames);
+/* Run every meter over `interleaved` and fold the result into the staging
+ * snapshot. Takes a buffer rather than reading engine->block, because the push
+ * source analyses a caller's memory directly — which is also what makes the
+ * conformance suite able to feed the engine a signal it constructed. */
+void bel_analyse(bel_engine *engine, const float *interleaved, uint32_t frames);
 
 /* Publish `shared` under the seqlock. */
 void bel_snapshot_publish(bel_engine *engine);

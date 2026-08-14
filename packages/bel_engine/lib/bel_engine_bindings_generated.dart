@@ -57,6 +57,30 @@ external ffi.Pointer<bel_snapshot> bel_snapshot_buffer(
 @ffi.Native<ffi.Uint64 Function(ffi.Pointer<bel_engine>)>()
 external int bel_snapshot_acquire(ffi.Pointer<bel_engine> engine);
 
+/// Measure `frames` frames of interleaved float audio and publish the result.
+///
+/// Only valid when the engine was created with BEL_SOURCE_PUSH; anything else
+/// returns BEL_ERR_WRONG_STATE rather than quietly mixing pushed audio into a
+/// stream that a device is already driving.
+///
+/// Synchronous: on return the snapshot reflects these samples. Any block size is
+/// accepted, and the measurements do not depend on it — the 400 ms and 3 s
+/// windows are counted in samples internally, so pushing an hour in one call and
+/// pushing it in 512-frame chunks produce identical readings. The conformance
+/// suite relies on exactly that.
+@ffi.Native<
+  ffi.Int32 Function(
+    ffi.Pointer<bel_engine>,
+    ffi.Pointer<ffi.Float>,
+    ffi.Uint32,
+  )
+>()
+external int bel_engine_push(
+  ffi.Pointer<bel_engine> engine,
+  ffi.Pointer<ffi.Float> interleaved,
+  int frames,
+);
+
 /// The address of each array field inside a snapshot.
 ///
 /// These exist so that a consumer can build a typed view over the arrays
@@ -146,7 +170,17 @@ enum bel_source_kind {
   BEL_SOURCE_DEVICE(2),
 
   /// Decoded from a file, driven as fast as the CPU allows. Phase 5.
-  BEL_SOURCE_FILE(3);
+  BEL_SOURCE_FILE(3),
+
+  /// The caller supplies the audio, synchronously, via bel_engine_push().
+  ///
+  /// No thread is started and nothing is paced against a clock: a push returns
+  /// once the block has been measured. That makes the engine a pure function of
+  /// the samples it was given, which is what lets the conformance suite feed it
+  /// a signal it constructed and assert on the result — no device, no timing,
+  /// no flakiness. It is also the shape file analysis needs, so Phase 5 decodes
+  /// into this rather than growing a second path.
+  BEL_SOURCE_PUSH(4);
 
   final int value;
   const bel_source_kind(this.value);
@@ -156,6 +190,7 @@ enum bel_source_kind {
     1 => BEL_SOURCE_TEST_TONE,
     2 => BEL_SOURCE_DEVICE,
     3 => BEL_SOURCE_FILE,
+    4 => BEL_SOURCE_PUSH,
     _ => throw ArgumentError('Unknown value for bel_source_kind: $value'),
   };
 }

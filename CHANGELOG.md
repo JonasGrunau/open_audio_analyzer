@@ -9,6 +9,43 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### 📐 Measurement
+
+- **Loudness is now measured.** LUFS-M, LUFS-S, LUFS-I and LRA previously read
+  as a dash and now report real values, verified against the EBU Tech 3341
+  cases within the standard's ±0.1 LU on every push, on all three desktop
+  platforms. K-weighting follows ITU-R BS.1770-4 with coefficients designed at
+  the stream's own sample rate, so 44.1, 88.2, 96 and 192 kHz are correct rather
+  than approximately correct.
+- **True peak is now measured**, with the 4× polyphase oversampler from
+  BS.1770-4 Annex 2. It reads **higher than sample peak** — by up to about
+  3 dB on dense, limited material — because that is what the signal actually
+  reaches between samples. **A master that previously passed a −1 dBTP ceiling
+  on sample peak alone may now fail it. Re-measure before delivery.**
+- DR-S, DR-I, PLR and PSR are now defined, being differences of the above. See
+  [docs/METRICS.md](docs/METRICS.md) for the formulas; none of them is
+  Decibel's proprietary TrueDyn and none pretends to be.
+- LFE is excluded from loudness and surround channels are weighted +1.5 dB, per
+  BS.1770-4. Channel layout is inferred from the channel count, and the
+  four-channel case is read as quad (L R Ls Rs) rather than L R C LFE — see
+  METRICS.md, and expect this to be replaced by real layout metadata when a
+  device or file source can supply it.
+
+### ✨ Added
+
+- `BelSource.push` and `bel_engine_push()`: audio supplied synchronously by the
+  caller, with no thread and no clock. It makes the engine a pure function of
+  the samples it was given, which is what the conformance suite needs and what
+  file analysis will be built on.
+
+### 🚧 Internal
+
+- The conformance suite generates its own signals rather than reading WAV
+  fixtures, so it runs on a headless runner with no network and no decoder.
+- Loudness is asserted to be independent of both sample rate and push block
+  size — properties the standard does not state but which catch two classes of
+  error that 48 kHz single-block tests cannot.
+
 ## [0.1.0] — 2026-08-15
 
 First release. The architecture is proven end to end and the app runs; most

@@ -13,11 +13,12 @@ modular canvas is the best interaction model anybody has found for this problem.
 The measurement work, the architecture and the visual language are our own, and
 where Bel cannot honestly match Decibel it says so rather than approximating.
 
-> **Status: Phase 0.** The architecture is proven end to end — native engine,
-> zero-copy snapshot, ticker-driven painting — and the app runs. Loudness is
-> **not measured yet**; those readouts show a dash. See
-> [Roadmap](#roadmap) for what lands when, and [docs/PLAN.md](docs/PLAN.md) for
-> the full plan.
+> **Status: Phase 1, in progress.** The architecture is proven end to end —
+> native engine, zero-copy snapshot, ticker-driven painting — and **loudness is
+> measured**: momentary, short-term, integrated, LRA and true peak, verified
+> against the EBU Tech 3341/3342 cases on every push. Still to come in this
+> phase: capture from a real audio device. See [Roadmap](#roadmap), and
+> [docs/PLAN.md](docs/PLAN.md) for the full plan.
 
 ---
 
@@ -89,10 +90,14 @@ spec rather than to intuition.
 | K-weighting | ITU-R BS.1770-4 stage-1 shelf + stage-2 RLB, coefficients computed from the analog prototype **at the actual sample rate** — not hardcoded 48 kHz tables |
 | Gating | EBU R128: 400 ms blocks at 75% overlap, absolute gate −70 LUFS, relative gate −10 LU |
 | Momentary / Short-term | 400 ms / 3 s |
-| LRA | Gated at −20 LU relative, 10th–95th percentile, via a 0.1 LU-bin histogram (O(1) per update) |
-| True peak | BS.1770-4 Annex 2, 4× oversampling with the specified 48-tap polyphase FIR; 2× at ≥96 kHz |
+| LRA | Gated at −20 LU relative, 10th–95th percentile, via a 0.01 LU-bin histogram storing exact energy sums (O(1) per update, constant memory) |
+| True peak | BS.1770-4 Annex 2, 4× oversampling with the specified 48-tap polyphase FIR, at every sample rate |
 | Spectrum | Hann window, 1024–8192 points, log-frequency mapping with **peak-per-bin** so narrow peaks survive |
 | Correlation | Running Pearson over a sliding window |
+
+Every one of these is measured today and checked in CI. The spectrum is not —
+those bands stay at the floor behind a flag, and the analyser module that draws
+them lands with the FFT.
 
 ### On dynamics, and on honesty
 
@@ -107,19 +112,33 @@ reproducible from the definition by anybody who wants to check.
 The same principle runs through the code. A quantity this build does not
 measure is **NaN**, never zero — zero is a legitimate reading for correlation,
 balance and several dB quantities, so it cannot double as "no data" — and the
-UI renders it as an em dash. Today that means every loudness readout, and the
-app says so on screen.
+UI renders it as an em dash. Today that means the spectrum, and it also means
+any reading that is not yet *defined*: momentary loudness needs 400 ms of
+signal, short-term needs 3 s, and integrated needs one gating block above the
+absolute gate. Each shows a dash until it means something.
 
 ### The correctness gate
 
-CI runs the engine against the **EBU R128 / ITU BS.2217 conformance vectors**
-and asserts agreement within ±0.1 LU, cross-checked against `libebur128` as an
-oracle. This lands in Phase 1, in the same change as the loudness code it
-proves — not after it.
+CI runs the **EBU Tech 3341 and 3342** cases on Linux, macOS and Windows on
+every push, and fails the build if any reading is outside the standard's stated
+tolerance. A loudness meter that has never been run against the reference cases
+is a number generator.
 
-A loudness meter that has never been run against the reference vectors is a
-number generator. Shipping one would undermine the only thing this project has
-to be good at.
+The signals are **generated, not downloaded** — every case is a sine at a stated
+level or a sequence of them, so the suite needs no fixtures, no network and no
+WAV decoder, and each expected value is derived from the standard in a comment
+rather than copied from somebody's output. Two extra properties are asserted
+that the standard does not state but no correct implementation can violate:
+
+- **Sample rate independence** — the same tone reads the same at 44.1, 48, 88.2,
+  96 and 192 kHz. This catches the tempting shortcut of using the 48 kHz
+  coefficient table BS.1770-4 prints instead of designing the filter at the
+  stream's rate: it passes every 48 kHz test there is, and is wrong by a
+  fraction of a dB on the most common delivery rate in music.
+- **Block size independence** — ten seconds pushed in one call, in 512-frame
+  device blocks, and in 377-frame chunks agree to 0.001 LU.
+
+Phase 5 adds the official BS.2217 WAV vectors as an independent second check.
 
 ---
 
@@ -261,7 +280,8 @@ hardware anywhere near it.
 | Phase | | Status |
 |---|---|---|
 | 0 | Skeleton, engine spike, the render path, design tokens | ✅ done |
-| 1 | miniaudio capture, K-weighting, M/S/I, LRA, true peak, **EBU conformance in CI** | next |
+| 1a | K-weighting, M/S/I, LRA, true peak, **EBU conformance in CI** | ✅ done |
+| 1b | miniaudio device capture, ring buffer | next |
 | 2 | The 24-column canvas: add, move, resize, duplicate, tabs | |
 | 3 | The twelve modules | |
 | 4 | Presets, calibrations, skins, audio settings, persistence | |
