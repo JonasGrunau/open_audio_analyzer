@@ -8,10 +8,11 @@
 // tone a reference the meters can be held against on a headless CI runner with
 // no sound hardware anywhere near it.
 //
-// The loudness assertions are the other half. They check that the engine
-// reports loudness as *unavailable* rather than reporting a number, because
-// until Phase 1 lands K-weighting and the EBU conformance vectors, any LUFS
-// value this engine produced would be fiction.
+// The loudness assertions live next door in conformance_test.dart, against the
+// EBU Tech 3341/3342 cases. What is checked here is the surrounding contract:
+// the ABI matches, unmeasured quantities say so, silence falls to the floor
+// instead of freezing, reset clears the integrators, and an unavailable source
+// fails loudly rather than substituting something plausible.
 
 import 'dart:math' as math;
 
@@ -198,12 +199,40 @@ void main() {
     expect(cleared, isTrue, reason: 'reset did not clear the elapsed clock');
   });
 
-  test('unimplemented sources fail loudly', () {
-    // Silently substituting the test tone here would let somebody believe they
-    // were metering their soundcard.
+  test('an unimplemented source fails loudly', () {
+    // File decoding is Phase 5. Silently substituting the test tone would let
+    // somebody believe they had analysed their master.
     expect(
-      () => BelEngine.start(source: BelSource.device),
+      () => BelEngine.start(source: BelSource.file),
       throwsA(isA<BelEngineException>()),
     );
+  });
+
+  test('an unknown device id fails rather than falling back', () {
+    // Falling back to the default device would be the friendly-looking choice
+    // and the wrong one: a preset naming an interface that is not plugged in
+    // would silently meter the laptop microphone instead, and every reading
+    // after that would be of the wrong signal.
+    expect(
+      () => BelEngine.start(
+        source: BelSource.device,
+        deviceId: 'deadbeefdeadbeef',
+      ),
+      throwsA(isA<BelEngineException>()),
+    );
+  });
+
+  test('capture devices can be enumerated', () {
+    // May legitimately be empty — a headless CI runner has no audio backend at
+    // all, and that is a usable state rather than an error. What must hold is
+    // that anything reported is well formed enough to put in a preset and show
+    // to a human.
+    final devices = BelEngine.devices();
+    for (final device in devices) {
+      expect(device.id, isNotEmpty);
+      expect(device.name, isNotEmpty);
+      expect(device.channels, lessThanOrEqualTo(kBelMaxChannels));
+    }
+    expect(devices.where((d) => d.isDefault).length, lessThanOrEqualTo(1));
   });
 }

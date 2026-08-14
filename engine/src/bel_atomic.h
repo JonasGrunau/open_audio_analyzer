@@ -45,6 +45,10 @@ static __forceinline uint32_t bel_atomic_increment(bel_atomic_u32 *p) {
   return (uint32_t)_InterlockedIncrement(p);
 }
 
+static __forceinline uint32_t bel_atomic_add(bel_atomic_u32 *p, uint32_t v) {
+  return (uint32_t)_InterlockedExchangeAdd(p, (long)v) + v;
+}
+
 #define BEL_ATOMIC_INIT(v) (v)
 
 #else /* clang, gcc */
@@ -63,6 +67,10 @@ static inline void bel_atomic_store_release(bel_atomic_u32 *p, uint32_t v) {
 
 static inline uint32_t bel_atomic_increment(bel_atomic_u32 *p) {
   return atomic_fetch_add_explicit(p, 1, memory_order_acq_rel) + 1;
+}
+
+static inline uint32_t bel_atomic_add(bel_atomic_u32 *p, uint32_t v) {
+  return atomic_fetch_add_explicit(p, v, memory_order_acq_rel) + v;
 }
 
 #define BEL_ATOMIC_INIT(v) (v)

@@ -17,6 +17,7 @@
 ///     microtask late, which is exactly one frame of latency for no benefit.
 library;
 
+import 'dart:convert';
 import 'dart:ffi';
 import 'dart:typed_data';
 
@@ -43,7 +44,13 @@ enum BelSource {
   /// exact readings it must produce.
   testTone(1),
 
-  /// A capture device. Not implemented yet; [BelEngine.start] throws.
+  /// A hardware or loopback capture device, chosen with `deviceId`.
+  ///
+  /// The engine adopts the device's own sample rate and channel count rather
+  /// than converting to a requested format — a resampler in front of the
+  /// measurement would move inter-sample peaks and shift the K-weighted
+  /// energy. Read [BelEngine.sampleRate] and [BelEngine.channels] back to find
+  /// out what it settled on.
   device(2),
 
   /// A decoded file, run as fast as the CPU allows. Not implemented yet.
@@ -58,6 +65,72 @@ enum BelSource {
   const BelSource(this.value);
   final int value;
 }
+
+/// A capture device the system is offering.
+class BelDevice {
+  BelDevice._(native.bel_device_info info)
+    : id = _readString(info.id, kBelDeviceIdMax),
+      name = _readString(info.name, kBelDeviceNameMax),
+      channels = info.channels,
+      sampleRate = info.sample_rate,
+      isDefault = info.is_default != 0,
+      isLoopback = info.is_loopback != 0;
+
+  /// Opaque and platform-specific, but stable enough to store in a preset.
+  /// Pass to [BelEngine.start].
+  final String id;
+
+  /// What to show a human.
+  final String name;
+
+  /// Native format, where the backend reports it. Zero means it would not say
+  /// before the device is opened — reporting zero beats reporting a guess.
+  final int channels;
+  final int sampleRate;
+
+  final bool isDefault;
+
+  /// True only when the backend says this device captures system output.
+  /// Windows/WASAPI reports it; elsewhere a virtual loopback is
+  /// indistinguishable from a real input, so this stays false and must not be
+  /// read as "loopback is impossible here".
+  final bool isLoopback;
+
+  @override
+  String toString() => 'BelDevice($name, $channels ch @ $sampleRate Hz)';
+}
+
+/// Reads a fixed-size C char array up to its NUL, as UTF-8.
+///
+/// Two details that are easy to get wrong and both bite immediately on a real
+/// machine:
+///
+///   - `Char` is **signed**, so every byte above 0x7F arrives negative. The
+///     mask is not defensive tidying; without it the first device with an
+///     accented character in its name throws.
+///   - The bytes are UTF-8, not code units. macOS named a device
+///     `Mikrofon von "Jonas iPhone"` using typographic quotes, which is three
+///     bytes that mean one character — treating them as code points would have
+///     produced mojibake rather than a crash, which is worse.
+///
+/// `allowMalformed` because a device name comes from a driver, and a metering
+/// app must not fall over because somebody's interface has a broken string in
+/// its firmware.
+String _readString(Array<Char> array, int capacity) {
+  final bytes = <int>[];
+  for (var i = 0; i < capacity; i++) {
+    final byte = array[i] & 0xFF;
+    if (byte == 0) break;
+    bytes.add(byte);
+  }
+  return utf8.decode(bytes, allowMalformed: true);
+}
+
+/// Mirrors `BEL_DEVICE_ID_MAX`.
+const int kBelDeviceIdMax = 256;
+
+/// Mirrors `BEL_DEVICE_NAME_MAX`.
+const int kBelDeviceNameMax = 256;
 
 /// Thrown when the engine cannot be created or started.
 class BelEngineException implements Exception {
@@ -89,7 +162,7 @@ class BelEngine {
           .asTypedList(kBelSpectrumBands);
 
   /// The ABI this Dart code was written against. Mirrors `BEL_ABI_VERSION`.
-  static const int expectedAbiVersion = 1;
+  static const int expectedAbiVersion = 2;
 
   final Pointer<native.bel_engine> _handle;
 
@@ -142,6 +215,7 @@ class BelEngine {
     int sampleRate = 48000,
     int channels = 2,
     int blockFrames = 0,
+    String? deviceId,
   }) {
     // A mismatch means the compiled library and these bindings disagree about
     // the layout of the snapshot. That does not crash — it silently reads the
@@ -156,13 +230,17 @@ class BelEngine {
     }
 
     final config = calloc<native.bel_config>();
+    final nativeDeviceId = deviceId == null
+        ? nullptr
+        : deviceId.toNativeUtf8().cast<Char>();
     try {
       native.bel_config_defaults(config);
       config.ref
         ..sample_rate = sampleRate
         ..channels = channels
         ..source = source.value
-        ..block_frames = blockFrames;
+        ..block_frames = blockFrames
+        ..device_id = nativeDeviceId;
 
       final handle = native.bel_engine_create(config);
       if (handle == nullptr) {
@@ -183,6 +261,34 @@ class BelEngine {
       return engine;
     } finally {
       calloc.free(config);
+      if (nativeDeviceId != nullptr) calloc.free(nativeDeviceId);
+    }
+  }
+
+  /// The capture devices the system currently offers.
+  ///
+  /// A snapshot: devices come and go, and a stale entry simply fails to open.
+  /// Returns empty when there is no audio backend at all, which is an ordinary
+  /// state on a headless machine and not an error.
+  ///
+  /// On Windows, WASAPI can capture the system's own output, so metering
+  /// whatever is playing needs no setup. On macOS and Linux an input is a
+  /// microphone or line input, and metering system audio needs a virtual
+  /// loopback device (BlackHole, Loopback, a PulseAudio/PipeWire monitor) which
+  /// then appears here like any other input.
+  static List<BelDevice> devices() {
+    final list = native.bel_devices_enumerate();
+    if (list == nullptr) return const [];
+    try {
+      final count = native.bel_device_list_count(list);
+      return [
+        for (var i = 0; i < count; i++)
+          if (native.bel_device_list_at(list, i) case final info
+              when info != nullptr)
+            BelDevice._(info.ref),
+      ];
+    } finally {
+      native.bel_device_list_free(list);
     }
   }
 
@@ -259,6 +365,17 @@ class BelEngine {
   double get elapsedSeconds => _snapshot.elapsed_seconds;
 
   bool get isRunning => _snapshot.flags & 1 != 0;
+
+  /// Frames the capture callback had to discard because analysis fell behind.
+  ///
+  /// Not a diagnostic. Integrated loudness averages every block since the
+  /// reset, so dropped audio does not make the reading stale — it makes it an
+  /// average of a different programme than the one that played. Non-zero means
+  /// the integrated reading cannot be trusted, and the UI has to say so.
+  int get droppedFrames => _snapshot.dropped_frames;
+
+  /// Whether any audio has been lost since the last reset. Sticky until reset.
+  bool get hasOverrun => _snapshot.flags & (1 << 3) != 0;
 
   /// Whether the loudness readings are measured in this build.
   ///

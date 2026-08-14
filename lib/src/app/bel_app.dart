@@ -47,18 +47,49 @@ class _WorkspaceState extends State<_Workspace>
   MeterClock? _clock;
   String? _failure;
 
+  BelSource _source = BelSource.testTone;
+  String? _deviceId;
+  String _sourceLabel = 'TEST TONE';
+
   @override
   void initState() {
     super.initState();
+    _open(BelSource.testTone, label: 'TEST TONE');
+  }
+
+  /// Tears the engine down and builds a new one around a different source.
+  ///
+  /// There is no way to retarget a running engine and there should not be: the
+  /// sample rate, the channel count and every filter coefficient derived from
+  /// them belong to the source. Swapping the audio underneath a half-integrated
+  /// loudness measurement would produce a number that averaged two different
+  /// programmes at two different rates.
+  void _open(BelSource source, {String? deviceId, required String label}) {
+    _clock?.dispose();
+    _engine?.dispose();
+    _clock = null;
+    _engine = null;
+
     try {
-      final engine = BelEngine.start(source: BelSource.testTone);
-      _engine = engine;
-      _clock = MeterClock(engine: engine, vsync: this);
+      final engine = BelEngine.start(source: source, deviceId: deviceId);
+      setState(() {
+        _engine = engine;
+        _clock = MeterClock(engine: engine, vsync: this);
+        _source = source;
+        _deviceId = deviceId;
+        _sourceLabel = label;
+        _failure = null;
+      });
     } on BelEngineException catch (error) {
-      // Showing the reason beats a blank window. The most likely cause by far
-      // is a stale native library after a change to bel.h, and the exception
-      // says so.
-      _failure = error.message;
+      // Showing the reason beats a blank window. For a device this is usually
+      // a microphone permission that was declined or an interface that has
+      // been unplugged; for the built-in sources it is a stale native library.
+      setState(() {
+        _failure = error.message;
+        _source = source;
+        _deviceId = deviceId;
+        _sourceLabel = label;
+      });
     }
   }
 
@@ -87,7 +118,14 @@ class _WorkspaceState extends State<_Workspace>
             : Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  _StatusBar(engine: engine, clock: clock),
+                  _StatusBar(
+                    engine: engine,
+                    clock: clock,
+                    sourceLabel: _sourceLabel,
+                    source: _source,
+                    deviceId: _deviceId,
+                    onSelect: _open,
+                  ),
                   Expanded(
                     child: _MeterCanvas(engine: engine, clock: clock),
                   ),
@@ -130,11 +168,25 @@ class _EngineFailure extends StatelessWidget {
 }
 
 /// The bar across the top: what is being measured, for how long, against what.
+typedef SourceSelector =
+    void Function(BelSource source, {String? deviceId, required String label});
+
 class _StatusBar extends ConsumerWidget {
-  const _StatusBar({required this.engine, required this.clock});
+  const _StatusBar({
+    required this.engine,
+    required this.clock,
+    required this.sourceLabel,
+    required this.source,
+    required this.deviceId,
+    required this.onSelect,
+  });
 
   final BelEngine engine;
   final MeterClock clock;
+  final String sourceLabel;
+  final BelSource source;
+  final String? deviceId;
+  final SourceSelector onSelect;
 
   static const double height = 40;
 
@@ -183,7 +235,12 @@ class _StatusBar extends ConsumerWidget {
                     ),
                   ),
                   const SizedBox(width: Space.lg),
-                  _SourceIndicator(engine: engine),
+                  _SourcePicker(
+                    label: sourceLabel,
+                    source: source,
+                    deviceId: deviceId,
+                    onSelect: onSelect,
+                  ),
                   if (showFormat) ...[
                     const SizedBox(width: Space.lg),
                     Text(
@@ -214,31 +271,116 @@ class _StatusBar extends ConsumerWidget {
   }
 }
 
-class _SourceIndicator extends StatelessWidget {
-  const _SourceIndicator({required this.engine});
+/// What Bel is listening to, and how to change it.
+class _SourcePicker extends StatelessWidget {
+  const _SourcePicker({
+    required this.label,
+    required this.source,
+    required this.deviceId,
+    required this.onSelect,
+  });
 
-  final BelEngine engine;
+  final String label;
+  final BelSource source;
+  final String? deviceId;
+  final SourceSelector onSelect;
 
   @override
   Widget build(BuildContext context) {
     final colors = BelTheme.of(context);
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: Space.xs + Space.xxs,
-          height: Space.xs + Space.xxs,
-          decoration: BoxDecoration(
-            color: colors.accent,
-            borderRadius: BelRadius.allXs,
+
+    return PopupMenuButton<void>(
+      tooltip: 'Signal source',
+      color: colors.panelRaised,
+      position: PopupMenuPosition.under,
+      itemBuilder: (context) {
+        // Enumerated when the menu opens, not cached at launch. Interfaces are
+        // plugged and unplugged constantly in a studio, and a list built once
+        // would be wrong by the time anybody looked at it.
+        final devices = BelEngine.devices();
+
+        return <PopupMenuEntry<void>>[
+          _item(
+            context,
+            'Test tone',
+            selected: source == BelSource.testTone,
+            onTap: () => onSelect(BelSource.testTone, label: 'TEST TONE'),
           ),
+          _item(
+            context,
+            'Silence',
+            selected: source == BelSource.silence,
+            onTap: () => onSelect(BelSource.silence, label: 'SILENCE'),
+          ),
+          const PopupMenuDivider(),
+          if (devices.isEmpty)
+            PopupMenuItem<void>(
+              enabled: false,
+              height: Space.xl,
+              child: Text(
+                'No capture devices',
+                style: BelType.caption.copyWith(color: colors.textFaint),
+              ),
+            )
+          else
+            for (final device in devices)
+              _item(
+                context,
+                device.isDefault ? '${device.name}  (default)' : device.name,
+                selected: source == BelSource.device && deviceId == device.id,
+                onTap: () => onSelect(
+                  BelSource.device,
+                  deviceId: device.id,
+                  label: device.name.toUpperCase(),
+                ),
+              ),
+        ];
+      },
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: Space.xs + Space.xxs,
+            height: Space.xs + Space.xxs,
+            decoration: BoxDecoration(
+              color: source == BelSource.silence
+                  ? colors.textFaint
+                  : colors.accent,
+              borderRadius: BelRadius.allXs,
+            ),
+          ),
+          const SizedBox(width: Space.sm),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 220),
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              softWrap: false,
+              style: BelType.label.copyWith(color: colors.textMuted),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  PopupMenuItem<void> _item(
+    BuildContext context,
+    String text, {
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
+    final colors = BelTheme.of(context);
+    return PopupMenuItem<void>(
+      onTap: onTap,
+      height: Space.xl,
+      child: Text(
+        text,
+        style: BelType.body.copyWith(
+          color: selected ? colors.accent : colors.textPrimary,
         ),
-        const SizedBox(width: Space.sm),
-        Text(
-          'TEST TONE',
-          style: BelType.label.copyWith(color: colors.textMuted),
-        ),
-      ],
+      ),
     );
   }
 }
@@ -393,14 +535,34 @@ class _MeterCanvas extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (!engine.hasLoudness) ...[
+          // Rebuilds on the transition only, never on the sixty frames a
+          // second where nothing changed — see MeterClock.overrun.
+          ValueListenableBuilder<bool>(
+            valueListenable: clock.overrun,
+            builder: (context, hasOverrun, _) {
+              if (!hasOverrun) return const SizedBox.shrink();
+              return Padding(
+                padding: const EdgeInsets.only(bottom: Space.lg),
+                child: _Notice(
+                  severity: colors.over,
+                  text:
+                      'Audio was lost — ${engine.droppedFrames} frames were '
+                      'discarded because analysis could not keep up. '
+                      'Integrated loudness and LRA average every block since '
+                      'the reset, so they are now averages of less than what '
+                      'played and cannot be trusted. Press RESET to start a '
+                      'clean measurement.',
+                ),
+              );
+            },
+          ),
+          if (!engine.hasSpectrum) ...[
             _Notice(
               text:
-                  'Loudness is not measured in this build. K-weighting, R128 '
-                  'gating, LRA and true-peak oversampling land in Phase 1 '
-                  'together with the EBU conformance suite that proves them — '
-                  'not before. Those readings show a dash rather than a '
-                  'plausible guess.',
+                  'The spectrum is not measured in this build. Those bands sit '
+                  'at the floor rather than showing an array of zeroes, which '
+                  'would draw as a flat line at full scale. The FFT lands with '
+                  'the analyser module that displays it.',
             ),
             const SizedBox(height: Space.lg),
           ],
@@ -433,9 +595,13 @@ class _MeterCanvas extends ConsumerWidget {
 }
 
 class _Notice extends StatelessWidget {
-  const _Notice({required this.text});
+  const _Notice({required this.text, this.severity});
 
   final String text;
+
+  /// The accent stripe. Defaults to warn; pass `colors.over` for something the
+  /// user has to act on rather than merely know about.
+  final Color? severity;
 
   @override
   Widget build(BuildContext context) {
@@ -462,7 +628,7 @@ class _Notice extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 ColoredBox(
-                  color: colors.warn,
+                  color: severity ?? colors.warn,
                   child: const SizedBox(width: BelStroke.emphasis),
                 ),
                 Expanded(

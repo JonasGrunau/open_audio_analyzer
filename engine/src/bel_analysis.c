@@ -243,5 +243,9 @@ void bel_analyse(bel_engine *engine, const float *interleaved,
       (double)engine->frames_done / (double)engine->cfg.sample_rate;
   out->sample_rate = engine->cfg.sample_rate;
   out->channels = channels;
-  out->flags = BEL_FLAG_RUNNING | BEL_FLAG_SPECTRUM_UNAVAILABLE;
+  /* OR rather than assign: BEL_FLAG_OVERRUN is sticky until a reset, and the
+   * analysis pass runs many times a second. Assigning here would erase the
+   * warning a moment after it appeared. */
+  out->flags |= BEL_FLAG_RUNNING | BEL_FLAG_SPECTRUM_UNAVAILABLE;
+  out->flags &= ~(uint32_t)BEL_FLAG_LOUDNESS_UNAVAILABLE;
 }

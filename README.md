@@ -13,12 +13,11 @@ modular canvas is the best interaction model anybody has found for this problem.
 The measurement work, the architecture and the visual language are our own, and
 where Bel cannot honestly match Decibel it says so rather than approximating.
 
-> **Status: Phase 1, in progress.** The architecture is proven end to end —
-> native engine, zero-copy snapshot, ticker-driven painting — and **loudness is
-> measured**: momentary, short-term, integrated, LRA and true peak, verified
-> against the EBU Tech 3341/3342 cases on every push. Still to come in this
-> phase: capture from a real audio device. See [Roadmap](#roadmap), and
-> [docs/PLAN.md](docs/PLAN.md) for the full plan.
+> **Status: Phase 1 complete.** Bel measures real audio from a real device.
+> Loudness — momentary, short-term, integrated, LRA and true peak — is verified
+> against the EBU Tech 3341/3342 cases on Linux, macOS and Windows on every
+> push. Next is the canvas: drag, resize and tabs, then the twelve modules. See
+> [Roadmap](#roadmap), and [docs/PLAN.md](docs/PLAN.md) for the full plan.
 
 ---
 
@@ -280,9 +279,8 @@ hardware anywhere near it.
 | Phase | | Status |
 |---|---|---|
 | 0 | Skeleton, engine spike, the render path, design tokens | ✅ done |
-| 1a | K-weighting, M/S/I, LRA, true peak, **EBU conformance in CI** | ✅ done |
-| 1b | miniaudio device capture, ring buffer | next |
-| 2 | The 24-column canvas: add, move, resize, duplicate, tabs | |
+| 1 | K-weighting, M/S/I, LRA, true peak, **EBU conformance in CI**, device capture | ✅ done |
+| 2 | The 24-column canvas: add, move, resize, duplicate, tabs | next |
 | 3 | The twelve modules | |
 | 4 | Presets, calibrations, skins, audio settings, persistence | |
 | 5 | Offline file analysis, report panel, exports, `bel` CLI | |
@@ -292,10 +290,18 @@ hardware anywhere near it.
 
 ### Known gaps, stated plainly
 
-- **macOS system-audio capture is the biggest gap versus Decibel.** Decibel
-  ships its own signed monitoring driver; we realistically cannot early on. v1
-  documents BlackHole and similar loopback devices, and ScreenCaptureKit
-  (macOS 13+) is evaluated later.
+- **Capturing your own system's output needs a virtual device on macOS and
+  Linux.** This is the biggest gap versus Decibel, which ships a signed
+  monitoring driver.
+  - **Windows** — nothing to do. WASAPI loopback captures whatever is playing.
+  - **macOS** — install [BlackHole](https://existential.audio/blackhole/) (free)
+    or Loopback, route your output through it, and it appears in Bel's source
+    menu like any other input. ScreenCaptureKit is a later evaluation.
+  - **Linux** — a PulseAudio or PipeWire monitor source already appears in the
+    list.
+
+  Metering a hardware input needs none of this — any interface shows up
+  directly.
 - **Tablets are display-first.** FFI works fine on iPadOS and Android, but audio
   *input* selection differs sharply per platform. The tablet build's primary
   role is the Phase 6 remote display.

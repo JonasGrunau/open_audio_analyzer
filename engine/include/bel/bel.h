@@ -63,7 +63,7 @@ extern "C" {
  * side asserts against it at startup, because a stale prebuilt library that
  * silently reads a reordered struct produces plausible-looking wrong numbers,
  * which is the worst failure mode a measurement tool has. */
-#define BEL_ABI_VERSION 1
+#define BEL_ABI_VERSION 2
 
 /* 7.1 is the widest layout the Digital Meter renders, so it is the widest the
  * graph carries. */
@@ -130,17 +130,25 @@ typedef enum {
 
 #define BEL_FLAG_RUNNING (1u << 0)
 
-/* Set while the loudness fields of the snapshot are not yet computed by this
- * build. It exists so the UI can render "—" instead of a number nobody
- * measured. A meter that displays a placeholder as though it were a reading is
- * worse than a meter that displays nothing, so this flag is checked, not
- * assumed. Cleared in Phase 1, when the fields land together with the EBU
- * conformance suite that proves them. */
+/* Set while the loudness fields of the snapshot are not computed by this build,
+ * so the UI can render an em dash instead of a number nobody measured.
+ *
+ * **This build does not set it** — loudness landed together with the EBU
+ * conformance suite that proves it. The flag stays in the ABI and consumers
+ * must keep checking it, because it is exactly the mechanism a future build
+ * would use to say a measurement is unavailable for some platform or source.
+ * An individual reading can still be NaN when it is not yet *defined*:
+ * momentary loudness needs 400 ms of signal before it means anything. */
 #define BEL_FLAG_LOUDNESS_UNAVAILABLE (1u << 1)
 
 /* Likewise for the spectrum arrays, which stay at BEL_DB_FLOOR until the FFT
- * lands in Phase 1. */
+ * lands with the analyser module that draws it. Still set. */
 #define BEL_FLAG_SPECTRUM_UNAVAILABLE (1u << 2)
+
+/* Audio has been lost since the last reset — see `dropped_frames`. Sticky
+ * until reset, because a measurement taken over discarded audio stays
+ * questionable long after the drop itself has passed. */
+#define BEL_FLAG_OVERRUN (1u << 3)
 
 /* ------------------------------------------------------------------------ */
 /* The snapshot                                                              */
@@ -178,7 +186,16 @@ typedef struct bel_snapshot {
   uint32_t sample_rate;
   uint32_t channels;
   uint32_t flags; /* BEL_FLAG_* */
-  uint32_t reserved0;
+
+  /* Frames the capture callback had to discard because the analysis thread
+   * fell behind, since the last reset.
+   *
+   * This is not a diagnostic counter. Integrated loudness averages every block
+   * since the reset, so a dropped second does not make the reading slightly
+   * stale — it makes it an average of a different programme than the one that
+   * played. A non-zero value here means the integrated reading cannot be
+   * trusted, and the UI has to say so rather than quietly showing it. */
+  uint32_t dropped_frames;
 
   /* --- Loudness, ITU-R BS.1770-4 / EBU R128, in LUFS ------------------- */
   float lufs_momentary;  /* 400 ms window */
@@ -223,11 +240,60 @@ typedef struct bel_snapshot {
 /* Configuration                                                             */
 /* ------------------------------------------------------------------------ */
 
+/* ------------------------------------------------------------------------ */
+/* Devices                                                                    */
+/* ------------------------------------------------------------------------ */
+
+#define BEL_DEVICE_ID_MAX 256
+#define BEL_DEVICE_NAME_MAX 256
+
+typedef struct bel_device_info {
+  /* Opaque, platform-specific, and stable enough to store in a preset. Pass it
+   * back in bel_config.device_id. */
+  char id[BEL_DEVICE_ID_MAX];
+
+  /* What to show a human. */
+  char name[BEL_DEVICE_NAME_MAX];
+
+  uint32_t channels;
+  uint32_t sample_rate;
+
+  /* Non-zero when this is the system's default capture device. */
+  uint32_t is_default;
+
+  /* Non-zero when this device captures the system's own output rather than a
+   * physical input. Only WASAPI provides this natively; on macOS and Linux a
+   * virtual loopback device appears as an ordinary input and cannot be
+   * distinguished, so this stays zero there. Do not use it to decide whether
+   * loopback is *possible* — only to label a device that certainly is. */
+  uint32_t is_loopback;
+} bel_device_info;
+
+typedef struct bel_device_list bel_device_list;
+
+/* Enumerates capture devices. Returns NULL if the audio backend is
+ * unavailable, which is a normal outcome on a headless machine and not an
+ * error worth crashing over. Free with bel_device_list_free. */
+BEL_API bel_device_list *bel_devices_enumerate(void);
+BEL_API uint32_t bel_device_list_count(const bel_device_list *list);
+BEL_API const bel_device_info *bel_device_list_at(const bel_device_list *list,
+                                                  uint32_t index);
+BEL_API void bel_device_list_free(bel_device_list *list);
+
 typedef struct bel_config {
+  /* For the synthetic and pushed sources these are binding. For
+   * BEL_SOURCE_DEVICE they are ignored: the engine adopts whatever format the
+   * hardware produces, because resampling in front of a measurement changes
+   * the measurement. Read the actual values back from the snapshot. */
   uint32_t sample_rate; /* 0 asks the source to pick */
   uint32_t channels;    /* 1..BEL_MAX_CHANNELS */
-  uint32_t source;      /* bel_source_kind */
-  uint32_t block_frames;/* analysis block size; 0 selects a sane default */
+
+  uint32_t source;       /* bel_source_kind */
+  uint32_t block_frames; /* analysis block size; 0 selects a sane default */
+
+  /* Which capture device, for BEL_SOURCE_DEVICE. NULL means the system
+   * default. Copied during bel_engine_create; the caller need not keep it. */
+  const char *device_id;
 } bel_config;
 
 typedef struct bel_engine bel_engine;

@@ -53,6 +53,15 @@ class MeterClock extends ChangeNotifier {
     _minimumInterval = _intervalFor(value);
   }
 
+  /// Whether audio has been lost since the last reset.
+  ///
+  /// The one measurement fact that has to reach the *widget* tree rather than
+  /// a painter, because it changes what the UI says rather than what a meter
+  /// draws. It is a [ValueNotifier] updated only when the value actually
+  /// differs, so the warning banner rebuilds on the transition and never on
+  /// the sixty frames a second where nothing changed.
+  final ValueNotifier<bool> overrun = ValueNotifier<bool>(false);
+
   /// Frames where the engine had something new. Diagnostics only.
   int get framesPainted => _framesPainted;
 
@@ -77,6 +86,9 @@ class MeterClock extends ChangeNotifier {
     // published nothing since the last look, which is the common case.
     if (engine.refresh()) {
       _framesPainted++;
+      if (engine.hasOverrun != overrun.value) {
+        overrun.value = engine.hasOverrun;
+      }
       notifyListeners();
     } else {
       _framesSkipped++;
@@ -86,6 +98,7 @@ class MeterClock extends ChangeNotifier {
   @override
   void dispose() {
     _ticker.dispose();
+    overrun.dispose();
     super.dispose();
   }
 }

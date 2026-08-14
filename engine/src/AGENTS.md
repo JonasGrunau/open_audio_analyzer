@@ -9,11 +9,25 @@
 | `bel_kweight.h/.c` | The BS.1770-4 K-weighting biquads, **designed at the stream's sample rate** rather than tabulated, plus the channel weight table. |
 | `bel_loudness.h/.c` | Sub-block accumulation, R128 gating, momentary/short-term/integrated, and the LRA histogram. |
 | `bel_truepeak.h/.c` | The BS.1770-4 Annex 2 4x polyphase oversampler. |
+| `bel_ring.h/.c` | The SPSC ring between the audio callback and analysis. Drops are **counted and published**, never silently overwritten. |
+| `bel_device.h/.c` | miniaudio, cut down to enumeration and capture. The only file that includes miniaudio.h. |
 | `bel_analysis.c` | One pass over a block: the simple meters inline, the two standards-defined ones driven. |
 | `bel_engine.c` | Lifecycle, the analysis thread, and the OS shims. |
 
 ## Rules
 
+- **The capture callback is real-time context.** No malloc, no locks, no
+  syscalls, no logging — it does a bounds check and up to two memcpys and
+  returns. Anything added there that can block will drop audio.
+- **Open a device, size the ring, then start it.** The ring's frame stride must
+  equal the device's channel count, and that is not known until the device has
+  been negotiated. Sizing the ring for BEL_MAX_CHANNELS and starting inside
+  open reads eight floats per frame out of a one-float-per-frame buffer; it
+  crashed immediately on a mono built-in microphone and would have corrupted
+  memory quietly on a stereo one.
+- **The engine adopts the device's format; it never converts to its own.** A
+  resampler in front of the measurement moves inter-sample peaks and shifts the
+  K-weighted energy. MA_NO_DECODING is set partly to make that impossible.
 - **The analysis thread must never be delayed.** It sits downstream of a
   real-time audio callback; if it falls behind, the ring overruns and signal is
   lost for good. That is why publishing is a seqlock and not a mutex, and why

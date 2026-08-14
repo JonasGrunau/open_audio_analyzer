@@ -14,6 +14,7 @@
 #include "bel/bel.h"
 #include "bel_atomic.h"
 #include "bel_loudness.h"
+#include "bel_ring.h"
 #include "bel_truepeak.h"
 
 #include <stdint.h>
@@ -99,6 +100,13 @@ struct bel_engine {
    * against the document that defines it. */
   bel_loudness loudness;
   bel_truepeak truepeak;
+
+  /* Live only for BEL_SOURCE_DEVICE. The ring is what makes the capture
+   * callback's job a bounded memcpy; `device` is opaque so that miniaudio's
+   * 96,000-line header is included by exactly one translation unit. */
+  struct bel_device *device;
+  bel_ring ring;
+  int ring_ready;
   float *block;         /* interleaved scratch, block_frames * channels */
   double tone_phase;    /* radians, kept in [0, 2pi) to stay precise */
   double tone_time;     /* seconds of generated signal, for the modulators */

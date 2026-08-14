@@ -4,6 +4,29 @@
 // ignore_for_file: type=lint, unused_import
 import 'dart:ffi' as ffi;
 
+/// Enumerates capture devices. Returns NULL if the audio backend is
+/// unavailable, which is a normal outcome on a headless machine and not an
+/// error worth crashing over. Free with bel_device_list_free.
+@ffi.Native<ffi.Pointer<bel_device_list> Function()>()
+external ffi.Pointer<bel_device_list> bel_devices_enumerate();
+
+@ffi.Native<ffi.Uint32 Function(ffi.Pointer<bel_device_list>)>()
+external int bel_device_list_count(ffi.Pointer<bel_device_list> list);
+
+@ffi.Native<
+  ffi.Pointer<bel_device_info> Function(
+    ffi.Pointer<bel_device_list>,
+    ffi.Uint32,
+  )
+>()
+external ffi.Pointer<bel_device_info> bel_device_list_at(
+  ffi.Pointer<bel_device_list> list,
+  int index,
+);
+
+@ffi.Native<ffi.Void Function(ffi.Pointer<bel_device_list>)>()
+external void bel_device_list_free(ffi.Pointer<bel_device_list> list);
+
 /// ------------------------------------------------------------------------ */
 /// /* Lifecycle                                                                 */
 /// /* ------------------------------------------------------------------------
@@ -234,8 +257,16 @@ final class bel_snapshot extends ffi.Struct {
   @ffi.Uint32()
   external int flags;
 
+  /// Frames the capture callback had to discard because the analysis thread
+  /// fell behind, since the last reset.
+  ///
+  /// This is not a diagnostic counter. Integrated loudness averages every block
+  /// since the reset, so a dropped second does not make the reading slightly
+  /// stale — it makes it an average of a different programme than the one that
+  /// played. A non-zero value here means the integrated reading cannot be
+  /// trusted, and the UI has to say so rather than quietly showing it.
   @ffi.Uint32()
-  external int reserved0;
+  external int dropped_frames;
 
   /// 400 ms window
   @ffi.Float()
@@ -323,9 +354,37 @@ final class bel_snapshot extends ffi.Struct {
   external ffi.Array<ffi.Float> spectrum_peak;
 }
 
-/// ------------------------------------------------------------------------ */
-/// /* Configuration                                                             */
-/// /* ------------------------------------------------------------------------
+final class bel_device_info extends ffi.Struct {
+  /// Opaque, platform-specific, and stable enough to store in a preset. Pass it
+  /// back in bel_config.device_id.
+  @ffi.Array.multi([256])
+  external ffi.Array<ffi.Char> id;
+
+  /// What to show a human.
+  @ffi.Array.multi([256])
+  external ffi.Array<ffi.Char> name;
+
+  @ffi.Uint32()
+  external int channels;
+
+  @ffi.Uint32()
+  external int sample_rate;
+
+  /// Non-zero when this is the system's default capture device.
+  @ffi.Uint32()
+  external int is_default;
+
+  /// Non-zero when this device captures the system's own output rather than a
+  /// physical input. Only WASAPI provides this natively; on macOS and Linux a
+  /// virtual loopback device appears as an ordinary input and cannot be
+  /// distinguished, so this stays zero there. Do not use it to decide whether
+  /// loopback is *possible* — only to label a device that certainly is.
+  @ffi.Uint32()
+  external int is_loopback;
+}
+
+final class bel_device_list extends ffi.Opaque {}
+
 final class bel_config extends ffi.Struct {
   /// 0 asks the source to pick
   @ffi.Uint32()
@@ -342,11 +401,15 @@ final class bel_config extends ffi.Struct {
   /// analysis block size; 0 selects a sane default
   @ffi.Uint32()
   external int block_frames;
+
+  /// Which capture device, for BEL_SOURCE_DEVICE. NULL means the system
+  /// default. Copied during bel_engine_create; the caller need not keep it.
+  external ffi.Pointer<ffi.Char> device_id;
 }
 
 final class bel_engine extends ffi.Opaque {}
 
-const int BEL_ABI_VERSION = 1;
+const int BEL_ABI_VERSION = 2;
 
 const int BEL_MAX_CHANNELS = 8;
 
@@ -359,3 +422,9 @@ const int BEL_FLAG_RUNNING = 1;
 const int BEL_FLAG_LOUDNESS_UNAVAILABLE = 2;
 
 const int BEL_FLAG_SPECTRUM_UNAVAILABLE = 4;
+
+const int BEL_FLAG_OVERRUN = 8;
+
+const int BEL_DEVICE_ID_MAX = 256;
+
+const int BEL_DEVICE_NAME_MAX = 256;

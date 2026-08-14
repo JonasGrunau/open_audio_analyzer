@@ -19,6 +19,7 @@
  * iteration happens there instead, in the same order.
  */
 
+#include "bel_device.h"
 #include "bel_internal.h"
 
 #include <math.h>
@@ -48,6 +49,12 @@
  * jitter and a slow host, far short of replaying a backlog after a laptop
  * wakes from sleep. */
 #define BEL_MAX_CATCHUP_SECONDS 0.25
+
+/* How much audio the capture ring holds. Half a second is far more than any
+ * ordinary scheduling hiccup needs and costs 384 kB at 48 kHz stereo; sizing
+ * it tightly would save nothing worth having and would turn a hiccup into lost
+ * audio, which is the one outcome a measurement cannot absorb. */
+#define BEL_RING_SECONDS 0.5
 
 /* ------------------------------------------------------------------------ */
 /* OS primitives                                                             */
@@ -151,6 +158,12 @@ static void bel_clear_measurements(bel_engine *engine) {
   memset(engine->channel, 0, sizeof(engine->channel));
   bel_loudness_reset(&engine->loudness);
   bel_truepeak_reset(&engine->truepeak);
+  if (engine->ring_ready) {
+    /* Clears the warning, not the ring: the audio already in flight is still
+     * wanted, it is only the record of past losses that this measurement no
+     * longer inherits. */
+    bel_ring_clear_dropped(&engine->ring);
+  }
   engine->frames_done = 0;
   engine->sample_peak_max_linear = 0.0f;
   engine->corr_sum_lr = 0.0;
@@ -162,6 +175,7 @@ static void bel_clear_measurements(bel_engine *engine) {
   s->sample_rate = engine->cfg.sample_rate;
   s->channels = engine->cfg.channels;
   s->flags = BEL_FLAG_SPECTRUM_UNAVAILABLE;
+  s->dropped_frames = 0;
 
   s->lufs_momentary = NAN;
   s->lufs_short = NAN;
@@ -213,8 +227,26 @@ static void *bel_analysis_thread(void *raw) {
       bel_atomic_store_release(&engine->reset_pending, 0);
     }
 
-    bel_source_render(engine, engine->cfg.block_frames);
-    bel_analyse(engine, engine->block, engine->cfg.block_frames);
+    if (engine->cfg.source == BEL_SOURCE_DEVICE) {
+      /* The device sets the pace, so take whatever has arrived rather than
+       * insisting on a full block. A partial block is not a problem: every
+       * measurement counts its own windows in samples. */
+      const uint32_t got =
+          bel_ring_read(&engine->ring, engine->block, engine->cfg.block_frames);
+      if (got > 0) {
+        bel_analyse(engine, engine->block, got);
+      }
+
+      const uint32_t dropped = bel_ring_dropped(&engine->ring);
+      engine->staging.dropped_frames = dropped;
+      if (dropped > 0) {
+        engine->staging.flags |= (uint32_t)BEL_FLAG_OVERRUN;
+      }
+    } else {
+      bel_source_render(engine, engine->cfg.block_frames);
+      bel_analyse(engine, engine->block, engine->cfg.block_frames);
+    }
+
     bel_snapshot_publish(engine);
 
     deadline += block_seconds;
@@ -286,7 +318,8 @@ bel_engine *bel_engine_create(const bel_config *cfg) {
    * somebody believe they are metering their soundcard. */
   if (resolved.source != BEL_SOURCE_SILENCE &&
       resolved.source != BEL_SOURCE_TEST_TONE &&
-      resolved.source != BEL_SOURCE_PUSH) {
+      resolved.source != BEL_SOURCE_PUSH &&
+      resolved.source != BEL_SOURCE_DEVICE) {
     return NULL;
   }
 
@@ -295,6 +328,46 @@ bel_engine *bel_engine_create(const bel_config *cfg) {
     return NULL;
   }
   engine->cfg = resolved;
+
+  /* A device is opened here, before anything is sized, because it is the
+   * device that decides the format. The requested rate and channel count are
+   * overwritten with what the hardware actually produces — resampling in front
+   * of a measurement changes the measurement. */
+  if (resolved.source == BEL_SOURCE_DEVICE) {
+    uint32_t device_rate = 0;
+    uint32_t device_channels = 0;
+
+    /* Negotiate first. The ring's frame stride must match the device's channel
+     * count exactly, and until the device is open nobody knows what that is —
+     * sizing the ring for BEL_MAX_CHANNELS and letting a mono microphone write
+     * into it reads eight floats per frame out of a one-float-per-frame
+     * buffer. */
+    if (bel_device_open(&engine->device, cfg != NULL ? cfg->device_id : NULL,
+                        &device_rate, &device_channels) != BEL_OK) {
+      free(engine);
+      return NULL;
+    }
+
+    if (!bel_ring_init(&engine->ring,
+                       (uint32_t)(device_rate * BEL_RING_SECONDS),
+                       device_channels)) {
+      bel_device_close(engine->device);
+      free(engine);
+      return NULL;
+    }
+    engine->ring_ready = 1;
+
+    if (bel_device_start(engine->device, &engine->ring) != BEL_OK) {
+      bel_device_close(engine->device);
+      bel_ring_free(&engine->ring);
+      free(engine);
+      return NULL;
+    }
+
+    engine->cfg.sample_rate = device_rate;
+    engine->cfg.channels = device_channels;
+    resolved = engine->cfg;
+  }
 
   engine->block = (float *)calloc(
       (size_t)resolved.block_frames * resolved.channels, sizeof(float));
@@ -322,6 +395,15 @@ void bel_engine_destroy(bel_engine *engine) {
     return;
   }
   bel_engine_stop(engine);
+
+  /* The device first, always: it owns the thread that writes into the ring,
+   * and freeing the ring under a live callback would be a use-after-free in
+   * real-time context — the hardest kind of crash to reproduce. */
+  bel_device_close(engine->device);
+  if (engine->ring_ready) {
+    bel_ring_free(&engine->ring);
+  }
+
   free(engine->block);
   free(engine);
 }

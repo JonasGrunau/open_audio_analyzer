@@ -30,9 +30,11 @@ import 'package:native_toolchain_c/native_toolchain_c.dart';
 /// Everything under `engine/src`, relative to this package's root.
 const _engineSources = <String>[
   '../../engine/src/bel_analysis.c',
+  '../../engine/src/bel_device.c',
   '../../engine/src/bel_engine.c',
   '../../engine/src/bel_kweight.c',
   '../../engine/src/bel_loudness.c',
+  '../../engine/src/bel_ring.c',
   '../../engine/src/bel_snapshot.c',
   '../../engine/src/bel_source.c',
   '../../engine/src/bel_truepeak.c',
@@ -61,6 +63,23 @@ Map<String, String?> _defines(OS targetOS) {
   };
 }
 
+List<String> _libraries(OS targetOS) => switch (targetOS) {
+  OS.linux => const ['dl', 'pthread', 'm'],
+  OS.android => const ['dl', 'm'],
+  _ => const [],
+};
+
+List<String> _frameworks(OS targetOS) => switch (targetOS) {
+  OS.macOS => const ['CoreFoundation', 'CoreAudio', 'AudioToolbox'],
+  OS.iOS => const [
+    'CoreFoundation',
+    'CoreAudio',
+    'AudioToolbox',
+    'AVFoundation',
+  ],
+  _ => const [],
+};
+
 void main(List<String> args) async {
   await build(args, (input, output) async {
     final builder = CBuilder.library(
@@ -73,7 +92,14 @@ void main(List<String> args) async {
       assetName: '${input.packageName}_bindings_generated.dart',
 
       sources: _engineSources,
-      includes: ['../../engine/include'],
+      includes: ['../../engine/include', '../../engine/third_party/miniaudio'],
+
+      // miniaudio dlopen()s the Linux backends at runtime and needs the maths
+      // and threading libraries everywhere POSIX. On Apple platforms it talks
+      // to CoreAudio directly, so those frameworks have to be linked; miniaudio
+      // will not tell you they are missing until the link step.
+      libraries: _libraries(input.config.code.targetOS),
+      frameworks: _frameworks(input.config.code.targetOS),
 
       // The engine uses C11 atomics on every toolchain that has them. Saying so
       // here rather than relying on a compiler default is what keeps the

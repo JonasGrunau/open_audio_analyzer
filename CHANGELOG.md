@@ -33,13 +33,37 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### ✨ Added
 
+- **Capture from real audio devices.** Inputs are enumerated and selectable
+  from the source menu in the status bar. On Windows, WASAPI loopback meters
+  system output with no setup; on macOS and Linux a virtual loopback device
+  (BlackHole, a PipeWire monitor) appears in the same list — see the README.
 - `BelSource.push` and `bel_engine_push()`: audio supplied synchronously by the
   caller, with no thread and no clock. It makes the engine a pure function of
   the samples it was given, which is what the conformance suite needs and what
   file analysis will be built on.
+- **Lost audio is reported rather than hidden.** If analysis falls behind, the
+  capture callback drops frames and the count is published; the app shows a
+  warning saying the integrated reading can no longer be trusted. Integrated
+  loudness averages every block since the reset, so dropped audio does not make
+  it stale — it makes it an average of a different programme than the one that
+  played.
+
+### 📐 Measurement (device capture)
+
+- **A device's own sample rate and channel count are adopted, not converted
+  to.** Bel measures the stream the hardware produced; resampling in front of
+  the measurement would move inter-sample peaks and shift the K-weighted
+  energy, and the resulting numbers would still look plausible.
+- An interface wider than 7.1 is **refused** rather than measured eight
+  channels at a time and reported as programme loudness.
+- An unknown device id **fails** instead of falling back to the default. A
+  preset naming an interface that is not plugged in would otherwise silently
+  meter the laptop microphone.
 
 ### 🚧 Internal
 
+- miniaudio v0.11.25 vendored under `engine/third_party/` (public domain /
+  MIT-0), with everything but the device layer compiled out.
 - The conformance suite generates its own signals rather than reading WAV
   fixtures, so it runs on a headless runner with no network and no decoder.
 - Loudness is asserted to be independent of both sample rate and push block
