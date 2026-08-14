@@ -1,0 +1,86 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# Two jobs, split by what they actually need.
+#
+# `checks` needs no C toolchain at all, because `bel_core` depends on nothing
+# and the widget tests never touch the engine. That is not an accident — it is
+# the reason the package boundaries are drawn where they are, and keeping this
+# job toolchain-free is how the boundary stays honest.
+#
+# `engine` compiles the C through the build hook and runs the meters against
+# arithmetic on all three desktop platforms. It needs no audio hardware: the
+# built-in test tone is what makes the engine testable on a headless runner.
+#
+# From Phase 1 this file also runs the EBU R128 conformance vectors, and a red
+# conformance run blocks the release. See docs/METRICS.md.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Pinned to the same version as .tool-versions. Keep the two in step; a CI that
+# passes on a different Flutter than everybody develops against is worse than
+# no CI.
+env:
+  FLUTTER_VERSION: 3.44.5
+
+jobs:
+  checks:
+    name: Analyze and test (no toolchain)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Resolve dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Check formatting
+        run: dart format --output=none --set-exit-if-changed .
+
+      - name: Domain tests
+        working-directory: packages/bel_core
+        run: |
+          dart pub get
+          dart test
+
+      - name: Widget tests
+        run: flutter test
+
+  engine:
+    name: Engine (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      # Compiles engine/src through hook/build.dart and exercises the meters
+      # against the test tone. A sine of amplitude A peaks at A and has an RMS
+      # of A/sqrt(2) — if those drift, the meters are wrong, not the tone.
+      - name: Engine tests
+        working-directory: packages/bel_engine
+        run: |
+          dart pub get
+          dart test

@@ -1,0 +1,23 @@
+name: bel_engine
+description: >-
+  Dart bindings for the Bel measurement engine. Compiles the C in engine/ via a
+  build hook and exposes its snapshot as zero-copy typed views.
+version: 0.1.0
+publish_to: 'none' # Depends on ../../engine, which no published archive contains.
+
+environment:
+  sdk: ^3.12.2
+
+dependencies:
+  code_assets: ^1.0.0
+  # Needed at runtime, not just for codegen: bel_version_string returns a
+  # Pointer<Char> and Utf8 conversion lives here.
+  ffi: ^2.1.4
+  hooks: ^1.0.0
+  logging: ^1.3.0
+  native_toolchain_c: ^0.17.4
+
+dev_dependencies:
+  ffigen: ^20.1.1
+  flutter_lints: ^6.0.0
+  test: ^1.28.0

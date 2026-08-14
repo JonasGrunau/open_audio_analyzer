@@ -1,0 +1,60 @@
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
+
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# The .vscode folder contains launch configuration and tasks you configure in
+# VS Code which you may wish to be included in version control, so this line
+# is commented out by default.
+#.vscode/
+
+# Flutter/Dart/Pub related
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+/build/
+/coverage/
+
+# Symbolication related
+app.*.symbols
+
+# Obfuscation related
+app.*.map.json
+
+# Android Studio will place build artifacts here
+/android/app/debug
+/android/app/profile
+/android/app/release
+
+# Workspace packages build their own artifacts.
+packages/*/build/
+packages/*/.dart_tool/
+
+# The engine's out-of-tree CMake build (C tests, Phase 1).
+engine/build/
+
+# The plan and design docs are committed; scratch notes are not.
+docs/scratch/
+
+# Local agent/tooling state. Session-scoped and machine-specific, and the
+# replay logs contain transcript content — never publish these.
+# Leading ** so it matches inside the workspace packages too, not just the root.
+**/.omc/

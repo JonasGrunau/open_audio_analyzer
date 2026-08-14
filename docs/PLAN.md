@@ -1,0 +1,253 @@
+# Bel — a free, open-source loudness & spectrum analyzer
+
+## Context
+
+[Decibel](https://process.audio/de/products/decibel/manual) by process.audio is a commercial
+modular metering suite: a resizable canvas of meter modules (LUFS, True Peak, VU, spectrum,
+spectrogram, phase scope, histogram…), organised into tabs, driven by presets, calibrations and
+skins, with offline file analysis and a Wi-Fi companion display for tablets.
+
+We want a free and open-source equivalent, built in Flutter so one codebase covers macOS,
+Windows, Linux and tablets. Phone and web are explicitly out of scope. The hard requirement is
+**latency-free, perfectly smooth rendering** — a meter that stutters is not a meter — which
+drives essentially every architectural decision below.
+
+Product name: **Bel** (the unit a *deci*bel is a tenth of — an honest nod, not a copy).
+Repo stays `open_music_analyzer`; binary and packages are `bel*`.
+
+The repo is currently empty (one commit, no files). Everything below is greenfield.
+
+### Decisions already made
+
+| | |
+|---|---|
+| **Scope** | All three tiers: standalone app → LAN remote display → headless DAW plugin. Phased so each ships alone. |
+| **License** | Dual. `engine/` + `packages/bel_core` → **MIT**. App, UI, plugin, CLI → **GPL-3.0-or-later**. Rationale: the DSP engine is worth embedding everywhere and needs outside scrutiny; the finished product should not be re-closable. MIT→GPL is one-way compatible, so this composes cleanly. |
+| **Visual language** | "Precision Instrument" — graphite black `#0B0C0E`, panel `#121417`, 1px hairline `#1F2328`, single accent `#35E0C4`, warn `#F2B01E`, over `#FF4D4D`. Inter + JetBrains Mono (tabular figures). No shadows, no gradients, flat. |
+| **State** | Riverpod for UI/config. **Meter data never enters it** — see the performance thesis. |
+| **Flutter** | Pin `3.44.5-stable` in `.tool-versions` (matches `gather-v2-app`). |
+| **Native** | `flutter create --template=package_ffi` + `hook/build.dart` + `native_toolchain_c`. Recommended since Flutter 3.38; no `CMakeLists.txt`/podspec/gradle per platform. |
+
+---
+
+## The performance thesis
+
+Everything turns on one rule: **audio data never crosses an isolate boundary, never allocates
+per frame, and never rebuilds a widget.** Three tiers:
+
+1. **Audio thread (C, realtime-safe).** miniaudio callback. No malloc, no locks, no syscalls.
+   Copies input into a lock-free SPSC ring buffer and returns. Microseconds.
+2. **Analysis thread (C, high priority, not realtime).** Drains the ring, runs the whole DSP
+   graph, publishes results into a **seqlock-protected snapshot struct** in shared memory.
+3. **UI thread (Dart).** One `Ticker`. Per frame: a single `@Native(isLeaf: true)` call
+   (`bel_snapshot_acquire`, ~2–5 ns, no safepoint transition) then every painter reads
+   `Float32List` views **created once at startup** via `Pointer.asTypedList()` over that native
+   memory. Zero copies into the Dart heap, zero allocation per frame.
+
+The widget tree is not involved. Painters use `CustomPainter(repaint: meterClock)`, which
+repaints **without rebuilding**. Frame cost = 1 FFI call + N `paint()` calls.
+
+A single `MeterClock` owns the only `Ticker`; modules never own one. The FPS setting
+(30/60/120) throttles by skipping notifications.
+
+### Rendering technique per module
+
+Most Flutter audio UIs die here. Specifics, all inside `RepaintBoundary`:
+
+| Module | Technique |
+|---|---|
+| Number box, LUFS, Alert, Validator | `ui.Paragraph` **cached per distinct formatted string**. Values change ~10 Hz, not 60 — re-layout only when the string actually changes. |
+| Digital meter | Batched `drawRect`, one reused `Paint`. |
+| VU meter | Dial face pre-rendered **once** to a `ui.Image` via `Picture.toImageSync()`; only the needle repaints. |
+| Spectrum analyzer | `drawRawPoints(PointMode.polygon, …)` over the native-memory `Float32List`. C writes **screen-space x,y pairs directly** (log-frequency x positions recomputed only on resize). Zero conversion in Dart. |
+| Phase scope | `drawRawPoints(PointMode.points, …)` onto a persistent afterglow layer: `Picture.toImageSync()` ping-pong — draw previous image at reduced opacity, then new points. All GPU-side, no CPU readback. |
+| Stereo cloud | `drawVertices(Vertices.raw(...))` — takes `Float32List` positions + `Int32List` colors straight through. |
+| Spectrogram | Persistent scroll target: each frame blit the previous image offset by N px, then one new 1×H column. Never re-uploads the full texture. |
+| Histogram | Two layers: a **committed** `ui.Image` for everything off the live tail (rebuilt only on zoom/scroll) + the live tail per frame. 4 h at 10 Hz is 144k points — never re-path all of it. |
+
+`Picture.toImageSync()` layers hold GPU textures — **explicit disposal on resize/teardown**, or
+we leak VRAM. Call this out in `AGENTS.md`.
+
+---
+
+## Repository structure
+
+```
+open_music_analyzer/
+├── README.md                  # the real design document (gather-v2-app register)
+├── CLAUDE.md                  # agent instructions
+├── AGENTS.md                  # + one per directory, gather-style
+├── LICENSE                    # GPL-3.0-or-later (the app)
+├── engine/LICENSE             # MIT
+├── .tool-versions             # flutter 3.44.5-stable
+├── engine/                    # C11 DSP core — knows nothing about Dart or Flutter
+│   ├── include/bel/bel.h      # the entire public C ABI, one header
+│   ├── src/{ring,seqlock,kweight,loudness,lra,truepeak,rms,vu,fft,phase,cloud,
+│   │        spectro,histogram,snapshot,graph,device,decode}.c
+│   ├── third_party/{miniaudio,pffft,dr_libs,stb_vorbis}
+│   ├── test/                  # C unit tests + EBU conformance vectors
+│   └── CMakeLists.txt         # only for the C test runner and the plugin build
+├── packages/
+│   ├── bel_engine/            # FFI package; hook/build.dart, ffigen.yaml, typed snapshot facade
+│   ├── bel_core/              # pure Dart domain — no dart:ffi, no Flutter
+│   └── bel_ui/                # design system: tokens, primitives, painter bases
+├── lib/src/{app,clock,modules,canvas,panels,data}/
+├── cli/                       # `bel analyze file.wav --json`
+├── plugin/                    # CLAP plugin (Phase 7)
+├── tool/                      # icons, conformance runner, release scripts
+└── .github/workflows/
+```
+
+**The load-bearing boundary:** `engine/` has no knowledge of Flutter; `bel_core` has no
+knowledge of `dart:ffi`. That is the clean-architecture line that actually matters here — it is
+also what makes "all three tiers" tractable, because *the same `libbel` serves all of them.*
+
+---
+
+## The DSP, specified against standards
+
+Correctness is the whole product. Every metric is pinned to a spec, not vibes.
+
+- **K-weighting** — ITU-R BS.1770-4 stage-1 shelf + stage-2 RLB high-pass. Coefficients
+  **computed from the analog prototype at the actual sample rate**, not hardcoded 48 kHz tables,
+  so 44.1/48/88.2/96/192 k are all correct.
+- **Gating** — EBU R128: 400 ms blocks at 75 % overlap, absolute gate −70 LUFS, relative gate
+  −10 LU. Momentary 400 ms, short-term 3 s.
+- **LRA** — gated at −20 LU relative, 10th–95th percentile of the short-term distribution, via a
+  0.1 LU-bin **histogram** (O(1) per update, not a sorted list).
+- **True Peak** — BS.1770-4 Annex 2: 4× oversampling with the specified 48-tap polyphase FIR
+  (12 taps/phase); 2× at ≥96 kHz.
+- **RMS, Peak, crest factor, PLR, PSR.**
+- **Dynamics** — Decibel's "TrueDyn" is proprietary and undocumented. We do **not** claim
+  parity. We ship `DR-S` / `DR-I` = `TruePeakMax − LUFS-S/I`, formula published in our manual and
+  reproducible. Honesty over a fake-compatible number.
+- **FFT** — pffft; Hann window; sizes 1024–8192; log-frequency band mapping using
+  **peak-per-bin** (not average, so narrow peaks survive); A/C/Z weighting; slow/med/fast
+  release ballistics; infinite peak hold.
+- **Correlation** — running Pearson over a sliding window, sum-based, O(1) per sample.
+
+The graph is **sample-rate agnostic** and **channel-count agnostic up to 7.1** (the Digital
+Meter requires it).
+
+### The correctness gate
+
+CI asserts the engine against the **EBU R128 / ITU BS.2217 conformance test set** (known
+LUFS-I / LRA / TP values) within ±0.1 LU, and cross-checks against `libebur128` (MIT) as an
+oracle in the C test suite. This single test is what separates a real meter from a toy; it
+lands in Phase 1, not "later".
+
+---
+
+## Feature mapping — Decibel → Bel
+
+| Decibel | Bel | Note |
+|---|---|---|
+| Modules: LUFS, Super, Digital, VU, Spectrum, Spectrogram, Phase Scope, Stereo Cloud, Histogram, Number Box, Alert, Validator | all twelve | VU keeps Vintage/Modern/"Destroyed" variants and mono/stereo/mid/side |
+| Free-pixel canvas, corner resize | **24-column snapping grid**, cell-based | Our twist: deterministic, responsive tablet↔desktop for free. Keeps shift-to-fill, alt-drag duplicate, right-click menu, click-empty-to-add |
+| Tabs (per preset, keyboard switchable) | same | |
+| Presets store layout + tabs + display assignment, relative sizing | same, but grid coords make screen-independence free | Decibel special-cases this; we get it structurally |
+| Calibration (VU ref, TP max, LUFS-I target + tolerance, LRA max) | same, plus a **curated target library as JSON data** | Spotify/Apple/YouTube/Tidal/Amazon, EBU R128, ATSC A/85, podcast, club/CD — community-editable, not compiled in |
+| Skins | token-based JSON skins | users author them without a build |
+| LUFS modes: Continuous / System / Elapsed / Timecode | same | Elapsed & Timecode arrive with the plugin (Phase 7) |
+| Offline drag-and-drop analysis | same, same DSP code path at max speed | identical numbers to realtime — that *is* the correctness argument |
+| Export `.txt` report | `.txt` **+ JSON + CSV + rendered report card**, plus a `bel analyze --json` CLI | scriptable in a release pipeline; a genuine win over the original, nearly free once the engine is a C lib |
+| Companion display, connect by typing an IP | remote display via **mDNS discovery** (`_bel._tcp`) | strictly better UX than typing IPs |
+| Standalone / VST3 / AU / AAX | standalone + **CLAP** plugin, VST3/AU via `clap-wrapper` | Flutter cannot be a plugin GUI. The plugin is headless C++ around the same `libbel`, streaming snapshots + DAW transport to the app. CLAP's SDK is MIT — no VST3-SDK licensing friction |
+| 30/60 fps option | 30/60/120 | |
+
+---
+
+## Design system (`packages/bel_ui`)
+
+- **Spacing** `2, 4, 8, 12, 16, 24, 32, 48, 64` exposed as `Space.*`. **No raw numbers in widget
+  code** — enforced as a review rule in `CLAUDE.md`.
+- **Radii** `0, 2, 4, 8`. **Borders** 1px hairline only. **Elevation: none** — depth comes from
+  background steps and hairlines, which is how professional audio tools read.
+- **Type** Inter (UI) + JetBrains Mono for every numeric readout, with
+  `FontFeature.tabularFigures()` — non-negotiable; jittering digits look amateur.
+- **Reused primitives** (the "reuse components" requirement is met structurally): `ModuleFrame`
+  (title bar, burger menu, resize affordance, min-size placeholder), `Readout`, `ScaleAxis`,
+  `TargetMarker`, `OptionSheet`, `PanelScaffold`, `SegmentedControl`, `MeterPainterBase`.
+  Every one of the twelve modules is `ModuleFrame` + a painter; module-specific code is the
+  painter and its options schema, nothing else.
+
+---
+
+## Documentation deliverables
+
+`gather-v2-app` has no `CLAUDE.md` — its equivalent is `AGENTS.md`, with one per directory. We
+produce both, in the same register: long "why, not what" file-header comments stating the
+failure mode that forced each design.
+
+- `CLAUDE.md` — spacing rule, the no-allocation-per-frame rule, the engine/Flutter boundary,
+  the dual-license boundary, test gates.
+- `AGENTS.md` at root + `engine/`, `engine/src/`, `packages/`, each package, `lib/`,
+  `lib/src/modules/`, `test/`, `tool/`, `.github/`.
+- `README.md` — the real design document: architecture, the performance thesis, the DSP spec
+  table, licensing split, build instructions, the honest list of gaps vs Decibel.
+
+---
+
+## Phasing
+
+Each phase is independently shippable.
+
+- **Phase 0 — Skeleton + spike (proves the thesis).** Repo scaffolding, both LICENSEs, README,
+  CLAUDE.md/AGENTS.md tree, CI, `gh repo create JonasGrunau/open_music_analyzer --public --push`.
+  Flutter app shell + `bel_engine` package_ffi compiling one C file; a C sine generator writing
+  a snapshot; one Number Box painting it via the Ticker path.
+  **Gate: profile-mode frame time < 2 ms including the FFI read.** If `hook/build.dart` native
+  assets misbehave on any desktop target, we find out here — fallback is legacy `plugin_ffi` +
+  CMake, and finding out in Phase 0 costs a day instead of a month.
+- **Phase 1 — Engine core.** miniaudio capture, ring buffer, seqlock snapshot, K-weighting,
+  M/S/I, LRA, true peak, RMS, VU ballistics, crest. C tests **+ EBU conformance in CI**.
+- **Phase 2 — Design system + canvas.** `bel_ui` tokens and primitives; grid canvas with
+  add/move/resize/duplicate/delete; tabs.
+- **Phase 3 — The twelve modules,** in dependency order: Number Box → LUFS → Digital → Alert →
+  Validator → Super → Histogram → VU → Spectrum → Phase Scope → Spectrogram → Stereo Cloud.
+- **Phase 4 — Presets, Calibration, Skins, audio settings, persistence.**
+- **Phase 5 — Offline analysis, report panel, exports, `bel` CLI.**
+- **Phase 6 — Remote display:** mDNS discovery, binary snapshot wire format, tablet mode
+  rendering the same `ModuleSpec` tree with the same painters.
+- **Phase 7 — CLAP plugin** + `clap-wrapper` VST3/AU, DAW transport → Elapsed/Timecode modes.
+- **Phase 8 — Polish:** keyboard shortcuts, docs site, packaging (dmg / msix / AppImage / flatpak).
+
+---
+
+## Risks, stated honestly
+
+1. **macOS system-audio capture is the biggest gap vs Decibel.** Decibel ships its own signed
+   monitoring driver; we realistically cannot early on. v1 documents BlackHole/loopback devices;
+   ScreenCaptureKit (macOS 13+) is evaluated in a later phase. This should be stated plainly in
+   the README rather than discovered by users.
+2. **Native assets (`hook/build.dart`) are young.** Recommended since Flutter 3.38, but verify on
+   all three desktop targets in Phase 0 before anything is built on top.
+3. **Tablets are display-first.** FFI works fine on iPadOS/Android, but audio *input* selection
+   differs sharply per platform; the tablet build's primary role is the Phase 6 remote display.
+4. **GPU texture lifetime** in the `toImageSync()` persistence layers (spectrogram, phase scope,
+   stereo cloud, histogram) — disposal is mandatory on resize and teardown.
+5. `cmake` and `ninja` are **not installed** on this machine. Needed for the C test runner and
+   Phase 7; `brew install cmake ninja` in Phase 1.
+
+---
+
+## Verification
+
+- `flutter analyze && flutter test` — lints and widget/golden tests.
+- `dart test packages/bel_core` — domain layer, no widget tree needed.
+- `cmake --build engine/build && ctest` — DSP unit tests.
+- **`tool/conformance.dart`** — runs the EBU R128 / BS.2217 vectors through the engine, asserts
+  ±0.1 LU. Red conformance = red CI = no release.
+- Golden tests per module painter at fixed snapshot values.
+- **Perf gate:** a benchmark asserting frame build + raster stays in budget with 12 modules
+  live; verified with `flutter run --profile` and the DevTools timeline.
+- Manual: play a known-loudness reference file through the app and through `bel analyze`, and
+  confirm the two agree — realtime and offline share the DSP path, so divergence is a bug.
+
+---
+
+## First actions on approval
+
+1. Scaffold the repo, both LICENSE files, README, CLAUDE.md and the AGENTS.md tree.
+2. `gh repo create JonasGrunau/open_music_analyzer --public --source=. --push`.
+3. Phase 0 spike, and hold it against the < 2 ms gate before going further.

@@ -1,0 +1,13 @@
+# Editor-only. The real build gets these from packages/bel_engine/hook/build.dart.
+#
+# `-xc` is not optional: without it clangd guesses Objective-C++ for the .h
+# files on macOS, then rejects `-std=c11` as incompatible and reports a cascade
+# of errors that have nothing to do with the code. Relative paths resolve
+# against this file's directory.
+CompileFlags:
+  Add:
+    - -xc
+    - -I../include
+    - -std=c11
+    - -Wall
+    - -Wextra

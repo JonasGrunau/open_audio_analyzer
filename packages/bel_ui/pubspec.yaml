@@ -1,0 +1,21 @@
+name: bel_ui
+description: >-
+  The Bel design system: spacing, colour and type tokens, and the widget
+  primitives every meter module is assembled from.
+version: 0.1.0
+publish_to: 'none'
+
+environment:
+  sdk: ^3.12.2
+  flutter: '>=3.44.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  bel_core:
+    path: ../bel_core
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
