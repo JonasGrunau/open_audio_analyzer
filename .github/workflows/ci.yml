@@ -2,14 +2,18 @@
 #
 # Two jobs, split by what they actually need.
 #
-# `checks` needs no C toolchain at all, because `bel_core` depends on nothing
-# and the widget tests never touch the engine. That is not an accident — it is
-# the reason the package boundaries are drawn where they are, and keeping this
-# job toolchain-free is how the boundary stays honest.
+# `checks` runs the cheap, broad signals first. The domain tests genuinely need
+# no C toolchain — `bel_core` depends on nothing — so they run before anything
+# that compiles, and a domain regression is diagnosed without waiting on a
+# native build. The widget tests come after and *do* build the engine, because
+# the app depends on `bel_engine`; there is no way around that and no reason to
+# want one.
 #
 # `engine` compiles the C through the build hook and runs the meters against
 # arithmetic on all three desktop platforms. It needs no audio hardware: the
 # built-in test tone is what makes the engine testable on a headless runner.
+# Running all three matters — the POSIX feature-test macro bug that broke the
+# first CI run was invisible on Windows and on the development machine.
 #
 # From Phase 1 this file also runs the EBU R128 conformance vectors, and a red
 # conformance run blocks the release. See docs/METRICS.md.
@@ -30,7 +34,7 @@ env:
 
 jobs:
   checks:
-    name: Analyze and test (no toolchain)
+    name: Analyze and test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

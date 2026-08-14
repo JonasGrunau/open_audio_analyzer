@@ -98,6 +98,72 @@ Loudness is not measured yet and the UI says so.
   The Dart side asserts the version at startup, because a stale library does not
   crash — it reads a reordered struct and displays plausible wrong numbers.
 
+### CHANGELOG.md Format
+
+`CHANGELOG.md` is written for the person deciding whether to update, not for
+the person who wrote the code. Based on Keep a Changelog with one addition that
+matters more here than anywhere else — see 📐 below.
+
+**Structure.** Newest first. `## [Unreleased]` always sits at the top, even when
+empty. Versions are `## [0.2.0] — 2026-09-01`, semver, em dash, ISO date. Link
+definitions go at the bottom. **A released section is never rewritten** — if it
+was wrong, correct it in the next release and say so.
+
+**Sections**, in this exact order. Omit any that is empty; never reorder them,
+because readers learn the shape and scan by position.
+
+| | Section | Contents |
+|---|---|---|
+| 📐 | `Measurement` | Anything that changes a number Bel reports. |
+| ✨ | `Added` | New capability that was not there before. |
+| ⚡ | `Changed` | Existing behaviour that works differently now. |
+| 🐛 | `Fixed` | A defect that is no longer there. |
+| 🔥 | `Removed` | Capability that is gone. Deprecations go under `Changed` with the removal version named. |
+| 🔒 | `Security` | Anything with a security consequence. |
+| 🚧 | `Internal` | Refactors, build, CI, docs. Last, because most readers stop before it. |
+
+**📐 Measurement comes first, and it is not optional.** Users make delivery
+decisions from these numbers. If a reading changes — a corrected filter
+coefficient, a different gating threshold, a fixed rounding — somebody's
+previous master was measured with the old one. Every entry states **the old
+behaviour, the new behaviour, and the magnitude**, and says whether a re-measure
+is warranted. "Fixed LRA calculation" is not an acceptable entry. This section
+also records a metric moving from unavailable to measured.
+
+**Entries.** One line each, starting with a capital and ending with a full stop.
+Describe the effect on the user, not the diff. Reference at the end: `(#42)`.
+Emoji appear **only in section headings** — never inside an entry, never in a
+heading twice, never anywhere else in the file.
+
+```markdown
+## [Unreleased]
+
+## [0.2.0] — 2026-09-01
+
+### 📐 Measurement
+- LUFS-I, LUFS-M, LUFS-S and LRA are now measured; they previously read as a
+  dash. Verified against the EBU R128 conformance vectors to within 0.1 LU. (#31)
+- True peak now uses 4× oversampling per BS.1770-4 Annex 2 instead of sample
+  peak. Readings rise by up to 1.5 dB on limited material, and a master that
+  previously passed a −1 dBTP ceiling may now fail it. Re-measure before
+  delivery. (#33)
+
+### ✨ Added
+- Audio device capture on macOS, Windows and Linux. (#28)
+
+### ⚡ Changed
+- The meter refresh rate defaults to 60 fps and is settable to 30 or 120. (#35)
+
+### 🐛 Fixed
+- The elapsed clock no longer resets when a device changes sample rate. (#39)
+
+### 🚧 Internal
+- The engine's POSIX feature-test macros are declared in the build hook. (#26)
+
+[unreleased]: https://github.com/JonasGrunau/open_music_analyzer/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/JonasGrunau/open_music_analyzer/compare/v0.1.0...v0.2.0
+```
+
 ### Testing Requirements
 
 ```sh

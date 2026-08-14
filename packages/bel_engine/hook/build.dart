@@ -35,6 +35,29 @@ const _engineSources = <String>[
   '../../engine/src/bel_source.c',
 ];
 
+/// Feature-test macros, which must be defined before any system header is
+/// included — which is why they are compiler defines rather than `#define`s at
+/// the top of one `.c` file. Every translation unit needs them, and
+/// `bel_internal.h` pulls in `<pthread.h>` on its own.
+Map<String, String?> _defines(OS targetOS) {
+  if (targetOS == OS.windows) {
+    // MSVC has no feature-test macro model; the Win32 headers are always
+    // visible. Passing these would be noise at best.
+    return const {};
+  }
+
+  return {
+    // POSIX.1-2008: clock_gettime, CLOCK_MONOTONIC, nanosleep, pthreads.
+    '_POSIX_C_SOURCE': '200809L',
+
+    // Asking for _POSIX_C_SOURCE on Darwin narrows the SDK to exactly POSIX and
+    // hides the Apple-specific half of the headers. We do not use any of it
+    // today, but the failure mode if we ever do is another "missing
+    // declaration" that looks like a compiler bug, so restore it up front.
+    if (targetOS == OS.macOS || targetOS == OS.iOS) '_DARWIN_C_SOURCE': null,
+  };
+}
+
 void main(List<String> args) async {
   await build(args, (input, output) async {
     final builder = CBuilder.library(
@@ -54,6 +77,20 @@ void main(List<String> args) async {
       // Windows build from silently falling back to C99 and failing inside
       // bel_atomic.h with an error that points at the wrong place.
       std: 'c11',
+
+      // `-std=c11` asks for strict ISO C, which defines __STRICT_ANSI__, which
+      // makes glibc and the Apple SDK hide everything POSIX — including
+      // clock_gettime, CLOCK_MONOTONIC, nanosleep and the pthread functions
+      // the analysis thread is built on.
+      //
+      // Declaring the POSIX level we need is the fix, rather than relaxing to
+      // gnu11 and depending on whichever extensions a given toolchain happens
+      // to leave switched on. This was found the hard way: a local Xcode SDK
+      // was lenient enough to compile without it, so the build passed on the
+      // development machine and failed on both POSIX CI runners. Windows was
+      // green throughout, which is exactly what made it confusing — MSVC never
+      // sees any of these declarations.
+      defines: _defines(input.config.code.targetOS),
 
       // GCC/Clang spelling only. MSVC treats `-Wall` as an alias for its own
       // (far noisier) `/Wall` and does not know `-Wextra` at all, so handing it
