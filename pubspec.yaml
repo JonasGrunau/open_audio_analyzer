@@ -36,3 +36,28 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
+  # Declared here rather than in bel_ui, which is where the type styles that use
+  # them live. A package's fonts have to be referenced as
+  # `TextStyle(fontFamily: 'Inter', package: 'bel_ui')`, and that constructor
+  # argument rewrites `fontFamilyFallback` as well — turning the system
+  # fallbacks in BelType into 'packages/bel_ui/Menlo' and similar paths that do
+  # not exist. Bundling from the application keeps both lists honest.
+  #
+  # Both families are SIL OFL 1.1; their licence files sit beside them and must
+  # ship with any binary. Only the weights BelType actually names are included.
+  fonts:
+    - family: Inter
+      fonts:
+        - asset: assets/fonts/Inter-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/Inter-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Inter-SemiBold.ttf
+          weight: 600
+    - family: JetBrains Mono
+      fonts:
+        - asset: assets/fonts/JetBrainsMono-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/JetBrainsMono-Medium.ttf
+          weight: 500

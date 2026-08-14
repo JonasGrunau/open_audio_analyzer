@@ -25,6 +25,9 @@ Loudness is not measured yet and the UI says so.
 | `packages/bel_engine/hook/build.dart` | Compiles `engine/` and bundles it as a code asset. The only native build description in the repo. |
 | `packages/bel_ui/lib/src/tokens.dart` | `Space`, `BelRadius`, `BelStroke`, `BelColors`, `BelType`. Nothing outside this file invents a spatial or colour value. |
 | `packages/bel_core/lib/src/layout.dart` | `ModuleSpec` / `TabSpec` / `PresetSpec` — the serialised layout model. |
+| `packages/bel_core/lib/src/grid.dart` | Every rule about where a module may go, as pure functions. No pixels. |
+| `lib/src/canvas/grid_canvas.dart` | The canvas: drag, resize, selection, the preview overlay. |
+| `lib/src/canvas/workspace.dart` | The one path every layout edit takes, and the undo history. |
 | `.tool-versions` | Pins Flutter `3.44.5-stable`. CI pins the same; keep them in step. |
 
 ## Subdirectories
@@ -82,6 +85,17 @@ Loudness is not measured yet and the UI says so.
 - **Every number on screen is monospaced with tabular figures.** `BelType`
   already does this. A readout whose digits change width jitters while you watch
   it.
+
+- **Painted chrome absorbs pointer events unless you stop it.** A
+  `CustomPaint` swallows every hit that lands on it, because
+  `CustomPainter.hitTest` returns null and `RenderCustomPaint` reads that as
+  true; `RenderDecoratedBox` does the same by asking the decoration, and a
+  `BoxDecoration` says yes everywhere inside its shape; `RenderParagraph` says
+  yes too. The canvas puts a module's drag and selection layers *behind* the
+  module, so any of the three makes meters unclickable and undraggable with no
+  error anywhere. Module painters extend `MeterPainter`, and inert chrome is
+  painted rather than decorated. This cost real debugging time; see the header
+  of `packages/bel_ui/lib/src/module_frame.dart`.
 
 - **A `BoxDecoration` may not combine `borderRadius` with a non-uniform
   `Border`.** Flutter asserts, the decoration paint aborts, and it silently

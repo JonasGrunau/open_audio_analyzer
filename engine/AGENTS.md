@@ -4,8 +4,8 @@ The C11 measurement core. **MIT licensed**, and it must stay independently
 usable — this is the part of the project with value outside the app.
 
 Three consumers link against it: the Flutter app (through `dart:ffi`), the `bel`
-CLI, and the CLAP plugin. None of them may know about the others, and none of
-their concerns may leak in here. In particular there is **no Dart, no Flutter,
+CLI, and the headless VST3/AU plugin. None of them may know about the others,
+and none of their concerns may leak in here. In particular there is **no Dart, no Flutter,
 no UI vocabulary and no file I/O outside `bel_decode.c`**.
 
 | Path | Contents |

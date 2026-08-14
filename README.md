@@ -13,11 +13,17 @@ modular canvas is the best interaction model anybody has found for this problem.
 The measurement work, the architecture and the visual language are our own, and
 where Bel cannot honestly match Decibel it says so rather than approximating.
 
-> **Status: Phase 1 complete.** Bel measures real audio from a real device.
+> **Status: Phase 2 complete.** Bel measures real audio from a real device, and
+> the canvas is arrangeable: add, move, resize, duplicate, delete, tabs, undo.
 > Loudness — momentary, short-term, integrated, LRA and true peak — is verified
 > against the EBU Tech 3341/3342 cases on Linux, macOS and Windows on every
-> push. Next is the canvas: drag, resize and tabs, then the twelve modules. See
+> push. **One of the twelve modules exists so far**; the other eleven can be
+> placed and say `NOT BUILT YET` where their meter will go. That is next. See
 > [Roadmap](#roadmap), and [docs/PLAN.md](docs/PLAN.md) for the full plan.
+>
+> Layouts are not saved yet — a rearranged canvas is gone when the app closes.
+> Persistence is Phase 4, and a half-written autosave now would only produce a
+> file format Phase 4 has to migrate.
 
 ---
 
@@ -148,16 +154,39 @@ positioning. 24 divides by 2, 3, 4, 6, 8 and 12, so halves, thirds and quarters
 are all exact — a 12-column grid cannot express thirds and quarters at once,
 which is the first thing anybody wants when arranging meters.
 
+**The row count is fixed too, at 16.** The obvious alternative — square cells
+and a canvas that scrolls — keeps module aspect ratios identical everywhere, and
+is wrong: on a 32" display a cell becomes 160 px, a six-row meter becomes 960 px
+tall, and a layout built on a laptop now needs scrolling. A meter bridge you
+have to scroll is not a meter bridge. So both axes are fixed and cells are
+whatever shape the window makes them, which costs nothing because every painter
+has to handle arbitrary aspect anyway — nothing stops you resizing a phase scope
+to 8×2.
+
 The practical win is that a preset stores grid cells, so it is
 screen-independent by construction. Decibel stores fractions of the window and
 reconstitutes them per display; Bel opens the same layout on a 32" monitor and
 an 11" tablet with nobody writing responsive code.
 
-The interactions worth keeping are kept: click empty space to add, shift-click
-to fill, alt-drag to duplicate, right-click for options, drag the corner to
-resize. A module resized below its minimum shows `TOO SMALL` instead of an
-unreadable smear — a spectrum analyser in two cells is not a small spectrum
-analyser.
+The interactions: **drag the title bar** to move, **drag the corner grip** to
+resize, **alt-drag** to duplicate, **right-click or double-click empty canvas**
+to add a module there, **right-click a module** for its options, `⌫` to delete,
+`⌘Z` / `⌘⇧Z` to undo and redo, and `1`–`9` to switch tabs. Buttons for add, undo
+and redo sit in the tab strip as well, because tablets have neither a right
+mouse button nor `⌘Z`.
+
+**Modules do not overlap, and a drop that would overlap is refused.** The two
+alternatives are worse: allowing overlap turns a meter bridge into a stack of
+half-hidden panels and needs a z-order, and pushing neighbours aside — what most
+dashboard grids do — means a drag near an edge can rearrange a layout you spent
+ten minutes on, irreversibly. Bel shows the target cells while the pointer is
+down, in the accent colour when the drop is legal and in red when it is not, and
+an illegal drop simply does not happen. Nothing moves that you did not move.
+
+A module resized below its minimum shows `TOO SMALL` instead of an unreadable
+smear — a spectrum analyser in two cells is not a small spectrum analyser. A
+module kind that has no painter yet says `NOT BUILT YET` rather than showing an
+empty panel, which would read as a meter that is broken.
 
 **Presets, Calibrations and Skins** are three independent axes, as in Decibel,
 including the `from preset` indirection. Null means *follow the preset*; a
@@ -196,6 +225,13 @@ Two rules are enforced rather than merely encouraged:
    you watch it. It is the single most obvious tell of a meter written by
    somebody who does not use meters.
 
+**Inter** (labels and prose) and **JetBrains Mono** (every number) are bundled
+rather than requested from the system, in the three and two weights the type
+scale actually names. Falling through to the platform's own faces means digit
+width, tracking and cap height all differ between macOS, Windows and Linux, and
+a layout tuned on one is subtly wrong on the other two. Both are SIL OFL 1.1 and
+their licences ship in `assets/fonts/`.
+
 Every one of the twelve modules is [`ModuleFrame`](packages/bel_ui/lib/src/module_frame.dart)
 plus a painter. That is the whole reuse strategy: a module that also owns its
 own border and title treatment is a module that will drift from the other
@@ -212,8 +248,9 @@ packages/
   bel_core/        Domain model. Pure Dart — no Flutter, no dart:ffi.        MIT
   bel_ui/          Design tokens and the primitives modules are built from.  GPL
 lib/               The application.                                          GPL
+assets/fonts/      Inter and JetBrains Mono, with their licences.        SIL OFL
 cli/               `bel analyze file.wav --json`            (Phase 5)        GPL
-plugin/            Headless CLAP plugin                     (Phase 7)        GPL
+plugin/            Headless VST3 + AU plugin                (Phase 7)        GPL
 ```
 
 Two boundaries carry weight:
@@ -280,12 +317,12 @@ hardware anywhere near it.
 |---|---|---|
 | 0 | Skeleton, engine spike, the render path, design tokens | ✅ done |
 | 1 | K-weighting, M/S/I, LRA, true peak, **EBU conformance in CI**, device capture | ✅ done |
-| 2 | The 24-column canvas: add, move, resize, duplicate, tabs | next |
-| 3 | The twelve modules | |
+| 2 | The 24×16 canvas: add, move, resize, duplicate, tabs, undo; bundled type | ✅ done |
+| 3 | The twelve modules | next |
 | 4 | Presets, calibrations, skins, audio settings, persistence | |
 | 5 | Offline file analysis, report panel, exports, `bel` CLI | |
 | 6 | Remote display: mDNS discovery, wire protocol, tablet mode | |
-| 7 | CLAP plugin (+ VST3/AU via `clap-wrapper`), DAW transport and timecode | |
+| 7 | VST3 and Audio Unit plugin, DAW transport and timecode | |
 | 8 | Keyboard shortcuts, docs, packaging (dmg / msix / AppImage / flatpak) | |
 
 ### Known gaps, stated plainly
@@ -305,10 +342,12 @@ hardware anywhere near it.
 - **Tablets are display-first.** FFI works fine on iPadOS and Android, but audio
   *input* selection differs sharply per platform. The tablet build's primary
   role is the Phase 6 remote display.
-- **Flutter cannot be a VST3/AU plugin GUI.** The plugin is a headless C++ CLAP
+- **Flutter cannot be a VST3/AU plugin GUI.** The plugin is a headless C++
   wrapper around the same `libbel`, streaming measurements and DAW transport to
-  the app. CLAP's SDK is MIT, which is also why it is the primary format rather
-  than VST3.
+  the app over a local socket. It ships as **VST3 and Audio Unit** — the two
+  formats that reach every DAW people actually master in, Ableton Live
+  included. AAX is out of scope: it needs Avid's SDK and a registered developer
+  account, neither of which a free project can promise.
 - **Native assets are young.** Recommended since Flutter 3.38, but the fallback
   if a platform misbehaves is the legacy `plugin_ffi` template plus CMake.
 

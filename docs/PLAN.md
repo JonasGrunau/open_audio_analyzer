@@ -93,7 +93,7 @@ open_music_analyzer/
 │   └── bel_ui/                # design system: tokens, primitives, painter bases
 ├── lib/src/{app,clock,modules,canvas,panels,data}/
 ├── cli/                       # `bel analyze file.wav --json`
-├── plugin/                    # CLAP plugin (Phase 7)
+├── plugin/                    # headless VST3 + AU plugin (Phase 7)
 ├── tool/                      # icons, conformance runner, release scripts
 └── .github/workflows/
 ```
@@ -152,7 +152,7 @@ lands in Phase 1, not "later".
 | Offline drag-and-drop analysis | same, same DSP code path at max speed | identical numbers to realtime — that *is* the correctness argument |
 | Export `.txt` report | `.txt` **+ JSON + CSV + rendered report card**, plus a `bel analyze --json` CLI | scriptable in a release pipeline; a genuine win over the original, nearly free once the engine is a C lib |
 | Companion display, connect by typing an IP | remote display via **mDNS discovery** (`_bel._tcp`) | strictly better UX than typing IPs |
-| Standalone / VST3 / AU / AAX | standalone + **CLAP** plugin, VST3/AU via `clap-wrapper` | Flutter cannot be a plugin GUI. The plugin is headless C++ around the same `libbel`, streaming snapshots + DAW transport to the app. CLAP's SDK is MIT — no VST3-SDK licensing friction |
+| Standalone / VST3 / AU / AAX | standalone + **VST3** + **Audio Unit** | Flutter cannot be a plugin GUI. The plugin is headless C++ around the same `libbel`, streaming snapshots + DAW transport to the app. AAX is out of scope — it needs Avid's SDK and a registered account |
 | 30/60 fps option | 30/60/120 | |
 
 ---
@@ -209,7 +209,28 @@ Each phase is independently shippable.
 - **Phase 5 — Offline analysis, report panel, exports, `bel` CLI.**
 - **Phase 6 — Remote display:** mDNS discovery, binary snapshot wire format, tablet mode
   rendering the same `ModuleSpec` tree with the same painters.
-- **Phase 7 — CLAP plugin** + `clap-wrapper` VST3/AU, DAW transport → Elapsed/Timecode modes.
+- **Phase 7 — VST3 and Audio Unit plugin**, DAW transport → Elapsed/Timecode modes.
+
+  Built with **JUCE under its GPL-3.0 option**, which produces both formats — plus a
+  standalone target — from one headless C++ source set wrapped around `libbel`. The
+  alternative is writing against Steinberg's VST3 SDK and Apple's AudioUnit API
+  separately, which is two substantial implementations of boilerplate that a framework
+  exists to absorb, for a plugin whose actual job is thirty lines: take the DAW's buffer,
+  push it into `bel_engine_push`, and stream snapshots and transport position to the app
+  over a local socket.
+
+  **The licensing is coherent but it is a one-way door for `plugin/` only.** JUCE and the
+  VST3 SDK are both dual-licensed — proprietary, or GPL-3.0. Bel takes the GPL-3.0 path,
+  which is available *because* the application and plugin are already
+  GPL-3.0-or-later. The combined plugin binary is therefore GPL-3.0, and nobody can ship
+  a closed-source fork of it without buying both licences. `engine/` stays MIT and is
+  not touched by this: the plugin links it, it does not link the plugin.
+
+  CLAP was the earlier choice and is dropped. Its SDK is MIT and technically the nicest
+  of the three, but **Ableton Live does not host CLAP**, and a metering plugin that
+  cannot be inserted in Live is a metering plugin most people cannot use. VST3 plus AU
+  reaches Live, Logic, Pro Tools (via VST3 on the systems that allow it), Reaper, Studio
+  One, Bitwig, Cubase and Digital Performer.
 - **Phase 8 — Polish:** keyboard shortcuts, docs site, packaging (dmg / msix / AppImage / flatpak).
 
 ---

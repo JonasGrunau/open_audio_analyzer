@@ -32,7 +32,12 @@ abstract final class Space {
   /// Between unrelated groups inside one panel.
   static const double lg = 24;
 
-  /// Between modules on the canvas, and around the canvas itself.
+  /// Between two panels, and around a dialog's content.
+  ///
+  /// Deliberately *not* the gutter between modules on the canvas: with 24
+  /// columns there are 23 gutters across the screen, and 32 px each would spend
+  /// a third of a laptop display on empty space. The canvas uses [sm] between
+  /// modules and [md] around itself — see `GridGeometry`.
   static const double xl = 32;
 
   /// Major section separation.
@@ -170,10 +175,19 @@ class BelColors {
 /// it. It is the single most obvious tell of a meter written by somebody who
 /// does not use meters.
 abstract final class BelType {
-  /// Bundled in Phase 2. Until then these fall through to whatever the
-  /// platform offers, which is a real monospace on all five targets — good
-  /// enough to build against, not good enough to ship, because the tracking and
-  /// digit width differ per platform and the layout is tuned to one of them.
+  /// Both families are bundled — see the `fonts:` section of the application's
+  /// pubspec, which is where they have to be declared rather than in this
+  /// package (the reason is written down there).
+  ///
+  /// Bundling is not a nicety for a metering tool. Falling through to the
+  /// platform's own faces means the digit width, the tracking and the cap
+  /// height all differ between macOS, Windows and Linux, and a layout tuned on
+  /// one of them is subtly wrong on the other two — readouts that fit on the
+  /// machine it was designed on and ellipsise elsewhere.
+  ///
+  /// The fallback lists below stay as insurance. They cost nothing and they
+  /// keep the interface legible rather than blank if an asset ever fails to
+  /// load.
   static const String uiFamily = 'Inter';
   static const String monoFamily = 'JetBrains Mono';
 

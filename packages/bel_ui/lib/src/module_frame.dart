@@ -2,6 +2,7 @@
 
 import 'package:flutter/widgets.dart';
 
+import 'meter_painter.dart';
 import 'theme.dart';
 import 'tokens.dart';
 
@@ -17,6 +18,23 @@ import 'tokens.dart';
 /// entirely. The title does not change 60 times a second; only [child] repaints,
 /// and it does so inside a [RepaintBoundary] so that a spectrum analyser
 /// redrawing cannot dirty the panel border around it.
+///
+/// ---------------------------------------------------------------------------
+/// The chrome is painted, not decorated, because decorations eat pointers
+///
+/// The obvious way to draw this is a `DecoratedBox` with a `BoxDecoration`, and
+/// that is what it used to be. It is a trap. `RenderDecoratedBox.hitTestSelf`
+/// asks the decoration whether the point is inside its shape, and a
+/// `BoxDecoration` says yes to every point in the box — so the frame silently
+/// consumed every pointer event that landed anywhere on the module. The canvas
+/// puts a module's drag and selection affordances *behind* it, so the symptom
+/// was a canvas where no meter could be selected or dragged and nothing
+/// anywhere reported an error. `RenderParagraph` does the same thing, which is
+/// why the title label is wrapped in an [IgnorePointer].
+///
+/// So the fill, the border and the title rule are drawn by a [MeterPainter],
+/// which does not take input, and the only thing in the frame that can be
+/// clicked is the menu button. The frame is chrome, and chrome is inert.
 class ModuleFrame extends StatelessWidget {
   const ModuleFrame({
     required this.title,
@@ -51,37 +69,87 @@ class ModuleFrame extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = BelTheme.of(context);
 
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: colors.panel,
-        borderRadius: BelRadius.allSm,
-        border: Border.all(
-          color: selected ? colors.accent : colors.hairline,
-          width: BelStroke.hairline,
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        CustomPaint(
+          painter: _FramePainter(
+            fill: colors.panel,
+            border: selected ? colors.accent : colors.hairline,
+            rule: colors.hairline,
+          ),
         ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _TitleBar(
-            title: title,
-            trailing: trailing,
-            onMenu: onMenu,
-            colors: colors,
-          ),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.all(Space.sm),
-              // Isolates the meter's repaints from the frame around it. Without
-              // this, a spectrogram scrolling at 60 fps marks the whole panel
-              // dirty and the border is re-rastered along with it.
-              child: RepaintBoundary(child: child),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _TitleBar(
+              title: title,
+              trailing: trailing,
+              onMenu: onMenu,
+              colors: colors,
             ),
-          ),
-        ],
-      ),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.all(Space.sm),
+                // Isolates the meter's repaints from the frame around it.
+                // Without this, a spectrogram scrolling at 60 fps marks the
+                // whole panel dirty and the border is re-rastered along with it.
+                child: RepaintBoundary(child: child),
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
+}
+
+/// The panel fill, its hairline border and the rule under the title.
+class _FramePainter extends MeterPainter {
+  _FramePainter({required this.fill, required this.border, required this.rule})
+    : _fillPaint = (Paint()..color = fill),
+      _borderPaint = (Paint()
+        ..color = border
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = BelStroke.hairline),
+      _rulePaint = (Paint()
+        ..color = rule
+        ..strokeWidth = BelStroke.hairline
+        ..isAntiAlias = false);
+
+  final Color fill;
+  final Color border;
+  final Color rule;
+
+  final Paint _fillPaint;
+  final Paint _borderPaint;
+  final Paint _rulePaint;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final bounds = Offset.zero & size;
+    canvas.drawRRect(RRect.fromRectAndRadius(bounds, BelRadius.sm), _fillPaint);
+    // Inset by half the stroke so a hairline lands inside the panel rather than
+    // straddling its edge, where it renders as two grey half-pixels.
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        bounds.deflate(BelStroke.hairline / 2),
+        BelRadius.sm,
+      ),
+      _borderPaint,
+    );
+    canvas.drawLine(
+      const Offset(0, ModuleFrame.titleBarHeight),
+      Offset(size.width, ModuleFrame.titleBarHeight),
+      _rulePaint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_FramePainter oldDelegate) =>
+      oldDelegate.fill != fill ||
+      oldDelegate.border != border ||
+      oldDelegate.rule != rule;
 }
 
 class _TitleBar extends StatelessWidget {
@@ -101,20 +169,14 @@ class _TitleBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return SizedBox(
       height: ModuleFrame.titleBarHeight,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          border: Border(
-            bottom: BorderSide(
-              color: colors.hairline,
-              width: BelStroke.hairline,
-            ),
-          ),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: Space.sm),
-          child: Row(
-            children: [
-              Expanded(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: Space.sm),
+        child: Row(
+          children: [
+            // The title bar is a drag handle everywhere except the menu button,
+            // and text absorbs pointer events — see this file's header.
+            Expanded(
+              child: IgnorePointer(
                 child: Text(
                   title.toUpperCase(),
                   style: BelType.label.copyWith(color: colors.textMuted),
@@ -122,19 +184,21 @@ class _TitleBar extends StatelessWidget {
                   maxLines: 1,
                 ),
               ),
-              if (trailing != null) ...[
-                const SizedBox(width: Space.sm),
-                DefaultTextStyle(
+            ),
+            if (trailing != null) ...[
+              const SizedBox(width: Space.sm),
+              IgnorePointer(
+                child: DefaultTextStyle(
                   style: BelType.tick.copyWith(color: colors.textFaint),
                   child: trailing!,
                 ),
-              ],
-              if (onMenu != null) ...[
-                const SizedBox(width: Space.sm),
-                _MenuButton(onPressed: onMenu!, colors: colors),
-              ],
+              ),
             ],
-          ),
+            if (onMenu != null) ...[
+              const SizedBox(width: Space.sm),
+              _MenuButton(onPressed: onMenu!, colors: colors),
+            ],
+          ],
         ),
       ),
     );
@@ -206,10 +270,14 @@ class ModuleTooSmall extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = BelTheme.of(context);
-    return Center(
-      child: Text(
-        'TOO SMALL',
-        style: BelType.label.copyWith(color: colors.textFaint),
+    // Inert, like every other meter body: this stands in for a module and must
+    // not stop the canvas selecting or dragging the module it stands in for.
+    return IgnorePointer(
+      child: Center(
+        child: Text(
+          'TOO SMALL',
+          style: BelType.label.copyWith(color: colors.textFaint),
+        ),
       ),
     );
   }

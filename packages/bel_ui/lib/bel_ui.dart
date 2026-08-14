@@ -16,6 +16,8 @@
 /// is swappable per skin.
 library;
 
+export 'src/grid_geometry.dart';
+export 'src/meter_painter.dart';
 export 'src/module_frame.dart';
 export 'src/readout.dart';
 export 'src/theme.dart';

@@ -8,20 +8,111 @@ import 'metric.dart';
 /// exception: [superMeter] keeps Decibel's name because there is no better one
 /// for "three integrating measurements on concentric arcs".
 enum ModuleKind {
-  numberBox('number_box', 'Number Box', 2, 1),
-  lufsMeter('lufs_meter', 'LUFS Meter', 4, 6),
-  digitalMeter('digital_meter', 'Digital Meter', 3, 6),
-  superMeter('super_meter', 'Super Meter', 6, 6),
-  vuMeter('vu_meter', 'VU Meter', 5, 4),
-  alertMeter('alert_meter', 'Alert Meter', 3, 2),
-  validator('validator', 'Validator', 4, 3),
-  histogram('histogram', 'Histogram', 8, 5),
-  spectrumAnalyzer('spectrum', 'Spectrum Analyzer', 8, 5),
-  spectrogram('spectrogram', 'Spectrogram', 8, 5),
-  phaseScope('phase_scope', 'Phase Scope', 5, 5),
-  stereoCloud('stereo_cloud', 'Stereo Cloud', 6, 5);
+  numberBox(
+    'number_box',
+    'Number Box',
+    minColumns: 2,
+    minRows: 1,
+    defaultColumns: 4,
+    defaultRows: 2,
+  ),
+  lufsMeter(
+    'lufs_meter',
+    'LUFS Meter',
+    minColumns: 4,
+    minRows: 6,
+    defaultColumns: 5,
+    defaultRows: 8,
+  ),
+  digitalMeter(
+    'digital_meter',
+    'Digital Meter',
+    minColumns: 3,
+    minRows: 6,
+    defaultColumns: 4,
+    defaultRows: 8,
+  ),
+  superMeter(
+    'super_meter',
+    'Super Meter',
+    minColumns: 6,
+    minRows: 6,
+    defaultColumns: 8,
+    defaultRows: 8,
+  ),
+  vuMeter(
+    'vu_meter',
+    'VU Meter',
+    minColumns: 5,
+    minRows: 4,
+    defaultColumns: 6,
+    defaultRows: 5,
+  ),
+  alertMeter(
+    'alert_meter',
+    'Alert Meter',
+    minColumns: 3,
+    minRows: 2,
+    defaultColumns: 4,
+    defaultRows: 3,
+  ),
+  validator(
+    'validator',
+    'Validator',
+    minColumns: 4,
+    minRows: 3,
+    defaultColumns: 6,
+    defaultRows: 4,
+  ),
+  histogram(
+    'histogram',
+    'Histogram',
+    minColumns: 8,
+    minRows: 5,
+    defaultColumns: 12,
+    defaultRows: 6,
+  ),
+  spectrumAnalyzer(
+    'spectrum',
+    'Spectrum Analyzer',
+    minColumns: 8,
+    minRows: 5,
+    defaultColumns: 12,
+    defaultRows: 7,
+  ),
+  spectrogram(
+    'spectrogram',
+    'Spectrogram',
+    minColumns: 8,
+    minRows: 5,
+    defaultColumns: 12,
+    defaultRows: 7,
+  ),
+  phaseScope(
+    'phase_scope',
+    'Phase Scope',
+    minColumns: 5,
+    minRows: 5,
+    defaultColumns: 6,
+    defaultRows: 6,
+  ),
+  stereoCloud(
+    'stereo_cloud',
+    'Stereo Cloud',
+    minColumns: 6,
+    minRows: 5,
+    defaultColumns: 6,
+    defaultRows: 6,
+  );
 
-  const ModuleKind(this.id, this.label, this.minColumns, this.minRows);
+  const ModuleKind(
+    this.id,
+    this.label, {
+    required this.minColumns,
+    required this.minRows,
+    required this.defaultColumns,
+    required this.defaultRows,
+  });
 
   /// Stable identifier for presets and the wire protocol.
   final String id;
@@ -35,6 +126,15 @@ enum ModuleKind {
   /// on resize.
   final int minColumns;
   final int minRows;
+
+  /// The size a freshly placed module gets.
+  ///
+  /// Deliberately larger than the minimum. Placing a module at its own minimum
+  /// means every module arrives looking cramped and the first thing anybody
+  /// does after adding one is resize it, which is a small failure repeated
+  /// twelve times.
+  final int defaultColumns;
+  final int defaultRows;
 
   static ModuleKind? fromId(String id) {
     for (final kind in ModuleKind.values) {
@@ -138,6 +238,13 @@ class ModuleSpec {
   Metric get metric =>
       Metric.fromId(options['metric'] as String? ?? '') ??
       Metric.lufsIntegrated;
+
+  /// What the title bar says.
+  ///
+  /// A Number Box is titled by what it shows rather than by what it is: six of
+  /// them side by side all called "Number Box" is six modules you have to read
+  /// the digits of to tell apart.
+  String get title => kind == ModuleKind.numberBox ? metric.label : kind.label;
 
   ModuleSpec copyWith({GridRect? rect, Map<String, Object?>? options}) =>
       ModuleSpec(
@@ -254,3 +361,27 @@ class PresetSpec {
 /// exact. A 12-column grid cannot express thirds and quarters at the same time,
 /// which is the first thing anybody wants when arranging meters.
 const int kGridColumns = 24;
+
+/// And this many rows tall.
+///
+/// Fixing the row count as well as the column count is what makes a preset
+/// genuinely screen-independent, and it is worth being explicit about why,
+/// because the obvious alternative looks better and is not.
+///
+/// The obvious alternative is square cells with a scrolling canvas: a cell is
+/// `width / 24` in both axes and the layout grows downwards. That keeps module
+/// aspect ratios identical everywhere — but on a 32" display a cell is 160 px,
+/// a modest six-row meter is 960 px tall, and a layout that fitted on the
+/// laptop it was built on now needs scrolling. A meter bridge you have to
+/// scroll is not a meter bridge; the entire point is that everything is in view
+/// at once.
+///
+/// So both axes are fixed and cells are whatever shape the window makes them.
+/// Aspect distortion costs nothing, because every painter has to handle
+/// arbitrary aspect anyway — nothing stops a user resizing a phase scope to
+/// 8x2, so a scope that only works when its cell is square was already broken.
+///
+/// 16 divides by 2, 4 and 8, so vertical halves, quarters and eighths are
+/// exact, and 24x16 is close enough to square on a 16:9 display that a module
+/// specified 6x6 reads as roughly square without anybody thinking about it.
+const int kGridRows = 16;

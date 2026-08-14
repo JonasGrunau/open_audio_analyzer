@@ -12,7 +12,7 @@
 //
 // **The relative paths below are load-bearing.** The engine deliberately lives
 // at the repository root rather than inside this package, because the CLI and
-// the CLAP plugin compile the same sources without going anywhere near Dart.
+// the VST3/AU plugin compile the same sources without going anywhere near Dart.
 // `CBuilder` resolves `sources` and `includes` against the package root, so
 // reaching it means climbing out of `packages/bel_engine/`. The consequence is
 // that this package is **not publishable to pub.dev** — a published archive

@@ -31,8 +31,31 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   METRICS.md, and expect this to be replaced by real layout metadata when a
   device or file source can supply it.
 
+- **A device's own sample rate and channel count are adopted, not converted
+  to.** Bel measures the stream the hardware produced; resampling in front of
+  the measurement would move inter-sample peaks and shift the K-weighted
+  energy, and the resulting numbers would still look plausible.
+- An interface wider than 7.1 is **refused** rather than measured eight
+  channels at a time and reported as programme loudness.
+- An unknown device id **fails** instead of falling back to the default. A
+  preset naming an interface that is not plugged in would otherwise silently
+  meter the laptop microphone.
+
 ### ✨ Added
 
+- **The canvas is arrangeable.** A 24-column by 16-row grid: drag a module by
+  its title bar to move it, drag the corner grip to resize, alt-drag to
+  duplicate, right-click or double-click empty space to add one, right-click a
+  module for its options. Modules may not overlap and an illegal drop is
+  refused rather than nudged elsewhere, with the target cells shown live while
+  the pointer is down.
+- **Tabs**, with rename, duplicate and delete, switchable with the number keys.
+- **Undo and redo**, over every layout edit, from the keyboard or the tab strip.
+- **A Number Box shows any of the sixteen measurements**, chosen per module
+  from its menu.
+- Inter and JetBrains Mono are **bundled** instead of requested from the system,
+  so digit width and tracking are identical on macOS, Windows and Linux. Both
+  are SIL OFL 1.1 and their licences ship alongside them.
 - **Capture from real audio devices.** Inputs are enumerated and selectable
   from the source menu in the status bar. On Windows, WASAPI loopback meters
   system output with no setup; on macOS and Linux a virtual loopback device
@@ -48,17 +71,18 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   it stale — it makes it an average of a different programme than the one that
   played.
 
-### 📐 Measurement (device capture)
+### ⚡ Changed
 
-- **A device's own sample rate and channel count are adopted, not converted
-  to.** Bel measures the stream the hardware produced; resampling in front of
-  the measurement would move inter-sample peaks and shift the K-weighted
-  energy, and the resulting numbers would still look plausible.
-- An interface wider than 7.1 is **refused** rather than measured eight
-  channels at a time and reported as programme loudness.
-- An unknown device id **fails** instead of falling back to the default. A
-  preset naming an interface that is not plugged in would otherwise silently
-  meter the laptop microphone.
+- The main view is an arrangeable canvas instead of a fixed wall showing every
+  metric at once. It opens on six readings — LUFS-M, LUFS-S, LUFS-I, LRA, TP
+  Max and Peak Max — and the rest of the canvas is yours.
+- Eleven of the twelve module kinds can now be **placed** on a tab, and say
+  `NOT BUILT YET` where their meter will go. Laying out a tab before every meter
+  exists is useful; an empty panel that looks like a broken meter is not.
+- The DAW plugin will ship as **VST3 and Audio Unit** rather than CLAP. CLAP's
+  SDK is the nicest of the three, but Ableton Live does not host CLAP, and a
+  metering plugin that cannot be inserted in Live is one most people cannot
+  use. This is a plan change; no plugin exists yet either way.
 
 ### 🚧 Internal
 
@@ -69,6 +93,17 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Loudness is asserted to be independent of both sample rate and push block
   size — properties the standard does not state but which catch two classes of
   error that 48 kHz single-block tests cannot.
+- The canvas placement rules — overlap, clamping, id allocation — are pure
+  functions over `TabSpec` in `bel_core`, so they are covered by tests that need
+  no window, and so the remote display cannot come to a different conclusion
+  about where a module goes than the app did.
+- Dragging a module rebuilds nothing. The module stays where it is and one
+  painter draws where it would land, so pointer movement cannot stall a canvas
+  of live meters.
+- Module painters now extend a `MeterPainter` base and the module frame's
+  chrome is painted rather than decorated. `CustomPainter.hitTest` and
+  `BoxDecoration` both absorb pointer events by default, which left every
+  meter's face unclickable with nothing reported anywhere.
 
 ## [0.1.0] — 2026-08-15
 

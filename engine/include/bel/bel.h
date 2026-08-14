@@ -5,9 +5,9 @@
  * Copyright (c) 2026 Jonas Grunau
  *
  * This one header is the whole contract. Three very different consumers link
- * against it — the Flutter app (through dart:ffi), the `bel` CLI, and the CLAP
- * plugin — and none of them may know anything about the others. If a thing is
- * not declared here, it is not part of the engine.
+ * against it — the Flutter app (through dart:ffi), the `bel` CLI, and the
+ * headless VST3/AU plugin — and none of them may know anything about the
+ * others. If a thing is not declared here, it is not part of the engine.
  *
  * ---------------------------------------------------------------------------
  * Why the API is shaped like this

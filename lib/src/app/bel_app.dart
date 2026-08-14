@@ -6,6 +6,8 @@ import 'package:bel_ui/bel_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../canvas/grid_canvas.dart';
+import '../canvas/tab_strip.dart';
 import '../clock/meter_clock.dart';
 import '../data/providers.dart';
 import '../modules/number_box.dart';
@@ -126,8 +128,35 @@ class _WorkspaceState extends State<_Workspace>
                     deviceId: _deviceId,
                     onSelect: _open,
                   ),
+                  const TabStrip(),
+                  // Rebuilds on the transition only, never on the sixty frames
+                  // a second where nothing changed — see MeterClock.overrun.
+                  ValueListenableBuilder<bool>(
+                    valueListenable: clock.overrun,
+                    builder: (context, hasOverrun, _) => hasOverrun
+                        ? Padding(
+                            padding: const EdgeInsets.fromLTRB(
+                              Space.md,
+                              Space.md,
+                              Space.md,
+                              0,
+                            ),
+                            child: _Notice(
+                              severity: colors.over,
+                              text:
+                                  'Audio was lost — ${engine.droppedFrames} '
+                                  'frames were discarded because analysis '
+                                  'could not keep up. Integrated loudness and '
+                                  'LRA average every block since the reset, so '
+                                  'they are now averages of less than what '
+                                  'played and cannot be trusted. Press RESET '
+                                  'to start a clean measurement.',
+                            ),
+                          )
+                        : const SizedBox.shrink(),
+                  ),
                   Expanded(
-                    child: _MeterCanvas(engine: engine, clock: clock),
+                    child: GridCanvas(engine: engine, clock: clock),
                   ),
                 ],
               ),
@@ -507,88 +536,6 @@ class _BarButton extends StatelessWidget {
           label,
           style: BelType.label.copyWith(color: colors.textMuted),
         ),
-      ),
-    );
-  }
-}
-
-/// Phase 0's stand-in for the grid canvas.
-///
-/// Every metric the engine knows about, as a Number Box, so that the ones which
-/// are not measured yet are visible as em dashes rather than quietly absent.
-/// The real 24-column canvas with drag, resize and snapping is Phase 2; this
-/// exists to exercise the render path and to make the honesty about
-/// unimplemented measurements impossible to miss.
-class _MeterCanvas extends ConsumerWidget {
-  const _MeterCanvas({required this.engine, required this.clock});
-
-  final BelEngine engine;
-  final MeterClock clock;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final colors = BelTheme.of(context);
-    final calibration = ref.watch(calibrationProvider);
-
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(Space.xl),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Rebuilds on the transition only, never on the sixty frames a
-          // second where nothing changed — see MeterClock.overrun.
-          ValueListenableBuilder<bool>(
-            valueListenable: clock.overrun,
-            builder: (context, hasOverrun, _) {
-              if (!hasOverrun) return const SizedBox.shrink();
-              return Padding(
-                padding: const EdgeInsets.only(bottom: Space.lg),
-                child: _Notice(
-                  severity: colors.over,
-                  text:
-                      'Audio was lost — ${engine.droppedFrames} frames were '
-                      'discarded because analysis could not keep up. '
-                      'Integrated loudness and LRA average every block since '
-                      'the reset, so they are now averages of less than what '
-                      'played and cannot be trusted. Press RESET to start a '
-                      'clean measurement.',
-                ),
-              );
-            },
-          ),
-          if (!engine.hasSpectrum) ...[
-            _Notice(
-              text:
-                  'The spectrum is not measured in this build. Those bands sit '
-                  'at the floor rather than showing an array of zeroes, which '
-                  'would draw as a flat line at full scale. The FFT lands with '
-                  'the analyser module that displays it.',
-            ),
-            const SizedBox(height: Space.lg),
-          ],
-          Text(
-            'MEASUREMENTS',
-            style: BelType.label.copyWith(color: colors.textFaint),
-          ),
-          const SizedBox(height: Space.smd),
-          Wrap(
-            spacing: Space.md,
-            runSpacing: Space.md,
-            children: [
-              for (final metric in Metric.values)
-                SizedBox(
-                  width: 200,
-                  height: 84,
-                  child: NumberBoxModule(
-                    engine: engine,
-                    clock: clock,
-                    metric: metric,
-                    calibration: calibration,
-                  ),
-                ),
-            ],
-          ),
-        ],
       ),
     );
   }

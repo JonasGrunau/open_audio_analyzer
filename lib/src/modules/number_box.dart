@@ -15,6 +15,10 @@ import '../data/metric_reader.dart';
 /// The simplest of the twelve modules, and therefore the one that establishes
 /// the pattern all the others follow:
 ///
+///   - The widget is the **body only**. Its title bar, border, menu affordance
+///     and selection state belong to the `ModuleFrame` the canvas wraps it in,
+///     so that twelve modules cannot drift into twelve slightly different
+///     frames.
 ///   - The widget builds **once**. It rebuilds only when the palette or the
 ///     target changes, never because a measurement did.
 ///   - The painter is handed [MeterClock] as its `repaint` listenable, so a new
@@ -62,25 +66,22 @@ class _NumberBoxModuleState extends State<NumberBoxModule> {
   Widget build(BuildContext context) {
     final colors = BelTheme.of(context);
 
-    return ModuleFrame(
-      title: widget.metric.label,
-      child: CustomPaint(
-        painter: _NumberBoxPainter(
-          engine: widget.engine,
-          metric: widget.metric,
-          calibration: widget.calibration,
-          colors: colors,
-          readout: _readout,
-          repaint: widget.clock,
-        ),
-        // Without this the CustomPaint has no intrinsic size and collapses.
-        child: const SizedBox.expand(),
+    return CustomPaint(
+      painter: _NumberBoxPainter(
+        engine: widget.engine,
+        metric: widget.metric,
+        calibration: widget.calibration,
+        colors: colors,
+        readout: _readout,
+        repaint: widget.clock,
       ),
+      // Without this the CustomPaint has no intrinsic size and collapses.
+      child: const SizedBox.expand(),
     );
   }
 }
 
-class _NumberBoxPainter extends CustomPainter {
+class _NumberBoxPainter extends MeterPainter {
   _NumberBoxPainter({
     required this.engine,
     required this.metric,
@@ -217,7 +218,7 @@ class _ElapsedReadoutState extends State<ElapsedReadout> {
   }
 }
 
-class _ElapsedPainter extends CustomPainter {
+class _ElapsedPainter extends MeterPainter {
   _ElapsedPainter({
     required this.engine,
     required this.colors,
