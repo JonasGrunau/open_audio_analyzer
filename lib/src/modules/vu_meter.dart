@@ -52,6 +52,28 @@ class _VuMeterModuleState extends State<VuMeterModule> {
   ui.Paragraph? _unit;
   Color? _builtColor;
 
+  /// How much room the scale labels need, above the arc and beside it.
+  ///
+  /// The labels sit outside the arc, each one pushed out far enough that its
+  /// *near* edge clears the arc by the same gap — which is what puts six boxes
+  /// of three different widths on one visual radius rather than scattered
+  /// along it.
+  ///
+  /// The two directions get different bounds because they are genuinely
+  /// different problems, and using one number for both is what left a band of
+  /// dead space above the dial. Straight up the reserve is exactly one label
+  /// height; the label nearest vertical is the tallest thing over the arc and
+  /// nothing beyond it reaches higher. Sideways it depends on the angle the
+  /// sweep opens to, so it is bounded rather than solved.
+  double _labelAbove = 0;
+  double _labelBeside = 0;
+
+  /// Height of the `VU` badge, which is reserved below the pivot rather than
+  /// drawn inside the dial. Printing it on the face is what a real VU does and
+  /// it is wrong here: at 0 VU — the one reading anybody is looking for — the
+  /// needle passes straight through it.
+  double _unitHeight = 0;
+
   @override
   Widget build(BuildContext context) {
     final colors = BelTheme.of(context);
@@ -76,6 +98,18 @@ class _VuMeterModuleState extends State<VuMeterModule> {
         'VU',
         BelType.label.copyWith(color: colors.textFaint),
       );
+
+      var widest = 0.0;
+      var tallest = 0.0;
+      for (final label in _labels) {
+        if (label.longestLine <= 0) continue;
+        if (label.longestLine > widest) widest = label.longestLine;
+        if (label.height > tallest) tallest = label.height;
+      }
+      _labelAbove = tallest;
+      _labelBeside =
+          math.sqrt(widest * widest + tallest * tallest) / 2 + widest / 2;
+      _unitHeight = _unit!.height;
     }
 
     return MeterBody(
@@ -130,73 +164,121 @@ class _VuPainter extends MeterPainter {
   final Paint _needle;
   final Paint _pivot;
 
-  /// The needle sweeps 70°, centred on vertical.
+  /// How far the sweep may open, either side of vertical.
   ///
-  /// Started at 50°, which is close to a real movement's travel and turned out
-  /// to be unreadable here: the eleven marks and their six labels have to fit
-  /// along that arc, and at 50° on a five-row module the labels overlap into a
-  /// grey smear. Real VU faces get away with it because they are physically
-  /// large. Wider than about 80° and it starts reading as a speedometer.
-  static const double _halfSweep = 35 * math.pi / 180;
+  /// Not a constant, because the module is not a constant shape. A VU tile is
+  /// resized in width far more often than in height, and a face laid out for
+  /// one aspect ratio leaves a third of the other empty — which is precisely
+  /// what this module did: a 35° sweep in a 2:1 tile drew its ink across the
+  /// middle half of the width and left the rest bare with the badge adrift in
+  /// it. The sweep now opens until the face fills the box, between two bounds
+  /// that both come from looking at it: under 35° the eleven marks collide,
+  /// and over 55° it stops reading as a VU and starts reading as a speedometer.
+  static const double _minHalfSweep = 35 * math.pi / 180;
+  static const double _maxHalfSweep = 55 * math.pi / 180;
 
   /// Ends of the scale, in VU. The face crowds towards the bottom end because
   /// deflection is linear in voltage.
   static const double _minVu = -20;
   static const double _maxVu = 3;
 
+  /// The gap between the arc and the near edge of a scale label.
+  static const double _labelGap = Space.xs;
+
+  /// The pivot cap, as a fraction of the face radius.
+  static const double _capShare = 0.035;
+
   @override
   void paint(Canvas canvas, Size size) {
-    if (size.width < 80 || size.height < 50) return;
+    // --- Geometry -----------------------------------------------------------
+    // Solved rather than assumed. `face` is the arc's radius; everything else
+    // is expressed against it, so the whole dial scales as one object and the
+    // ink is centred in the tile instead of pinned to a corner of it.
+    // No inset of its own: `ModuleFrame` already gives every module the same
+    // margin on all four sides, and a painter that adds a second one is a
+    // module that sits differently from the other eleven.
+    final availW = size.width;
+    final availH = size.height;
 
-    // The pivot sits below the face, so the needle sweeps across the top of the
-    // module and the dial fills the width rather than the height — which is the
-    // shape a VU module is actually resized into.
-    final radius = math.min(size.width * 0.52, size.height * 0.92);
-    final pivot = Offset(size.width / 2, size.height * 0.94);
-    final faceRadius = radius * 0.88;
+    final above = _labelGap + state._labelAbove;
+    final beside = _labelGap + state._labelBeside;
+    final unitBand = state._unitHeight + Space.sm;
 
-    final bounds = Rect.fromCircle(center: pivot, radius: faceRadius);
+    final vertical = availH - above - unitBand;
+    final horizontal = availW / 2 - beside;
+    if (vertical <= 0 || horizontal <= 0) return;
+
+    // Pick the sweep that makes width and height bind at the same radius, then
+    // clamp it into the readable range.
+    final halfSweep = math
+        .asin(
+          ((1 + _capShare) * horizontal / vertical).clamp(
+            math.sin(_minHalfSweep),
+            math.sin(_maxHalfSweep),
+          ),
+        )
+        .toDouble();
+    final sinHalf = math.sin(halfSweep);
+
+    final face = math.min(vertical / (1 + _capShare), horizontal / sinHalf);
+    if (face <= 0) return;
+
+    final cap = face * _capShare;
+    final inkHeight = face * (1 + _capShare) + above + unitBand;
+    final pivot = Offset(
+      size.width / 2,
+      (size.height - inkHeight) / 2 + face + above,
+    );
+
+    final bounds = Rect.fromCircle(center: pivot, radius: face);
     final zero = -math.pi / 2; // straight up
 
     // --- The arc, in two pieces so "over" is part of the face --------------
-    final overStart = zero + _angleOf(0);
+    final overStart = zero + _angleOf(0, halfSweep);
     canvas.drawArc(
       bounds,
-      zero - _halfSweep,
-      overStart - (zero - _halfSweep),
+      zero - halfSweep,
+      overStart - (zero - halfSweep),
       false,
       _arc,
     );
     canvas.drawArc(
       bounds,
       overStart,
-      zero + _halfSweep - overStart,
+      zero + halfSweep - overStart,
       false,
       _arcOver,
     );
 
-    // --- Marks --------------------------------------------------------------
+    // --- Marks and labels ---------------------------------------------------
+    // Labels sit *outside* the arc. Inside, they are in the needle's sweep:
+    // at rest the needle lay along the −20 mark and struck its own label
+    // through, and no reading on the lower half of the face could be read
+    // without the needle across it.
     for (var i = 0; i < _vuMarks.length; i++) {
       final vu = _vuMarks[i];
-      final angle = zero + _angleOf(vu);
+      final angle = zero + _angleOf(vu, halfSweep);
       final direction = Offset(math.cos(angle), math.sin(angle));
       final long = _vuLabelled.contains(vu);
 
       canvas.drawLine(
-        pivot + direction * faceRadius,
-        pivot +
-            direction * (faceRadius - (long ? radius * 0.09 : radius * 0.05)),
+        pivot + direction * face,
+        pivot + direction * (face - (long ? face * 0.10 : face * 0.06)),
         vu >= 0 ? _markOver : _mark,
       );
 
       final label = state._labels[i];
-      if (long && label.longestLine > 0) {
-        final at = pivot + direction * (faceRadius - radius * 0.19);
-        canvas.drawParagraph(
-          label,
-          at - Offset(label.longestLine / 2, label.height / 2),
-        );
-      }
+      if (!long || label.longestLine <= 0) continue;
+
+      // How far the label's own box extends along the radius it sits on. Push
+      // the centre out by exactly that and every near edge lands on one
+      // circle, whatever the angle — which is the difference between six
+      // labels on a scale and six labels scattered near one.
+      final half = Offset(label.longestLine / 2, label.height / 2);
+      final extent =
+          half.dx * direction.dx.abs() + half.dy * direction.dy.abs();
+      final at = pivot + direction * (face + _labelGap + extent);
+      canvas.drawParagraph(label, at - half);
     }
 
     // --- The needle ---------------------------------------------------------
@@ -209,19 +291,26 @@ class _VuPainter extends MeterPainter {
     }
 
     final vu = loudest - calibration.vuReference;
-    final angle = zero + _angleOf(vu);
+    final angle = zero + _angleOf(vu, halfSweep);
     final direction = Offset(math.cos(angle), math.sin(angle));
+
+    // From the pivot outwards, and no further back. The needle used to start a
+    // little behind its own centre — a counterweight a real movement has and a
+    // drawing of one does not need — and the tail was longer than the cap that
+    // was meant to hide it, so a second short needle stuck out of the bottom
+    // of the pivot pointing the opposite way.
     canvas.drawLine(
-      pivot - direction * (radius * 0.06),
-      pivot + direction * (faceRadius - radius * 0.02),
+      pivot,
+      pivot + direction * (face - BelStroke.mark),
       _needle,
     );
-    canvas.drawCircle(pivot, radius * 0.035, _pivot);
+    canvas.drawCircle(pivot, cap, _pivot);
 
+    // Below the pivot, where the needle cannot reach.
     final unit = state._unit!;
     canvas.drawParagraph(
       unit,
-      Offset(pivot.dx - unit.longestLine / 2, pivot.dy - radius * 0.30),
+      Offset(pivot.dx - unit.longestLine / 2, pivot.dy + cap + Space.sm),
     );
   }
 
@@ -232,15 +321,18 @@ class _VuPainter extends MeterPainter {
   /// what maps evenly onto the arc. Spacing the marks evenly in dB instead is
   /// the usual mistake and produces a face that looks right and reads wrong
   /// everywhere except at its two ends.
-  double _angleOf(double vu) {
+  double _angleOf(double vu, double halfSweep) {
     final clamped = vu.isNaN ? _minVu : vu.clamp(_minVu, _maxVu);
-    final low = _voltage(_minVu);
-    final high = _voltage(_maxVu);
-    final fraction = (_voltage(clamped) - low) / (high - low);
-    return (fraction * 2 - 1) * _halfSweep;
+    final fraction = (_voltage(clamped) - _lowVoltage) / _voltageSpan;
+    return (fraction * 2 - 1) * halfSweep;
   }
 
   static double _voltage(double vu) => math.pow(10, vu / 20).toDouble();
+
+  /// Hoisted off the frame path: the two ends of the scale never move, and
+  /// recomputing them cost twenty-four `pow` calls a frame.
+  static final double _lowVoltage = _voltage(_minVu);
+  static final double _voltageSpan = _voltage(_maxVu) - _voltage(_minVu);
 
   @override
   bool shouldRepaint(_VuPainter oldDelegate) =>

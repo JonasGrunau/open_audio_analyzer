@@ -9,7 +9,7 @@ The application. GPL-3.0-or-later.
 | `src/canvas/` | The grid canvas, the tab strip and the layout controller. See its own `AGENTS.md`. |
 | `src/clock/` | `MeterClock` — the only `Ticker` in the app. |
 | `src/data/` | Riverpod providers (configuration only) and `metric_reader.dart`. |
-| `src/modules/` | One file per meter module, all twelve. Bodies only — the frame is the canvas's. |
+| `src/modules/` | One file per meter module, all thirteen. Bodies only — the frame is the canvas's. |
 | `src/panels/` | Settings, presets, the delivery-target editor, the report. See its own `AGENTS.md`. |
 | `src/storage/` | Where configuration lives and how it is read and written. See its own `AGENTS.md`. |
 | `src/remote/` | Both ends of the remote display — the desktop host and the tablet client — plus mDNS. See its own `AGENTS.md`. |
@@ -28,7 +28,7 @@ The application. GPL-3.0-or-later.
   `repaint: clock`.** That constructor argument is the whole render strategy: it
   re-rasters without rebuilding the widget. The module widget supplies the
   **body only**; `ModuleHost` wraps it in the frame, so the title, border, menu
-  affordance and selection state are written once for all twelve.
+  affordance and selection state are written once for all thirteen.
 - **Every module painter extends `MeterPainter`, never `CustomPainter`
   directly.** `CustomPainter.hitTest` returns null and `RenderCustomPaint` reads
   that as *true*, so a plain painter silently swallows every pointer event that
@@ -50,15 +50,34 @@ The application. GPL-3.0-or-later.
   out only when the *formatted string* differs; and bulk geometry written into a
   preallocated `Float32List` and drawn with one `drawRawPoints`. A filled
   spectrum is 512 vertical segments in a single call, not a `Path`.
+- **Readings scale with the module; labels do not.** A bar, an arc and a dial
+  are already sized off the box they are handed, and the number beside them has
+  to be too — the same canvas is a 960 px window on a laptop and a 2560 px one
+  on a desktop, so a font size written as a constant is legible at exactly one
+  of them. Derive it from the module (`size.height * k`, or the gauge's
+  diameter) and clamp it, taking the *width* into the minimum wherever a long
+  reading could run off the side. What stays fixed is everything that is not a
+  measurement: a scale's tick labels, a column heading, a unit, PASS and FAIL.
+  Those are the same size in all thirteen modules, and scaling them is how thirteen
+  modules end up with thirteen type scales.
+- **A module never guards its own minimum size.** Declare it as
+  `minBodyWidth`/`minBodyHeight` on `ModuleKind` and let the frame substitute
+  the placeholder. A painter that returns early draws nothing, and nothing with
+  a title bar over it is a panel the user reads as broken rather than as small.
 - **A module that accumulates advances on `engine.generation`, never on
   `paint`.** Paint also runs on a resize, a theme change, or an ancestor marking
   the subtree dirty. A spectrogram that scrolled on those would invent time that
   no audio passed through, and it would look completely plausible.
-- **Anything from `toImageSync` holds a GPU texture and must be disposed.** The
-  garbage collector sees a small handle and feels no pressure, so a layer
-  dropped per frame leaks video memory on a machine reporting plenty free. Use
-  `PersistenceLayer`, which owns both the ping-pong and the disposal, and call
-  its `dispose` from `State.dispose`.
+- **An image from `toImageSync` may never be drawn into the picture that makes
+  the next one.** It is a handle to a display list the engine has not
+  rasterised yet and it keeps that display list alive for as long as it lives,
+  so a ping-pong retains every frame back to the first — and `dispose()`
+  releases the Dart handle, not the chain. The spectrogram, phase scope and
+  stereo cloud were all built this way and took the application to 266 GB
+  before killing the raster thread with a 3,286-deep destructor recursion.
+  There is no way to accumulate into a GPU surface from `dart:ui`: a module
+  that needs history keeps the history as data and redraws it, with
+  `PointBuckets` to keep the redraw to a few dozen calls.
 - **Look at the module running before you call it done.** Five defects in the
   first eleven were invisible to `flutter analyze` and to the widget tests, and
   obvious within a second of seeing the app: a right-aligned paragraph offset by

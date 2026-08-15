@@ -8,7 +8,7 @@ import 'tokens.dart';
 
 /// The chrome every meter module sits inside.
 ///
-/// All twelve modules are this frame plus a painter. That is the whole reuse
+/// All thirteen modules are this frame plus a painter. That is the whole reuse
 /// strategy, and it is deliberate: a module that also owns its own border, its
 /// own title treatment and its own menu affordance is a module that will drift
 /// from the other eleven, and eleven near-identical borders is exactly how an
@@ -75,7 +75,13 @@ class ModuleFrame extends StatelessWidget {
         CustomPaint(
           painter: _FramePainter(
             fill: colors.panel,
-            border: selected ? colors.accent : colors.hairline,
+            // Selection is weight and brightness, never the signal hue. A
+            // module outlined in `accent` is outlined in the colour that means
+            // "in spec" everywhere else on this canvas, and here the two are
+            // adjacent by construction — the border literally touches the
+            // reading it would be confused with.
+            border: selected ? colors.hairlineStrong : colors.hairline,
+            borderWidth: selected ? BelStroke.emphasis : BelStroke.hairline,
             rule: colors.hairline,
           ),
         ),
@@ -90,7 +96,14 @@ class ModuleFrame extends StatelessWidget {
             ),
             Expanded(
               child: Padding(
-                padding: const EdgeInsets.all(Space.sm),
+                // The same on all four sides, and the same value the title bar
+                // insets by — the title's left edge is the meter's left edge,
+                // and two paddings that differ by four pixels read as a
+                // misalignment rather than as a decision. This is the *only*
+                // margin a module gets: painters draw to the edges of what
+                // they are handed, so a painter that adds a second inset of
+                // its own is a module that no longer matches the other eleven.
+                padding: const EdgeInsets.all(Space.smd),
                 // Isolates the meter's repaints from the frame around it.
                 // Without this, a spectrogram scrolling at 60 fps marks the
                 // whole panel dirty and the border is re-rastered along with it.
@@ -106,19 +119,24 @@ class ModuleFrame extends StatelessWidget {
 
 /// The panel fill, its hairline border and the rule under the title.
 class _FramePainter extends MeterPainter {
-  _FramePainter({required this.fill, required this.border, required this.rule})
-    : _fillPaint = (Paint()..color = fill),
-      _borderPaint = (Paint()
-        ..color = border
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = BelStroke.hairline),
-      _rulePaint = (Paint()
-        ..color = rule
-        ..strokeWidth = BelStroke.hairline
-        ..isAntiAlias = false);
+  _FramePainter({
+    required this.fill,
+    required this.border,
+    required this.borderWidth,
+    required this.rule,
+  }) : _fillPaint = (Paint()..color = fill),
+       _borderPaint = (Paint()
+         ..color = border
+         ..style = PaintingStyle.stroke
+         ..strokeWidth = borderWidth),
+       _rulePaint = (Paint()
+         ..color = rule
+         ..strokeWidth = BelStroke.hairline
+         ..isAntiAlias = false);
 
   final Color fill;
   final Color border;
+  final double borderWidth;
   final Color rule;
 
   final Paint _fillPaint;
@@ -132,15 +150,18 @@ class _FramePainter extends MeterPainter {
     // Inset by half the stroke so a hairline lands inside the panel rather than
     // straddling its edge, where it renders as two grey half-pixels.
     canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        bounds.deflate(BelStroke.hairline / 2),
-        BelRadius.sm,
-      ),
+      RRect.fromRectAndRadius(bounds.deflate(borderWidth / 2), BelRadius.sm),
       _borderPaint,
     );
+    // Stops at the border's inner edge rather than running to the panel edge.
+    // A full-width rule is drawn *after* the border and in the dim hairline
+    // colour, so it punched two notches out of the selection outline — at
+    // `BelStroke.emphasis` that is a visible break in the one line whose whole
+    // job is to be continuous, and it reads as the divider sitting on top of
+    // the selection rather than inside it.
     canvas.drawLine(
-      const Offset(0, ModuleFrame.titleBarHeight),
-      Offset(size.width, ModuleFrame.titleBarHeight),
+      Offset(borderWidth, ModuleFrame.titleBarHeight),
+      Offset(size.width - borderWidth, ModuleFrame.titleBarHeight),
       _rulePaint,
     );
   }
@@ -149,6 +170,7 @@ class _FramePainter extends MeterPainter {
   bool shouldRepaint(_FramePainter oldDelegate) =>
       oldDelegate.fill != fill ||
       oldDelegate.border != border ||
+      oldDelegate.borderWidth != borderWidth ||
       oldDelegate.rule != rule;
 }
 
@@ -170,7 +192,8 @@ class _TitleBar extends StatelessWidget {
     return SizedBox(
       height: ModuleFrame.titleBarHeight,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: Space.sm),
+        // Matches the body's inset — see the note there.
+        padding: const EdgeInsets.fromLTRB(Space.sm, 0, 4, 0),
         child: Row(
           children: [
             // The title bar is a drag handle everywhere except the menu button,

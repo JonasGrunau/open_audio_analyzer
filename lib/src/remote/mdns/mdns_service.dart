@@ -6,10 +6,15 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 
 import 'dns_message.dart';
+import 'host_discovery.dart';
 
 /// The service Bel advertises. `_bel._tcp` under the local domain, as DNS-SD
 /// spells it.
 const String belServiceType = '_bel._tcp.local';
+
+/// The same type without the domain, which is how Apple's DNS-SD API spells it
+/// and therefore what `Info.plist` and `BelBonjour.swift` say.
+const String belServiceName = '_bel._tcp';
 
 const String _multicastAddress = '224.0.0.251';
 const int _multicastPort = 5353;
@@ -18,66 +23,19 @@ const int _multicastPort = 5353;
 /// for a service that will send a goodbye when it stops.
 const int _recordTtl = 120;
 
-/// A host found on the network.
-class DiscoveredHost {
-  DiscoveredHost({
-    required this.instanceName,
-    required this.address,
-    required this.port,
-    required this.txt,
-    required this.seenAt,
-  });
-
-  /// The DNS-SD instance name, which is unique on the network.
-  final String instanceName;
-
-  final String address;
-  final int port;
-  final Map<String, String> txt;
-  final DateTime seenAt;
-
-  /// What to put in the list. The TXT name if the host gave one — it is
-  /// free-form and may contain characters DNS-SD escapes — otherwise the
-  /// instance name.
-  String get displayName {
-    final advertised = txt['name'];
-    if (advertised != null && advertised.isNotEmpty) return advertised;
-    return instanceName;
-  }
-
-  /// The signal the host says it is measuring, for the list. Absent while the
-  /// host has not settled on a format.
-  String? get format {
-    final rate = txt['sr'];
-    final channels = txt['ch'];
-    if (rate == null || channels == null) return null;
-    final khz = (int.tryParse(rate) ?? 0) / 1000;
-    return '$channels ch · ${khz.toStringAsFixed(khz % 1 == 0 ? 0 : 1)} kHz';
-  }
-
-  DiscoveredHost copyWith({
-    String? address,
-    int? port,
-    Map<String, String>? txt,
-    DateTime? seenAt,
-  }) => DiscoveredHost(
-    instanceName: instanceName,
-    address: address ?? this.address,
-    port: port ?? this.port,
-    txt: txt ?? this.txt,
-    seenAt: seenAt ?? this.seenAt,
-  );
-}
-
-/// Binds the multicast socket both roles need.
+/// Binds the multicast socket both roles need, and says why when it cannot.
 ///
 /// `reusePort` is asked for and then not insisted on. macOS already runs a
 /// system responder on 5353 and will not share the port without it; Windows has
 /// no equivalent option and refuses the request outright. Trying and falling
 /// back is two lines and covers both, where picking either one alone silently
 /// loses discovery on a whole platform.
-Future<RawDatagramSocket?> _bindMulticast() async {
-  RawDatagramSocket? socket;
+///
+/// The error is returned rather than thrown — nothing about discovery may throw
+/// — but it is *returned*, which the first eight phases did not do. A caller
+/// that is handed null and no reason can only show an empty list.
+Future<(RawDatagramSocket?, Object?)> _bindMulticast() async {
+  RawDatagramSocket socket;
   try {
     socket = await RawDatagramSocket.bind(
       InternetAddress.anyIPv4,
@@ -92,8 +50,8 @@ Future<RawDatagramSocket?> _bindMulticast() async {
         _multicastPort,
         reuseAddress: true,
       );
-    } on Object {
-      return null;
+    } on Object catch (error) {
+      return (null, error);
     }
   }
 
@@ -102,15 +60,42 @@ Future<RawDatagramSocket?> _bindMulticast() async {
     // 255 is what mDNS specifies; the default of 1 is a link-local hop count
     // that some switches treat differently.
     socket.multicastHops = 255;
-  } on Object {
+  } on Object catch (error) {
     // A machine with no multicast-capable interface — a VM with host-only
     // networking, a locked-down corporate laptop. Discovery will not work here
     // and the UI's typed-address path is why that is survivable.
     socket.close();
-    return null;
+    return (null, error);
   }
 
-  return socket;
+  return (socket, null);
+}
+
+/// Why discovery is not working, in a sentence for a person.
+String describeDiscoveryFailure(Object? error) {
+  if (error is SocketException) {
+    final osError = error.osError;
+    // **`EHOSTUNREACH` on a multicast send is what a refused local-network
+    // permission looks like from inside the process.** The socket binds, the
+    // group joins, `NetworkInterface.list` reports the Wi-Fi address, the
+    // routing table has a route for 224.0.0/4, `ping 224.0.0.251` is answered
+    // by half the building — and every packet the process sends is refused
+    // with "no route to host". Nothing else about the machine looks wrong,
+    // which is why this needs saying in words rather than reporting an errno.
+    if (Platform.isMacOS && osError != null && osError.errorCode == 65) {
+      return 'macOS is not letting Bel search the local network. Allow it '
+          'under System Settings › Privacy & Security › Local Network, or '
+          'enter an address below.';
+    }
+    return osError == null
+        ? error.message
+        : '${error.message} (${osError.message})';
+  }
+  if (error == null) {
+    return 'This device cannot search the network for hosts. Enter an address '
+        'below.';
+  }
+  return error.toString();
 }
 
 /// Advertises this host's display service on the local network.
@@ -161,7 +146,7 @@ class MdnsResponder {
   Future<void> start() async {
     if (_socket != null) return;
 
-    final socket = await _bindMulticast();
+    final (socket, _) = await _bindMulticast();
     if (socket == null) return;
     _socket = socket;
 
@@ -287,17 +272,19 @@ class MdnsResponder {
 }
 
 /// Watches the network for hosts advertising [belServiceType].
-class MdnsBrowser {
-  /// Hosts seen recently, newest information winning. A [ValueNotifier] rather
-  /// than a stream because the discovery list is a widget that rebuilds — this
-  /// is configuration-shaped state, not measurement-shaped state, and it
-  /// changes a few times a minute.
+///
+/// The implementation of [HostDiscovery] for every platform that lets an
+/// application hold a multicast socket, which is all of them except iOS and
+/// iPadOS — see `host_discovery.dart`.
+class MdnsBrowser implements HostDiscovery {
+  @override
   final ValueNotifier<List<DiscoveredHost>> hosts = ValueNotifier(const []);
 
-  /// Whether the socket could be opened at all. False means this machine cannot
-  /// do multicast discovery and the UI should say so and offer an address
-  /// field, rather than showing an empty list that looks like "nothing found".
+  @override
   final ValueNotifier<bool> isBrowsing = ValueNotifier(false);
+
+  @override
+  final ValueNotifier<String?> failure = ValueNotifier(null);
 
   RawDatagramSocket? _socket;
   Timer? _queryTimer;
@@ -308,25 +295,32 @@ class MdnsBrowser {
   /// Instance names seen in a PTR whose SRV has not arrived, and the addresses
   /// of host names an SRV pointed at before the A record turned up. Multicast
   /// packets arrive in whatever order the network feels like.
-  final Map<String, String> _hostAddresses = {};
+  ///
+  /// A host name maps to *every* address announced for it, because a laptop on
+  /// Wi-Fi in a Thunderbolt dock announces two and only one of them is the one
+  /// this tablet can reach.
+  final Map<String, List<String>> _hostAddresses = {};
   final Map<String, _PendingService> _pending = {};
 
+  @override
   Future<void> start() async {
     if (_socket != null) return;
 
-    final socket = await _bindMulticast();
+    final (socket, error) = await _bindMulticast();
     if (socket == null) {
       isBrowsing.value = false;
+      failure.value = describeDiscoveryFailure(error);
       return;
     }
     _socket = socket;
     isBrowsing.value = true;
+    failure.value = null;
 
     socket.listen((event) {
       if (event != RawSocketEvent.read) return;
       final datagram = socket.receive();
       if (datagram != null) _handle(datagram);
-    }, onError: (Object _) {});
+    }, onError: _fail);
 
     _query();
     // Re-asking costs one small packet and covers the host that was switched on
@@ -335,7 +329,20 @@ class MdnsBrowser {
     _pruneTimer = Timer.periodic(const Duration(seconds: 10), (_) => _prune());
   }
 
+  @override
   Future<void> stop() async {
+    _release();
+    hosts.value = const [];
+    isBrowsing.value = false;
+    failure.value = null;
+  }
+
+  /// Everything [stop] gives back that is not a notifier.
+  ///
+  /// Apart from the publishing half because [dispose] must do this and *not*
+  /// that: a write to a disposed `ValueNotifier` throws, and teardown is
+  /// precisely when the two would meet.
+  void _release() {
     _queryTimer?.cancel();
     _pruneTimer?.cancel();
     _queryTimer = null;
@@ -345,8 +352,14 @@ class MdnsBrowser {
     _found.clear();
     _pending.clear();
     _hostAddresses.clear();
-    hosts.value = const [];
+  }
+
+  /// A send that failed is not a tick to try again on; it is the reason the
+  /// list stays empty. Dart reports a datagram socket's send errors through the
+  /// stream rather than from `send`, so both paths end here.
+  void _fail(Object error) {
     isBrowsing.value = false;
+    failure.value = describeDiscoveryFailure(error);
   }
 
   void _query() {
@@ -358,16 +371,48 @@ class MdnsBrowser {
         InternetAddress(_multicastAddress),
         _multicastPort,
       );
-    } on Object {
-      // Same as the responder: the next tick tries again.
+    } on Object catch (error) {
+      _fail(error);
     }
   }
 
-  void _handle(Datagram datagram) {
-    final message = decodeMessage(datagram.data);
+  /// Feeds a datagram to the browser as if the socket had delivered it.
+  ///
+  /// Everything between "a PTR arrived" and "there is a row somebody can tap"
+  /// is otherwise reachable only through a multicast socket, and a test that
+  /// opens one passes or fails on the machine's network. There is not even a
+  /// loopback route in: on macOS a unicast datagram sent to 5353 is handed to
+  /// the system responder rather than to whoever else holds the port. This
+  /// state machine went eight phases with no test for exactly that reason,
+  /// which is how it kept the last address a host announced rather than the
+  /// one that could be reached.
+  @visibleForTesting
+  void handleDatagram(Uint8List data) => _handleMessage(data);
+
+  void _handle(Datagram datagram) => _handleMessage(datagram.data);
+
+  void _handleMessage(Uint8List data) {
+    final message = decodeMessage(data);
     if (message == null || !message.isResponse) return;
 
     var changed = false;
+
+    // **Addresses first, and all of them.** The SRV that needs one is usually
+    // in the same packet and multicast promises nothing about the order; and
+    // every A record Bel sends carries the cache-flush bit, which means "this
+    // is the whole truth about this name", so a packet replaces what was known
+    // rather than adding to it. Keeping the last record seen instead — which is
+    // what a plain assignment per record does — is how a laptop that announces
+    // its Wi-Fi address and then the 169.254 address of an empty dock ends up
+    // listed at the one nothing can reach.
+    final announced = <String, List<String>>{};
+    for (final record in message.answers) {
+      if (record.type != DnsType.a || record.address.length != 4) continue;
+      announced
+          .putIfAbsent(record.name, () => <String>[])
+          .add(record.address.join('.'));
+    }
+    _hostAddresses.addAll(announced);
 
     for (final record in message.answers) {
       switch (record.type) {
@@ -396,18 +441,15 @@ class MdnsBrowser {
           final pending = _pending.putIfAbsent(instance, _PendingService.new)
             ..txt = record.txt;
           if (_resolve(instance, pending)) changed = true;
+      }
+    }
 
-        case DnsType.a:
-          if (record.address.length != 4) break;
-          _hostAddresses[record.name] = record.address.join('.');
-          // An A record can arrive after the SRV that needed it, so anything
-          // waiting on this host name may now be complete.
-          for (final entry in _pending.entries) {
-            if (entry.value.hostName == record.name &&
-                _resolve(entry.key, entry.value)) {
-              changed = true;
-            }
-          }
+    // An A record can arrive after — or without — the SRV that needed it, so
+    // anything waiting on a host name this packet carried may now be complete.
+    for (final entry in _pending.entries) {
+      if (announced.containsKey(entry.value.hostName) &&
+          _resolve(entry.key, entry.value)) {
+        changed = true;
       }
     }
 
@@ -421,7 +463,7 @@ class MdnsBrowser {
     final port = pending.port;
     if (hostName == null || port == null) return false;
 
-    final address = _hostAddresses[hostName];
+    final address = _pickAddress(_hostAddresses[hostName]);
     if (address == null) {
       // Ask for it directly rather than waiting for the next announcement.
       final socket = _socket;
@@ -480,10 +522,27 @@ class MdnsBrowser {
     return name.substring(0, name.length - belServiceType.length - 1);
   }
 
+  /// Which of a host's addresses to offer.
+  ///
+  /// A 169.254 address is what an interface gives itself when nothing
+  /// configured it — a dock with no cable in it, a second Ethernet port, a
+  /// Thunderbolt bridge. It is a real address on a real interface and nothing
+  /// on the network can reach it, so it is the last resort rather than
+  /// whichever one happened to be announced last.
+  static String? _pickAddress(List<String>? addresses) {
+    if (addresses == null || addresses.isEmpty) return null;
+    for (final address in addresses) {
+      if (!address.startsWith('169.254.')) return address;
+    }
+    return addresses.first;
+  }
+
+  @override
   void dispose() {
-    unawaited(stop());
+    _release();
     hosts.dispose();
     isBrowsing.dispose();
+    failure.dispose();
   }
 }
 

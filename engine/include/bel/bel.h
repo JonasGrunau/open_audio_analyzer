@@ -70,8 +70,9 @@ extern "C" {
 #define BEL_MAX_CHANNELS 8
 
 /* Log-spaced spectrum bands published to the UI. Deliberately a *display*
- * resolution, not an FFT size: the FFT is 4096 points, but the analyzer only
- * ever draws this many columns, so this is what crosses the boundary. */
+ * resolution, not an FFT size: the analysis window is 4096 points and the
+ * transform it is zero-padded into is 16384, but the analyzer only ever draws
+ * this many columns, so this is what crosses the boundary. */
 #define BEL_SPECTRUM_BANDS 512
 
 /* The frequency range those bands span, log-spaced, at every sample rate.

@@ -109,6 +109,11 @@ class ScaleGraticule {
           maxWidth: _labelWidth,
         ),
     ];
+
+    for (final label in _labels) {
+      if (label.longestLine > _inkWidth) _inkWidth = label.longestLine;
+      if (label.height > _inkHeight) _inkHeight = label.height;
+    }
   }
 
   final MeterScale scale;
@@ -120,17 +125,48 @@ class ScaleGraticule {
   final Color _labelColor;
   late final List<ui.Paragraph> _labels;
 
-  /// Enough for "-60" at 10 px, with room for a minus sign and a decimal.
+  /// The layout box the labels are aligned inside. Generous on purpose — it is
+  /// an upper bound, not a measurement, and the labels are aligned to the edge
+  /// of it that faces the track, so a box wider than the text costs nothing.
   static const double _labelWidth = 30;
+
+  /// What the labels actually take up, once laid out.
+  ///
+  /// The gutter used to be [_labelWidth] flat, so a scale whose widest label is
+  /// "-60" reserved thirteen more pixels than it drew in — and since the meter
+  /// sits flush against the *other* side of its module, that surplus turned up
+  /// as a module whose contents were visibly off-centre. Four modules share
+  /// this class and all four leaned the same way.
+  double _inkWidth = 0;
+  double _inkHeight = 0;
 
   static String _defaultFormat(double value) => value.round().toString();
 
   /// How much room the labels need on their edge, so the caller can inset the
   /// track by it.
   double get gutter => switch (side) {
-    ScaleSide.left || ScaleSide.right => _labelWidth + Space.xs,
-    ScaleSide.bottom => labelStyle.fontSize! + Space.xs,
+    ScaleSide.left || ScaleSide.right => _inkWidth + Space.xs,
+    ScaleSide.bottom => _inkHeight + Space.xs,
   };
+
+  /// Keeps a label inside the extent of the track it labels.
+  ///
+  /// A scale's end labels are centred on gridlines that sit on the track's own
+  /// edges, so half of each falls outside it — and a track is normally flush
+  /// with the edge of its module, where "outside" means clipped. **The zero at
+  /// the top of the LUFS meter was drawn as its own bottom half**, and the
+  /// spectrum analyser's top label and the histogram's first and last were the
+  /// same defect in the same line of code.
+  ///
+  /// Nudging the label in is the smaller of the two fixes. The alternative —
+  /// having every caller inset its track by half a label — moves the meter's
+  /// full-scale point away from the top of the module, in four modules, one of
+  /// which will be written later and forget. Here the gridline still sits
+  /// exactly on its value and only the text moves, by at most half its own
+  /// size, at the two ends of the scale where there is no neighbour to confuse
+  /// it with.
+  static double _inside(double start, double extent, double low, double high) =>
+      start < low ? low : (start + extent > high ? high - extent : start);
 
   /// Draws the gridlines across [track] and the labels beside it.
   ///
@@ -152,10 +188,18 @@ class ScaleGraticule {
         );
         // Centred under its own gridline, which needs the paragraph's width —
         // the reason these are laid out rather than measured by character
-        // count.
+        // count. Held inside the plot at the two ends; see [_inside].
         canvas.drawParagraph(
           label,
-          Offset(x - label.longestLine / 2, track.bottom + Space.xs),
+          Offset(
+            _inside(
+              x - label.longestLine / 2,
+              label.longestLine,
+              track.left,
+              track.right,
+            ),
+            track.bottom + Space.xs,
+          ),
         );
       } else {
         final y = track.bottom - fraction * track.height;
@@ -165,7 +209,12 @@ class ScaleGraticule {
           _linePaint,
         );
 
-        final dy = y - label.height / 2;
+        final dy = _inside(
+          y - label.height / 2,
+          label.height,
+          track.top,
+          track.bottom,
+        );
         if (side == ScaleSide.left) {
           canvas.drawParagraph(
             label,

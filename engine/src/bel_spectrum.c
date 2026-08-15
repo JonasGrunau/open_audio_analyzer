@@ -20,8 +20,12 @@
 
 /* Amplitude of a full-scale sine, given the peak bin of a Hann-windowed
  * transform. The window sums to N/2 and a real sine splits its energy between
- * the positive and negative frequency, so the peak bin holds A*N/4. */
-#define BEL_FFT_AMPLITUDE_SCALE (4.0f / (float)BEL_FFT_SIZE)
+ * the positive and negative frequency, so the peak bin holds A*N/4.
+ *
+ * N here is the *window*, not the transform. Zero padding adds no energy, so
+ * it cannot change what a tone reads — scaling by the padded length instead
+ * would put the whole display 12 dB low. */
+#define BEL_FFT_AMPLITUDE_SCALE (4.0f / (float)BEL_FFT_WINDOW)
 
 /* Below this a band is reported at the floor rather than as a very negative
  * number, so that digital silence does not produce -300 dB noise on screen. */
@@ -38,17 +42,38 @@ static float bel_db_from_power(float power) {
 /* --- Band mapping --------------------------------------------------------- */
 
 /*
- * Which FFT bins each log-spaced display band covers.
+ * Which transform bins each log-spaced display band covers.
  *
- * At the bottom of the range a band is far narrower than one bin — at 48 kHz
- * the first band spans 20.0 to 20.1 Hz and a bin is 11.7 Hz wide — so several
- * consecutive bands legitimately map to the same bin. That is not a bug to
- * work around: the transform genuinely has no more resolution there, and
- * interpolating between bins would invent detail that was never measured.
+ * Two regimes, and which one a band is in depends only on its width against
+ * the bin spacing.
+ *
+ * A band wide enough to contain bins takes the loudest of them — see
+ * "Peak-per-bin" in the header. Above about 216 Hz at 48 kHz, that is every
+ * band.
+ *
+ * Below that a band contains no bin at all. The bottom octave is 51 of the 512
+ * bands spread over 20 Hz, and no transform anybody would run in real time
+ * puts a bin every 0.4 Hz. Rounding each of those bands to its nearest bin is
+ * what drew the bass as a staircase: fifty-one bands, eight values, six-band
+ * treads wide enough to count on screen.
+ *
+ * So they read *between* the bins instead. That is not the same thing as
+ * inventing detail, and the distinction is the whole reason this is allowed:
+ * the bins are not independent measurements with unknown territory between
+ * them, they are samples of one continuous function — the transform of the
+ * windowed frame — taken every 2.93 Hz across a main lobe 11.7 Hz wide. Four
+ * samples per lobe is dense enough that a straight line between two of them
+ * is within about a tenth of a decibel of the curve it is cutting. The band
+ * gets the value the transform actually has at its centre frequency.
+ *
+ * What this does *not* do is resolve anything the window could not. Two bass
+ * notes 8 Hz apart still merge into one hump; the hump is now drawn as a hump
+ * rather than as a row of bricks, which is the honest picture of an 11.7 Hz
+ * window and was always what the display was trying to say.
  */
 static void bel_spectrum_map_bands(bel_spectrum *s) {
   const double nyquist_bin = (double)BEL_FFT_BINS - 1.0;
-  const double bins_per_hz = (double)BEL_FFT_SIZE / (double)s->sample_rate;
+  const double bins_per_hz = (double)BEL_FFT_TRANSFORM / (double)s->sample_rate;
   const double ratio =
       (double)BEL_SPECTRUM_HZ_HIGH / (double)BEL_SPECTRUM_HZ_LOW;
 
@@ -61,11 +86,6 @@ static void bel_spectrum_map_bands(bel_spectrum *s) {
     long first = (long)ceil(low * bins_per_hz);
     long last = (long)floor(high * bins_per_hz);
 
-    if (last < first) {
-      /* Narrower than a bin: take the one nearest the band's centre. */
-      first = last = (long)floor(sqrt(low * high) * bins_per_hz + 0.5);
-    }
-
     if (first < 1) {
       first = 1; /* Bin 0 is DC, which is not a frequency anybody plots. */
     }
@@ -73,14 +93,36 @@ static void bel_spectrum_map_bands(bel_spectrum *s) {
       /* Above Nyquist. Nothing was measured here and nothing is drawn. */
       s->band_first[b] = 0;
       s->band_last[b] = 0;
+      s->band_lerp[b] = -1.0f;
       continue;
     }
     if ((double)last > nyquist_bin) {
       last = (long)nyquist_bin;
     }
 
+    if (last < first) {
+      /* Narrower than a bin: read the transform at the band's centre, which
+       * falls between two of its samples. Clamped so that `first + 1` is
+       * always a bin that exists — at the very bottom and the very top of the
+       * range the pair is the nearest one rather than the straddling one, and
+       * a hair of extrapolation there beats reading off the end. */
+      const double centre = sqrt(low * high) * bins_per_hz;
+      double base = floor(centre);
+      if (base < 1.0) {
+        base = 1.0;
+      }
+      if (base > nyquist_bin - 1.0) {
+        base = nyquist_bin - 1.0;
+      }
+      s->band_first[b] = (uint16_t)base;
+      s->band_last[b] = (uint16_t)base;
+      s->band_lerp[b] = (float)(centre - base);
+      continue;
+    }
+
     s->band_first[b] = (uint16_t)first;
     s->band_last[b] = (uint16_t)last;
+    s->band_lerp[b] = -1.0f;
   }
 }
 
@@ -97,15 +139,15 @@ int bel_spectrum_init(bel_spectrum *s, uint32_t channels,
   s->channels = channels;
   s->sample_rate = sample_rate;
 
-  s->setup = pffft_new_setup(BEL_FFT_SIZE, PFFFT_REAL);
-  s->window = (float *)calloc(BEL_FFT_SIZE, sizeof(float));
-  s->input = (float *)calloc((size_t)channels * BEL_FFT_SIZE, sizeof(float));
+  s->setup = pffft_new_setup(BEL_FFT_TRANSFORM, PFFFT_REAL);
+  s->window = (float *)calloc(BEL_FFT_WINDOW, sizeof(float));
+  s->input = (float *)calloc((size_t)channels * BEL_FFT_WINDOW, sizeof(float));
   s->power = (float *)calloc((size_t)channels * BEL_FFT_BINS, sizeof(float));
 
-  s->frame = (float *)pffft_aligned_malloc(BEL_FFT_SIZE * sizeof(float));
-  s->work = (float *)pffft_aligned_malloc(BEL_FFT_SIZE * sizeof(float));
+  s->frame = (float *)pffft_aligned_malloc(BEL_FFT_TRANSFORM * sizeof(float));
+  s->work = (float *)pffft_aligned_malloc(BEL_FFT_TRANSFORM * sizeof(float));
   s->coefficients =
-      (float *)pffft_aligned_malloc(BEL_FFT_SIZE * sizeof(float));
+      (float *)pffft_aligned_malloc(BEL_FFT_TRANSFORM * sizeof(float));
 
   if (s->setup == NULL || s->window == NULL || s->input == NULL ||
       s->power == NULL || s->frame == NULL || s->work == NULL ||
@@ -114,13 +156,19 @@ int bel_spectrum_init(bel_spectrum *s, uint32_t channels,
     return 0;
   }
 
+  /* The padding, written once. Every transform overwrites the first
+   * BEL_FFT_WINDOW samples and nothing ever touches the rest — pffft takes its
+   * input as const, so the zeros survive. Missing this reads whatever the
+   * allocator handed back as three quarters of the signal. */
+  memset(s->frame, 0, BEL_FFT_TRANSFORM * sizeof(float));
+
   /* Periodic Hann rather than symmetric: the window is applied to successive
    * overlapping frames of a continuous signal, not to one isolated record, and
    * the periodic form is the one whose overlapped copies sum flat. */
-  for (uint32_t n = 0; n < BEL_FFT_SIZE; n++) {
+  for (uint32_t n = 0; n < BEL_FFT_WINDOW; n++) {
     s->window[n] =
         0.5f -
-        0.5f * cosf(2.0f * (float)BEL_PI * (float)n / (float)BEL_FFT_SIZE);
+        0.5f * cosf(2.0f * (float)BEL_PI * (float)n / (float)BEL_FFT_WINDOW);
   }
 
   bel_spectrum_map_bands(s);
@@ -143,7 +191,7 @@ void bel_spectrum_free(bel_spectrum *s) {
 
 void bel_spectrum_reset(bel_spectrum *s) {
   if (s->input != NULL) {
-    memset(s->input, 0, (size_t)s->channels * BEL_FFT_SIZE * sizeof(float));
+    memset(s->input, 0, (size_t)s->channels * BEL_FFT_WINDOW * sizeof(float));
   }
   if (s->power != NULL) {
     memset(s->power, 0, (size_t)s->channels * BEL_FFT_BINS * sizeof(float));
@@ -167,12 +215,13 @@ static void bel_spectrum_transform(bel_spectrum *s) {
   const float scale = BEL_FFT_AMPLITUDE_SCALE;
 
   for (uint32_t c = 0; c < s->channels; c++) {
-    const float *ring = &s->input[(size_t)c * BEL_FFT_SIZE];
+    const float *ring = &s->input[(size_t)c * BEL_FFT_WINDOW];
 
     /* De-ring and window in one pass. `write` is where the *next* sample goes,
-     * so it is also the oldest sample in the ring. */
-    for (uint32_t n = 0; n < BEL_FFT_SIZE; n++) {
-      const uint32_t index = (s->write + n) & (BEL_FFT_SIZE - 1);
+     * so it is also the oldest sample in the ring. Everything past
+     * BEL_FFT_WINDOW is the padding and stays as init left it. */
+    for (uint32_t n = 0; n < BEL_FFT_WINDOW; n++) {
+      const uint32_t index = (s->write + n) & (BEL_FFT_WINDOW - 1);
       s->frame[n] = ring[index] * s->window[n];
     }
 
@@ -209,15 +258,27 @@ static void bel_spectrum_transform(bel_spectrum *s) {
     }
     const uint32_t last = s->band_last[b];
 
-    /* Loudest bin in the band, over every channel. The same worst-case rule
-     * the number boxes use for per-channel quantities: an average would hide
-     * one hot channel, which is the thing worth seeing. */
+    /* Loudest bin in the band, over every channel — or, for a band with no
+     * bin in it, the transform read between the two nearest. The worst-case
+     * rule across channels is the one the number boxes use for per-channel
+     * quantities: an average would hide one hot channel, which is the thing
+     * worth seeing. */
+    const float lerp = s->band_lerp[b];
     float loudest = 0.0f;
     for (uint32_t c = 0; c < s->channels; c++) {
       const float *power = &s->power[(size_t)c * BEL_FFT_BINS];
-      for (uint32_t k = first; k <= last; k++) {
-        if (power[k] > loudest) {
-          loudest = power[k];
+      if (lerp >= 0.0f) {
+        const float below = power[first];
+        const float above = power[first + 1];
+        const float between = below + (above - below) * lerp;
+        if (between > loudest) {
+          loudest = between;
+        }
+      } else {
+        for (uint32_t k = first; k <= last; k++) {
+          if (power[k] > loudest) {
+            loudest = power[k];
+          }
         }
       }
     }
@@ -274,11 +335,11 @@ void bel_spectrum_process(bel_spectrum *s, const float *interleaved,
   for (uint32_t i = 0; i < frames; i++) {
     const float *frame = &interleaved[(size_t)i * channels];
     for (uint32_t c = 0; c < channels; c++) {
-      s->input[(size_t)c * BEL_FFT_SIZE + s->write] = frame[c];
+      s->input[(size_t)c * BEL_FFT_WINDOW + s->write] = frame[c];
     }
-    s->write = (s->write + 1) & (BEL_FFT_SIZE - 1);
+    s->write = (s->write + 1) & (BEL_FFT_WINDOW - 1);
 
-    if (s->filled < BEL_FFT_SIZE) {
+    if (s->filled < BEL_FFT_WINDOW) {
       s->filled++;
     }
     s->since_hop++;
@@ -286,7 +347,7 @@ void bel_spectrum_process(bel_spectrum *s, const float *interleaved,
     /* One transform per hop, and only once the window is genuinely full.
      * Transforming a half-filled ring would analyse the zeros in it, which
      * reads as a real measurement of a signal that is quieter than it is. */
-    if (s->since_hop >= BEL_FFT_HOP && s->filled >= BEL_FFT_SIZE) {
+    if (s->since_hop >= BEL_FFT_HOP && s->filled >= BEL_FFT_WINDOW) {
       s->since_hop = 0;
       bel_spectrum_transform(s);
     }

@@ -36,6 +36,23 @@ Dart bindings for the engine, plus the build hook that compiles it.
   `code_assets` 1.0.0 it dies as a bare null-check failure inside
   `CodeConfig._fromJson`, naming neither this file nor the reason. Anything else
   added above the `CBuilder` must tolerate the empty pass too.
+- **On iOS the engine is compiled as Objective-C, and that is miniaudio's
+  doing.** Under `MA_APPLE_MOBILE` `miniaudio.h` includes
+  `<AVFoundation/AVFoundation.h>`, because the Core Audio backend configures an
+  `AVAudioSession` and iOS gives it no C way to. A C compiler handed that header
+  tree emits several hundred errors inside `NSObjCRuntime.h`, `NSZone.h` and
+  `NSObject.h` — "unknown type name 'NSString'" — and names no file in this
+  repository, so it reads as a broken Xcode installation. `-x objective-c`
+  applies to every source that follows it and there is no per-source flag; the
+  other eleven translation units are unaffected, since `-std=c11` still picks
+  the C dialect.
+- **`frameworks:` only reaches the linker when `language:` is
+  `Language.objectiveC`.** On macOS the list is inert and the build works
+  anyway, because miniaudio `dlopen`s Core Audio there; `MA_APPLE_MOBILE`
+  switches runtime linking off, so iOS must link the frameworks or fail with
+  undefined symbols. Do not read the macOS entry as evidence that passing
+  `frameworks:` is sufficient — `otool -L` on the macOS dylib shows libSystem
+  and nothing else.
 - **The generated bindings are committed.** `flutter analyze` and the IDE need
   them before any hook has run, and a contributor who only touches Dart should
   never need a C toolchain. Regenerate after every `bel.h` change.

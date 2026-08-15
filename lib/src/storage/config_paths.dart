@@ -24,6 +24,16 @@
 /// here needs no knowledge of that — it uses whatever `HOME` the process was
 /// given — which is exactly why the decision has to be defended in the
 /// entitlements rather than here.
+///
+/// **iPadOS is the one platform where the environment answers nothing.** An iOS
+/// process gets a data container and no usable `HOME`, so the Unix branch below
+/// resolved to null on an iPad and the app opened with a "no configuration
+/// directory" notice and remembered nothing between launches. `TMPDIR` *is*
+/// set, and it is the container's own `tmp`, so the container is one path
+/// component up from the temporary directory — which is why [resolveConfigRoot]
+/// takes that directory as an argument. It is the only value that identifies
+/// the container without a platform channel, and a platform channel is
+/// `path_provider`, which the first paragraph rules out.
 library;
 
 /// The environment variable that overrides the platform's convention.
@@ -59,10 +69,16 @@ const String kConfigDirEnvVar = 'BEL_CONFIG_DIR';
 /// than an error: Bel runs perfectly well without persistence, it just does not
 /// remember anything. Guessing `/` and failing at write time instead would be
 /// worse.
+///
+/// [temporaryDirectory] is `Directory.systemTemp.path`, and is read by the iOS
+/// branch alone — see the library comment. Passing it in rather than reading it
+/// keeps this function free of `dart:io` and lets a test on any platform
+/// exercise an iPad's paths, which is otherwise a device build away.
 String? resolveConfigRoot({
   required String operatingSystem,
   required Map<String, String> environment,
   String? override,
+  String? temporaryDirectory,
 }) {
   // The flag beats the environment variable, which beats the platform. A flag
   // is typed for this launch and an environment variable is usually inherited
@@ -87,8 +103,28 @@ String? resolveConfigRoot({
       // points — see the library comment on why that second half is not free.
       return '$home/Library/Application Support/Bel';
 
-    // Linux and anything else Unix-shaped. XDG first, because a user who has
-    // set XDG_CONFIG_HOME has said where they want this.
+    case 'ios':
+      // `HOME` is deliberately not consulted. It is either absent — which is
+      // what an iPad actually does, and what made this branch necessary — or
+      // pointing at `/var/mobile`, which the app may not write to. Both fail,
+      // and the second fails as a permission error at save time rather than as
+      // a notice at launch. The container is the only place there is.
+      final container = _containerOf(temporaryDirectory);
+      if (container == null) return null;
+      // Apple's own convention, and the same shape as the macOS row above.
+      // Nothing here is user-visible: an iPad shows its configuration through
+      // Settings → Session, not through the Files app.
+      return '$container/Library/Application Support/Bel';
+
+    // Linux and anything else Unix-shaped — including Android, which has no
+    // `HOME` either and therefore no configuration directory. Its container is
+    // not derivable the way iOS's is: Dart's temporary directory there is
+    // `/data/local/tmp`, which belongs to no app and is not writable by one.
+    // An Android tablet is a display and persists nothing; giving it a
+    // configuration means a platform channel to `getFilesDir()`.
+    //
+    // XDG first, because a user who has set XDG_CONFIG_HOME has said where
+    // they want this.
     default:
       final xdg = environment['XDG_CONFIG_HOME'];
       if (xdg != null && xdg.isNotEmpty) return '$xdg/bel';
@@ -96,6 +132,32 @@ String? resolveConfigRoot({
       if (home == null || home.isEmpty) return null;
       return '$home/.config/bel';
   }
+}
+
+/// The data container [temporaryDirectory] belongs to, or null if it is not
+/// inside one.
+///
+/// An iOS app's `TMPDIR` is `<container>/tmp`, so the container is the parent.
+/// The check that the last component really is `tmp` is not defensive
+/// programming: a process whose `TMPDIR` is unset gets `/tmp`, whose parent is
+/// `/`, and returning that would put the configuration root at
+/// `/Library/Application Support/Bel` — a path outside the sandbox that fails
+/// at write time with a permission error, which reads like a broken install
+/// rather than an environment Bel cannot place anything in.
+String? _containerOf(String? temporaryDirectory) {
+  if (temporaryDirectory == null) return null;
+
+  var path = temporaryDirectory;
+  while (path.length > 1 && path.endsWith('/')) {
+    path = path.substring(0, path.length - 1);
+  }
+
+  final separator = path.lastIndexOf('/');
+  // `/tmp`, or a relative path. Neither names a container.
+  if (separator <= 0) return null;
+  if (path.substring(separator + 1) != 'tmp') return null;
+
+  return path.substring(0, separator);
 }
 
 /// The subdirectories under the root.

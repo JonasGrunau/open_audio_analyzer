@@ -48,7 +48,7 @@ abstract final class MeterShape {
 /// is a window onto memory a C analysis thread owns. On the tablet there is no
 /// engine, no native library doing any work and no audio device — the numbers
 /// arrive over a socket and land in ordinary Dart lists. Between those two the
-/// twelve modules are *identical*, and they have to be: a remote display whose
+/// thirteen modules are *identical*, and they have to be: a remote display whose
 /// meters were written a second time is a remote display that will eventually
 /// disagree with the desktop about what the signal did, and then neither
 /// reading can be trusted.

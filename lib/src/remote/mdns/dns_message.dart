@@ -11,10 +11,16 @@
 /// and the pure-Dart package that everyone reaches for only browses; the
 /// packages that do both wrap each platform's native responder through plugin
 /// channels, which on Linux desktop is the platform Bel would then quietly stop
-/// supporting. One implementation that behaves identically on macOS, Windows,
-/// Linux, iPadOS and Android is worth a few hundred lines, especially when the
-/// alternative is discovering the gap on the one machine in the studio that
-/// runs Linux.
+/// supporting. One implementation that behaves identically on macOS, Windows
+/// and Linux is worth a few hundred lines, especially when the alternative is
+/// discovering the gap on the one machine in the studio that runs Linux.
+///
+/// **iPadOS is the exception, and it is not one Bel chose.** Apple will not let
+/// an app hold a multicast socket on real hardware without a restricted
+/// entitlement granted per team on request, so the tablet browses through the
+/// system responder instead — `mdns/bonjour_discovery.dart`, and the reasoning
+/// in `mdns/host_discovery.dart`. Nothing else moved: a tablet is a display and
+/// never advertises, so this file is still the only thing that writes a record.
 ///
 /// Names are written uncompressed. Compression is optional for a writer and
 /// mandatory for a reader, so this reads pointers and never emits them; the

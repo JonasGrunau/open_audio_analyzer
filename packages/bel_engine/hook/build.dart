@@ -83,15 +83,59 @@ List<String> _libraries(OS targetOS) => switch (targetOS) {
   _ => const [],
 };
 
+/// On Apple's mobile SDK the engine is Objective-C, because miniaudio is.
+///
+/// `miniaudio.h` includes `<AVFoundation/AVFoundation.h>` under
+/// `MA_APPLE_MOBILE`: the Core Audio backend configures an `AVAudioSession`
+/// there, and iOS offers no C way to do it. Handing that header tree to a C
+/// compiler produces several hundred errors inside `NSObjCRuntime.h`,
+/// `NSZone.h` and `NSObject.h` — "unknown type name 'NSString'", "expected
+/// identifier or '('" — and not one of them names a file in this repository.
+/// The failure reads as a broken Xcode installation rather than as a missing
+/// compiler flag, which is what makes it expensive.
+///
+/// Objective-C is a superset of C11 and `-std=c11` still selects the C dialect,
+/// so `-x objective-c` (see [_flags]) leaves the other eleven translation units
+/// and pffft compiling exactly as they do on every other platform.
+Language _language(OS targetOS) =>
+    targetOS == OS.iOS ? Language.objectiveC : Language.c;
+
+/// The frameworks the linker needs — **which `CBuilder` emits only when
+/// [_language] is [Language.objectiveC]**, so this list is a no-op on macOS.
+///
+/// That is not an oversight kept for symmetry. On desktop Apple, miniaudio
+/// resolves Core Audio through `dlopen` at runtime and the dylib genuinely
+/// links nothing but libSystem; `MA_APPLE_MOBILE` switches that off, and iOS
+/// has to be linked against the frameworks or the code asset fails to build
+/// with undefined symbols. Listing macOS's three states what the engine uses,
+/// and is what a `-DMA_NO_RUNTIME_LINKING` build would need — miniaudio warns
+/// that runtime linking can fail Apple's notarization, which is a decision for
+/// whoever signs the dmg and not one this hook makes on its own.
 List<String> _frameworks(OS targetOS) => switch (targetOS) {
   OS.macOS => const ['CoreFoundation', 'CoreAudio', 'AudioToolbox'],
   OS.iOS => const [
+    'Foundation',
     'CoreFoundation',
     'CoreAudio',
     'AudioToolbox',
     'AVFoundation',
   ],
   _ => const [],
+};
+
+/// GCC/Clang spelling only. MSVC treats `-Wall` as an alias for its own (far
+/// noisier) `/Wall` and does not know `-Wextra` at all, so handing it these
+/// would trade real warnings for a wall of D9002 noise.
+///
+/// `-x objective-c` governs every source that *follows* it on the command line,
+/// and `CBuilder` emits flags ahead of the source list, so it reaches all of
+/// them. Only `bel_device.c` needs it; there is no per-source flag to give it
+/// alone, and none is wanted — twelve files compiled two different ways is a
+/// difference somebody would eventually have to debug.
+List<String> _flags(OS targetOS) => switch (targetOS) {
+  OS.windows => const <String>[],
+  OS.iOS => const <String>['-Wall', '-Wextra', '-x', 'objective-c'],
+  _ => const <String>['-Wall', '-Wextra'],
 };
 
 void main(List<String> args) async {
@@ -126,11 +170,11 @@ void main(List<String> args) async {
       ],
 
       // miniaudio dlopen()s the Linux backends at runtime and needs the maths
-      // and threading libraries everywhere POSIX. On Apple platforms it talks
-      // to CoreAudio directly, so those frameworks have to be linked; miniaudio
-      // will not tell you they are missing until the link step.
+      // and threading libraries everywhere POSIX. On iOS it cannot: see
+      // _frameworks and _language, which are one decision in two places.
       libraries: _libraries(input.config.code.targetOS),
       frameworks: _frameworks(input.config.code.targetOS),
+      language: _language(input.config.code.targetOS),
 
       // The engine uses C11 atomics on every toolchain that has them. Saying so
       // here rather than relying on a compiler default is what keeps the
@@ -152,12 +196,7 @@ void main(List<String> args) async {
       // sees any of these declarations.
       defines: _defines(input.config.code.targetOS),
 
-      // GCC/Clang spelling only. MSVC treats `-Wall` as an alias for its own
-      // (far noisier) `/Wall` and does not know `-Wextra` at all, so handing it
-      // these would trade real warnings for a wall of D9002 noise.
-      flags: input.config.code.targetOS == OS.windows
-          ? const <String>[]
-          : const <String>['-Wall', '-Wextra'],
+      flags: _flags(input.config.code.targetOS),
     );
 
     await builder.run(

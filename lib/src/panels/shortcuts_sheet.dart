@@ -43,16 +43,19 @@ class _ShortcutsSheet extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          for (final group in ShortcutGroup.values)
-            if (belShortcuts.any((s) => s.group == group))
-              PanelSection(
-                title: group.title,
-                children: [
-                  for (final shortcut in belShortcuts)
-                    if (shortcut.group == group)
-                      _Row(shortcut: shortcut, apple: apple),
-                ],
-              ),
+          for (final (index, group)
+              in ShortcutGroup.values
+                  .where((g) => belShortcuts.any((s) => s.group == g))
+                  .indexed)
+            PanelSection(
+              title: group.title,
+              ruled: index > 0,
+              children: [
+                for (final shortcut in belShortcuts)
+                  if (shortcut.group == group)
+                    _Row(shortcut: shortcut, apple: apple),
+              ],
+            ),
           _Footnote(apple: apple),
         ],
       ),

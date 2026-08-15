@@ -8,7 +8,14 @@ git clone https://github.com/JonasGrunau/open_music_analyzer
 cd open_music_analyzer
 flutter pub get
 flutter run -d macos          # or windows, linux
+flutter run -d <ipad>         # the display build; `flutter devices` names it
 ```
+
+On iOS the engine is compiled as **Objective-C**, because miniaudio's Core
+Audio backend is: it configures an `AVAudioSession` there, and iOS offers no C
+way to do that. The build hook handles it — the reason to know is the failure
+if it is ever undone, which is several hundred errors inside Apple's own
+`Foundation` headers naming no file in Bel.
 
 There is **no podspec, no `build.gradle` and no per-platform `CMakeLists.txt`**
 for the application. `packages/bel_engine/hook/build.dart` compiles the C

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:bel_core/bel_core.dart';
@@ -75,8 +76,16 @@ class _LufsMeterModuleState extends State<LufsMeterModule> {
       );
 
       final style = BelType.label.copyWith(color: colors.textFaint);
-      _momentaryLabel = layoutParagraph('M', style, align: TextAlign.center);
-      _shortLabel = layoutParagraph('S', style, align: TextAlign.center);
+      // **Left-aligned, and centred by [_centred] instead.** These asked for
+      // `TextAlign.center` and were not drawn at all: an unconstrained
+      // paragraph is laid out a megapixel wide, and centre alignment then puts
+      // the glyph half a million pixels along a line whose origin is the offset
+      // it is drawn at. `longestLine` still reports the ink, so the arithmetic
+      // around it looks right and the letter is simply somewhere else. Centre
+      // a bare paragraph by measuring it, or lay it out in a box it can be
+      // centred in — see the reading in `super_meter.dart` for the second.
+      _momentaryLabel = layoutParagraph('M', style);
+      _shortLabel = layoutParagraph('S', style);
       _integratedLabel = layoutParagraph('LUFS-I', style);
       _rangeLabel = layoutParagraph('LRA', style);
     }
@@ -134,16 +143,73 @@ class _LufsMeterPainter extends MeterPainter {
   final Paint _integratedLine;
 
   /// Below this there is no room for the readouts and the bars keep the space.
-  static const double _readoutHeight = 34;
-
-  /// And below this even the scale labels stop fitting.
   static const double _minimumHeight = 60;
+
+  /// The same judgement as [_minimumHeight], in the other axis: under this a
+  /// reading is chrome rather than a number, and the bars keep the space.
+  static const double _minimumValueSize = 11;
+
+  /// Advance of one glyph of [BelType.reading], in ems. JetBrains Mono is 0.6
+  /// and the style tightens it by half a pixel; the slack is what keeps this an
+  /// upper bound rather than a measurement.
+  static const double _advance = 0.62;
+
+  /// The reading is fitted to at least this many glyphs — the width of
+  /// `-17.6` — whatever it currently prints.
+  ///
+  /// Fitting the string that is actually on screen would resize the whole row
+  /// the moment integrated loudness crossed −10 or LRA reached 10.0 and the
+  /// number gained a digit. Tabular figures exist so a readout does not move
+  /// while you watch it; a face that changes size at a threshold undoes that
+  /// far more visibly than proportional digits ever did.
+  static const int _minimumGlyphs = 5;
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (size.height < _minimumHeight || size.width < 60) return;
+    const gap = Space.xs;
+    final barWidth = (size.width - graticule.gutter - gap) / 2;
 
-    final showReadouts = size.height > _minimumHeight + _readoutHeight;
+    final integrated = engine.lufsIntegrated;
+    final integratedText = Metric.lufsIntegrated.format(integrated);
+    final rangeText = Metric.loudnessRange.format(engine.loudnessRange);
+
+    // **The readouts scale with the module, like the bars above them.** They
+    // were fixed at 20 px in a band 34 px deep, so on a tall meter the two
+    // numbers that get delivered shrank to a caption under a bar four times
+    // their height, and on a short one they crowded it. The bars have always
+    // been sized off the module; a reading that is not is a reading that is
+    // legible at exactly one window size.
+    //
+    // **The column bounds it as well as the height does.** Sized off the height
+    // alone, a tall narrow meter asked for a 40 px reading in a column that
+    // holds 30 — and a paragraph laid out at `maxLines: 1` does not complain,
+    // it simply stops drawing where it runs out of room. `-17.6` was rendered
+    // as `-17.`, which is not a clipped number but a *different* one, and the
+    // meter looked entirely willing to stand behind it. Both readings take the
+    // smaller of the two sizes so the row still reads as a pair; the widest of
+    // the two strings decides it, since a `2.9` beside a `-17.6` set larger
+    // reads as the more important of the two.
+    //
+    // Every glyph of a reading is a digit, a minus or a point and the face is
+    // monospaced, so the width that fits is arithmetic — no trial layout on the
+    // frame path to find out whether the real one fitted. The column is fitted
+    // one space short of its full width, because a reading that ends exactly at
+    // the column boundary stands one bar gap from the next one, and `-17.6 2.9`
+    // closes up into a single run of digits.
+    final glyphs = math.max(
+      _minimumGlyphs,
+      math.max(integratedText.length, rangeText.length),
+    );
+    final valueSize = math
+        .min(size.height * 0.09, (barWidth - Space.sm) / (glyphs * _advance))
+        .clamp(0.0, 40.0)
+        .toDouble();
+    final labelHeight = state._integratedLabel!.height;
+    final readoutHeight = labelHeight + Space.xxs + valueSize * 1.3;
+
+    final showReadouts =
+        valueSize >= _minimumValueSize &&
+        size.height > _minimumHeight + readoutHeight;
     final barLabelHeight = BelType.label.fontSize! + Space.xs;
 
     final track = Rect.fromLTRB(
@@ -152,11 +218,33 @@ class _LufsMeterPainter extends MeterPainter {
       size.width,
       size.height -
           barLabelHeight -
-          (showReadouts ? _readoutHeight + Space.xs : 0),
+          (showReadouts ? readoutHeight + Space.xs : 0),
     );
     if (track.height < 24 || track.width < 24) return;
 
-    canvas.drawRect(track, _track);
+    // **A trough per bar, not one rectangle behind both.** Painted as a single
+    // background, the gap between momentary and short-term is the same colour
+    // as the empty part of either bar, so the two only separate where their
+    // fills stop — and when they read alike, which is most of the time on
+    // steady programme, they merge into one bar. The gap has to show the
+    // module behind it to be a gap.
+    canvas.drawRect(
+      Rect.fromLTRB(track.left, track.top, track.left + barWidth, track.bottom),
+      _track,
+    );
+    canvas.drawRect(
+      Rect.fromLTRB(
+        track.right - barWidth,
+        track.top,
+        track.right,
+        track.bottom,
+      ),
+      _track,
+    );
+
+    // Over the troughs and under everything else: the scale belongs to the
+    // meter as a whole, so it crosses the gap the way the target and
+    // integrated rules below do.
     graticule.paint(canvas, track);
 
     // --- Target band --------------------------------------------------------
@@ -183,9 +271,6 @@ class _LufsMeterPainter extends MeterPainter {
     );
 
     // --- Bars ---------------------------------------------------------------
-    const gap = Space.xs;
-    final barWidth = (track.width - gap) / 2;
-
     _bar(canvas, track, track.left, barWidth, engine.lufsMomentary, _momentary);
     _bar(
       canvas,
@@ -209,7 +294,6 @@ class _LufsMeterPainter extends MeterPainter {
     // number that gets delivered, and drawing it as a rule the bars pass
     // through is what makes "am I above or below where I will end up" readable
     // without arithmetic.
-    final integrated = engine.lufsIntegrated;
     if (!integrated.isNaN) {
       _integratedLine.color = colorForState(
         classify(Metric.lufsIntegrated, integrated, calibration),
@@ -242,30 +326,44 @@ class _LufsMeterPainter extends MeterPainter {
     if (!showReadouts) return;
 
     // --- Readouts -----------------------------------------------------------
-    final readoutTop = size.height - _readoutHeight;
-    final half = size.width / 2;
+    // **Two columns aligned to the two bars, not to the module.** They were
+    // laid out against `size.width / 2`, which is the middle of the *module* —
+    // but the bars start after the scale's gutter, so their middle is some
+    // twenty-odd pixels to the right of it. LUFS-I ended up under the scale
+    // numbers and LRA under the middle of the momentary bar, and a column of
+    // figures that does not line up with the thing above it reads as a
+    // misprint. The M and S labels directly under the bars say which bar is
+    // which; these two are a row of results, and they line up with the meter.
+    final readoutTop = size.height - readoutHeight;
 
     _readout(
       canvas,
       state._integratedLabel!,
       state._integrated,
-      Metric.lufsIntegrated.format(integrated),
+      integratedText,
       colorForState(
         classify(Metric.lufsIntegrated, integrated, calibration),
         colors,
       ),
-      Rect.fromLTWH(0, readoutTop, half - Space.xs, _readoutHeight),
+      Rect.fromLTWH(track.left, readoutTop, barWidth, readoutHeight),
+      valueSize,
     );
     _readout(
       canvas,
       state._rangeLabel!,
       state._range,
-      Metric.loudnessRange.format(engine.loudnessRange),
+      rangeText,
       colorForState(
         classify(Metric.loudnessRange, engine.loudnessRange, calibration),
         colors,
       ),
-      Rect.fromLTWH(half, readoutTop, half, _readoutHeight),
+      Rect.fromLTWH(
+        track.left + barWidth + gap,
+        readoutTop,
+        barWidth,
+        readoutHeight,
+      ),
+      valueSize,
     );
   }
 
@@ -307,12 +405,13 @@ class _LufsMeterPainter extends MeterPainter {
     String text,
     Color color,
     Rect bounds,
+    double fontSize,
   ) {
     canvas.drawParagraph(label, bounds.topLeft);
     canvas.drawParagraph(
       value.of(
         text,
-        BelType.reading(20).copyWith(color: color),
+        BelType.reading(fontSize).copyWith(color: color),
         maxWidth: bounds.width,
       ),
       Offset(bounds.left, bounds.top + label.height + Space.xxs),

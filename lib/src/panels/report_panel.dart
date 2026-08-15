@@ -467,6 +467,7 @@ class _ReportView extends StatelessWidget {
       children: [
         PanelSection(
           title: 'Source',
+          ruled: false,
           children: [
             PanelRow(label: 'File', child: _Value(report.fileName)),
             PanelRow(label: 'Format', child: _Value(report.describeSource())),

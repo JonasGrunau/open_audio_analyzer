@@ -101,7 +101,10 @@ class _ValidatorModuleState extends State<ValidatorModule> {
       _passLabels = [
         layoutParagraph('PASS', BelType.label.copyWith(color: colors.accent)),
         layoutParagraph('FAIL', BelType.label.copyWith(color: colors.over)),
-        layoutParagraph('—', BelType.label.copyWith(color: colors.textFaint)),
+        // Muted, not faint: this dash sits in the same column as PASS and FAIL
+        // and carries the same weight of statement — the check could not be
+        // made. See `colorForState` for the full reasoning.
+        layoutParagraph('—', BelType.label.copyWith(color: colors.textMuted)),
       ];
     }
 
@@ -144,16 +147,25 @@ class _ValidatorPainter extends MeterPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (size.width < 100 || size.height < 48) return;
-
-    final rowHeight = ((size.height - _verdictHeight) / _checks.length).clamp(
-      14.0,
-      34.0,
-    );
+    // **The rows fill the module, and what is left over is split above and
+    // below them rather than all dropped at the bottom.** At the old ceiling
+    // of 34 px a default-size Validator drew three tight rows under its
+    // verdict and left a third of the tile blank beneath — a table that had
+    // visibly run out before the box did. The ceiling still exists, because a
+    // twelve-row-tall Validator with three checks should not have rows the
+    // height of a fist; past it the block is simply centred in the space.
+    final available = size.height - _verdictHeight;
+    final rowHeight = (available / _checks.length).clamp(14.0, 44.0);
     final valueRight = size.width * 0.62;
 
+    // The measured column scales with the row; the name, the limit and the
+    // PASS/FAIL do not. Those three are labels — the same size in every module
+    // on the canvas — and the middle column is a reading, which is the thing
+    // you are actually looking at and the thing that should grow with the box.
+    final readingSize = (rowHeight * 0.42).clamp(13.0, 28.0).toDouble();
+
     var worst = _Outcome.pass;
-    var top = _verdictHeight;
+    var top = _verdictHeight + (available - rowHeight * _checks.length) / 2;
 
     for (var i = 0; i < _checks.length; i++) {
       if (top + rowHeight > size.height + 1) break;
@@ -178,7 +190,7 @@ class _ValidatorPainter extends MeterPainter {
       // top of the limit beside it.
       final reading = state._values[i].of(
         check.metric.format(value),
-        BelType.readingSmall.copyWith(
+        BelType.reading(readingSize).copyWith(
           color: outcome == _Outcome.fail ? colors.over : colors.textPrimary,
         ),
       );

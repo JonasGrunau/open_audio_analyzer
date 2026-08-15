@@ -46,6 +46,7 @@ class _SuperMeterModuleState extends State<SuperMeterModule> {
   ui.Paragraph? _unit;
   ui.Paragraph? _rangeLabel;
   List<ui.Paragraph> _arcLabels = const [];
+  double _arcLabelHeight = 0;
   Color? _labelColor;
 
   @override
@@ -69,6 +70,7 @@ class _SuperMeterModuleState extends State<SuperMeterModule> {
         layoutParagraph('S', style),
         layoutParagraph('I', style),
       ];
+      _arcLabelHeight = _arcLabels.first.height;
     }
 
     return MeterBody(
@@ -120,13 +122,53 @@ class _SuperMeterPainter extends MeterPainter {
   static const double _startAngle = 150 * math.pi / 180;
   static const double _sweepAngle = 240 * math.pi / 180;
 
+  /// The width of one ring, as a fraction of the outer radius.
+  static const double _ringWidth = 0.115;
+
+  /// Where a ring's name sits, as a fraction of the ring's width, measured
+  /// **along the arc** from its open end.
+  ///
+  /// An arc length rather than an angle, which is the whole point. The names
+  /// used to lead the arcs by a fixed 0.12 radians, and a fixed angle is a
+  /// fixed fraction of each radius — so the outermost name stood nearly twice
+  /// as far from its own arc as the innermost did from its. Three names that
+  /// each mark one ring then read as a diagonal drifting off the bottom of the
+  /// gauge rather than as three labels. The same number of pixels for all
+  /// three puts each name beside the arc it names.
+  static const double _labelGap = 0.7;
+
+  /// The angular lead of the *outermost* name.
+  ///
+  /// It is the lowest ink on the face, so the layout is solved against it
+  /// rather than against the arcs. Both terms of the arc length scale with the
+  /// outer radius, so this angle does not depend on the module's size: the
+  /// name sits on its ring's centreline, half a ring in from the outer edge.
+  static const double _labelLead =
+      _ringWidth * _labelGap / (1 - _ringWidth / 2);
+
   @override
   void paint(Canvas canvas, Size size) {
-    final extent = math.min(size.width, size.height);
-    if (extent < 90) return;
+    // **The gauge is not a circle and must not be centred as one.** It opens
+    // 120° at the bottom, so its ink reaches only `sin` of the way below the
+    // centre that it does above it — and centring the notional circle instead
+    // of the drawn shape left a band of dead space along the bottom of the
+    // module a fifth of its height deep, with the ring labels stranded in it.
+    // Solve for the radius that fills the box, then centre what is actually
+    // drawn.
+    final labelDrop = math.sin(_startAngle - _labelLead);
+    final labelHalf = state._arcLabelHeight / 2;
 
-    final centre = Offset(size.width / 2, size.height / 2);
-    final outer = extent / 2 - Space.sm;
+    final outer = math.min(
+      size.width / 2,
+      (size.height - labelHalf) / (1 + labelDrop),
+    );
+    if (outer < 40) return;
+
+    final inkHeight = outer * (1 + labelDrop) + labelHalf;
+    final centre = Offset(
+      size.width / 2,
+      (size.height - inkHeight) / 2 + outer,
+    );
 
     // Three rings and two gaps, sized off the module rather than fixed, so the
     // meter reads the same at 6x6 cells and at 12x12.
@@ -135,7 +177,7 @@ class _SuperMeterPainter extends MeterPainter {
     // arithmetic is fine and the display is not: two adjacent rings at similar
     // brightness read as one thick band with a seam, and the whole point of
     // three concentric arcs is being able to tell which is which at a glance.
-    final ring = outer * 0.115;
+    final ring = outer * _ringWidth;
     final gap = ring * 0.85;
 
     _track.strokeWidth = ring;
@@ -193,14 +235,15 @@ class _SuperMeterPainter extends MeterPainter {
         _target,
       );
 
-      // Ring name, at the open end of the gauge.
+      // Ring name, at the open end of the gauge, on the ring's own centreline
+      // and the same arc length from every arc — see [_labelGap].
       final label = state._arcLabels[i];
-      final labelAngle = _startAngle - 0.12;
+      final labelRadius = radius - ring / 2;
+      final labelAngle = _startAngle - ring * _labelGap / labelRadius;
       canvas.drawParagraph(
         label,
         centre +
-            Offset(math.cos(labelAngle), math.sin(labelAngle)) *
-                (radius - ring / 2) -
+            Offset(math.cos(labelAngle), math.sin(labelAngle)) * labelRadius -
             Offset(label.longestLine / 2, label.height / 2),
       );
     }
@@ -212,16 +255,47 @@ class _SuperMeterPainter extends MeterPainter {
       colors,
     );
 
-    final fontSize = (extent * 0.16).clamp(16.0, 56.0);
+    // Sized off the gauge rather than off the module's short side: the
+    // readout lives inside the rings, so it has to scale with them.
+    // The ceiling is high enough that the gauge is what limits the number, not
+    // the constant. At 56 a Super Meter given a quarter of a 27" display drew
+    // the same digits in the middle of a 700 px dial as one in a corner drew in
+    // a 350 px one, and the readout stopped looking like the centre of the
+    // instrument and started looking like a caption that had been left behind.
+    final dial = outer * 2;
+
+    // **The rings bound the readout, not the module.** `outer` is the outside
+    // of the first arc; three rings and two gaps in, what is left is the clear
+    // disc the number sits in. Sizing against `dial` alone is what put a
+    // four-digit reading through the innermost arc on both sides: the old
+    // `maxWidth` of `dial * 0.6` is 1.2 times `outer`, and the disc is only
+    // 0.92 of it across.
+    final innerRadius = outer - 2 * (ring + gap) - ring;
+
+    // A chord, not the diameter. The number is not a line — it stands about
+    // four tenths of the inner radius tall — and a box as wide as the circle
+    // fits only if it has no height. At 0.8 of the radius its corners still
+    // clear the arc.
+    final textWidth = innerRadius * 1.6;
+
+    // Every glyph in a reading is a digit, a minus or a point, and the reading
+    // face is monospaced, so the width is arithmetic and not a measurement —
+    // no second layout to find out whether the first one fitted. 0.62 em covers
+    // JetBrains Mono's 0.6 advance with a little slack.
+    final text = Metric.lufsIntegrated.format(integrated);
+    final fontSize = math
+        .min(dial * 0.16, textWidth / (text.length * 0.62))
+        .clamp(12.0, 120.0);
+
     final value = state._integrated.of(
-      Metric.lufsIntegrated.format(integrated),
+      text,
       BelType.reading(fontSize).copyWith(color: integratedColor),
       align: TextAlign.center,
-      maxWidth: extent * 0.6,
+      maxWidth: textWidth,
     );
     canvas.drawParagraph(
       value,
-      Offset(centre.dx - extent * 0.3, centre.dy - value.height * 0.72),
+      Offset(centre.dx - textWidth / 2, centre.dy - value.height * 0.72),
     );
 
     final unit = state._unit!;

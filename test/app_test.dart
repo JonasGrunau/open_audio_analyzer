@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import 'dart:io';
+
+import 'package:bel/src/app/window_chrome.dart';
 import 'package:bel_ui/bel_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -73,6 +76,74 @@ void main() {
       );
       await tester.tap(find.byType(GestureDetector));
       expect(tapped, isTrue);
+    });
+  });
+
+  group('WindowDragArea', () {
+    // The status bar is the window's title bar on macOS, so every control in
+    // it sits under this widget's gesture recognisers. It answered a double
+    // click with a zoom, and a `DoubleTapGestureRecognizer` holds the gesture
+    // arena until `kDoubleTapTimeout` expires — so nothing underneath could
+    // resolve a tap for 300 ms and the whole row felt like an application that
+    // was busy. Only the pan is left, and a pan does not hold.
+    //
+    // **Real on macOS and vacuous everywhere else**, because the widget is its
+    // own child off macOS. That is the right way round: the defect only ever
+    // existed on the platform where the test means something.
+    testWidgets('a control under it answers on release', (tester) async {
+      var pressed = false;
+      await tester.pumpWidget(
+        _wrap(
+          WindowDragArea(
+            child: BelButton(label: 'RESET', onPressed: () => pressed = true),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('RESET'));
+      // One frame, no elapsed time. A held arena would still be holding.
+      await tester.pump();
+
+      expect(pressed, isTrue);
+    });
+  });
+
+  group('cached text', () {
+    // The trap this guards is silent in both directions, which is why it is
+    // worth a test that reads source rather than pixels: a paragraph laid out
+    // with no width gets a line box a megapixel wide, so aligning it centre or
+    // right draws the glyph half a megapixel from where the caller paints it —
+    // and `longestLine` still reports the ink, so every measurement taken
+    // around the label agrees that it is exactly where it is not. The `M` and
+    // `S` under the LUFS meter's bars were invisible this way for a phase.
+    test('nothing aligns a paragraph inside a box it never asked for', () {
+      final offenders = <String>[];
+
+      for (final directory in const [
+        'lib/src/modules',
+        'packages/bel_ui/lib/src',
+      ]) {
+        for (final file in Directory(directory).listSync().whereType<File>()) {
+          if (!file.path.endsWith('.dart')) continue;
+          // Calls are matched whole — the alignment and the width are often on
+          // different lines — and only the two alignments that move the ink
+          // are at issue. `TextAlign.left` in an infinite box is a no-op.
+          for (final call in RegExp(
+            r'(layoutParagraph|\.of)\((?:[^()]|\([^()]*\))*\)',
+            dotAll: true,
+          ).allMatches(file.readAsStringSync())) {
+            final text = call.group(0)!;
+            if (!text.contains('TextAlign.center') &&
+                !text.contains('TextAlign.right')) {
+              continue;
+            }
+            if (text.contains('maxWidth')) continue;
+            offenders.add('${file.path}: ${text.split('\n').first}');
+          }
+        }
+      }
+
+      expect(offenders, isEmpty);
     });
   });
 

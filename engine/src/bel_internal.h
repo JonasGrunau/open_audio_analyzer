@@ -98,6 +98,19 @@ struct bel_engine {
 
   bel_thread thread;
 
+  /* Whether `thread` names a thread that was started and not yet joined.
+   *
+   * Not atomic, and deliberately separate from the two flags above: only the
+   * owner's thread ever reads or writes it, and it is the only one that
+   * answers the question stop() actually has to ask. `should_run` is the stop
+   * *signal* — using it as the predicate makes stop() decide whether to join
+   * by reading the flag it is about to clear, so anything that ever cleared it
+   * elsewhere would silently turn destroy() into a free underneath a live
+   * thread. `thread_alive` is the thread's own report and it goes false a few
+   * instructions before the thread actually returns, which is too early to
+   * skip the join on. */
+  int thread_started;
+
   /* --- Analysis state, never published directly ------------------------- */
   bel_channel_state channel[BEL_MAX_CHANNELS];
 

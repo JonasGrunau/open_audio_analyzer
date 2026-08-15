@@ -66,6 +66,8 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Bel measures the audio coming into an input you choose. It analyses the signal and never records, stores or transmits it.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Bel finds and connects to Bel hosts on your local network so that a tablet can display another machine's meters. It never sends audio.</string>
 	<key>NSBonjourServices</key>

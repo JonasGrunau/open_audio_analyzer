@@ -10,7 +10,7 @@ import 'package:flutter/foundation.dart';
 /// tickers, do not own timers, and do not subscribe to streams. There are three
 /// reasons, in increasing order of how much they matter:
 ///
-///   1. Twelve tickers is twelve callbacks per frame doing the same work.
+///   1. Thirteen tickers is thirteen callbacks per frame doing the same work.
 ///   2. Independent tickers drift, so two meters showing the same measurement
 ///      can show *different* values in the same frame. On a metering tool that
 ///      is not a cosmetic problem, it is a correctness problem — a user
@@ -50,8 +50,43 @@ class MeterClock extends ChangeNotifier {
   set targetFps(int value) {
     if (value == _targetFps) return;
     _targetFps = value;
-    _minimumInterval = _intervalFor(value);
+    _minimumInterval = _intervalFor(effectiveFps);
   }
+
+  /// The rate to fall back to when the platform asks for reduced motion.
+  static const int reducedMotionFps = 30;
+
+  /// Whether the platform's "reduce motion" accessibility preference is set.
+  ///
+  /// Bel has no decorative animation to switch off — there is not one
+  /// `AnimationController` in the application — so honouring this preference
+  /// cannot mean what it means elsewhere. What moves here is the measurement,
+  /// and a meter that stopped moving would not be a calmer meter, it would be
+  /// a broken one.
+  ///
+  /// So the honest response is the one thing that genuinely reduces motion
+  /// without inventing or withholding a reading: halve the update rate. The
+  /// meters still show everything the engine publishes — [framesSkipped]
+  /// already proves most frames carry nothing new — they simply redraw half as
+  /// often, which is the same trade the 30 fps setting exists to offer. The
+  /// settings panel says so out loud rather than showing a rate that is not
+  /// the rate being used.
+  bool get reducedMotion => _reducedMotion;
+  bool _reducedMotion = false;
+
+  set reducedMotion(bool value) {
+    if (value == _reducedMotion) return;
+    _reducedMotion = value;
+    _minimumInterval = _intervalFor(effectiveFps);
+  }
+
+  /// The rate the meters actually redraw at, once the preference is applied.
+  ///
+  /// A user who has already chosen 30 is left there rather than pushed lower:
+  /// the preference is a ceiling, not an override.
+  int get effectiveFps => _reducedMotion && _targetFps > reducedMotionFps
+      ? reducedMotionFps
+      : _targetFps;
 
   /// Whether audio has been lost since the last reset.
   ///

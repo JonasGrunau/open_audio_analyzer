@@ -1,0 +1,262 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+//
+// The three modules that keep a history, held to the property whose absence
+// crashed the application.
+//
+// Bel used to accumulate the spectrogram, the phase trail and the stereo cloud
+// into an image kept between frames, taken with `Picture.toImageSync`. That
+// image is a handle to a display list the engine has not rasterised yet, and it
+// holds that display list for as long as the image lives — so frame *n* pinned
+// frame *n−1*, back to the first frame, and disposing the Dart handle released
+// none of it. The application leaked a full-size image per published frame and
+// died on the raster thread with a stack overflow, recursing 3,286 destructors
+// deep through the chain as it was finally dropped.
+//
+// The fix is that these modules keep their history as data and redraw it. The
+// first test below is the one that would have caught the crash: while audio is
+// running, these modules must create no images at all. The second is the
+// behaviour that the rewrite had to preserve — the display advances on new
+// audio and on nothing else.
+
+import 'dart:typed_data';
+import 'dart:ui' as ui;
+
+import 'package:bel/src/clock/meter_clock.dart';
+import 'package:bel/src/modules/phase_scope.dart';
+import 'package:bel/src/modules/spectrogram.dart';
+import 'package:bel/src/modules/stereo_cloud.dart';
+import 'package:bel_core/bel_core.dart';
+import 'package:bel_ui/bel_ui.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+/// A source the test drives by hand, so a thousand published frames take no
+/// real time. The modules cannot tell it from the engine — that is the point of
+/// [MeterSource] — and it is the only way to run the history long enough to
+/// matter inside a widget test.
+class _Fake implements MeterSource {
+  int _generation = 0;
+
+  final Float32List _spectrum = Float32List(MeterShape.spectrumBands);
+  final Float32List _pan = Float32List(MeterShape.spectrumBands);
+  final Float32List _scope = Float32List(MeterShape.scopePoints * 2);
+
+  /// Publishes one frame of something that is different from the last one, so
+  /// the displays have a reason to change.
+  void publish() {
+    _generation++;
+    for (var band = 0; band < _spectrum.length; band++) {
+      final tilt = band / _spectrum.length;
+      _spectrum[band] = -84 + 70 * (1 - tilt) * ((_generation + band) % 7) / 6;
+      _pan[band] = ((_generation + band) % 11) / 5 - 1;
+    }
+    for (var i = 0; i < _scope.length; i += 2) {
+      _scope[i] = ((_generation + i) % 13) / 13 - 0.5;
+      _scope[i + 1] = ((_generation + i) % 17) / 17 - 0.5;
+    }
+  }
+
+  @override
+  int get generation => _generation;
+
+  @override
+  bool refresh() => true;
+
+  @override
+  bool get hasOverrun => false;
+
+  @override
+  bool get hasSpectrum => true;
+
+  @override
+  int get channels => 2;
+
+  @override
+  double get correlation => 0.5;
+
+  @override
+  Float32List get spectrum => _spectrum;
+
+  @override
+  Float32List get spectrumPeak => _spectrum;
+
+  @override
+  Float32List get spectrumPan => _pan;
+
+  @override
+  Float32List get scope => _scope;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => throw UnimplementedError();
+}
+
+/// Owns the clock for as long as the tree lives, as the workspace does. A
+/// ticker created beside the tree outlives it and the binding then reports an
+/// animation still running after disposal — see the note in canvas_test.dart.
+class _Harness extends StatefulWidget {
+  const _Harness({required this.source, required this.child});
+
+  final MeterSource source;
+  final Widget Function(MeterSource engine, MeterClock clock) child;
+
+  @override
+  State<_Harness> createState() => _HarnessState();
+}
+
+class _HarnessState extends State<_Harness>
+    with SingleTickerProviderStateMixin {
+  late final MeterClock clock = MeterClock(engine: widget.source, vsync: this);
+
+  @override
+  void dispose() {
+    clock.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => MaterialApp(
+    home: BelTheme(
+      colors: BelColors.precisionInstrument,
+      child: Material(
+        color: BelColors.precisionInstrument.background,
+        child: Center(child: widget.child(widget.source, clock)),
+      ),
+    ),
+  );
+}
+
+/// Three of these stack inside the 800×600 the test binding gives a window.
+const _size = Size(320, 180);
+
+Widget _sized(Widget child) =>
+    SizedBox(width: _size.width, height: _size.height, child: child);
+
+/// One frame of the application's clock.
+Future<void> _frame(WidgetTester tester) =>
+    tester.pump(const Duration(milliseconds: 17));
+
+void main() {
+  test('an image being created is something this file can see', () {
+    // A guard on the guard below. It asserts that nothing created an image,
+    // which is also what it would report if `Image.onCreate` had quietly
+    // stopped firing — a test that cannot fail is worse than no test, and this
+    // one is watching for a defect that took a crash report to find.
+    final created = <ui.Image>[];
+    final previous = ui.Image.onCreate;
+    ui.Image.onCreate = created.add;
+    addTearDown(() => ui.Image.onCreate = previous);
+
+    final recorder = ui.PictureRecorder();
+    ui.Canvas(recorder).drawPaint(ui.Paint());
+    final picture = recorder.endRecording();
+    picture.toImageSync(8, 8).dispose();
+    picture.dispose();
+
+    expect(created, hasLength(1));
+  });
+
+  testWidgets('the modules that keep a history create no images', (
+    tester,
+  ) async {
+    // Every `ui.Image` in the process, from any code. The three modules below
+    // are the only things drawing, so anything that lands here was created by
+    // one of them — and a module that creates one image per published frame is
+    // the defect this file exists to prevent.
+    final created = <ui.Image>[];
+    final previous = ui.Image.onCreate;
+    ui.Image.onCreate = created.add;
+    addTearDown(() => ui.Image.onCreate = previous);
+
+    final source = _Fake();
+    await tester.pumpWidget(
+      _Harness(
+        source: source,
+        child: (engine, clock) => Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _sized(SpectrogramModule(engine: engine, clock: clock)),
+            _sized(PhaseScopeModule(engine: engine, clock: clock)),
+            _sized(StereoCloudModule(engine: engine, clock: clock)),
+          ],
+        ),
+      ),
+    );
+
+    // Comfortably longer than the ring buffers, and longer than the seventy
+    // seconds of audio it took to kill the application.
+    for (var frame = 0; frame < 500; frame++) {
+      source.publish();
+      await _frame(tester);
+    }
+
+    expect(
+      created,
+      isEmpty,
+      reason:
+          'A module kept an image between frames. An image from toImageSync '
+          'retains the display list that drew it, so one per frame retains '
+          'every frame before it — which is the leak that crashed the raster '
+          'thread.',
+    );
+  });
+
+  testWidgets('the spectrogram advances on new audio and on nothing else', (
+    tester,
+  ) async {
+    final source = _Fake();
+    final key = GlobalKey();
+
+    await tester.pumpWidget(
+      _Harness(
+        source: source,
+        child: (engine, clock) => RepaintBoundary(
+          key: key,
+          child: _sized(SpectrogramModule(engine: engine, clock: clock)),
+        ),
+      ),
+    );
+
+    for (var frame = 0; frame < 20; frame++) {
+      source.publish();
+      await _frame(tester);
+    }
+    final scrolled = await _shoot(tester, key);
+
+    // Repaints without new audio. A display that aged on these would be
+    // inventing time that no audio passed through.
+    for (var frame = 0; frame < 20; frame++) {
+      await _frame(tester);
+    }
+    expect(
+      await _shoot(tester, key),
+      scrolled,
+      reason: 'the spectrogram scrolled on a repaint that carried no audio',
+    );
+
+    source.publish();
+    await _frame(tester);
+    expect(
+      await _shoot(tester, key),
+      isNot(scrolled),
+      reason: 'the spectrogram did not scroll when a measurement arrived',
+    );
+  });
+}
+
+/// The rendered pixels of [key]'s subtree.
+///
+/// `toImage` is a real asynchronous read and cannot be awaited inside the fake
+/// async zone a `testWidgets` body runs in — hence `runAsync`.
+Future<Uint8List> _shoot(WidgetTester tester, GlobalKey key) async {
+  final boundary =
+      key.currentContext!.findRenderObject()! as RenderRepaintBoundary;
+  late Uint8List pixels;
+  await tester.runAsync(() async {
+    final image = await boundary.toImage();
+    final data = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+    pixels = data!.buffer.asUint8List(0, data.lengthInBytes);
+    image.dispose();
+  });
+  return pixels;
+}

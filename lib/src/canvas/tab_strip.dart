@@ -45,13 +45,14 @@ class _TabStripState extends ConsumerState<TabStrip> {
     });
 
     // **Asked for again on the next frame, and the field's own `autofocus` is
-    // not enough.** Renaming from the context menu runs while that menu's route
-    // is still being popped, and a popping `ModalRoute` hands focus back to
-    // whatever held it before it opened — the canvas — *after* the field has
+    // not enough.** Renaming runs from the context menu, while that menu's
+    // route is still being popped, and a popping `ModalRoute` hands focus back
+    // to whatever held it before it opened — the canvas — *after* the field has
     // autofocused. The result is a rename field sitting there ready, with the
-    // caret in it, that swallows nothing you type. Double-clicking a tab
-    // involves no route and was never affected, which is what made this
-    // invisible: the two ways in behaved differently.
+    // caret in it, that swallows nothing you type. It was invisible for a phase
+    // because a double click opened the same field with no route involved and
+    // was never affected, so the two ways in behaved differently; the double
+    // click is gone now and every rename takes this path.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && _editing == index) _renameFocus.requestFocus();
     });
@@ -171,13 +172,16 @@ class _TabStripState extends ConsumerState<TabStrip> {
                             label: tabs[i].name,
                             active: i == workspace.activeTab,
                             onTap: () => controller.selectTab(i),
-                            onRename: () => _startRename(i, tabs[i].name),
                             onMenu: (position) => _tabMenu(i, position),
                           ),
                       // Inside the scroller, so that "add a tab" stays beside
                       // the last tab instead of being carried to the far end of
                       // the strip and sitting against UNDO.
-                      _StripButton(label: '+', onPressed: controller.addTab),
+                      _StripButton(
+                        label: '+',
+                        glyph: true,
+                        onPressed: controller.addTab,
+                      ),
                     ],
                   ),
                 ),
@@ -209,23 +213,32 @@ class _Tab extends StatelessWidget {
     required this.label,
     required this.active,
     required this.onTap,
-    required this.onRename,
     required this.onMenu,
   });
 
   final String label;
   final bool active;
   final VoidCallback onTap;
-  final VoidCallback onRename;
   final void Function(Offset globalPosition) onMenu;
 
   @override
   Widget build(BuildContext context) {
     final colors = BelTheme.of(context);
 
+    // **Long press, not double tap.** Renaming used to be a double click here,
+    // which armed a `DoubleTapGestureRecognizer` over the tab — and that
+    // recogniser holds the gesture arena from the first tap until
+    // `kDoubleTapTimeout` expires. The arena is never swept while it is held,
+    // so [onTap] could not win it and switching tabs took 300 ms every time.
+    // A long press costs nothing: it resolves by rejecting when the pointer
+    // lifts early, so the tap is swept at once.
+    //
+    // It also opens the menu rather than the field, which is what a tablet
+    // was missing — there is no right mouse button there, so rename, duplicate
+    // and delete were all unreachable on one.
     return GestureDetector(
       onTap: onTap,
-      onDoubleTap: onRename,
+      onLongPressStart: (details) => onMenu(details.globalPosition),
       onSecondaryTapUp: (details) => onMenu(details.globalPosition),
       behavior: HitTestBehavior.opaque,
       child: MouseRegion(
@@ -237,10 +250,16 @@ class _Tab extends StatelessWidget {
           // A bottom rule rather than a filled chip. The active tab has to be
           // unmistakable without introducing a second surface colour into a
           // palette whose depth comes entirely from hairlines.
+          //
+          // Drawn in `textPrimary` and not the signal hue: this strip sits
+          // directly above the meters, so an accent rule here is the same
+          // colour as an in-spec reading a few pixels below it. The label
+          // already carries the state as well — textPrimary when active,
+          // textFaint when not — so the rule is confirming, not carrying.
           decoration: BoxDecoration(
             border: Border(
               bottom: BorderSide(
-                color: active ? colors.accent : Colors.transparent,
+                color: active ? colors.textPrimary : Colors.transparent,
                 width: BelStroke.emphasis,
               ),
             ),
@@ -281,7 +300,7 @@ class _RenameField extends StatelessWidget {
             focusNode: focusNode,
             autofocus: true,
             style: BelType.label.copyWith(color: colors.textPrimary),
-            cursorColor: colors.accent,
+            cursorColor: colors.textPrimary,
             cursorWidth: BelStroke.hairline,
             decoration: const InputDecoration(
               isDense: true,
@@ -305,15 +324,37 @@ class _StripButton extends StatelessWidget {
     required this.label,
     required this.onPressed,
     this.enabled = true,
+    this.glyph = false,
   });
 
   final String label;
   final VoidCallback onPressed;
   final bool enabled;
 
+  /// Whether the label is a bare glyph rather than a word.
+  ///
+  /// `+` is drawn centred on the font's math axis, which sits roughly a
+  /// thirteenth of an em below the middle of the cap band that `LOUDNESS` and
+  /// `UNDO` occupy. Words need no correction because the line box is already
+  /// centred on the band they fill; a lone symbol does, and without it the
+  /// plus sagged towards the baseline of the tab beside it and read as a
+  /// speck of dirt rather than a control.
+  final bool glyph;
+
+  /// Measured against the cap band of [BelType.label], and expressed as a
+  /// fraction of the size so it survives a change to it.
+  static const double _mathAxisDrop = 0.075;
+
   @override
   Widget build(BuildContext context) {
     final colors = BelTheme.of(context);
+    final text = Text(
+      label,
+      style: BelType.label.copyWith(
+        color: enabled ? colors.textMuted : colors.textFaint,
+      ),
+    );
+
     return GestureDetector(
       onTap: enabled ? onPressed : null,
       behavior: HitTestBehavior.opaque,
@@ -321,14 +362,25 @@ class _StripButton extends StatelessWidget {
         cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
         child: Container(
           height: TabStrip.height,
-          padding: const EdgeInsets.symmetric(horizontal: Space.sm),
-          alignment: Alignment.center,
-          child: Text(
-            label,
-            style: BelType.label.copyWith(
-              color: enabled ? colors.textMuted : colors.textFaint,
-            ),
+          // **The active tab's rule is reserved here as well.** A `_Tab` draws
+          // a bottom border of `BelStroke.emphasis` whether or not it is the
+          // active one, and a border insets the child — so a tab's label is
+          // centred in the strip *minus* the rule, while a button with no
+          // border is centred in the whole of it. Every action in this row sat
+          // a pixel below the tab labels because of that, and the `+` sits
+          // directly beside the last tab where a pixel is impossible to miss.
+          padding: const EdgeInsets.only(
+            left: Space.sm,
+            right: Space.sm,
+            bottom: BelStroke.emphasis,
           ),
+          alignment: Alignment.center,
+          child: glyph
+              ? Transform.translate(
+                  offset: Offset(0, -BelType.label.fontSize! * _mathAxisDrop),
+                  child: text,
+                )
+              : text,
         ),
       ),
     );

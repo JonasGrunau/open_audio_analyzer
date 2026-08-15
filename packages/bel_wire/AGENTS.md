@@ -14,7 +14,7 @@ published wire format is that things nobody asked for can talk to it.
 | `src/frame.dart` | The 12-byte header, the magic, the frame types, and the reader that skips what it does not recognise. |
 | `src/hello.dart` | `HELLO` — the shape negotiation, and the rejection when two builds disagree about what a byte means. |
 | `src/snapshot_codec.dart` | `0x0003 SNAPSHOT`. Every offset in the frozen table, as named constants. |
-| `src/wire_snapshot.dart` | `WireSnapshot` — a decoded frame presented as a `MeterSource`, so the twelve modules cannot tell it from an engine. |
+| `src/wire_snapshot.dart` | `WireSnapshot` — a decoded frame presented as a `MeterSource`, so the thirteen modules cannot tell it from an engine. |
 | `src/daw_transport.dart` | `0x0010 DAW_TRANSPORT`, and the presence bits. |
 
 ## Rules

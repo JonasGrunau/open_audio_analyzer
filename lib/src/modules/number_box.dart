@@ -11,12 +11,12 @@ import '../data/metric_reader.dart';
 
 /// Displays any single measurement as a number.
 ///
-/// The simplest of the twelve modules, and therefore the one that establishes
+/// The simplest of the thirteen modules, and therefore the one that establishes
 /// the pattern all the others follow:
 ///
 ///   - The widget is the **body only**. Its title bar, border, menu affordance
 ///     and selection state belong to the `ModuleFrame` the canvas wraps it in,
-///     so that twelve modules cannot drift into twelve slightly different
+///     so that thirteen modules cannot drift into thirteen slightly different
 ///     frames.
 ///   - The widget builds **once**. It rebuilds only when the palette or the
 ///     target changes, never because a measurement did.
@@ -96,15 +96,12 @@ class _NumberBoxPainter extends MeterPainter {
   final BelColors colors;
   final ReadoutPainter readout;
 
-  /// Below this the digits are unreadable and the box says so instead.
-  static const double _minimumHeight = 24;
-
   @override
   void paint(Canvas canvas, Size size) {
-    if (size.height < _minimumHeight || size.width < 32) {
-      return;
-    }
-
+    // No size guard here. Below `ModuleKind.numberBox.minBodyHeight` the frame
+    // has already substituted the "too small" placeholder — the guard used to
+    // live here and silently drew nothing, which is how six empty Number Boxes
+    // shipped on a 1024x640 window.
     final value = readMetric(engine, metric);
     final state = classify(metric, value, calibration);
     final color = colorForState(state, colors);
@@ -124,26 +121,37 @@ class _NumberBoxPainter extends MeterPainter {
     final hasUnit = unitText.isNotEmpty && state != ReadingState.unavailable;
 
     final top = (size.height - valueParagraph.height) / 2;
-    canvas.drawParagraph(valueParagraph, Offset(0, top));
 
-    if (hasUnit) {
-      final unitParagraph = readout.unit(
-        unitText,
-        colors.textMuted,
-        size.width,
-      );
+    final unitParagraph = hasUnit
+        ? readout.unit(unitText, colors.textMuted, size.width)
+        : null;
 
+    // **The value and its unit are one object, and it is centred as one.**
+    // Drawn from x = 0 the number hugged the left edge of a box it rarely
+    // fills — most obviously on an unavailable reading, where a single em dash
+    // sat alone in the corner of a four-cell tile and read as a rendering
+    // fault rather than as "not measured yet". The unit rides along, so the
+    // group stays centred whether or not there is one.
+    final unitWidth = unitParagraph == null
+        ? 0.0
+        : Space.xs + unitParagraph.longestLine;
+    final groupWidth = valueParagraph.longestLine + unitWidth;
+    final left = groupWidth <= size.width ? (size.width - groupWidth) / 2 : 0.0;
+
+    canvas.drawParagraph(valueParagraph, Offset(left, top));
+
+    if (unitParagraph != null) {
       // Sit the unit on the value's baseline. Centring it against the value's
       // box instead is the usual shortcut and it always looks slightly wrong,
       // because a unit's x-height and a digit's cap-height do not agree.
-      final left = valueParagraph.longestLine + Space.xs;
+      final unitLeft = left + valueParagraph.longestLine + Space.xs;
       final baseline =
           top +
           valueParagraph.alphabeticBaseline -
           unitParagraph.alphabeticBaseline;
 
-      if (left + unitParagraph.longestLine <= size.width) {
-        canvas.drawParagraph(unitParagraph, Offset(left, baseline));
+      if (unitLeft + unitParagraph.longestLine <= size.width) {
+        canvas.drawParagraph(unitParagraph, Offset(unitLeft, baseline));
       }
     }
   }
@@ -231,9 +239,23 @@ class _ElapsedPainter extends MeterPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    final paragraph = state.paragraphFor(
+      _format(engine.elapsedSeconds),
+      colors.textMuted,
+    );
+    // **Centred in the box, not drawn from its top-left.** The box is taller
+    // than the line it holds, and drawn at the origin every one of those spare
+    // pixels lands *under* the digits: the clock rode two pixels above the
+    // optical centre of every label beside it in the bar — including the
+    // sample-rate readout three items to its left, which is the same
+    // `readingSmall` style and lands where it should because it is a `Text`.
+    //
+    // A `Text` centres its own line box in whatever the Row gives it. Anything
+    // painted has to do that itself, and a painted readout that skips it is
+    // misaligned by however much slack the box happens to have.
     canvas.drawParagraph(
-      state.paragraphFor(_format(engine.elapsedSeconds), colors.textMuted),
-      Offset.zero,
+      paragraph,
+      Offset(0, (size.height - paragraph.height) / 2),
     );
   }
 

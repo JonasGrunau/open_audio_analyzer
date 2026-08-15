@@ -25,8 +25,10 @@ import '../remote/display_screen.dart';
 import '../remote/remote_control.dart';
 import '../storage/config_paths.dart';
 import '../storage/startup_config.dart';
+import 'bar_controls.dart';
 import 'launch_options.dart';
 import 'shortcuts.dart';
+import 'window_chrome.dart';
 
 /// The application root.
 class BelApp extends ConsumerWidget {
@@ -39,11 +41,27 @@ class BelApp extends ConsumerWidget {
     // keeps every module painter's `shouldRepaint` cheap — see its comment.
     final colors = ref.watch(paletteProvider);
 
+    // The window's own chrome follows the skin too. On macOS there is no title
+    // bar left to disagree with the palette, but the window buttons are still
+    // AppKit's and the window's background is what shows during a live resize;
+    // both have to be told which skin is in force. Deduplicated inside, so the
+    // rebuilds that did not change the palette cost nothing.
+    WindowChrome.applyPalette(colors);
+
     return MaterialApp(
       title: 'Bel',
       debugShowCheckedModeBanner: false,
       theme: belThemeData(colors),
-      home: BelTheme(colors: colors, child: const _Workspace()),
+      // **The palette goes where the Material theme already is: above the
+      // `Navigator`, which is what `builder` wraps.** Under `home` it is
+      // invisible to a route, so every panel could only be handed a copy of it
+      // taken when it opened — and a skin chosen in the settings panel, which
+      // is where skins are chosen, repainted the canvas behind that panel and
+      // left the panel itself in the old colours. Material's half of the theme
+      // did follow, because `MaterialApp` puts it here, so the panel came apart
+      // into two skins at once. See `showBelPanel`.
+      builder: (context, child) => BelTheme(colors: colors, child: child!),
+      home: const _Workspace(),
     );
   }
 }
@@ -69,8 +87,23 @@ class _Workspace extends ConsumerStatefulWidget {
   ConsumerState<_Workspace> createState() => _WorkspaceState();
 }
 
+/// **`TickerProviderStateMixin`, not `SingleTickerProviderStateMixin`.** There
+/// is only ever one clock alive, so the single-ticker mixin looks like the
+/// right one and is not: it permits one `createTicker` call *per State*, for
+/// the life of the State, and never clears the field — disposing the ticker
+/// does not buy another. This State creates one clock per source, so the first
+/// source works and every change after it throws.
+///
+/// That failure is invisible in exactly the wrong way. `_openFor` catches
+/// `BelEngineException`, and this is a `FlutterError`, so it escapes the
+/// `setState` callback: the engine has already been created and started, but
+/// `_engine` and `_clock` are never assigned. The window keeps painting the
+/// previous source — same label, same elapsed clock, still running — while the
+/// new engine holds the capture device open with nothing reading it. Selecting
+/// a microphone appears to do nothing at all, and the only visible trace is the
+/// system's recording indicator.
 class _WorkspaceState extends ConsumerState<_Workspace>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   BelEngine? _engine;
   MeterClock? _clock;
   String? _failure;
@@ -129,8 +162,8 @@ class _WorkspaceState extends ConsumerState<_Workspace>
     );
 
     // The command line, after the first frame. Both halves need a context below
-    // `MaterialApp.home`: a panel is a route pushed above the application's
-    // `Material` and `BelTheme`, so it cannot be opened from `main()`.
+    // `MaterialApp` — a panel is a route, so it needs the `Navigator` this
+    // widget is built under, and it cannot be opened from `main()`.
     WidgetsBinding.instance.addPostFrameCallback((_) => _applyLaunchOptions());
   }
 
@@ -289,10 +322,15 @@ class _WorkspaceState extends ConsumerState<_Workspace>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    _StatusBar(
-                      engine: engine,
-                      clock: clock,
-                      sourceLabel: _sourceLabel,
+                    // The status bar is the window's title bar as well on
+                    // macOS — there is no system one left to drag. See
+                    // window_chrome.dart.
+                    WindowDragArea(
+                      child: _StatusBar(
+                        engine: engine,
+                        clock: clock,
+                        sourceLabel: _sourceLabel,
+                      ),
                     ),
                     const TabStrip(),
                     // Rebuilds on the transition only, never on the sixty frames
@@ -427,9 +465,13 @@ class _StatusBar extends ConsumerWidget {
     final settings = ref.watch(settingsProvider);
     final calibration = ref.watch(calibrationProvider);
 
-    // The clock is the single throttle point, so the setting is pushed into it
-    // rather than read from it.
+    // The clock is the single throttle point, so both the setting and the
+    // platform's accessibility preference are pushed into it rather than read
+    // from it. `disableAnimations` is the OS-level "reduce motion" switch; on
+    // a metering tool it becomes a ceiling on the redraw rate, because the
+    // motion here is the measurement and cannot be removed. See MeterClock.
     clock.targetFps = settings.targetFps;
+    clock.reducedMotion = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
 
     return SizedBox(
       height: height,
@@ -444,76 +486,189 @@ class _StatusBar extends ConsumerWidget {
           ),
         ),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: Space.md),
-          // The bar carries eight things and a narrow window cannot hold all
-          // of them. Rather than let a Row overflow, the least load-bearing
-          // items drop out first: the format readout, then the frame rate.
-          // What never drops is the source, the elapsed clock, settings and
-          // RESET — knowing what is being measured, for how long, being able
-          // to change it and being able to start again are the parts you
-          // cannot work without.
+          // Leading and trailing rather than symmetric: on macOS the three
+          // window buttons are drawn over the top of this bar, and BEL cannot
+          // start until they have ended. See WindowChrome.statusBarLeading.
+          padding: EdgeInsets.only(
+            left: WindowChrome.statusBarLeading,
+            right: Space.md,
+          ),
+          // **What earns a place in the bar is what changes while you work,
+          // or what a reading has to be read against.** The source, the
+          // elapsed clock and RESET are the first; the delivery target is the
+          // second — every PASS and FAIL on the canvas is a verdict against
+          // it, so naming it beside them is the meter's units, not a shortcut
+          // to a setting. The refresh rate was neither. It is chosen once for
+          // a machine and never looked at again, and its chip sat in the bar
+          // duplicating a control two clicks away for no other reason than
+          // that it fit — so it is in the settings panel now and only there.
+          //
+          // **A narrow window cannot hold everything, and a Row that cannot
+          // hold its children does not shrink them — it overflows.** One gate
+          // was not enough: at the smallest window the platform allows, the
+          // bar ran 121 px past its own edge, which is a debug stripe in
+          // development and silently clipped controls in a release build.
+          //
+          // So the items leave in order of how little they carry, each at the
+          // width below which the rest no longer fit. Every one of them is
+          // still reachable — the four buttons all have shortcuts, listed in
+          // the sheet the `?` opens and in docs/site/keyboard.md — and what
+          // stays at the narrowest width is what the rule above says stays:
+          // the source, the elapsed clock, the delivery target and RESET.
           child: LayoutBuilder(
             builder: (context, constraints) {
-              final showFormat = constraints.maxWidth >= 860;
-              final showFps = constraints.maxWidth >= 700;
+              final width = constraints.maxWidth;
+              // Each number is the row width at which everything *up to and
+              // including* that item still fits, measured rather than
+              // estimated — `test/scaling_test.dart` sweeps the whole
+              // application every 20 px and fails on the overflow, and the
+              // margin above each measured threshold is about 35 px for the
+              // longest string the item beside it can hold. 860 was the single
+              // gate this replaced, and it was 20 px short of even its own
+              // case: the bar fitted at every window anybody had opened and
+              // ran 121 px past the edge at the smallest one the platform
+              // allowed.
+              //
+              // Below 500 the irreducible set — source, clock, target,
+              // SETTINGS, RESET — does not fit either, and there is no honest
+              // item left to drop. That is under half the supported minimum
+              // window and is left to the platform.
+              final showFormat = width >= 900;
+              final showWordmark = width >= 790;
+              final showAnalyse = width >= 730;
+              final showRemote = width >= 620;
+              final showHelp = width >= 520;
 
               return Row(
                 children: [
-                  Text(
-                    'BEL',
-                    style: BelType.label.copyWith(
-                      color: colors.textPrimary,
-                      letterSpacing: 2,
+                  // **The left group is the slack.** It is `Expanded`, so it
+                  // takes whatever the right group leaves and pushes that group
+                  // flush right — the job a `Spacer` used to do here.
+                  //
+                  // The Spacer is gone because it cannot coexist with a child
+                  // that shrinks, and the bar needs one. Both pickers cap at
+                  // 220 px and ellipsis, so a long device name and a long target
+                  // name together add about 200 px that the width gates below
+                  // never counted; at 950 px every gate was open and the row ran
+                  // 18 px past its edge. Making the source picker `Flexible`
+                  // fixes that — but `Flexible` and `Spacer` both default to
+                  // `flex: 1`, so `RenderFlex` splits the free space between
+                  // them, the loose picker takes only what it needs, and the
+                  // Spacer's half is laid out *after* the last child. That is
+                  // the bug described two comments down, and this is the shape
+                  // that has neither.
+                  Expanded(
+                    child: Row(
+                      children: [
+                        if (showWordmark) ...[
+                          Text(
+                            'BEL',
+                            style: BelType.label.copyWith(
+                              color: colors.textPrimary,
+                              letterSpacing: 2,
+                            ),
+                          ),
+                          const SizedBox(width: Space.lg),
+                        ],
+                        Flexible(
+                          child: _SourcePicker(
+                            label: sourceLabel,
+                            settings: settings,
+                          ),
+                        ),
+                        if (showFormat) ...[
+                          const SizedBox(width: Space.lg),
+                          Text(
+                            '${(engine.sampleRate / 1000).toStringAsFixed(1)}'
+                            ' kHz · ${engine.channels} ch',
+                            style: BelType.readingSmall.copyWith(
+                              color: colors.textFaint,
+                            ),
+                            maxLines: 1,
+                            softWrap: false,
+                          ),
+                        ],
+                      ],
                     ),
                   ),
-                  const SizedBox(width: Space.lg),
-                  _SourcePicker(label: sourceLabel, settings: settings),
-                  if (showFormat) ...[
-                    const SizedBox(width: Space.lg),
-                    Text(
-                      '${(engine.sampleRate / 1000).toStringAsFixed(1)} kHz'
-                      ' · ${engine.channels} ch',
-                      style: BelType.readingSmall.copyWith(
-                        color: colors.textFaint,
-                      ),
-                    ),
-                  ],
-                  const Spacer(),
                   ElapsedReadout(engine: engine, clock: clock),
                   const SizedBox(width: Space.md),
-                  Flexible(child: _CalibrationPicker(calibration: calibration)),
-                  const SizedBox(width: Space.sm),
-                  if (showFps) ...[
-                    _FpsPicker(fps: settings.targetFps),
+                  // Bounded, not `Flexible`. A `Flexible` here shares the row's
+                  // free space with the `Spacer` above — both default to
+                  // `flex: 1`, so `RenderFlex` hands each of them half. The
+                  // Spacer is tight and takes its half; this one is loose and
+                  // takes only the width of the name, and the leftover half is
+                  // laid out *after* the last child. Everything from the
+                  // elapsed clock rightwards then sat in the middle of the bar
+                  // with a gap beside it that grew as the window did.
+                  //
+                  // A maximum with an ellipsis is what the source picker two
+                  // rows up already does, and it is the honest constraint: the
+                  // bar drops whole items on a narrow window rather than
+                  // squeezing them — see the `showFormat` gate.
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 220),
+                    child: _CalibrationPicker(calibration: calibration),
+                  ),
+                  if (showRemote) ...[
                     const SizedBox(width: Space.sm),
+                    RemoteDisplayControl(
+                      source: engine,
+                      abiVersion: BelEngine.abiVersion,
+                    ),
                   ],
-                  RemoteDisplayControl(
-                    source: engine,
-                    abiVersion: BelEngine.abiVersion,
-                  ),
+                  if (showAnalyse) ...[
+                    const SizedBox(width: Space.sm),
+                    BarButton(
+                      label: 'ANALYSE FILE',
+                      onPressed: () => showReportPanel(context),
+                    ),
+                  ],
                   const SizedBox(width: Space.sm),
-                  _BarButton(
-                    label: 'ANALYSE FILE',
-                    onPressed: () => showReportPanel(context),
-                  ),
-                  const SizedBox(width: Space.sm),
-                  // Bel draws its own chrome and therefore has no menu bar, so
-                  // the usual place a desktop user reads a shortcut off — the
-                  // chord printed beside a menu item — does not exist. Without
-                  // this button the sheet is only reachable by pressing the key
-                  // that opens the list of keys.
-                  _BarButton(
-                    label: '?',
-                    tooltip: 'Keyboard shortcuts',
-                    onPressed: () => showShortcutsSheet(context),
-                  ),
-                  const SizedBox(width: Space.sm),
-                  _BarButton(
+                  BarButton(
                     label: 'SETTINGS',
                     onPressed: () => showSettingsPanel(context),
                   ),
                   const SizedBox(width: Space.sm),
-                  _BarButton(label: 'RESET', onPressed: engine.reset),
+                  // The scope has to be on the button. `RESET` beside
+                  // `SETTINGS` in identical chrome reads as "reset everything"
+                  // — the layout, the target, the app — when what it actually
+                  // discards is the integration in progress. Somebody twenty
+                  // minutes into an integrated measurement needs to know that
+                  // before they click, not after.
+                  BarButton(
+                    label: 'RESET',
+                    // Wording tracks the contract at bel_engine_reset() in
+                    // bel.h. If that changes, this changes with it — a button
+                    // that describes the wrong thing is worse than one that
+                    // describes nothing.
+                    tooltip:
+                        'Restarts the measurement — integrated loudness, LRA, '
+                        'the max-since-reset peaks, the clip counters and the '
+                        'elapsed clock. Momentary readings, the layout and the '
+                        'delivery target are untouched.',
+                    onPressed: engine.reset,
+                  ),
+                  // Last, and outside the working set on purpose. Everything to
+                  // its left is about the measurement in progress — what is
+                  // being measured, against what, and how to start again. This
+                  // is about the application, and a glyph sitting between two
+                  // words reads as a third word you cannot make out.
+                  //
+                  // It exists at all because Bel draws its own chrome and so
+                  // has no menu bar: the usual place a desktop user reads a
+                  // shortcut off — the chord printed beside a menu item — is
+                  // not there, and without this button the sheet is only
+                  // reachable by pressing the key that opens the list of keys.
+                  if (showHelp) ...[
+                    const SizedBox(width: Space.sm),
+                    BarButton(
+                      label: '?',
+                      tooltip: 'Keyboard shortcuts',
+                      semanticLabel: 'Keyboard shortcuts',
+                      onPressed: () => showShortcutsSheet(context),
+                    ),
+                  ],
                 ],
               );
             },
@@ -597,21 +752,33 @@ class _SourcePicker extends ConsumerWidget {
             width: Space.xs + Space.xxs,
             height: Space.xs + Space.xxs,
             decoration: BoxDecoration(
+              // Bright means listening, dim means silence. Not the signal hue:
+              // this dot sits in the same bar as the readings, where `accent`
+              // already means "in spec" — a lit teal dot next to a loudness
+              // number reads as a verdict on it.
               color: settings.sourceKind == AudioSourceKind.silence
                   ? colors.textFaint
-                  : colors.accent,
+                  : colors.textPrimary,
               borderRadius: BelRadius.allXs,
             ),
           ),
           const SizedBox(width: Space.sm),
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 220),
-            child: Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              softWrap: false,
-              style: BelType.label.copyWith(color: colors.textMuted),
+          // **`Flexible`, not just a maximum.** A `ConstrainedBox` caps how wide
+          // the name may grow; it does not make it shrink. This `Row` is
+          // `mainAxisSize.min`, so a child that is not flexible is measured
+          // against unbounded width — the name took its full 220 px however
+          // little room the bar had, and the Row overflowed inside the picker
+          // where the status bar's own width gates could not see it.
+          Flexible(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 220),
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                softWrap: false,
+                style: BelType.label.copyWith(color: colors.textMuted),
+              ),
             ),
           ),
         ],
@@ -632,7 +799,7 @@ class _SourcePicker extends ConsumerWidget {
       child: Text(
         text,
         style: BelType.body.copyWith(
-          color: selected ? colors.accent : colors.textPrimary,
+          color: selected ? colors.textPrimary : colors.textMuted,
         ),
       ),
     );
@@ -665,117 +832,14 @@ class _CalibrationPicker extends ConsumerWidget {
               option.name,
               style: BelType.body.copyWith(
                 color: option.id == calibration.id
-                    ? colors.accent
-                    : colors.textPrimary,
+                    ? colors.textPrimary
+                    : colors.textMuted,
               ),
             ),
           ),
       ],
-      child: _BarChip(text: calibration.name),
+      child: BarChip(text: calibration.name),
     );
-  }
-}
-
-class _FpsPicker extends ConsumerWidget {
-  const _FpsPicker({required this.fps});
-
-  final int fps;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final colors = BelTheme.of(context);
-    return PopupMenuButton<int>(
-      tooltip: 'Meter refresh rate',
-      color: colors.panelRaised,
-      position: PopupMenuPosition.under,
-      onSelected: ref.read(settingsProvider.notifier).setTargetFps,
-      itemBuilder: (context) => [
-        for (final option in kTargetFpsOptions)
-          PopupMenuItem(
-            value: option,
-            height: Space.xl,
-            child: Text(
-              '$option fps',
-              style: BelType.body.copyWith(
-                color: option == fps ? colors.accent : colors.textPrimary,
-              ),
-            ),
-          ),
-      ],
-      child: _BarChip(text: '$fps fps'),
-    );
-  }
-}
-
-class _BarChip extends StatelessWidget {
-  const _BarChip({required this.text});
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = BelTheme.of(context);
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: Space.sm,
-        vertical: Space.xs,
-      ),
-      decoration: BoxDecoration(
-        borderRadius: BelRadius.allXs,
-        border: Border.all(color: colors.hairline, width: BelStroke.hairline),
-      ),
-      // Calibration names run long ("Streaming (−14 LUFS)"), and this chip sits
-      // in a Row that has no slack. Ellipsis rather than overflow.
-      child: Text(
-        text,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        softWrap: false,
-        style: BelType.caption.copyWith(color: colors.textMuted),
-      ),
-    );
-  }
-}
-
-class _BarButton extends StatelessWidget {
-  const _BarButton({
-    required this.label,
-    required this.onPressed,
-    this.tooltip,
-  });
-
-  final String label;
-  final VoidCallback onPressed;
-
-  /// For the buttons whose label is a glyph rather than a word.
-  final String? tooltip;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = BelTheme.of(context);
-    final button = GestureDetector(
-      onTap: onPressed,
-      behavior: HitTestBehavior.opaque,
-      child: Container(
-        padding: const EdgeInsets.symmetric(
-          horizontal: Space.smd,
-          vertical: Space.xs,
-        ),
-        decoration: BoxDecoration(
-          borderRadius: BelRadius.allXs,
-          border: Border.all(
-            color: colors.hairlineStrong,
-            width: BelStroke.hairline,
-          ),
-        ),
-        child: Text(
-          label,
-          style: BelType.label.copyWith(color: colors.textMuted),
-        ),
-      ),
-    );
-
-    return tooltip == null ? button : Tooltip(message: tooltip!, child: button);
   }
 }
 
@@ -803,8 +867,12 @@ class _Notice extends StatelessWidget {
       child: ClipRRect(
         borderRadius: BelRadius.allSm,
         child: DecoratedBox(
+          // The radius is repeated on the decoration, not only on the clip: a
+          // square border inside a rounded clip loses its corners to the clip
+          // and leaves four bare arcs. See `PanelScaffold` for the long note.
           decoration: BoxDecoration(
             color: colors.panel,
+            borderRadius: BelRadius.allSm,
             border: Border.all(
               color: colors.hairline,
               width: BelStroke.hairline,

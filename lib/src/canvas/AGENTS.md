@@ -7,7 +7,7 @@ The arrangeable canvas. GPL-3.0-or-later.
 | `workspace.dart` | `Workspace` state, the Riverpod controller every layout edit goes through, undo/redo, and the default preset. |
 | `grid_canvas.dart` | The canvas: positioning, drag, resize, selection, the drag preview overlay. |
 | `canvas_notice.dart` | The one line the canvas says out loud. Refusals only. |
-| `module_host.dart` | The only place that knows which `ModuleKind`s exist as code. |
+| `module_host.dart` | The only place that knows which `ModuleKind`s exist as code, and where "too small" is decided — in cells *and* in pixels. |
 | `tab_strip.dart` | Tabs, inline rename, and the add/undo/redo buttons. |
 | `menus.dart` | The popup menus the canvas and the strip share. |
 
@@ -27,6 +27,15 @@ that decides *what a pointer means* belongs here.
 
 - **The notifier's value is immutable with a real `==`.** Pointer events that do
   not change which cell is targeted must not repaint.
+
+- **Everything a drag shows is drawn by that one painter.** The scrim over the
+  modules that are not being carried, the ruled cells, the border around them
+  and the ghost are four draws in `_PreviewPainter`, not widgets. A
+  `BackdropFilter` — the obvious way to blur instead of dim — would be a widget,
+  so it would rebuild the canvas on both edges of the gesture, and it would
+  re-run a full-screen Gaussian every frame over meters that are still
+  publishing at 47 Hz. The scrim costs one path, and the raster thread
+  composites it over the meters' own layers without touching them.
 
 - **Interaction layers sit *behind* the module, not in front.** That is what
   gives the frame's own menu button priority without any gesture-arena
@@ -58,7 +67,33 @@ that decides *what a pointer means* belongs here.
   walks back through every click before it undoes anything is undo nobody uses.
 
 - **Every affordance needs a non-keyboard, non-right-click route.** Bel runs on
-  tablets. Add, undo and redo are buttons in the tab strip for that reason.
+  tablets. Add, undo and redo are buttons in the tab strip for that reason, and
+  a long press opens the same menu a secondary click does — on empty canvas and
+  on a tab.
+
+- **Not a double tap. Ever.** `DoubleTapGestureRecognizer` holds the gesture
+  arena from the first tap until `kDoubleTapTimeout` — 300 ms — and a held
+  arena is never swept, so *every* tap recogniser under it waits that long to
+  resolve. Both routes into "add a module here" and "rename this tab" were
+  double clicks, and they made the tabs and the whole macOS status bar feel
+  like an application that was busy. A long press is the touch-and-mouse
+  gesture that costs nothing: it rejects the moment the pointer lifts early.
+
+- **Every `onPan*` detector passes `kDragDevices` to `supportedDevices`.** A
+  trackpad pan is not a button press, so `allowedButtonsFilter` — which defaults
+  to the primary button — never sees it: it arrives as a pan-zoom sequence,
+  admitted by `supportedDevices` alone, and accepted on the *start* event with
+  no slop to cross. A two-finger gesture anywhere over a title bar therefore
+  dragged the module, and since a two-finger tap is how a trackpad sends a right
+  click on macOS, opening a module's menu flashed the placement grid. The grip
+  had it too, and so did the window drag area in `lib/src/app/`.
 
 - **`pumpAndSettle` does not work in tests here.** The meter clock schedules a
   frame forever by design, so the tree never settles. Pump a fixed duration.
+
+- **Everything in the tab strip reserves the height of the active-tab rule.** A
+  `_Tab` carries a bottom border whether or not it is the active one, and a
+  border insets the child — so a tab's label is centred in the strip *minus*
+  the rule while an unbordered button is centred in the whole of it. Add a
+  control to the strip without that reservation and its label sits a pixel
+  below every tab name, which is invisible in a review and obvious on screen.

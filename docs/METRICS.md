@@ -28,8 +28,15 @@ answer to be within. `docs/PLAN.md` says 0.1 LU; the implementation went finer.
 
 The 120-bin histogram published in the snapshot is a **different, coarser
 thing** — it is for drawing, spans −60 to 0 LUFS at 0.5 LU, and is finer than a
-pixel column on any real display. The number and the picture are taken from the
-same population, so the histogram module and the LRA readout cannot disagree.
+pixel column on any real display. It is taken from the same population as the
+LRA number, so a distribution drawn from it cannot disagree with the readout
+beside it.
+
+The **Loudness Distribution** module draws it, with the two percentiles marked
+— see `lib/src/modules/loudness_distribution.dart`. Note that the *Histogram*
+module is a different picture of the same measurement: short-term loudness
+against time rather than against how often. The names are Decibel's and only
+one of them is a histogram.
 
 K-weighting is the BS.1770-4 two-stage filter: a high-frequency shelf followed
 by an RLB high-pass. Coefficients are computed from the analog prototype **at
@@ -97,19 +104,40 @@ than reporting nothing, and it is also true.
 
 | Metric | Unit | Definition | Availability |
 |---|---|---|---|
-| `Spectrum` | dBFS | 512 log-spaced bands from 20 Hz to 20 kHz. A 4096-point Hann transform per channel at a 1024-sample hop, taking the **loudest FFT bin in each band** rather than their mean so that a narrow resonance survives the mapping. | **now** |
+| `Spectrum` | dBFS | 512 log-spaced bands from 20 Hz to 20 kHz. A 4096-point Hann window per channel at a 1024-sample hop, zero-padded to a 16384-point transform. A band wide enough to contain bins takes the **loudest bin in the band** rather than their mean, so that a narrow resonance survives the mapping; a band too narrow to contain one reads the transform **between** its two nearest bins. | **now** |
 | `Spectrum peak` | dBFS | Per-band hold, computed in the engine because a transform runs every hop and a publish carries only the last one. | **now** |
-| `Spectrum pan` | — | Per-band stereo position, `−1` hard left to `+1` hard right. What the stereo cloud draws. | **now** |
+| `Spectrum pan` | — | Per-band stereo position, `−1` hard left to `+1` hard right. What the stereo cloud draws. | **now**, two channels or more |
+
+Spectrum pan needs a front pair. A one-channel source reports every band at `0`,
+for the same reason correlation reports `+1` — mono is dead centre, and it is
+true. The stereo cloud does not *draw* that, because a column of centred bands
+is a bright vertical line down the middle of the display and is read as a
+broken module rather than as a mono signal; it says **MONO SOURCE** instead.
 
 Levels are window-compensated: a full-scale sine on a bin centre reads
 0.0 dBFS, and that is asserted on every push. A tone **between** two bin centres
-reads up to 1.4 dB low. That is inherent to reading a peak bin rather than
-interpolating across two, and it is not corrected — an interpolated reading
-would be right for a pure tone and wrong for everything else, which is the worse
-trade for a display whose job is showing where the energy is.
+reads within 0.3 dB of its own level, asserted likewise.
+
+The window and the transform are different lengths and they answer different
+questions. The **window** is what the analysis can resolve: 4096 points is an
+11.7 Hz main lobe at 48 kHz, and two tones closer together than that merge into
+one hump no matter what follows. The **transform** is how finely that lobe is
+sampled for drawing, and padding the window out to 16384 samples the same
+transform of the same audio every 2.93 Hz instead of every 11.7 Hz. Nothing is
+invented by it: a zero-padded DFT is the exact continuous-frequency transform of
+the windowed frame, read at four times as many frequencies.
+
+That is also why the bands below about 216 Hz are allowed to read between two
+bins. The bottom octave of the display is 51 of the 512 bands spread across
+20 Hz and no real-time transform puts a bin every 0.4 Hz, so rounding each band
+to its nearest bin drew the bass as a staircase. The bins on either side are not
+separate measurements with unknown territory between them — they are samples of
+one continuous curve, taken four to a main lobe, and a straight line between two
+of them is within about a tenth of a decibel of it. Frequency **resolution** is
+unchanged by any of this; only the sampling of it is finer.
 
 A/C/Z weighting and selectable FFT sizes are named in `docs/PLAN.md` and are
-**not built**: the transform is 4096 points, unweighted (Z). One set of
+**not built**: the window is 4096 points, unweighted (Z). One set of
 transforms feeds the analyser, the spectrogram and the stereo cloud, so three
 modules cannot disagree about where a peak is.
 

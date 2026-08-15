@@ -84,6 +84,16 @@ class _HarnessState extends State<_Harness>
 /// Builds the canvas over a live engine and returns the container so a test can
 /// read the layout back.
 Future<ProviderContainer> _pump(WidgetTester tester) async {
+  // The smallest window the application supports, not the 800x600 the test
+  // binding defaults to. The canvas is a fixed 24x16 cells at every window
+  // size, so the surface decides how many pixels a module gets: at 600 tall a
+  // two-row Number Box has less body than a digit, and "every kind fits at its
+  // default size" is a question with no answer until the window is one the
+  // application would actually open. See test/scaling_test.dart.
+  tester.view.physicalSize = const Size(960, 768) * 3;
+  tester.view.devicePixelRatio = 3;
+  addTearDown(tester.view.reset);
+
   final container = ProviderContainer();
   addTearDown(container.dispose);
 
@@ -257,6 +267,45 @@ void main() {
     expect(container.read(workspaceProvider).tab.moduleById(id)!.rect.row, 3);
   });
 
+  testWidgets('a two-finger trackpad gesture drags nothing', (tester) async {
+    final container = await _pumpSparse(tester);
+    final rows = _rowStride(tester);
+    final id = _spec(container, Metric.lufsMomentary).id;
+    final handle = _titleBarOf(tester, 'LUFS-M');
+
+    // A trackpad pan is not a button press, so a drag recogniser's button
+    // filter never sees it: it arrives as a pan-zoom sequence, which
+    // `supportedDevices` alone admits, and it is accepted on the *start* event
+    // with no slop to cross. On macOS a two-finger tap is how a trackpad sends
+    // a right click, so this fired whenever somebody opened a module's menu —
+    // the placement grid flashed on screen — and a two-finger scroll over a
+    // title bar moved the module. See `kDragDevices`.
+    final bar = await tester.createGesture(kind: PointerDeviceKind.trackpad);
+    await bar.panZoomStart(handle);
+    await bar.panZoomUpdate(handle, pan: Offset(0, rows * 3));
+    await tester.pump();
+    await bar.panZoomEnd();
+    await tester.pump();
+
+    expect(container.read(workspaceProvider).tab.moduleById(id)!.rect.row, 0);
+    // A drag selects the module it picks up, so an untouched selection is the
+    // other half of "nothing began".
+    expect(container.read(workspaceProvider).selectedModuleId, isNull);
+
+    // The corner grip is a second detector with the same hole in it.
+    final corner =
+        tester.getRect(_moduleTitled('LUFS-M')).bottomRight -
+        const Offset(Space.sm, Space.sm);
+    final grip = await tester.createGesture(kind: PointerDeviceKind.trackpad);
+    await grip.panZoomStart(corner);
+    await grip.panZoomUpdate(corner, pan: Offset(0, rows * 3));
+    await tester.pump();
+    await grip.panZoomEnd();
+    await tester.pump();
+
+    expect(container.read(workspaceProvider).tab.moduleById(id)!.rect.rows, 3);
+  });
+
   testWidgets('alt-dragging leaves the original behind and drops a copy', (
     tester,
   ) async {
@@ -351,9 +400,87 @@ void main() {
     expect(added.kind, ModuleKind.spectrumAnalyzer);
     expect(added.rect.row, greaterThanOrEqualTo(3));
 
-    // And it is a real analyser, not a placeholder. Every one of the twelve
+    // And it is a real analyser, not a placeholder. Every one of the thirteen
     // kinds the menu offers now draws something.
     expect(find.byType(SpectrumAnalyzerModule), findsOneWidget);
+  });
+
+  // The three tests below pump **one frame with no elapsed time** on purpose.
+  // Both of these gestures used to be double clicks, and a
+  // `DoubleTapGestureRecognizer` holds the gesture arena from the first tap
+  // until `kDoubleTapTimeout` expires — a held arena is never swept, so the
+  // tap recogniser underneath could not be resolved for 300 ms. Every one of
+  // these assertions passed with a `pump(Duration(milliseconds: 400))` while
+  // the application felt broken to use. Advance no time and the wait is the
+  // failure.
+
+  testWidgets('long-pressing empty canvas adds a module where you pressed', (
+    tester,
+  ) async {
+    final container = await _pumpSparse(tester);
+
+    // The route a tablet takes: there is no second mouse button there, and
+    // this replaced the double tap that used to be the answer.
+    final canvas = tester.getRect(find.byType(GridCanvas));
+    await tester.longPressAt(
+      Offset(canvas.left + canvas.width / 4, canvas.bottom - canvas.height / 4),
+    );
+    await _settle(tester);
+
+    await tester.tap(find.textContaining('Spectrum Analyzer'));
+    await _settle(tester);
+
+    final workspace = container.read(workspaceProvider);
+    expect(workspace.tab.modules, hasLength(4));
+    expect(
+      workspace.tab.moduleById(workspace.selectedModuleId!)!.rect.row,
+      greaterThanOrEqualTo(3),
+    );
+  });
+
+  testWidgets('clicking empty canvas clears the selection at once', (
+    tester,
+  ) async {
+    final container = await _pumpSparse(tester);
+    final selected = _spec(container, Metric.loudnessRange).id;
+    container.read(workspaceProvider.notifier).select(selected);
+    await tester.pump();
+
+    final canvas = tester.getRect(find.byType(GridCanvas));
+    await tester.tapAt(
+      Offset(canvas.left + canvas.width / 4, canvas.bottom - canvas.height / 4),
+    );
+    await tester.pump();
+
+    expect(container.read(workspaceProvider).selectedModuleId, isNull);
+  });
+
+  testWidgets('a tab switches at once, and long-pressing one opens its menu', (
+    tester,
+  ) async {
+    final container = await _pump(tester);
+    final tabs = container.read(workspaceProvider).preset.tabs;
+    expect(tabs.length, greaterThan(1));
+    expect(container.read(workspaceProvider).activeTab, 0);
+
+    final second = find.descendant(
+      of: find.byType(TabStrip),
+      matching: find.text(tabs[1].name.toUpperCase()),
+    );
+
+    await tester.tap(second);
+    await tester.pump();
+    expect(container.read(workspaceProvider).activeTab, 1);
+
+    // The menu is what a long press opens now — rename was a double click, and
+    // a tablet could reach neither it nor duplicate and delete.
+    await tester.longPress(second);
+    await _settle(tester);
+    expect(find.text('Rename'), findsOneWidget);
+
+    await tester.tap(find.text('Rename'));
+    await _settle(tester);
+    expect(find.byType(EditableText), findsOneWidget);
   });
 
   testWidgets('every module kind the menu offers actually builds', (
@@ -364,7 +491,7 @@ void main() {
     // painter that throws on its first frame — a null label cache, a division
     // by a zero-height module — so every kind is placed and painted here.
     //
-    // One tab per kind, because twelve modules at their default sizes do not
+    // One tab per kind, because thirteen modules at their default sizes do not
     // fit on one and the canvas would correctly refuse half of them.
     final container = await _pump(tester);
     final controller = container.read(workspaceProvider.notifier);

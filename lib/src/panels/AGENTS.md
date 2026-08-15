@@ -12,17 +12,31 @@ The panels that sit over the canvas. GPL-3.0-or-later.
 | `shortcuts_sheet.dart` | The keyboard shortcuts, drawn from the table in `lib/src/app/shortcuts.dart`. Holds no list of its own. |
 
 The primitives they are assembled from — `PanelScaffold`, `PanelSection`,
-`PanelRow`, `PanelListRow`, `SegmentedControl`, `BelButton`, `BelToggle`,
-`BelTextField`, `showBelPanel` — live in `bel_ui/src/panel.dart`. A panel that
-rolls its own bordered box will drift from the others within a month.
+`PanelRow`, `PanelListRow`, `PanelNote`, `PanelActions`, `PanelMenu`,
+`SegmentedControl`, `BelButton`, `BelToggle`, `BelTextField`, `showBelPanel` —
+live in `bel_ui/src/panel.dart`. A panel that rolls its own bordered box will
+drift from the others within a month.
+
+**How a panel is composed is specified once, in
+`packages/bel_ui/AGENTS.md` § Panels**, and it is not optional or local to this
+directory: the shell, the footer convention, which primitive expresses which
+kind of row, `ruled: false` on the first section only, and push-a-second-panel
+rather than swap-your-own-body for anything with a second step. Read it before
+adding a panel anywhere — including in `lib/src/remote/`, whose pairing panel,
+sending panel and host picker live there because they own a socket rather than
+because they are a different kind of thing. Nothing about their structure
+differs from the six here.
 
 ## Rules
 
 - **Open with `showBelPanel`, and build on `PanelScaffold`.** A route is built by
-  the `Navigator`, which sits *above* both the application's `Material` and its
-  `BelTheme`. Without those two, `BelTheme.of` asserts and every `PopupMenuButton`
-  and `TextField` becomes an error box — whose intrinsic width is near 100 000 px,
-  so what you actually see is a `RenderFlex` overflow blaming an innocent `Row`.
+  the `Navigator`, which sits *above* the application's `Material`; without
+  `PanelScaffold`'s, every `PopupMenuButton` and `TextField` becomes an error box
+  — whose intrinsic width is near 100 000 px, so what you actually see is a
+  `RenderFlex` overflow blaming an innocent `Row`. `showBelPanel` is also what
+  keeps a panel on the current skin: it reads the palette from above the
+  navigator, where `BelApp` installs it, so a skin chosen in the settings panel
+  reaches the settings panel.
 
 - **There is no OK button.** Every control writes through as it is touched. A
   panel with an OK button can be abandoned in a state the interface has already

@@ -336,6 +336,17 @@ bel_engine *bel_engine_create(const bel_config *cfg) {
   }
   engine->cfg = resolved;
 
+  /* Everything below fails through bel_engine_destroy(), which is safe on a
+   * half-built engine because every owned resource is reached through a field
+   * that calloc left null or a flag it left clear.
+   *
+   * This is not tidiness. Once bel_device_start() has returned, a real-time
+   * callback is writing into `engine->ring` on a thread we do not own, and a
+   * bare free(engine) hands that callback a dangling ring while the block it
+   * points into is being handed to the next allocation. The failures below are
+   * out-of-memory paths, so the next allocation is exactly what is under
+   * pressure — the one moment the reuse is certain rather than unlikely. */
+
   /* A device is opened here, before anything is sized, because it is the
    * device that decides the format. The requested rate and channel count are
    * overwritten with what the hardware actually produces — resampling in front
@@ -351,23 +362,20 @@ bel_engine *bel_engine_create(const bel_config *cfg) {
      * buffer. */
     if (bel_device_open(&engine->device, cfg != NULL ? cfg->device_id : NULL,
                         &device_rate, &device_channels) != BEL_OK) {
-      free(engine);
+      bel_engine_destroy(engine);
       return NULL;
     }
 
     if (!bel_ring_init(&engine->ring,
                        (uint32_t)(device_rate * BEL_RING_SECONDS),
                        device_channels)) {
-      bel_device_close(engine->device);
-      free(engine);
+      bel_engine_destroy(engine);
       return NULL;
     }
     engine->ring_ready = 1;
 
     if (bel_device_start(engine->device, &engine->ring) != BEL_OK) {
-      bel_device_close(engine->device);
-      bel_ring_free(&engine->ring);
-      free(engine);
+      bel_engine_destroy(engine);
       return NULL;
     }
 
@@ -379,7 +387,7 @@ bel_engine *bel_engine_create(const bel_config *cfg) {
   engine->block = (float *)calloc(
       (size_t)resolved.block_frames * resolved.channels, sizeof(float));
   if (engine->block == NULL) {
-    free(engine);
+    bel_engine_destroy(engine);
     return NULL;
   }
 
@@ -388,8 +396,7 @@ bel_engine *bel_engine_create(const bel_config *cfg) {
 
   if (!bel_spectrum_init(&engine->spectrum, resolved.channels,
                          resolved.sample_rate)) {
-    free(engine->block);
-    free(engine);
+    bel_engine_destroy(engine);
     return NULL;
   }
 
@@ -450,6 +457,7 @@ int32_t bel_engine_start(bel_engine *engine) {
     bel_atomic_store_release(&engine->thread_alive, 0);
     return status;
   }
+  engine->thread_started = 1;
   return BEL_OK;
 }
 
@@ -457,12 +465,16 @@ int32_t bel_engine_stop(bel_engine *engine) {
   if (engine == NULL) {
     return BEL_ERR_INVALID_ARGUMENT;
   }
-  if (!bel_atomic_load_acquire(&engine->should_run)) {
+  /* The only safe predicate: is there a thread we started and have not
+   * joined. See the field's note in bel_internal.h for why neither of the two
+   * atomic flags can answer that. */
+  if (!engine->thread_started) {
     return BEL_OK;
   }
 
   bel_atomic_store_release(&engine->should_run, 0);
   bel_thread_join(engine->thread);
+  engine->thread_started = 0;
 
   engine->staging.flags &= ~(uint32_t)BEL_FLAG_RUNNING;
   bel_snapshot_publish(engine);

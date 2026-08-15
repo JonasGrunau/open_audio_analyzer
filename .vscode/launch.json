@@ -1,0 +1,69 @@
+{
+  // Use IntelliSense to learn about possible attributes.
+  // Hover to view descriptions of existing attributes.
+  // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "open_music_analyzer",
+      "request": "launch",
+      "type": "dart"
+    },
+    {
+      "name": "open_music_analyzer (profile mode)",
+      "request": "launch",
+      "type": "dart",
+      "flutterMode": "profile"
+    },
+    {
+      "name": "open_music_analyzer (release mode)",
+      "request": "launch",
+      "type": "dart",
+      "flutterMode": "release"
+    },
+    {
+      "name": "cli",
+      "cwd": "cli",
+      "request": "launch",
+      "type": "dart"
+    },
+    {
+      "name": "bel_core",
+      "cwd": "packages/bel_core",
+      "request": "launch",
+      "type": "dart"
+    },
+    {
+      "name": "bel_engine",
+      "cwd": "packages/bel_engine",
+      "request": "launch",
+      "type": "dart"
+    },
+    {
+      "name": "bel_ui",
+      "cwd": "packages/bel_ui",
+      "request": "launch",
+      "type": "dart"
+    },
+    {
+      "name": "bel_ui (profile mode)",
+      "cwd": "packages/bel_ui",
+      "request": "launch",
+      "type": "dart",
+      "flutterMode": "profile"
+    },
+    {
+      "name": "bel_ui (release mode)",
+      "cwd": "packages/bel_ui",
+      "request": "launch",
+      "type": "dart",
+      "flutterMode": "release"
+    },
+    {
+      "name": "bel_wire",
+      "cwd": "packages/bel_wire",
+      "request": "launch",
+      "type": "dart"
+    }
+  ]
+}

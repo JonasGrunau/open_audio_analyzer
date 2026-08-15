@@ -12,9 +12,16 @@ enum ModuleKind {
     'number_box',
     'Number Box',
     minColumns: 2,
-    minRows: 1,
+    // Two, not one. A single row is about 55 px on a 1600x880 canvas; the
+    // title bar takes 24 of that and the module's own inset takes the rest,
+    // so a one-row Number Box drew a title and an empty body — not "too
+    // small", which is a statement, but blank, which is a fault. Stored
+    // layouts holding a one-row box are clamped up by `normaliseModule`.
+    minRows: 2,
     defaultColumns: 4,
     defaultRows: 2,
+    minBodyWidth: 32,
+    minBodyHeight: 24,
   ),
   lufsMeter(
     'lufs_meter',
@@ -23,6 +30,8 @@ enum ModuleKind {
     minRows: 6,
     defaultColumns: 5,
     defaultRows: 8,
+    minBodyWidth: 60,
+    minBodyHeight: 60,
   ),
   digitalMeter(
     'digital_meter',
@@ -31,6 +40,8 @@ enum ModuleKind {
     minRows: 6,
     defaultColumns: 4,
     defaultRows: 8,
+    minBodyWidth: 60,
+    minBodyHeight: 60,
   ),
   superMeter(
     'super_meter',
@@ -39,6 +50,8 @@ enum ModuleKind {
     minRows: 6,
     defaultColumns: 8,
     defaultRows: 8,
+    minBodyWidth: 90,
+    minBodyHeight: 90,
   ),
   vuMeter(
     'vu_meter',
@@ -47,6 +60,8 @@ enum ModuleKind {
     minRows: 4,
     defaultColumns: 6,
     defaultRows: 5,
+    minBodyWidth: 80,
+    minBodyHeight: 50,
   ),
   alertMeter(
     'alert_meter',
@@ -56,6 +71,8 @@ enum ModuleKind {
     defaultColumns: 4,
     defaultRows: 3,
     defaultMetric: Metric.truePeakMax,
+    minBodyWidth: 48,
+    minBodyHeight: 28,
   ),
   validator(
     'validator',
@@ -64,6 +81,8 @@ enum ModuleKind {
     minRows: 3,
     defaultColumns: 6,
     defaultRows: 4,
+    minBodyWidth: 100,
+    minBodyHeight: 48,
   ),
   histogram(
     'histogram',
@@ -72,6 +91,18 @@ enum ModuleKind {
     minRows: 5,
     defaultColumns: 12,
     defaultRows: 6,
+    minBodyWidth: 120,
+    minBodyHeight: 60,
+  ),
+  loudnessDistribution(
+    'distribution',
+    'Loudness Distribution',
+    minColumns: 6,
+    minRows: 4,
+    defaultColumns: 8,
+    defaultRows: 5,
+    minBodyWidth: 100,
+    minBodyHeight: 56,
   ),
   spectrumAnalyzer(
     'spectrum',
@@ -80,6 +111,8 @@ enum ModuleKind {
     minRows: 5,
     defaultColumns: 12,
     defaultRows: 7,
+    minBodyWidth: 120,
+    minBodyHeight: 60,
   ),
   spectrogram(
     'spectrogram',
@@ -88,6 +121,8 @@ enum ModuleKind {
     minRows: 5,
     defaultColumns: 12,
     defaultRows: 7,
+    minBodyWidth: 80,
+    minBodyHeight: 40,
   ),
   phaseScope(
     'phase_scope',
@@ -96,6 +131,8 @@ enum ModuleKind {
     minRows: 5,
     defaultColumns: 6,
     defaultRows: 6,
+    minBodyWidth: 60,
+    minBodyHeight: 60,
   ),
   stereoCloud(
     'stereo_cloud',
@@ -104,6 +141,8 @@ enum ModuleKind {
     minRows: 5,
     defaultColumns: 6,
     defaultRows: 6,
+    minBodyWidth: 80,
+    minBodyHeight: 60,
   );
 
   const ModuleKind(
@@ -113,6 +152,8 @@ enum ModuleKind {
     required this.minRows,
     required this.defaultColumns,
     required this.defaultRows,
+    required this.minBodyWidth,
+    required this.minBodyHeight,
     this.defaultMetric = Metric.lufsIntegrated,
   });
 
@@ -129,6 +170,24 @@ enum ModuleKind {
   final int minColumns;
   final int minRows;
 
+  /// Smallest **body** this module can draw in, in logical pixels.
+  ///
+  /// A cell count is not a size. The canvas is 24x16 cells at every window
+  /// size, so a two-row module is 160 px tall on a 27" display and 40 px tall
+  /// on a small window, and the module's own drawing threshold is in pixels
+  /// either way. Enforcing only the cell minimum meant a legal layout could
+  /// still hand a painter a box it refused to draw in, and a painter that
+  /// refuses draws *nothing* — six Number Boxes across the top of the default
+  /// preset were empty panels on a 1024x640 window, which reads as a broken
+  /// meter rather than as a window that is too small.
+  ///
+  /// These are the numbers the painters already guarded on, moved here so the
+  /// frame can substitute the `ModuleTooSmall` placeholder instead of leaving
+  /// a blank. The body is what is left after the title bar and the module's
+  /// inset, which is what `ModuleHost` measures.
+  final double minBodyWidth;
+  final double minBodyHeight;
+
   /// Which measurement this kind shows when nothing has chosen one.
   ///
   /// Only the kinds that show a single quantity use it — a Number Box, an
@@ -143,7 +202,7 @@ enum ModuleKind {
   /// Deliberately larger than the minimum. Placing a module at its own minimum
   /// means every module arrives looking cramped and the first thing anybody
   /// does after adding one is resize it, which is a small failure repeated
-  /// twelve times.
+  /// thirteen times.
   final int defaultColumns;
   final int defaultRows;
 
@@ -226,7 +285,7 @@ class GridRect {
 ///
 /// [options] is an untyped map on purpose. Every module has its own settings —
 /// the spectrogram's scroll direction, the VU's face, the digital meter's decay
-/// — and threading a sealed class hierarchy for all twelve through the preset
+/// — and threading a sealed class hierarchy for all thirteen through the preset
 /// serialiser buys type safety in exactly one place while making it impossible
 /// to load a preset written by a newer version. An unknown key here is
 /// ignored and preserved; an unknown subclass would be a parse failure.

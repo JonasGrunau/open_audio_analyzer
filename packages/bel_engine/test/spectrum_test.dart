@@ -10,11 +10,15 @@
 // plausible-looking data, and a spectrum analyser is exactly the kind of
 // display nobody reads absolute numbers off often enough to notice.
 //
-// Every level assertion below puts its tone **exactly on a bin centre**. Hann
-// windowing costs up to 1.4 dB when a tone falls between two bins — that is
-// inherent to reading a peak bin and not a defect — so a test that tolerated it
-// would have to allow 1.4 dB of error and would then pass with the scaling
-// factor wrong by a factor of one and a half.
+// Most level assertions below put their tone **exactly on a bin centre**, so
+// that a failure is unambiguously the scaling and not the window. A test that
+// allowed for windowing error would have to tolerate more than a decibel and
+// would then pass with the scaling factor wrong by half.
+//
+// The two exceptions are deliberate and are the point of their own tests: the
+// transform is zero-padded to four times the window, which is what samples the
+// main lobe finely enough to read a tone that falls between window bins and to
+// draw the bottom octaves as a curve rather than as a staircase.
 
 import 'dart:math' as math;
 import 'dart:typed_data';
@@ -22,8 +26,9 @@ import 'dart:typed_data';
 import 'package:bel_engine/bel_engine.dart';
 import 'package:test/test.dart';
 
-/// Bin spacing is `sampleRate / 4096`, and a tone at an exact multiple of it
-/// lands in one bin with no leakage into its neighbours.
+/// Window-bin spacing is `sampleRate / 4096` — the resolution, not the
+/// sampling. A tone at an exact multiple of it lands in one window bin with no
+/// leakage into its neighbours.
 double _binCentreHz(int bin, int sampleRate) => bin * sampleRate / 4096;
 
 /// Pushes `seconds` of one or two sines and returns the engine.
@@ -131,6 +136,52 @@ void main() {
             '${bandCentreHz(band).toStringAsFixed(1)} Hz',
       );
     }
+  });
+
+  test('a tone between two window bins still reads its own level', () {
+    // Halfway between window bins 85 and 86 is the worst case for Hann
+    // scalloping. Transforming the 4096-point window on its own samples the
+    // main lobe only at the bin centres, so its peak is missed and the tone
+    // reads about 1.4 dB low — every level on screen sagging by an amount that
+    // depends on where the content happens to sit relative to the bins.
+    //
+    // Padding to 16384 samples the same lobe four times as finely, and 0.3 dB
+    // is what is left. Tighten this and it fails; loosen it past a decibel and
+    // it would pass with the padding removed, which is the whole point.
+    final engine = _analysed(
+      frequencies: [_binCentreHz(85, 48000) + 48000 / 4096 / 2],
+      amplitudes: [1.0],
+    );
+    addTearDown(engine.dispose);
+
+    expect(engine.spectrum[_loudestBand(engine)], closeTo(0.0, 0.3));
+  });
+
+  test('the bottom octave is drawn as a curve, not as two bricks', () {
+    // The complaint this guards against is visual and the measurement behind
+    // it is not: 20 to 40 Hz is 51 of the 512 display bands, and an unpadded
+    // 4096-point transform at 48 kHz has exactly *two* bins in there. Fifty-one
+    // bands sharing two values draw as two flat slabs a third of the module
+    // wide, and no amount of painting fixes it.
+    //
+    // Padding alone takes that from two values to eight, which is still six
+    // treads. Reading between the bins as well gives every band its own value,
+    // so the threshold here is most of the octave rather than a handful: at
+    // eight it would pass with the interpolation deleted, and at two with the
+    // padding deleted as well.
+    final engine = _analysed(
+      frequencies: [41.2, 55.0, 82.4, 110.0],
+      amplitudes: [0.2, 0.2, 0.2, 0.2],
+    );
+    addTearDown(engine.dispose);
+
+    final first = bandOfHz(20).round().clamp(0, kBelSpectrumBands - 1);
+    final last = bandOfHz(40).round().clamp(0, kBelSpectrumBands - 1);
+
+    final distinct = <double>{
+      for (var band = first; band <= last; band++) engine.spectrum[band],
+    };
+    expect(distinct.length, greaterThanOrEqualTo((last - first) * 4 ~/ 5));
   });
 
   test('two tones stay separate, and the gap between them stays empty', () {

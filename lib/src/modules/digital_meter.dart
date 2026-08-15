@@ -133,8 +133,10 @@ class _DigitalMeterPainter extends MeterPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    // The size floor is `ModuleKind.digitalMeter.minBody*`, enforced by the
+    // frame. What is left here guards arithmetic, not legibility.
     final channels = labels.length;
-    if (channels == 0 || size.width < 60 || size.height < 60) return;
+    if (channels == 0) return;
 
     final labelHeight = BelType.label.fontSize! + Space.xs;
     final track = Rect.fromLTRB(
@@ -145,12 +147,27 @@ class _DigitalMeterPainter extends MeterPainter {
     );
     if (track.height < 24 || track.width < channels * 4) return;
 
-    canvas.drawRect(track, _track);
-    graticule.paint(canvas, track);
-
     final gap = channels > 4 ? Space.xxs : Space.xs;
     final barWidth = (track.width - gap * (channels - 1)) / channels;
     final hotY = _y(track, _hotFrom);
+
+    // **A trough per bar, not one rectangle behind all of them.** Painted as a
+    // single background, the gaps between the channels are the same colour as
+    // the empty part of every bar, so the only thing separating L from R is
+    // where their fills happen to stop — two channels at different levels read
+    // as one block with a step in it, and two channels at the same level read
+    // as one bar. The gap has to show the module behind it to be a gap.
+    for (var c = 0; c < channels; c++) {
+      final left = track.left + c * (barWidth + gap);
+      canvas.drawRect(
+        Rect.fromLTRB(left, track.top, left + barWidth, track.bottom),
+        _track,
+      );
+    }
+
+    // Over the troughs and under the bars: the scale belongs to the meter as a
+    // whole, so it crosses the gaps the same way the channel rules do.
+    graticule.paint(canvas, track);
 
     for (var c = 0; c < channels; c++) {
       final left = track.left + c * (barWidth + gap);

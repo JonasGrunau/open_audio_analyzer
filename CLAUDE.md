@@ -14,7 +14,7 @@ the licensing split and the honest list of gaps. Read it before changing
 anything non-trivial. `docs/PLAN.md` is the full phased plan.
 
 **Currently Phase 8 complete — every phase in `docs/PLAN.md` has shipped.**
-All twelve modules measure something. Loudness and true peak are held against
+All thirteen modules measure something. Loudness and true peak are held against
 the EBU conformance cases in CI, and the spectrum against a sine of known
 amplitude. Layouts, settings, delivery targets and skins persist as JSON under
 the platform's configuration directory. Files are analysed offline by the app
@@ -34,14 +34,15 @@ is still not built, and `docs/PLAN.md` for what was planned.
 | `packages/bel_engine/hook/build.dart` | Compiles `engine/` and bundles it as a code asset. The app's only native build description. |
 | `engine/CMakeLists.txt` | The same compile, for consumers that are not Dart. A plugin CI runner has no Flutter SDK. **Add a new engine source to both, or `plugin/test/sources_match.sh` fails the build.** |
 | `plugin/src/BelWire.h` | The wire protocol, producer side. `docs/WIRE.md` is the specification; this and `packages/bel_wire/` are two implementations of it that must agree byte for byte. |
-| `packages/bel_ui/lib/src/tokens.dart` | `Space`, `BelRadius`, `BelStroke`, `BelColors`, `BelType`. Nothing outside this file invents a spatial or colour value. |
+| `packages/bel_ui/lib/src/tokens.dart` | `Space`, `BelControl`, `BelRadius`, `BelStroke`, `BelColors`, `BelType`. Nothing outside this file invents a spatial or colour value. |
 | `packages/bel_ui/lib/src/scale.dart` | `MeterScale` and `ScaleGraticule`. Five modules draw a dB scale; two side by side whose ticks disagree look like a rendering bug. |
-| `packages/bel_ui/lib/src/persistence_layer.dart` | The `toImageSync` ping-pong behind the spectrogram, phase scope and stereo cloud — and the texture disposal. |
-| `engine/src/bel_spectrum.h` | The 4096-point Hann STFT. One set of transforms serves all three frequency modules. |
+| `packages/bel_ui/lib/src/point_buckets.dart` | Marks sorted by the colour they are drawn in, one call per colour. What lets the spectrogram and the stereo cloud redraw their whole history every published frame instead of accumulating it into an image. |
+| `engine/src/bel_spectrum.h` | The Hann STFT: a 4096-point window, zero-padded into a 16384-point transform. The two lengths are not the same thing and the header says why. One set of transforms serves all three frequency modules. |
 | `lib/src/canvas/module_host.dart` | The only place that knows which `ModuleKind`s exist as code. Exhaustive switch, no default arm. |
 | `packages/bel_core/lib/src/layout.dart` | `ModuleSpec` / `TabSpec` / `PresetSpec` — the serialised layout model. |
 | `packages/bel_core/lib/src/meter_source.dart` | `MeterSource` — everything a module is allowed to read. `BelEngine` implements it; so does the remote display's decoder. |
 | `docs/WIRE.md` | The wire protocol, normative. Three implementations, none written against another. |
+| `ios/Runner/BelBonjour.swift` | The only platform channel in the application. iOS refuses an app the multicast socket every other platform browses with, so a tablet searches through the system's Bonjour responder instead; `lib/src/remote/mdns/host_discovery.dart` is where the two meet. |
 | `packages/bel_core/lib/src/grid.dart` | Every rule about where a module may go, as pure functions. No pixels. |
 | `lib/src/canvas/grid_canvas.dart` | The canvas: drag, resize, selection, the preview overlay. |
 | `lib/src/canvas/workspace.dart` | The one path every layout edit takes, and the undo history. |
@@ -116,7 +117,7 @@ is unaffected: it never links JUCE — it talks to the plugin over a socket.
 
 - **A module reads `MeterSource`, never a concrete engine.** There are two
   implementations — `BelEngine` over native memory, and `WireSnapshot` over a
-  socket — and the twelve modules cannot tell them apart. That is what lets a
+  socket — and the thirteen modules cannot tell them apart. That is what lets a
   tablet with no engine draw the desktop's meters with the desktop's painters.
   If something cannot be drawn from a `MeterSource`, widen the interface; do not
   write a second painter, because two implementations of a meter are two meters
@@ -135,7 +136,7 @@ is unaffected: it never links JUCE — it talks to the plugin over a socket.
   It is a workspace package and must stay one.
 
 - **Every spatial value comes from `Space`.** No `EdgeInsets.all(11)`, no
-  `SizedBox(height: 20)`. Twelve modules written over as many weeks drift apart
+  `SizedBox(height: 20)`. Thirteen modules written over as many weeks drift apart
   one raw number at a time. Same for colour: use `BelColors`, never a literal.
 
 - **Every number on screen is monospaced with tabular figures.** `BelType`
@@ -153,15 +154,50 @@ is unaffected: it never links JUCE — it talks to the plugin over a socket.
   painted rather than decorated. This cost real debugging time; see the header
   of `packages/bel_ui/lib/src/module_frame.dart`.
 
-- **A panel is built outside the application's `Material` *and* outside its
-  `BelTheme`.** Both live under `MaterialApp.home`; a route pushed with
-  `showGeneralDialog` is built by the `Navigator`, which sits above them. So
-  `BelTheme.of` asserts, and every stock widget that draws an ink response —
-  `PopupMenuButton`, `TextField` — is replaced by an error box whose *intrinsic
-  width is near 100 000 px*, which surfaces as a `RenderFlex` overflow blaming a
-  `Row` that is perfectly fine. `showBelPanel` re-provides the palette and
-  `PanelScaffold` provides the `Material`; use them rather than pushing a route
-  by hand.
+- **Nothing in Bel recognises a double tap.** `DoubleTapGestureRecognizer` calls
+  `gestureArena.hold` on the first tap and releases it only when
+  `kDoubleTapTimeout` expires 300 ms later, and a held arena is never swept — so
+  every tap recogniser beneath one, anywhere in the subtree, waits a third of a
+  second before it can win. Three gestures were double clicks and each delayed
+  everything under it: the status bar's zoom made every control in the row late
+  on macOS, a tab's rename made switching tabs late, and adding a module on
+  empty canvas made clearing the selection late. It presents as an application
+  that is slow rather than as a gesture that is waiting, which is why it stood
+  for a phase. **Use a long press** — it holds nothing and rejects as soon as
+  the pointer lifts early, it works on a tablet, and it can open the same menu
+  the secondary click does. A pan may share an arena with the buttons under it
+  freely; only the double tap holds.
+
+- **A drag detector takes `supportedDevices: kDragDevices`, always.** The
+  companion trap to the one above, and it hides better. A `PanGestureRecognizer`
+  filters buttons — `allowedButtonsFilter` defaults to the primary one — but a
+  trackpad gesture is not a button press: it arrives as a
+  `PointerPanZoomStartEvent`, `isPointerPanZoomAllowed` consults
+  `supportedDevices` and nothing else, and the recogniser accepts on the *start*
+  event with no slop to cross. So every `onPan*` detector in the application was
+  also a two-finger-gesture detector. On macOS a two-finger tap is how a
+  trackpad sends a right click, so right-clicking a module's title bar flashed
+  the placement grid on screen; a two-finger scroll over one dragged the module,
+  and over the status bar it handed the whole window to the compositor. All
+  three sites are one constant in `packages/bel_ui/lib/src/drag_devices.dart`.
+
+- **A panel is built outside the application's `Material`,** because that lives
+  under `MaterialApp.home` and a route pushed with `showGeneralDialog` is built
+  by the `Navigator`, which sits above it. Every stock widget that draws an ink
+  response — `PopupMenuButton`, `TextField` — is then replaced by an error box
+  whose *intrinsic width is near 100 000 px*, which surfaces as a `RenderFlex`
+  overflow blaming a `Row` that is perfectly fine. `PanelScaffold` provides the
+  `Material`; use it and `showBelPanel` rather than pushing a route by hand.
+
+- **The palette is installed above the `Navigator`, in `MaterialApp.builder`,
+  next to the Material theme.** It was under `home` for eight phases, so a panel
+  could only be handed a copy of it taken when the panel opened — and Bel's
+  skins are chosen *in* the settings panel. Choosing one repainted the canvas,
+  the window chrome and every Material widget inside the panel while the panel's
+  own hairlines, fills and text stayed in the previous skin until it was closed
+  and reopened: one panel in two skins at once. A palette a route cannot see is
+  a palette a route cannot follow. `showBelPanel` reads it from there and falls
+  back to the call site's for a tree that wraps only its home.
 
 - **Nothing on the settings path may write to disk synchronously,** and nothing
   reads back from disk to find out what the state is. A user action calls a
@@ -182,10 +218,30 @@ is unaffected: it never links JUCE — it talks to the plugin over a socket.
   sibling strip inside a `ClipRRect` instead. This cost real debugging time; see
   `_Notice` in `lib/src/app/bel_app.dart`.
 
-- **`toImageSync()` persistence layers hold GPU textures.** The spectrogram,
-  phase scope and stereo cloud each keep one. Dispose on resize and teardown or
-  leak VRAM — use `PersistenceLayer`, which owns both the ping-pong and the
-  disposal, rather than a fourth hand-rolled copy of it.
+- **A `ClipRRect` does not round a border — it amputates it.** The corollary of
+  the rule above: once a surface is wrapped in a rounded clip, its
+  `BoxDecoration` must repeat the *same* radius, or the clip removes the corner
+  of the stroke along with everything else outside the arc. The border then runs
+  the flat edges, stops dead at each tangent, and leaves four bare arcs. It is
+  invisible in a widget test and unmistakable on screen. A *uniform* border may
+  be combined with a radius freely; only a non-uniform one asserts. Every panel
+  in the application shipped this way — see `PanelScaffold` in
+  `packages/bel_ui/lib/src/panel.dart`.
+
+- **Never draw a `toImageSync` image into the picture that produces the next
+  one.** That image is a handle to a display list the engine has not rasterised
+  yet, and it holds that display list for its entire life — so frame *n*
+  retains the picture that drew it, which retains frame *n−1*, back to the
+  first frame. `dispose()` releases the Dart handle and nothing else; the chain
+  owns the rest. The spectrogram, phase scope and stereo cloud all accumulated
+  this way, which took the application to 266 GB and then killed the raster
+  thread, whose destructors recurse once per retained frame and overflowed its
+  stack 3,286 deep. **There is no way to accumulate into a GPU surface from
+  `dart:ui`** — a display that needs history keeps that history as data and
+  redraws it from scratch, bounded by the module's size rather than by the
+  length of the session. See the header of `lib/src/modules/spectrogram.dart`,
+  and `PointBuckets` for what makes redrawing tens of thousands of marks cheap
+  enough to do every frame.
 
 - **A module that accumulates advances on `engine.generation`, not on `paint`.**
   Paint also runs on a resize or a theme change, and a spectrogram that scrolled
@@ -213,6 +269,22 @@ is unaffected: it never links JUCE — it talks to the plugin over a socket.
   way and by nothing else. Anchor the boundary above `MaterialApp` or the panel,
   which the `Navigator` builds, is not in the picture — and open the panel from
   a context *below* `BelTheme`, or `showBelPanel` asserts.
+
+- **A feature that only fails on the device is a feature nobody tested.** Three
+  of Bel's platforms lie about the network in a way a development machine
+  cannot show you. On **iPadOS**, custom multicast needs a restricted
+  entitlement Apple grants per team by request — but the **simulator is exempt**,
+  so the socket browses perfectly there and finds nothing, ever, on the iPad;
+  that shipped, and the tablet now uses the system responder through the one
+  platform channel in the application. On **macOS**, Local Network permission is
+  attributed to the *responsible* process, so the same code is allowed inside
+  `open -a bel.app` and denied under `flutter test` or a bare
+  `bel.app/Contents/MacOS/bel` — a discovery test that opens a real socket fails
+  on a machine where the feature works, and `EHOSTUNREACH` on a multicast send
+  is what that denial looks like from inside. On **Android**, receiving needs a
+  `MulticastLock` Dart cannot take and the socket opens happily without one.
+  None of the three logs anything. See `lib/src/remote/AGENTS.md` § Platform
+  notes.
 
 - **Bump `BEL_ABI_VERSION` when `bel.h` changes shape,** and regenerate the
   bindings (`cd packages/bel_engine && dart run ffigen --config ffigen.yaml`).

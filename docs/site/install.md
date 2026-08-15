@@ -110,6 +110,13 @@ a directory you can read, edit, copy between machines and put in a repository:
 | macOS | `~/Library/Application Support/Bel` |
 | Windows | `%APPDATA%\Bel` |
 | Linux | `$XDG_CONFIG_HOME/bel`, or `~/.config/bel` |
+| iPadOS | `Library/Application Support/Bel` inside the app's own container |
+
+The iPad is the exception to "a directory you can read": iOS gives an app a
+private container, so the files are on the device but not reachable from the
+Files app or from a Mac. Settings → Session prints the path. An Android tablet
+persists nothing at all and says so at launch — Bel cannot locate its container
+without a platform channel it does not have.
 
 Two overrides, in order of precedence:
 

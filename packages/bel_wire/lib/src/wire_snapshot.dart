@@ -16,7 +16,7 @@ import 'snapshot_codec.dart';
 /// painter that held `spectrum` across a frame still holds the right list, and
 /// nothing on the paint path allocates.
 ///
-/// That is what makes the twelve modules run unmodified on a tablet with no
+/// That is what makes the thirteen modules run unmodified on a tablet with no
 /// engine in it, which is the entire point of the remote display: the meters
 /// are not reimplemented, so they cannot disagree with the desktop's.
 class WireSnapshot implements MeterSource {

@@ -42,7 +42,7 @@ The typed lists are **windows onto native memory, not copies.** Writing to one
 corrupts the engine's snapshot, and every one of them dangles after `dispose()`.
 
 `BelEngine` implements `bel_core`'s `MeterSource`, which is the interface the
-twelve meter modules read. The remote display's `WireSnapshot` implements the
+thirteen meter modules read. The remote display's `WireSnapshot` implements the
 same interface over a socket, so a module cannot tell an engine from a network
 link — that is what lets a tablet with no engine draw the desktop's meters with
 the desktop's painters.

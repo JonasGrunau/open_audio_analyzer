@@ -4,7 +4,7 @@ Everything Bel remembers between launches. GPL-3.0-or-later.
 
 | File | Purpose |
 |------|---------|
-| `config_paths.dart` | Where the configuration lives, per platform. Pure functions of an environment map — no `dart:io`, no Flutter. |
+| `config_paths.dart` | Where the configuration lives, per platform. Pure functions of an environment map and, on iOS, of the temporary directory — no `dart:io`, no Flutter. |
 | `config_store.dart` | Reading and writing it. Atomic writes, debounced session saves, and no exceptions. |
 | `startup_config.dart` | The one read of the whole directory, performed before the first frame. |
 
@@ -59,6 +59,21 @@ This directory knows about files; it does not know what is in them.
   a bundle at all, which is the paragraph below. **Do not add a third escape
   hatch** — two already need this note to explain which wins.
 
+- **iOS has no `HOME`, and the temporary directory is how its container is
+  found.** `TMPDIR` is set to `<container>/tmp`, so the container is one
+  component up — `resolveConfigRoot` takes `Directory.systemTemp.path` as an
+  argument and `ConfigStore.open` is the only place that reads it. That keeps
+  the resolver pure and makes an iPad's paths testable from a Mac, which is
+  otherwise a device build away. It shipped resolving to *nothing* on iPadOS
+  for a phase: the Unix branch asked for `HOME`, an iPad has none, and the app
+  opened with "no configuration directory" and forgot every layout. **Do not
+  fall back to `HOME` on iOS** — when it is set at all it is `/var/mobile`,
+  which the app cannot write to, and that turns a notice at launch into a
+  permission error at save time. Android is the same hole and is *not* fixed:
+  its temporary directory is `/data/local/tmp`, which belongs to no app, so an
+  Android display persists nothing until somebody adds a channel to
+  `getFilesDir()`.
+
 - **Every path here is only correct because the macOS app is not sandboxed.**
   A sandboxed app's `HOME` is its own container, so all three platform branches
   would quietly resolve under `~/Library/Containers/<bundle id>/Data` and
@@ -104,6 +119,7 @@ fake filesystem: the atomic rename, the tolerance for a corrupt file and the
 directory that does not exist yet are all properties of an actual filesystem,
 and a fake would only assert that the fake behaves as its author assumed.
 
-Path resolution is tested for all three platforms from whichever one is running,
-because `resolveConfigRoot` takes the operating system and the environment as
-arguments rather than reading them.
+Path resolution is tested for all four platforms — the three desktops and
+iPadOS — from whichever one is running, because `resolveConfigRoot` takes the
+operating system, the environment and the temporary directory as arguments
+rather than reading them.

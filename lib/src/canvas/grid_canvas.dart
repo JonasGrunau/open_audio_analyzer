@@ -22,7 +22,7 @@ import 'workspace.dart';
 ///
 /// A canvas can hold a dozen live meters. If a drag rebuilt the widget tree as
 /// the pointer moved, every one of those subtrees would be rebuilt at pointer
-/// rate — inflating twelve modules, twelve painters and twelve cached
+/// rate — inflating thirteen modules, thirteen painters and thirteen cached
 /// `ui.Paragraph` sets per pointer event — while the audio thread continues to
 /// publish at 47 Hz and the display expects a frame every 16 ms. It would stall
 /// exactly when the user is watching the screen most closely.
@@ -36,6 +36,12 @@ import 'workspace.dart';
 /// The notifier carries an immutable value with a real `==`, so the many
 /// pointer events that do not change which cell is targeted do not repaint
 /// either.
+///
+/// That constraint is also why a drag *dims* the rest of the canvas instead of
+/// blurring it: the whole effect is three more draws in the one painter that
+/// was already repainting, where a `BackdropFilter` would be a widget — a
+/// rebuild on both edges of the gesture — and a full-screen Gaussian re-run
+/// every frame over meters that are still publishing. See [_PreviewPainter].
 ///
 /// ---------------------------------------------------------------------------
 /// Why the drag affordances sit *behind* the module
@@ -107,7 +113,11 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
       // to work out mid-gesture.
       duplicate: !resize && HardwareKeyboard.instance.isAltPressed,
     );
-    _preview.value = _Preview(rect: module.rect, valid: true);
+    _preview.value = _Preview(
+      rect: module.rect,
+      source: module.rect,
+      valid: true,
+    );
     _controller.select(module.id);
   }
 
@@ -146,6 +156,7 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
 
     _preview.value = _Preview(
       rect: target,
+      source: origin,
       // A copy has to clear the module it was copied from; a move does not
       // have to clear the space it is vacating.
       valid: ref
@@ -241,7 +252,9 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
             context,
             metric,
             metric.label,
-            color: metric == module.metric ? colors.accent : colors.textPrimary,
+            color: metric == module.metric
+                ? colors.textPrimary
+                : colors.textMuted,
           ),
       ],
     );
@@ -274,14 +287,22 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
               clipBehavior: Clip.none,
               children: [
                 // Bottom: empty canvas. Left click clears the selection,
-                // right click and double click add a module where the pointer
+                // right click and long press add a module where the pointer
                 // is. A single left click deliberately does not open a menu —
                 // every stray click on the background would.
+                //
+                // **Long press rather than the double click this used to
+                // be.** A `DoubleTapGestureRecognizer` holds the gesture arena
+                // from the first tap until `kDoubleTapTimeout` expires, and a
+                // held arena is never swept — so clearing the selection took
+                // 300 ms and read as a canvas that was thinking about it. A
+                // long press rejects as soon as the pointer lifts, and reaches
+                // the tablets that have no second mouse button either.
                 Positioned.fill(
                   child: GestureDetector(
                     behavior: HitTestBehavior.opaque,
                     onTap: () => _controller.select(null),
-                    onDoubleTapDown: (details) => _showAddMenu(
+                    onLongPressStart: (details) => _showAddMenu(
                       details.globalPosition,
                       at: _rectAt(geometry, details.localPosition),
                     ),
@@ -338,7 +359,7 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
                 // The refusal line. A `Consumer` so that the message can
                 // arrive from the keyboard as well as from a dropped drag,
                 // and so that saying it rebuilds this corner rather than the
-                // twelve meters above it.
+                // thirteen meters above it.
                 Positioned(
                   left: 0,
                   right: 0,
@@ -432,6 +453,11 @@ class _ModuleSlot extends StatelessWidget {
               // snapping grid that is an entire column of permanent offset
               // between the pointer and the thing it is carrying.
               dragStartBehavior: DragStartBehavior.down,
+              // Or a two-finger gesture over the title bar drags the module —
+              // including the one macOS sends as a right click, which put the
+              // placement grid on screen for as long as the menu took to open.
+              // See [kDragDevices].
+              supportedDevices: kDragDevices,
               onTap: onSelect,
               onSecondaryTapUp: (details) => onMenu(details.globalPosition),
               onPanStart: (_) => onDragStart(false),
@@ -461,13 +487,16 @@ class _ModuleSlot extends StatelessWidget {
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
               dragStartBehavior: DragStartBehavior.down,
+              // The grip is eight pixels square and a two-finger gesture that
+              // starts on it would resize the module. See [kDragDevices].
+              supportedDevices: kDragDevices,
               onPanStart: (_) => onDragStart(true),
               onPanUpdate: onDragUpdate,
               onPanEnd: (_) => onDragEnd(),
               onPanCancel: onDragEnd,
               child: CustomPaint(
                 painter: _GripPainter(
-                  selected ? colors.accent : colors.textFaint,
+                  selected ? colors.textPrimary : colors.textFaint,
                 ),
               ),
             ),
@@ -494,16 +523,31 @@ class _GripPainter extends MeterPainter {
         ..strokeWidth = BelStroke.hairline
         ..isAntiAlias = false;
 
+  /// Distance from the slot's edge to the corner the ticks are drawn around.
+  ///
+  /// The grip sits in the same square as the frame's bottom-right corner, and
+  /// that corner is a rounded rectangle: a tick that ran to the slot's edge
+  /// ended *on* the border — half a hairline of it outside the panel, over the
+  /// gutter between modules — and at [BelStroke.emphasis], while the module is
+  /// selected, it crossed the selection outline outright. [Space.xs] is the
+  /// frame's corner radius, so insetting by it keeps both ticks clear of the
+  /// arc as well as of the widest border the frame draws.
+  static const double _clearance = Space.xs;
+
   final Color color;
   final Paint _stroke;
 
   @override
   void paint(Canvas canvas, Size size) {
+    final right = size.width - _clearance;
+    final bottom = size.height - _clearance;
+    final side = size.width - _clearance;
+
     for (var i = 1; i <= 2; i++) {
-      final inset = i * (size.width / 3);
+      final inset = i * (side / 3);
       canvas.drawLine(
-        Offset(size.width - inset, size.height),
-        Offset(size.width, size.height - inset),
+        Offset(right - inset, bottom),
+        Offset(right, bottom - inset),
         _stroke,
       );
     }
@@ -516,9 +560,22 @@ class _GripPainter extends MeterPainter {
 /// Where a dragged module would land.
 @immutable
 class _Preview {
-  const _Preview({required this.rect, required this.valid});
+  const _Preview({
+    required this.rect,
+    required this.source,
+    required this.valid,
+  });
 
   final GridRect rect;
+
+  /// Where the module being dragged still is, since a drag moves nothing until
+  /// it is released. It is the one thing on the canvas the scrim does not
+  /// cover: you have to be able to see what you are carrying.
+  ///
+  /// Constant for the whole gesture, so it costs no repaints — it is carried
+  /// here rather than read off the session because the painter is given the
+  /// notifier and nothing else.
+  final GridRect source;
 
   /// False when the target overlaps another module. Drawn in [BelColors.over]
   /// and refused on release.
@@ -526,10 +583,13 @@ class _Preview {
 
   @override
   bool operator ==(Object other) =>
-      other is _Preview && other.rect == rect && other.valid == valid;
+      other is _Preview &&
+      other.rect == rect &&
+      other.source == source &&
+      other.valid == valid;
 
   @override
-  int get hashCode => Object.hash(rect, valid);
+  int get hashCode => Object.hash(rect, source, valid);
 }
 
 class _DragSession {
@@ -566,32 +626,100 @@ class _PreviewPainter extends MeterPainter {
       ..color = colors.hairline
       ..strokeWidth = BelStroke.hairline
       ..isAntiAlias = false;
+    _edge = Paint()
+      ..color = colors.hairlineStrong
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = BelStroke.hairline;
+    _scrim = Paint()..color = colors.background.withValues(alpha: _scrimAlpha);
   }
+
+  /// How much of the canvas colour is washed over the modules that are not
+  /// being carried.
+  ///
+  /// Enough that a dozen live meters stop competing with the grid ruled on top
+  /// of them, and not so much that the canvas goes blank — the layout being
+  /// dropped into is the thing the user is aiming at, so the other modules have
+  /// to stay legible as shapes. At this value a reading recedes to about 3:1
+  /// against the panel it sits on, from 15:1.
+  ///
+  /// A blur says the same thing and costs far more. `BackdropFilter` re-runs a
+  /// full-screen Gaussian every frame, and the meters underneath are still
+  /// publishing at 47 Hz throughout the drag — it is the one effect on this
+  /// canvas whose cost is proportional to how *live* the display is, and it
+  /// would land on the raster thread at the moment the user is watching the
+  /// screen most closely. It would also need a widget, and so a rebuild of the
+  /// canvas on both edges of the gesture; this is a paint.
+  static const double _scrimAlpha = 0.62;
 
   final ValueListenable<_Preview?> preview;
   final GridGeometry geometry;
   final BelColors colors;
 
   late final Paint _guide;
+  late final Paint _edge;
+  late final Paint _scrim;
 
   @override
   void paint(Canvas canvas, Size size) {
     final target = preview.value;
     if (target == null) return;
 
+    // The border sits one gutter *outside* the grid rather than on it. The grid
+    // has no outer margin — cell 0 starts at pixel 0 — so a border on the
+    // bounds would land against the edge modules' own borders and read as one
+    // doubled line. A gutter out, it stands off a module by exactly what its
+    // neighbours do, and there is still half of the canvas padding left between
+    // it and the window. The radius is the module's, so the sheet the modules
+    // are arranged on is shaped like the things arranged on it.
+    final bounds = (Offset.zero & size).inflate(geometry.gap);
+    final border = RRect.fromRectAndRadius(bounds, BelRadius.sm);
+
+    // The sheet the modules are arranged on, with the one being carried punched
+    // out of it: everything else is washed toward the canvas colour, so the
+    // grid can be read over the top of a dozen live meters and the eye lands on
+    // the ghost rather than on whatever the meters happen to be doing.
+    // Even-odd rather than a saved layer or two clips — one path, drawn once
+    // and then reused as the clip for the ruling.
+    final sheet = Path()
+      ..fillType = PathFillType.evenOdd
+      ..addRRect(border)
+      ..addRRect(
+        RRect.fromRectAndRadius(geometry.rectFor(target.source), BelRadius.sm),
+      );
+
+    canvas.drawPath(sheet, _scrim);
+
     // The grid appears only while something is being dragged. Permanently
-    // ruled lines behind twelve meters is graph paper, and it competes with
+    // ruled lines behind thirteen meters is graph paper, and it competes with
     // the measurements; during a drag it is the thing the eye needs.
+    //
+    // Clipped to the sheet, so the ruling stops at the module being carried
+    // instead of running through it. The module is the one thing here that is
+    // *not* on the sheet — it has been picked up — and lines drawn across it
+    // read as the grid being in front of it.
+    canvas.save();
+    canvas.clipPath(sheet);
     for (var column = 1; column < kGridColumns; column++) {
       final x = column * geometry.columnStride - geometry.gap / 2;
-      canvas.drawLine(Offset(x, 0), Offset(x, size.height), _guide);
+      canvas.drawLine(Offset(x, bounds.top), Offset(x, bounds.bottom), _guide);
     }
     for (var row = 1; row < kGridRows; row++) {
       final y = row * geometry.rowStride - geometry.gap / 2;
-      canvas.drawLine(Offset(0, y), Offset(size.width, y), _guide);
+      canvas.drawLine(Offset(bounds.left, y), Offset(bounds.right, y), _guide);
     }
+    canvas.restore();
 
-    final colour = target.valid ? colors.accent : colors.over;
+    // Last, so it covers the ends of the ruling, and in the border colour that
+    // is meant to be seen rather than the hairline the cells are drawn in: it
+    // is the edge of what can be placed, which is the one thing on this overlay
+    // that is not a suggestion.
+    canvas.drawRRect(border, _edge);
+
+    // A valid landing is a neutral ghost, not the signal hue. This wash is
+    // painted over the meters themselves, so tinting it `accent` puts "in
+    // spec" across readings that are still live underneath. Refusal keeps
+    // `over` — see its note in tokens.dart.
+    final colour = target.valid ? colors.textPrimary : colors.over;
     final box = RRect.fromRectAndRadius(
       geometry.rectFor(target.rect),
       BelRadius.sm,

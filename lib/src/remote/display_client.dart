@@ -32,7 +32,7 @@ enum RemoteLinkState {
 /// Reads another machine's measurements off a socket.
 ///
 /// The counterpart to `DisplayHost`, and the reason `MeterSource` exists: what
-/// comes out of here is fed to the same twelve modules the desktop uses, with
+/// comes out of here is fed to the same thirteen modules the desktop uses, with
 /// the same painters, so the two screens cannot drift into disagreeing about
 /// what the signal did.
 ///

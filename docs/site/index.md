@@ -55,11 +55,12 @@ tabs as you like.
 | **VU Meter** | A real second-order movement, not a one-pole approximation. |
 | **Alert Meter** | One quantity, its worst case, and whether it passed. |
 | **Validator** | Every delivery criterion and a verdict per line. |
-| **Histogram** | How the short-term loudness was distributed. |
-| **Spectrum Analyzer** | 512 log-spaced bands from a 4096-point Hann STFT. |
+| **Histogram** | Short-term loudness over time, banded up to momentary, against the delivery target. |
+| **Loudness Distribution** | How often the programme sat at each loudness, with the two percentiles LRA is the distance between. |
+| **Spectrum Analyzer** | 512 log-spaced bands from a 4096-point Hann window, zero-padded to a 16384-point transform. |
 | **Spectrogram** | The same transform over time. |
 | **Phase Scope** | The goniometer, from the raw stereo sample stream. |
-| **Stereo Cloud** | Stereo position per frequency band. |
+| **Stereo Cloud** | Stereo position per frequency band. Needs two channels; on a mono source it says so. |
 
 Modules are added, moved, resized, duplicated and deleted, with undo. A module
 that has nowhere to go does not move: placement is a predicate, not a

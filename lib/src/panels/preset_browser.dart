@@ -88,6 +88,7 @@ class _PresetBrowserState extends ConsumerState<PresetBrowser> {
             ),
           PanelSection(
             title: 'Save the current layout',
+            ruled: false,
             children: [
               PanelRow(
                 label: 'Name',
@@ -114,6 +115,7 @@ class _PresetBrowserState extends ConsumerState<PresetBrowser> {
                     'Opening the preset switches to that target. Off means the '
                     'preset leaves your current one alone.',
                 child: BelToggle(
+                  semanticLabel: 'Store the delivery target with it',
                   value: _withCalibration,
                   onChanged: (value) =>
                       setState(() => _withCalibration = value),
@@ -122,6 +124,7 @@ class _PresetBrowserState extends ConsumerState<PresetBrowser> {
               PanelRow(
                 label: 'Store the skin with it',
                 child: BelToggle(
+                  semanticLabel: 'Store the skin with it',
                   value: _withSkin,
                   onChanged: (value) => setState(() => _withSkin = value),
                 ),

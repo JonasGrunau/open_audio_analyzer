@@ -89,8 +89,20 @@ Most Flutter audio UIs die here. Specifics, all inside `RepaintBoundary`:
 | Spectrogram | Persistent scroll target: each frame blit the previous image offset by N px, then one new 1×H column. Never re-uploads the full texture. |
 | Histogram | Two layers: a **committed** `ui.Image` for everything off the live tail (rebuilt only on zoom/scroll) + the live tail per frame. 4 h at 10 Hz is 144k points — never re-path all of it. |
 
-`Picture.toImageSync()` layers hold GPU textures — **explicit disposal on resize/teardown**, or
-we leak VRAM. Call this out in `AGENTS.md`.
+**Every row above that keeps a picture between frames did not survive contact with the
+engine, and neither did the disposal rule that was supposed to make them safe.** An image
+from `Picture.toImageSync()` retains the display list that drew it for its whole life, so
+feeding each frame's image into the next frame's picture retains every frame back to the
+first, and disposing the handle releases none of it. It ran the application to 266 GB and
+then killed the raster thread. The spectrogram, the phase scope, the stereo cloud and the
+histogram keep their history as data and redraw it — see
+`lib/src/modules/spectrogram.dart` and the rule in `CLAUDE.md`.
+
+The histogram row is wrong twice over. Redrawing all of it *is* what ships, and it is
+cheap because the display is bounded by the module's width rather than by the length of
+the session: at one 100 ms column per pixel, a 1200-px module is 1200 points and two
+minutes, and the ring behind it holds 4096 columns however small the module is. There is
+no zoom and no scroll, so there was never a committed layer to rebuild.
 
 ---
 
@@ -277,8 +289,11 @@ Each phase is independently shippable.
    all three desktop targets in Phase 0 before anything is built on top.
 3. **Tablets are display-first.** FFI works fine on iPadOS/Android, but audio *input* selection
    differs sharply per platform; the tablet build's primary role is the Phase 6 remote display.
-4. **GPU texture lifetime** in the `toImageSync()` persistence layers (spectrogram, phase scope,
-   stereo cloud, histogram) — disposal is mandatory on resize and teardown.
+4. ~~**GPU texture lifetime** in the `toImageSync()` persistence layers — disposal is mandatory
+   on resize and teardown.~~ **Wrong, and the way it was wrong crashed the application.** The
+   hazard is not the texture, it is the display list the image keeps alive: a ping-pong retains
+   every frame it has ever drawn, and disposal cannot release it. Accumulating into a GPU
+   surface is not possible from `dart:ui`; these modules redraw from data.
 5. `cmake` and `ninja` are **not installed** on this machine. Needed for the C test runner and
    Phase 7; `brew install cmake ninja` in Phase 1.
 

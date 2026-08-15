@@ -14,6 +14,16 @@ import 'package:flutter/widgets.dart';
 /// single most expensive mistake available in this codebase. A spectrum
 /// analyser has nine octave labels; laying those out at 60 fps is 540 text
 /// layouts a second to draw nine strings that have not changed since startup.
+///
+/// **[align] is meaningless without a [maxWidth], and worse than meaningless
+/// if it is `center` or `right`.** Alignment is relative to the line box, and
+/// an unconstrained line box is [_unconstrained] wide — so a centred glyph is
+/// drawn half a megapixel to the right of wherever the paragraph is painted,
+/// which is to say nowhere. It fails silently in both directions: nothing is
+/// drawn, and `longestLine` still reports the width of the ink, so every
+/// measurement taken around it looks correct. The `M` and `S` under the LUFS
+/// meter's bars were invisible this way. Pass the box you want the text
+/// aligned in, or leave the default and place the paragraph yourself.
 ui.Paragraph layoutParagraph(
   String text,
   TextStyle style, {

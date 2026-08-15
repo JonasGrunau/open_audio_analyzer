@@ -109,15 +109,35 @@ class _CalibrationEditorState extends ConsumerState<CalibrationEditor> {
           ],
           PanelSection(
             title: 'Identity',
+            ruled: false,
             children: [
               PanelRow(
                 label: 'Name',
                 child: BelTextField(controller: _name, width: 260),
               ),
-              PanelRow(
-                label: 'Note',
-                note: 'Where the numbers come from.',
-                child: BelTextField(controller: _note, width: 260),
+              // The note is prose, and it does not fit beside its own label.
+              // In a 260 px field the built-in target's own note truncated at
+              // "Spotify, Apple Music, YouTube, Ama" — mid-word, no ellipsis —
+              // so the one field that explains where a target's numbers came
+              // from was the one field you could not read. Every other control
+              // here holds a number, which is why nothing else needs this.
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: Space.xs),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Note',
+                      style: BelType.body.copyWith(color: colors.textPrimary),
+                    ),
+                    Text(
+                      'Where the numbers come from.',
+                      style: BelType.caption.copyWith(color: colors.textFaint),
+                    ),
+                    const SizedBox(height: Space.xs),
+                    BelTextField(controller: _note, width: double.infinity),
+                  ],
+                ),
               ),
             ],
           ),

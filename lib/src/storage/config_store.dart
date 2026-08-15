@@ -40,9 +40,13 @@ class ConfigStore {
   /// Opens the store for the current platform.
   ///
   /// [operatingSystem] and [environment] are injectable so that a test can
-  /// exercise all three platforms' path rules from any one of them, and so that
-  /// the whole suite can point at a temporary directory. [configDir] is the
+  /// exercise every platform's path rules from any one of them, and so that the
+  /// whole suite can point at a temporary directory. [configDir] is the
   /// `--config-dir` flag and beats both.
+  ///
+  /// `Directory.systemTemp` is read here rather than in [resolveConfigRoot]
+  /// because that function reads nothing. It is the iPad's container — see
+  /// `config_paths.dart` — and is ignored on every other platform.
   static Future<ConfigStore> open({
     String? operatingSystem,
     Map<String, String>? environment,
@@ -52,13 +56,14 @@ class ConfigStore {
       operatingSystem: operatingSystem ?? Platform.operatingSystem,
       environment: environment ?? Platform.environment,
       override: configDir,
+      temporaryDirectory: Directory.systemTemp.path,
     );
 
     if (path == null) {
       return ConfigStore._(
         null,
         'No configuration directory: neither --config-dir nor '
-        '$kConfigDirEnvVar nor the platform home variable is set. Settings and '
+        '$kConfigDirEnvVar nor a location this platform offers. Settings and '
         'presets will not be saved this session.',
       );
     }

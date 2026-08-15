@@ -5,16 +5,29 @@ Repository scripts. Nothing here ships. GPL-3.0-or-later.
 | File | Purpose |
 |------|---------|
 | `docs.dart` | Builds the documentation site from the Markdown in this repository. `dart run tool/docs.dart --out build/docs`. |
+| `bench_spectrogram.dart` | The measurement behind the recording figures in `lib/src/modules/spectrogram.dart`. `flutter test tool/bench_spectrogram.dart`. |
 
 ## Rules
 
-- **No dependencies, and that is the reason it is here rather than a
-  `mkdocs.yml`.** The documents the site publishes — `docs/METRICS.md`,
+- **`docs.dart` has no dependencies, and that is the reason it is here rather
+  than a `mkdocs.yml`.** The documents the site publishes — `docs/METRICS.md`,
   `docs/WIRE.md` — are normative and held by tests, so a site that can break on
   a machine where the code is fine is a site that will. `docs.dart` imports
   `dart:io` and `dart:convert` and nothing else, which is why
   `.github/workflows/docs.yml` is a Dart SDK and forty seconds with no Flutter
-  anywhere in it.
+  anywhere in it. That constraint belongs to `docs.dart` rather than to this
+  directory — `bench_spectrogram.dart` needs `dart:ui`, and therefore an engine
+  — and it survives as long as `docs.yml` runs `docs.dart` and nothing else.
+
+- **`bench_spectrogram.dart` is run by hand, and is not a gate.** It is written
+  as a `flutter test` file because `dart:ui` needs an engine, not because it
+  tests anything: `flutter test` with no arguments globs `test/`, so this never
+  runs in CI, and it asserts nothing about a timing. A stopwatch in the gate
+  fails on a loaded runner, a flaky gate gets deleted, and a deleted benchmark
+  is how the figure it backs became unfalsifiable the last time — an earlier
+  "205 µs" was quoted here for a phase after its benchmark was gone, and turned
+  out to be a recording cost being read as a frame cost. Do not add it to
+  `ci.yml`, and do not describe it anywhere as something CI checks.
 
 - **The page list is written out, not globbed.** A site whose contents are
   whatever happens to be in `docs/` publishes `PLAN.md` to users the day

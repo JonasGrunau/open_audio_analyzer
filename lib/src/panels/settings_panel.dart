@@ -6,6 +6,7 @@ import 'package:bel_ui/bel_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../clock/meter_clock.dart';
 import '../data/providers.dart';
 import '../storage/config_store.dart';
 import 'calibration_editor.dart';
@@ -93,7 +94,6 @@ class _SettingsPanelState extends ConsumerState<SettingsPanel> {
   // --- Signal ---------------------------------------------------------------
 
   Widget _signal(AppSettings settings) {
-    final colors = BelTheme.of(context);
     final controller = ref.read(settingsProvider.notifier);
 
     final selectedDevice = _devices
@@ -103,6 +103,7 @@ class _SettingsPanelState extends ConsumerState<SettingsPanel> {
     return PanelSection(
       title: 'Signal',
       note: 'What Bel is listening to. Changing it restarts the measurement.',
+      ruled: false,
       children: [
         PanelRow(
           label: 'Source',
@@ -129,28 +130,38 @@ class _SettingsPanelState extends ConsumerState<SettingsPanel> {
                 onPressed: () => setState(() => _devices = _enumerate()),
               ),
               const SizedBox(width: Space.sm),
-              _DeviceMenu(
-                devices: _devices,
-                selectedId: settings.deviceId,
-                onSelected: (device) => controller.setSource(
-                  AudioSourceKind.device,
-                  deviceId: device.id,
-                  deviceName: device.name,
-                ),
+              PanelMenu<String>(
+                semanticLabel: 'Capture device',
+                label:
+                    selectedDevice?.name ??
+                    (_devices.isEmpty ? 'None found' : 'Choose…'),
+                selected: settings.deviceId,
+                options: [
+                  for (final device in _devices)
+                    (
+                      value: device.id,
+                      label: device.isDefault
+                          ? '${device.name}  (default)'
+                          : device.name,
+                    ),
+                ],
+                onSelected: (id) {
+                  final device = _devices.firstWhere((d) => d.id == id);
+                  controller.setSource(
+                    AudioSourceKind.device,
+                    deviceId: device.id,
+                    deviceName: device.name,
+                  );
+                },
               ),
             ],
           ),
         ),
-        Padding(
-          padding: const EdgeInsets.only(top: Space.xs),
-          child: Text(
-            'Bel captures from input devices. To measure what is playing on '
-            'this machine, install a loopback device — BlackHole on macOS, '
-            'VB-Cable on Windows, a PulseAudio monitor source on Linux — and '
-            'select it here. Bel does not ship a system-audio driver of its '
-            'own; the README says why.',
-            style: BelType.caption.copyWith(color: colors.textFaint),
-          ),
+        const PanelNote(
+          'Input devices only. To measure what this machine is playing, '
+          'select a loopback device — BlackHole on macOS, VB-Cable on '
+          'Windows, a PulseAudio monitor on Linux. Bel ships no system-audio '
+          'driver of its own; the README says why.',
         ),
       ],
     );
@@ -168,7 +179,14 @@ class _SettingsPanelState extends ConsumerState<SettingsPanel> {
       children: [
         PanelRow(
           label: 'Refresh rate',
-          note: '30 halves GPU load for a session left open all day.',
+          // When the system asks for reduced motion the clock caps itself at
+          // 30, so a picker still reading "60 fps" would be showing a rate
+          // nothing is running at. Say which it is instead.
+          note: MediaQuery.maybeDisableAnimationsOf(context) ?? false
+              ? 'Capped at ${MeterClock.reducedMotionFps} fps while the system '
+                    'asks for reduced motion. The meters still show every '
+                    'reading; they redraw less often.'
+              : '30 halves GPU load for a session left open all day.',
           child: SegmentedControl<int>(
             value: settings.targetFps,
             onChanged: controller.setTargetFps,
@@ -184,7 +202,8 @@ class _SettingsPanelState extends ConsumerState<SettingsPanel> {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              _Menu<String>(
+              PanelMenu<String>(
+                semanticLabel: 'Delivery target',
                 label: calibration.name,
                 selected: calibration.id,
                 options: [
@@ -226,11 +245,9 @@ class _SettingsPanelState extends ConsumerState<SettingsPanel> {
             onTap: () => ref.read(settingsProvider.notifier).setSkinId(skin.id),
             trailing: _Swatches(skin: skin),
           ),
-        const SizedBox(height: Space.sm),
-        Row(
+        PanelActions(
           children: [
             BelButton(label: 'Reload from disk', onPressed: _reloadSkins),
-            const SizedBox(width: Space.sm),
             BelButton(
               label: 'Duplicate for editing',
               onPressed: _duplicateSkin,
@@ -294,6 +311,7 @@ class _SettingsPanelState extends ConsumerState<SettingsPanel> {
               'Off means Bel opens on its default arrangement every time, '
               'whatever you left on the canvas.',
           child: BelToggle(
+            semanticLabel: 'Restore the last layout at launch',
             value: settings.restoreSession,
             onChanged: ref.read(settingsProvider.notifier).setRestoreSession,
           ),
@@ -306,29 +324,29 @@ class _SettingsPanelState extends ConsumerState<SettingsPanel> {
             onPressed: () => showPresetBrowser(context),
           ),
         ),
-        const SizedBox(height: Space.sm),
         if (!store.isAvailable)
-          Text(
+          PanelNote(
             'Nothing is being saved this session. ${store.lastError ?? ''}',
-            style: BelType.caption.copyWith(color: colors.warn),
+            tone: colors.warn,
           )
         else ...[
-          Text(
+          const PanelNote(
             'Settings, presets, skins and delivery targets are kept here as '
             'plain JSON — edit them, copy them between machines, or keep them '
             'in version control.',
-            style: BelType.caption.copyWith(color: colors.textFaint),
           ),
-          const SizedBox(height: Space.xs),
           // **Selectable, and monospaced, because the path is not guessable.**
           // On macOS the app is sandboxed, so this is a container directory
           // named after the bundle identifier rather than the
           // ~/Library/Application Support/Bel anybody would think to look in.
           // Printing an unselectable path a user cannot navigate to is the same
           // as not printing it.
-          SelectableText(
-            store.root!.path,
-            style: BelType.readingSmall.copyWith(color: colors.textMuted),
+          Padding(
+            padding: const EdgeInsets.only(top: Space.xs),
+            child: SelectableText(
+              store.root!.path,
+              style: BelType.readingSmall.copyWith(color: colors.textMuted),
+            ),
           ),
         ],
       ],
@@ -373,130 +391,6 @@ class _Swatches extends StatelessWidget {
             ),
           ),
       ],
-    );
-  }
-}
-
-class _DeviceMenu extends StatelessWidget {
-  const _DeviceMenu({
-    required this.devices,
-    required this.selectedId,
-    required this.onSelected,
-  });
-
-  final List<BelDevice> devices;
-  final String? selectedId;
-  final ValueChanged<BelDevice> onSelected;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = BelTheme.of(context);
-    final selected = devices.where((d) => d.id == selectedId).firstOrNull;
-
-    return PopupMenuButton<BelDevice>(
-      tooltip: 'Capture device',
-      color: colors.panelRaised,
-      position: PopupMenuPosition.under,
-      onSelected: onSelected,
-      itemBuilder: (context) => [
-        if (devices.isEmpty)
-          PopupMenuItem<BelDevice>(
-            enabled: false,
-            height: Space.xl,
-            child: Text(
-              'No capture devices',
-              style: BelType.caption.copyWith(color: colors.textFaint),
-            ),
-          )
-        else
-          for (final device in devices)
-            PopupMenuItem<BelDevice>(
-              value: device,
-              height: Space.xl,
-              child: Text(
-                device.isDefault ? '${device.name}  (default)' : device.name,
-                style: BelType.body.copyWith(
-                  color: device.id == selectedId
-                      ? colors.accent
-                      : colors.textPrimary,
-                ),
-              ),
-            ),
-      ],
-      child: _Chip(
-        text: selected?.name ?? (devices.isEmpty ? 'None found' : 'Choose…'),
-      ),
-    );
-  }
-}
-
-class _Menu<T> extends StatelessWidget {
-  const _Menu({
-    required this.label,
-    required this.selected,
-    required this.options,
-    required this.onSelected,
-  });
-
-  final String label;
-  final T selected;
-  final List<({T value, String label})> options;
-  final ValueChanged<T> onSelected;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = BelTheme.of(context);
-
-    return PopupMenuButton<T>(
-      color: colors.panelRaised,
-      position: PopupMenuPosition.under,
-      onSelected: onSelected,
-      itemBuilder: (context) => [
-        for (final option in options)
-          PopupMenuItem<T>(
-            value: option.value,
-            height: Space.xl,
-            child: Text(
-              option.label,
-              style: BelType.body.copyWith(
-                color: option.value == selected
-                    ? colors.accent
-                    : colors.textPrimary,
-              ),
-            ),
-          ),
-      ],
-      child: _Chip(text: label),
-    );
-  }
-}
-
-class _Chip extends StatelessWidget {
-  const _Chip({required this.text});
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = BelTheme.of(context);
-
-    return Container(
-      constraints: const BoxConstraints(maxWidth: 220),
-      padding: const EdgeInsets.symmetric(
-        horizontal: Space.sm,
-        vertical: Space.xs + Space.xxs,
-      ),
-      decoration: BoxDecoration(
-        borderRadius: BelRadius.allSm,
-        border: Border.all(color: colors.hairline, width: BelStroke.hairline),
-      ),
-      child: Text(
-        text,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        softWrap: false,
-        style: BelType.caption.copyWith(color: colors.textMuted),
-      ),
     );
   }
 }

@@ -309,9 +309,8 @@ void main() {
       final last = tabs.length - 1;
       expect(container.read(workspaceProvider).activeTab, last);
 
-      // Right-click the tab and rename it. The same field opens on a double
-      // tap; this route is one gesture rather than two and does not depend on
-      // double-tap timing.
+      // Right-click the tab and rename it. This is the only way in — a long
+      // press opens the same menu, and there is no longer a double tap.
       await tester.tap(
         find.text(tabs[last].name.toUpperCase()),
         buttons: kSecondaryButton,

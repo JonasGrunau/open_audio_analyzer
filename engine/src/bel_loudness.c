@@ -49,7 +49,6 @@ void bel_loudness_reset(bel_loudness *l) {
   memset(l->gating, 0, sizeof(l->gating));
   memset(l->shortterm, 0, sizeof(l->shortterm));
   l->frames_in_subblock = 0;
-  l->ring_write = 0;
   l->subblocks_done = 0;
 }
 
@@ -98,9 +97,12 @@ static double window_energy(const bel_loudness *l, uint32_t subblocks) {
     }
     double sum = 0.0;
     for (uint32_t k = 0; k < subblocks; k++) {
+      /* `subblocks_done` is the count of closed sub-blocks, so it is also one
+       * past the newest row. The early return above guarantees it exceeds `k`,
+       * so the addition cannot wrap. */
       const uint32_t index =
-          (l->ring_write + BEL_SHORTTERM_SUBBLOCKS - 1 - k) %
-          BEL_SHORTTERM_SUBBLOCKS;
+          (uint32_t)((l->subblocks_done + BEL_SHORTTERM_SUBBLOCKS - 1 - k) %
+                     BEL_SHORTTERM_SUBBLOCKS);
       sum += l->ring[index][c];
     }
     total += l->weight[c] * (sum / (double)subblocks);
@@ -126,11 +128,16 @@ static void file_block(bel_hist_bin *histogram, double energy) {
 static void close_subblock(bel_loudness *l) {
   const double frames = (double)l->frames_per_subblock;
 
+  /* Reduced here rather than carried in a field — see the ring's note in the
+   * header. This is the one place the ring is written, so this modulo is what
+   * makes every store into it in range by construction. */
+  const uint32_t row =
+      (uint32_t)(l->subblocks_done % BEL_SHORTTERM_SUBBLOCKS);
+
   for (uint32_t c = 0; c < l->channels; c++) {
-    l->ring[l->ring_write][c] = l->accumulator[c] / frames;
+    l->ring[row][c] = l->accumulator[c] / frames;
     l->accumulator[c] = 0.0;
   }
-  l->ring_write = (l->ring_write + 1) % BEL_SHORTTERM_SUBBLOCKS;
   l->subblocks_done++;
 
   /* A 400 ms gating block every 100 ms is the 75% overlap the standard asks

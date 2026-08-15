@@ -5,7 +5,7 @@ import 'package:flutter/widgets.dart';
 /// The spacing scale. **No widget in this repository may use a raw number for
 /// padding, margin, gap or size.**
 ///
-/// That rule sounds pedantic and is not. Twelve meter modules, six panels and a
+/// That rule sounds pedantic and is not. Thirteen meter modules, six panels and a
 /// canvas built by different people over different weeks drift apart one
 /// `EdgeInsets.all(11)` at a time, and the result reads as amateur long before
 /// anybody can point at which value is wrong. A closed set makes the drift
@@ -45,6 +45,26 @@ abstract final class Space {
 
   /// Full-bleed breathing room. Rare, and deliberate when used.
   static const double xxxl = 64;
+}
+
+/// The metrics every boxed control shares.
+///
+/// A button, a menu, a segmented control and a text field stand side by side in
+/// a panel row, and three of them agreeing on a height while the fourth is two
+/// pixels short is the defect nobody can name and everybody sees. Before this
+/// existed each control derived its own height from its own type style and its
+/// own padding, so a `BelButton` came out at 30, a `SegmentedControl` at 31.4
+/// and a `BelTextField` at 28.9 — a row of controls that had never once been
+/// the same height as each other.
+///
+/// One number, applied by the four controls in `panel.dart`. Anything that
+/// wants a different height is not one of these controls.
+abstract final class BelControl {
+  /// The height of a button, menu, segmented control or field.
+  static const double height = Space.xl;
+
+  /// The gap inside one, from the border to the text.
+  static const double padding = Space.smd;
 }
 
 /// Corner radii. Small, because measurement instruments are not soft.
@@ -119,7 +139,18 @@ class BelColors {
   /// The only border colour.
   final Color hairline;
 
-  /// A border that needs to be seen: focus, selection, active module.
+  /// A border that needs to be seen: selection, hover, an active module.
+  ///
+  /// Held at roughly 3:1 against [panel] in both shipped skins. The value this
+  /// role carried before was 1.47:1 — a border whose entire job is to be seen,
+  /// set to a colour that could not be, so every caller that actually needed
+  /// visible selection reached past it for [accent] instead. Fixing the value
+  /// is what makes the role usable and lets the signal hue go back to meaning
+  /// one thing.
+  ///
+  /// Selection takes it at [BelStroke.emphasis]; keyboard focus is a hairline
+  /// in [textPrimary], so the two are told apart by weight and brightness
+  /// rather than by hue.
   final Color hairlineStrong;
 
   /// Readings, and anything the eye should land on first.
@@ -128,20 +159,62 @@ class BelColors {
   /// Labels and units.
   final Color textMuted;
 
-  /// Scale ticks, disabled state, and the em dash that means "not measured".
+  /// Scale ticks and disabled state.
+  ///
+  /// It used to carry a third job — the em dash that means "not measured" — and
+  /// at 2.81:1 against [panel] that set the statement *this quantity was not
+  /// measured* below the legibility floor while the numbers beside it sat at
+  /// 15:1. A graticule tick is meant to recede; a statement about the data is
+  /// not, and this one is the visible half of the rule that a quantity the
+  /// engine does not compute is never rendered as a plausible number. The dash
+  /// is [textMuted] now.
   final Color textFaint;
 
-  /// In spec. The single signal hue in the whole interface — which is what
-  /// makes it mean something.
+  /// In spec.
+  ///
+  /// **On the measurement surface this hue means exactly one thing.** The
+  /// canvas, the modules and every verdict reserve it for "within the delivery
+  /// target", and nothing there may borrow it — not a selected module, not the
+  /// active tab, not a highlighted menu row. A teal border meaning "selected"
+  /// beside a teal number meaning "in spec" is a meter you have to stop and
+  /// think about before you can read, which is the one thing a meter may never
+  /// be. Chrome that needs to stand out uses [hairlineStrong] or [textPrimary].
+  ///
+  /// Modal panels are the single exception, and it is a decision rather than a
+  /// leak: a panel covers the canvas, so there is no reading on screen to be
+  /// confused with, and an affirmative action that cannot be told from a
+  /// secondary one is a worse failure than a hue serving two contexts. Note
+  /// that selection *inside* a panel still uses [hairlineStrong] — the
+  /// exception buys the primary button, not the highlight.
   final Color accent;
 
   /// Approaching a limit.
   final Color warn;
 
-  /// Over a limit. Used for nothing else, ever.
+  /// Over a limit.
+  ///
+  /// Used for nothing else on the measurement surface. Two interaction states
+  /// borrow it and are listed here rather than left to be discovered: the
+  /// destructive button emphasis, and the outline of a layout drop the grid
+  /// will refuse. Both are refusals, both are momentary, and neither can be on
+  /// screen at the same time as a reading it might be mistaken for — but the
+  /// honest version of "used for nothing else, ever" is this list.
   final Color over;
 
   /// The unfilled part of a bar or arc.
+  ///
+  /// **It has to be visible, because how much room is left is half of what a
+  /// meter says.** Held at roughly 1.6:1 against [panel] in both shipped
+  /// skins. The value this role carried before was 1.10:1 dark and 1.22:1
+  /// light — a track indistinguishable from the surface behind it, which left
+  /// a bar that showed its own fill and nothing else, and three Super Meter
+  /// arcs whose extent you could only infer from the one that happened to be
+  /// lit.
+  ///
+  /// The ceiling is [meterFill]: the track stays about 2.5:1 *below* the fill,
+  /// so the reading is still the figure and the track is still the ground. A
+  /// track raised until it competes is a second bar, which is worse than an
+  /// invisible one.
   final Color meterTrack;
 
   /// The filled part, when it carries no pass/fail meaning of its own.
@@ -163,7 +236,7 @@ class BelColors {
   /// palette was a compile-time constant, identity was equality and the
   /// comparison was free. Skins end that: the palette is now built from a
   /// document, and without this a rebuild that produced an identical palette
-  /// would re-rasterise all twelve modules — and `BelTheme.updateShouldNotify`
+  /// would re-rasterise all thirteen modules — and `BelTheme.updateShouldNotify`
   /// would notify the whole tree on every skin *re-read*, not every skin
   /// change.
   @override
@@ -209,14 +282,14 @@ class BelColors {
     panel: Color(0xFF121417),
     panelRaised: Color(0xFF171A1E),
     hairline: Color(0xFF1F2328),
-    hairlineStrong: Color(0xFF2E343C),
+    hairlineStrong: Color(0xFF5A646E),
     textPrimary: Color(0xFFE6E8EB),
     textMuted: Color(0xFF8A9199),
     textFaint: Color(0xFF565E67),
     accent: Color(0xFF35E0C4),
     warn: Color(0xFFF2B01E),
     over: Color(0xFFFF4D4D),
-    meterTrack: Color(0xFF1A1E23),
+    meterTrack: Color(0xFF323942),
     meterFill: Color(0xFF6E7A85),
   );
 }

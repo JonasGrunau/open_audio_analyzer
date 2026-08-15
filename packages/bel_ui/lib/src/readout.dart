@@ -110,13 +110,22 @@ class ReadoutPainter {
 
 /// Maps a [ReadingState] onto the palette.
 ///
-/// Centralised so that "over" is the same red in all twelve modules. It sounds
+/// Centralised so that "over" is the same red in all thirteen modules. It sounds
 /// trivial; it is the difference between a colour that means something and a
 /// colour that is just decoration.
+///
+/// [ReadingState.unavailable] is [BelColors.textMuted] rather than
+/// `textFaint`, and the difference is 2.81:1 against the panel versus 5.79:1.
+/// The em dash is not chrome — it is the engine saying *this quantity was not
+/// measured*, which is the visible end of the rule that Bel never renders an
+/// unmeasured quantity as a plausible number. Printing that statement below
+/// the legibility floor, next to real readings at 15:1, undoes the honesty it
+/// exists to deliver: a dash nobody can see reads as a blank, and a blank
+/// reads as a meter that has not started yet.
 Color colorForState(ReadingState state, BelColors colors) => switch (state) {
   ReadingState.neutral => colors.textPrimary,
   ReadingState.inSpec => colors.accent,
   ReadingState.warn => colors.warn,
   ReadingState.over => colors.over,
-  ReadingState.unavailable => colors.textFaint,
+  ReadingState.unavailable => colors.textMuted,
 };

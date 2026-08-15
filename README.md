@@ -15,7 +15,7 @@ where Bel cannot honestly match Decibel it says so rather than approximating.
 
 > **Status: Phase 8 complete. Every phase in [docs/PLAN.md](docs/PLAN.md) has
 > shipped.**
-> **All twelve modules exist and measure something.** Bel opens on a working
+> **All thirteen modules exist and measure something.** Bel opens on a working
 > meter bridge — loudness, super, digital, VU, validator, histogram, alert —
 > with the analyser, spectrogram, phase scope and stereo cloud on a second tab,
 > and the canvas is arrangeable: add, move, resize, duplicate, delete, tabs,
@@ -71,7 +71,7 @@ nothing.
 
 Three consequences worth naming, because they are what usually goes wrong:
 
-- **One clock, not twelve.** Independent tickers drift, and two meters showing
+- **One clock, not thirteen.** Independent tickers drift, and two meters showing
   the same quantity could then disagree within a single frame. On a measurement
   tool that is a correctness bug, not a cosmetic one.
 - **Text is cached by formatted string.** A value changes continuously; the
@@ -92,10 +92,11 @@ Three consequences worth naming, because they are what usually goes wrong:
 | Digital meter | Batched `drawRect`, one reused `Paint` |
 | VU meter | Dial face pre-rendered once to a `ui.Image`; only the needle repaints |
 | Spectrum analyzer | `drawRawPoints` over the native `Float32List` — C writes screen-space x,y directly |
-| Phase scope | `drawRawPoints` onto a `toImageSync()` afterglow layer, GPU-side, no readback |
-| Stereo cloud | `drawVertices(Vertices.raw(...))` — positions and colors pass straight through |
-| Spectrogram | Persistent scroll target: blit the previous image offset by N px, add one column |
-| Histogram | Committed `ui.Image` for the tail + live head. 4 h at 10 Hz is 144k points; never re-path them all |
+| Phase scope | The last forty frames of samples in a ring, one `drawRawPoints` each at its age's brightness — the trail is the frames, not a faded picture |
+| Stereo cloud | A decayed accumulator per two-pixel cell, emitted as points sorted into brightness buckets |
+| Spectrogram | Run-length columns kept as data and redrawn every published frame, one `drawRawPoints` per palette step |
+| Histogram | Ten columns a second into a fixed ring of loudness values, redrawn whole every frame as three `drawRawPoints`. Kept as measurements, not pixels, so it survives a resize |
+| Loudness distribution | The engine's 120 published bins as one `drawRawPoints`, clipped twice so the bars either side of the target take different colours |
 
 ---
 
@@ -111,7 +112,7 @@ spec rather than to intuition.
 | Momentary / Short-term | 400 ms / 3 s |
 | LRA | Gated at −20 LU relative, 10th–95th percentile, via a 0.01 LU-bin histogram storing exact energy sums (O(1) per update, constant memory) |
 | True peak | BS.1770-4 Annex 2, 4× oversampling with the specified 48-tap polyphase FIR, at every sample rate |
-| Spectrum | 4096-point Hann window at a 1024-sample hop, mapped onto 512 log-spaced bands with **peak-per-bin** so narrow peaks survive. Window-compensated: a full-scale sine on a bin centre reads 0.0 dBFS |
+| Spectrum | 4096-point Hann window at a 1024-sample hop, zero-padded to a 16384-point transform and mapped onto 512 log-spaced bands with **peak-per-bin** so narrow peaks survive; bands too narrow to hold a bin read between two. Window-compensated: a full-scale sine reads 0.0 dBFS on a bin centre and within 0.3 dB off it |
 | Correlation | Running Pearson over a sliding window |
 
 Every one of these is measured today and checked in CI, the spectrum included:
@@ -197,11 +198,19 @@ screen-independent by construction. Decibel stores fractions of the window and
 reconstitutes them per display; Bel opens the same layout on a 32" monitor and
 an 11" tablet with nobody writing responsive code.
 
-The interactions: **drag the title bar** to move, **drag the corner grip** to
-resize, **alt-drag** to duplicate, **right-click or double-click empty canvas**
-to add a module there, and **right-click a module** for its options. Buttons for
-add, undo and redo sit in the tab strip as well, because tablets have neither a
-right mouse button nor `⌘Z`.
+The interactions: **drag a module's title bar** to move it, **drag the corner
+grip** to resize, **alt-drag** to duplicate, **right-click or long-press empty
+canvas**
+to add a module there, **right-click a module** for its options, and
+**right-click or long-press a tab** to rename, duplicate or delete it. Buttons
+for add, undo and redo sit in the tab strip as well, because tablets have
+neither a right mouse button nor `⌘Z`.
+
+Nothing in Bel is a double click. A double-tap recogniser holds Flutter's
+gesture arena for 300 ms before it gives up, and every button underneath one
+waits that long to fire — which is a third of a second of an application that
+feels broken, in exchange for a gesture a long press does better on both a
+mouse and a tablet.
 
 ### Keyboard
 
@@ -233,8 +242,16 @@ alternatives are worse: allowing overlap turns a meter bridge into a stack of
 half-hidden panels and needs a z-order, and pushing neighbours aside — what most
 dashboard grids do — means a drag near an edge can rearrange a layout you spent
 ten minutes on, irreversibly. Bel shows the target cells while the pointer is
-down, in the accent colour when the drop is legal and in red when it is not, and
-an illegal drop simply does not happen. Nothing moves that you did not move.
+down — bright when the drop is legal, red when it is not — and an illegal drop
+simply does not happen. Nothing moves that you did not move.
+
+While the pointer is down the canvas becomes the placement grid: the cells are
+ruled inside a border that sits one gutter outside the modules, and every module
+except the one being carried is dimmed. A drop target is easy to place against
+ruled cells and hard to find among a dozen meters that are all still moving.
+The meters do not stop — dimming is a wash painted over them, not a pause, and
+it is a wash rather than a blur because a full-screen blur would be re-computed
+every frame over exactly the readings that are still arriving.
 
 A module resized below its minimum shows `TOO SMALL` instead of an unreadable
 smear — a spectrum analyser in two cells is not a small spectrum analyser. A
@@ -267,13 +284,21 @@ machines or keep in version control.
 | **macOS** | `~/Library/Application Support/Bel` |
 | **Windows** | `%APPDATA%\Bel` |
 | **Linux** | `$XDG_CONFIG_HOME/bel`, or `~/.config/bel` |
+| **iPadOS** | `Library/Application Support/Bel` inside the app's own container |
 
-`BEL_CONFIG_DIR` overrides all three — for a portable install, or for keeping
-Bel's configuration alongside your dotfiles — and `--config-dir=<path>` on the
-command line beats the variable in turn, which is the one that works on macOS
-where an environment cannot be handed to an application bundle. Settings →
-Session prints the directory actually in use and lets you select it, which beats
-retyping any of the above.
+The iPad row is the one you cannot open in a file manager, because iOS gives an
+app a private container and no way out of it. Settings → Session prints the
+path; a display persists its layout, its skin and the host it last connected to,
+and nothing else on the device can read them. **An Android tablet persists
+nothing** and says so at launch: its container is not derivable without a
+platform channel Bel does not have.
+
+`BEL_CONFIG_DIR` overrides the three desktop rows — for a portable install, or
+for keeping Bel's configuration alongside your dotfiles — and
+`--config-dir=<path>` on the command line beats the variable in turn, which is
+the one that works on macOS where an environment cannot be handed to an
+application bundle. Settings → Session prints the directory actually in use and
+lets you select it, which beats retyping any of the above.
 
 **The macOS app is deliberately not sandboxed**, and that is what makes the
 first row true. A sandboxed app's `HOME` is redirected into
@@ -368,7 +393,7 @@ text    #E6E8EB / #8A9199 / #565E67
 Two rules are enforced rather than merely encouraged:
 
 1. **Every spatial value comes from `Space`** — `2, 4, 8, 12, 16, 24, 32, 48,
-   64`. No widget writes a raw number for padding, margin or gap. Twelve
+   64`. No widget writes a raw number for padding, margin or gap. Thirteen
    modules built over as many weeks drift apart one `EdgeInsets.all(11)` at a
    time, and the result reads as amateur long before anybody can say which
    value is wrong.
@@ -384,7 +409,7 @@ width, tracking and cap height all differ between macOS, Windows and Linux, and
 a layout tuned on one is subtly wrong on the other two. Both are SIL OFL 1.1 and
 their licences ship in `assets/fonts/`.
 
-Every one of the twelve modules is [`ModuleFrame`](packages/bel_ui/lib/src/module_frame.dart)
+Every one of the thirteen modules is [`ModuleFrame`](packages/bel_ui/lib/src/module_frame.dart)
 plus a painter. That is the whole reuse strategy: a module that also owns its
 own border and title treatment is a module that will drift from the other
 eleven.
@@ -485,7 +510,14 @@ Requires Flutter `3.44.5-stable` (pinned in `.tool-versions`) and a C toolchain
 ```sh
 flutter pub get
 flutter run -d macos          # or windows, linux
+flutter run -d <ipad>         # the display build; `flutter devices` names it
 ```
+
+On iOS the engine is compiled as **Objective-C**, because miniaudio's Core
+Audio backend is: it configures an `AVAudioSession` there, and iOS offers no C
+way to do that. `hook/build.dart` handles it. This is worth knowing only
+because of how it fails if it is ever undone — several hundred errors inside
+Apple's own `Foundation` headers, not one of which names a file in Bel.
 
 The app needs **no podspec, no `build.gradle` and no per-platform
 `CMakeLists.txt`**. `packages/bel_engine/hook/build.dart` compiles the C
@@ -684,9 +716,11 @@ so a release built from a fork is unsigned and every script says so. See
   cannot make and Bel has no native plugin for. An Android tablet browses
   nothing and has to be given an address, and its screen says exactly that
   rather than showing an empty list that reads as "no hosts are running". macOS,
-  Windows, Linux and iPadOS discover normally. Typing an address is supported
-  everywhere and always will be, because multicast is also the first thing a
-  guest network blocks.
+  Windows, Linux and iPadOS discover normally — iPadOS through the system's own
+  Bonjour responder, because Apple does not let an app hold a multicast socket
+  without an entitlement it grants per developer on request. Typing an address
+  is supported everywhere and always will be, because multicast is also the
+  first thing a guest network blocks.
 - **Publishing is never remembered, on purpose.** The display's name, port and
   update rate persist like every other setting; whether to publish does not, and
   starts off at every launch. There is no password on that port, and a
@@ -699,6 +733,12 @@ so a release built from a fork is unsigned and every script says so. See
   identifies itself — which is a client→host frame, so **wire protocol 2** — or
   the host keys assignments by address, which breaks on DHCP. Until then the
   display shows the whole preset and the viewer picks the tab.
+- **An Android tablet remembers nothing between launches.** Every other
+  platform resolves a configuration directory; Android is the one whose
+  container Bel cannot find without a platform call — `HOME` is unset and the
+  temporary directory an iPad's container is derived from is `/data/local/tmp`
+  there, which belongs to no app. The display works, and says at launch that
+  nothing is being saved. Fixing it means a channel to `getFilesDir()`.
 - **Tablets are display-first.** FFI works fine on iPadOS and Android, but audio
   *input* selection differs sharply per platform. The tablet build's primary
   role is the remote display.
@@ -708,11 +748,12 @@ so a release built from a fork is unsigned and every script says so. See
   formats that reach every DAW people actually master in, Ableton Live
   included. AAX is out of scope: it needs Avid's SDK and a registered developer
   account, neither of which a free project can promise.
-- **A light skin does not lighten the window's title bar.** Everything Bel
-  paints follows the skin; the window frame belongs to the operating system, and
-  Flutter has no supported desktop API for it — so Daylight runs under a dark
-  title bar on macOS. Purely cosmetic, and fixing it properly means a little
-  platform code on each of the three.
+- **A light skin does not lighten the window frame on Windows or Linux.**
+  Everything Bel paints follows the skin; the window frame belongs to the
+  operating system, and Flutter has no supported desktop API for it. macOS no
+  longer has a title bar at all — the status bar runs to the top edge and the
+  window buttons sit inside it — but that took platform code in the runner, and
+  the other two each need their own.
 - **Native assets are young.** Recommended since Flutter 3.38, but the fallback
   if a platform misbehaves is the legacy `plugin_ffi` template plus CMake.
 

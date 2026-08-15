@@ -8,6 +8,7 @@ import '../clock/meter_clock.dart';
 import '../modules/alert_meter.dart';
 import '../modules/digital_meter.dart';
 import '../modules/histogram.dart';
+import '../modules/loudness_distribution.dart';
 import '../modules/lufs_meter.dart';
 import '../modules/number_box.dart';
 import '../modules/phase_scope.dart';
@@ -23,7 +24,7 @@ import '../modules/vu_meter.dart';
 /// The single place that knows which module kinds exist as code. Everything
 /// else in the canvas works in terms of rectangles and ids and does not care
 /// what is inside them, which is what keeps the drag, resize and selection
-/// logic from acquiring twelve special cases.
+/// logic from acquiring thirteen special cases.
 ///
 /// The frame is built here rather than by each module, so that the title, the
 /// border, the menu affordance and the selection state are written once.
@@ -65,7 +66,28 @@ class ModuleHost extends StatelessWidget {
       return const ModuleTooSmall();
     }
 
-    // Exhaustive on purpose: no default arm. When the thirteenth module kind is
+    // **And again in pixels, because a cell is not a size.** The canvas is
+    // 24x16 cells at every window size, so the same legal two-row module is
+    // 160 px tall on a 27" display and 40 px on a small window. Every painter
+    // already refused to draw below its own threshold, and a painter that
+    // refuses draws nothing at all: on a 1024x640 window the six Number Boxes
+    // across the top of the default preset were six empty panels, which reads
+    // as a meter that has failed rather than as a window that is too small.
+    //
+    // The thresholds live on `ModuleKind` now. This measures the body — what
+    // is left after the title bar and `ModuleFrame`'s inset — because that is
+    // what the painter is handed.
+    return LayoutBuilder(
+      builder: (context, constraints) =>
+          constraints.maxWidth < spec.kind.minBodyWidth ||
+              constraints.maxHeight < spec.kind.minBodyHeight
+          ? const ModuleTooSmall()
+          : _meter(),
+    );
+  }
+
+  Widget _meter() {
+    // Exhaustive on purpose: no default arm. When the fourteenth module kind is
     // added the compiler names this switch, rather than the new module silently
     // rendering as "not built" for however long it takes somebody to notice.
     return switch (spec.kind) {
@@ -106,6 +128,11 @@ class ModuleHost extends StatelessWidget {
         calibration: calibration,
       ),
       ModuleKind.histogram => HistogramModule(
+        engine: engine,
+        clock: clock,
+        calibration: calibration,
+      ),
+      ModuleKind.loudnessDistribution => LoudnessDistributionModule(
         engine: engine,
         clock: clock,
         calibration: calibration,

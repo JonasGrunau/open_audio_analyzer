@@ -13,7 +13,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  testWidgets('opens on the connect panel with somewhere to type an address', (
+  testWidgets('opens on the host picker with somewhere to type an address', (
     tester,
   ) async {
     await tester.pumpWidget(
@@ -23,7 +23,10 @@ void main() {
       ),
     );
 
-    expect(find.text('Remote display'), findsOneWidget);
+    // The same panel the desktop opens to choose a host, on a screen with
+    // nothing behind it — one implementation, so the two ways into a display
+    // cannot drift apart.
+    expect(find.text('SHOW ANOTHER MACHINE'), findsOneWidget);
     expect(find.text('CONNECT'), findsOneWidget);
     expect(find.byType(TextField), findsOneWidget);
 

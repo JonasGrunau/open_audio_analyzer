@@ -7,19 +7,18 @@ import 'package:flutter/material.dart';
 import '../canvas/module_host.dart';
 import '../clock/meter_clock.dart';
 import 'display_client.dart';
-import 'display_host.dart';
-import 'mdns/mdns_service.dart';
+import 'host_picker.dart';
 
-/// The tablet's whole world: find a host, then draw what it is measuring.
+/// The tablet's whole world: attach to a host, then draw what it is measuring.
 ///
-/// The thing worth noticing here is how little of it there is. It finds a host,
-/// opens a socket, and then hands a `MeterSource` and a `PresetSpec` to
-/// [ModuleHost] — the *same* [ModuleHost] the desktop canvas uses, wrapping the
-/// same twelve modules and the same painters. There is no tablet rendering
-/// path. A remote display whose meters had been written a second time would
-/// eventually disagree with the desktop about what the signal did, and at that
-/// point neither screen could be trusted; the only way to be sure they agree is
-/// for there to be one implementation.
+/// The thing worth noticing here is how little of it there is. It opens a
+/// socket and hands a `MeterSource` and a `PresetSpec` to [ModuleHost] — the
+/// *same* [ModuleHost] the desktop canvas uses, wrapping the same thirteen
+/// modules and the same painters. There is no tablet rendering path. A remote
+/// display whose meters had been written a second time would eventually
+/// disagree with the desktop about what the signal did, and at that point
+/// neither screen could be trusted; the only way to be sure they agree is for
+/// there to be one implementation.
 ///
 /// What the display does *not* do is as deliberate. It cannot reset the host's
 /// integrated loudness, change its device, or load a preset on it. Version 1 of
@@ -27,7 +26,15 @@ import 'mdns/mdns_service.dart';
 /// a way for anyone on the venue Wi-Fi to interfere with the measurement
 /// somebody is making.
 class RemoteDisplayScreen extends StatefulWidget {
-  const RemoteDisplayScreen({super.key});
+  const RemoteDisplayScreen({this.host, this.port, super.key});
+
+  /// Where to attach on arrival, when something upstream already asked.
+  ///
+  /// Null is the state a tablet is in when it opens Bel with no host in mind,
+  /// and it is not an error — the screen shows [HostPickerPanel] until it has
+  /// somewhere to point. Nothing else about the screen differs between the two.
+  final String? host;
+  final int? port;
 
   @override
   State<RemoteDisplayScreen> createState() => _RemoteDisplayScreenState();
@@ -36,8 +43,6 @@ class RemoteDisplayScreen extends StatefulWidget {
 class _RemoteDisplayScreenState extends State<RemoteDisplayScreen>
     with SingleTickerProviderStateMixin {
   final DisplayClient _client = DisplayClient();
-  final MdnsBrowser _browser = MdnsBrowser();
-  final TextEditingController _address = TextEditingController();
 
   late final MeterClock _clock;
 
@@ -51,15 +56,16 @@ class _RemoteDisplayScreenState extends State<RemoteDisplayScreen>
     // It reads the decoded snapshot rather than an engine, and neither the
     // clock nor the modules can tell the difference.
     _clock = MeterClock(engine: _client.snapshot, vsync: this);
-    _browser.start();
+
+    final host = widget.host;
+    final port = widget.port;
+    if (host != null && port != null) _client.connect(host, port);
   }
 
   @override
   void dispose() {
     _clock.dispose();
-    _browser.dispose();
     _client.dispose();
-    _address.dispose();
     super.dispose();
   }
 
@@ -90,10 +96,18 @@ class _RemoteDisplayScreenState extends State<RemoteDisplayScreen>
                 child: ValueListenableBuilder<RemoteLinkState>(
                   valueListenable: _client.state,
                   builder: (context, state, _) => state == RemoteLinkState.idle
-                      ? _ConnectPanel(
-                          browser: _browser,
-                          address: _address,
+                      // The same panel the desktop opens to choose a host, on a
+                      // screen with nothing behind it. `PanelScaffold` is a
+                      // centred, bordered surface rather than a route, so it
+                      // sits here unchanged and the two ways into a display
+                      // cannot drift apart. Detaching from a host lands back
+                      // here, which is what makes the link bar's Disconnect a
+                      // way to move to another machine rather than a dead end.
+                      ? HostPickerPanel(
                           onConnect: _connect,
+                          onClose: Navigator.of(context).canPop()
+                              ? () => Navigator.of(context).pop()
+                              : null,
                         )
                       : _LiveDisplay(
                           client: _client,
@@ -109,212 +123,6 @@ class _RemoteDisplayScreenState extends State<RemoteDisplayScreen>
           ),
         );
       },
-    );
-  }
-}
-
-/// Pick a host, or type where one is.
-///
-/// The typed address is not a fallback for completeness. Multicast is the first
-/// thing a guest network blocks and the first thing a corporate image turns
-/// off, so a display that could only be reached by discovery would fail in
-/// exactly the rooms — venues, rehearsal spaces, shared studios — it exists for.
-class _ConnectPanel extends StatelessWidget {
-  const _ConnectPanel({
-    required this.browser,
-    required this.address,
-    required this.onConnect,
-  });
-
-  final MdnsBrowser browser;
-  final TextEditingController address;
-  final void Function(String host, int port) onConnect;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = BelTheme.of(context);
-
-    return Padding(
-      padding: const EdgeInsets.all(Space.xl),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Remote display',
-            style: BelType.body.copyWith(
-              color: colors.textPrimary,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: Space.xs),
-          Text(
-            'Showing another machine’s meters. This screen displays only — it '
-            'cannot change what the host is measuring.',
-            style: BelType.label.copyWith(color: colors.textMuted),
-          ),
-          const SizedBox(height: Space.lg),
-
-          Expanded(
-            child: ValueListenableBuilder<List<DiscoveredHost>>(
-              valueListenable: browser.hosts,
-              builder: (context, hosts, _) {
-                if (hosts.isEmpty) {
-                  return _Searching(browser: browser);
-                }
-                return ListView.separated(
-                  itemCount: hosts.length,
-                  separatorBuilder: (_, _) => const SizedBox(height: Space.xs),
-                  itemBuilder: (context, index) => _HostRow(
-                    host: hosts[index],
-                    onTap: () =>
-                        onConnect(hosts[index].address, hosts[index].port),
-                  ),
-                );
-              },
-            ),
-          ),
-
-          const SizedBox(height: Space.lg),
-          _AddressField(controller: address, onConnect: onConnect),
-        ],
-      ),
-    );
-  }
-}
-
-class _Searching extends StatelessWidget {
-  const _Searching({required this.browser});
-
-  final MdnsBrowser browser;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = BelTheme.of(context);
-
-    return ValueListenableBuilder<bool>(
-      valueListenable: browser.isBrowsing,
-      builder: (context, browsing, _) => Center(
-        child: Text(
-          browsing
-              ? 'Looking for hosts on this network…'
-              // Stated rather than shown as an empty list, which reads as
-              // "nothing is running" and sends somebody to check the wrong
-              // machine.
-              : 'This device cannot search the network for hosts.\n'
-                    'Enter the host’s address below.',
-          textAlign: TextAlign.center,
-          style: BelType.label.copyWith(color: colors.textMuted),
-        ),
-      ),
-    );
-  }
-}
-
-class _HostRow extends StatelessWidget {
-  const _HostRow({required this.host, required this.onTap});
-
-  final DiscoveredHost host;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = BelTheme.of(context);
-    final format = host.format;
-
-    return InkWell(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(
-          horizontal: Space.md,
-          vertical: Space.md,
-        ),
-        decoration: BoxDecoration(
-          color: colors.panel,
-          borderRadius: BelRadius.allMd,
-          border: Border.all(color: colors.hairline, width: BelStroke.hairline),
-        ),
-        child: Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    host.displayName,
-                    style: BelType.body.copyWith(color: colors.textPrimary),
-                  ),
-                  const SizedBox(height: Space.xxs),
-                  Text(
-                    '${host.address}:${host.port}'
-                    '${format == null ? '' : '  ·  $format'}',
-                    style: BelType.label.copyWith(color: colors.textMuted),
-                  ),
-                ],
-              ),
-            ),
-            Icon(Icons.chevron_right, color: colors.textMuted),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _AddressField extends StatelessWidget {
-  const _AddressField({required this.controller, required this.onConnect});
-
-  final TextEditingController controller;
-  final void Function(String host, int port) onConnect;
-
-  void _submit() {
-    final text = controller.text.trim();
-    if (text.isEmpty) return;
-
-    // `host`, `host:port` or a bare IPv6 in brackets. The port defaults rather
-    // than being demanded: almost nobody has changed it, and asking for it
-    // turns a working default into a thing to get wrong.
-    var host = text;
-    var port = DisplayHost.defaultPort;
-    final colon = text.lastIndexOf(':');
-    if (colon > 0 && !text.endsWith(']')) {
-      final parsed = int.tryParse(text.substring(colon + 1));
-      if (parsed != null && parsed > 0 && parsed <= 65535) {
-        host = text.substring(0, colon);
-        port = parsed;
-      }
-    }
-    onConnect(host, port);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = BelTheme.of(context);
-
-    return Row(
-      children: [
-        Expanded(
-          child: TextField(
-            controller: controller,
-            style: BelType.body.copyWith(color: colors.textPrimary),
-            onSubmitted: (_) => _submit(),
-            decoration: InputDecoration(
-              hintText: 'Host address, for example 192.168.1.20',
-              hintStyle: BelType.label.copyWith(color: colors.textMuted),
-              isDense: true,
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: Space.md,
-                vertical: Space.md,
-              ),
-              border: OutlineInputBorder(
-                borderRadius: BelRadius.allMd,
-                borderSide: BorderSide(color: colors.hairline),
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(width: Space.sm),
-        TextButton(onPressed: _submit, child: const Text('CONNECT')),
-      ],
     );
   }
 }
@@ -372,6 +180,12 @@ class _LiveDisplay extends StatelessWidget {
 
 /// The strip along the top: who this is, whether the picture is current, and
 /// which tab is showing.
+///
+/// Built like the desktop's own status bar — panel fill under a hairline, and
+/// `bel_ui` controls on it. The tabs and the way out were stock `TextButton`s,
+/// which in a theme that has stripped Material of its splash and highlight are
+/// text with no border, no hover and no focus ring: three controls that could
+/// not be told from the labels beside them.
 class _LinkBar extends StatelessWidget {
   const _LinkBar({
     required this.client,
@@ -394,46 +208,49 @@ class _LinkBar extends StatelessWidget {
     final colors = BelTheme.of(context);
     final tabs = layout?.tabs ?? const <TabSpec>[];
 
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: Space.md,
-        vertical: Space.sm,
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: colors.panel,
+        border: Border(
+          bottom: BorderSide(color: colors.hairline, width: BelStroke.hairline),
+        ),
       ),
-      color: colors.panel,
-      child: Row(
-        children: [
-          _StateDot(state: state),
-          const SizedBox(width: Space.sm),
-          ValueListenableBuilder<String?>(
-            valueListenable: client.hostName,
-            builder: (context, name, _) => Text(
-              name ?? 'Connecting…',
-              style: BelType.body.copyWith(color: colors.textPrimary),
-            ),
-          ),
-          const SizedBox(width: Space.md),
-          Expanded(
-            child: _StateMessage(client: client, state: state),
-          ),
-
-          if (tabs.length > 1)
-            for (var index = 0; index < tabs.length; index++)
-              Padding(
-                padding: const EdgeInsets.only(left: Space.xs),
-                child: TextButton(
-                  onPressed: () => onTab(index),
-                  child: Text(
-                    tabs[index].name.toUpperCase(),
-                    style: BelType.label.copyWith(
-                      color: index == tab ? colors.accent : colors.textMuted,
-                    ),
-                  ),
-                ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: Space.md,
+          vertical: Space.xs,
+        ),
+        child: Row(
+          children: [
+            _StateDot(state: state),
+            const SizedBox(width: Space.sm),
+            ValueListenableBuilder<String?>(
+              valueListenable: client.hostName,
+              builder: (context, name, _) => Text(
+                name ?? 'Connecting…',
+                style: BelType.body.copyWith(color: colors.textPrimary),
               ),
+            ),
+            const SizedBox(width: Space.md),
+            Expanded(
+              child: _StateMessage(client: client, state: state),
+            ),
 
-          const SizedBox(width: Space.sm),
-          TextButton(onPressed: onDisconnect, child: const Text('DISCONNECT')),
-        ],
+            if (tabs.length > 1) ...[
+              SegmentedControl<int>(
+                value: tab.clamp(0, tabs.length - 1),
+                segments: [
+                  for (final (index, spec) in tabs.indexed)
+                    (value: index, label: spec.name),
+                ],
+                onChanged: onTab,
+              ),
+              const SizedBox(width: Space.sm),
+            ],
+
+            BelButton(label: 'Disconnect', onPressed: onDisconnect),
+          ],
+        ),
       ),
     );
   }

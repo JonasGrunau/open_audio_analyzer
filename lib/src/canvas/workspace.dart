@@ -358,7 +358,14 @@ PresetSpec defaultPreset() {
           module(ModuleKind.digitalMeter, 13, 2, 4, 9),
           module(ModuleKind.validator, 17, 2, 7, 5),
           module(ModuleKind.vuMeter, 17, 7, 7, 5),
-          module(ModuleKind.histogram, 0, 11, 17, 5),
+          // Side by side, because they are one measurement asked two
+          // questions — *when* was the programme loud, and *how often* — and
+          // the answer to either is worth more next to the other. The
+          // distribution takes the narrower half: its axis is fixed at the
+          // published −60 to 0 and most programmes occupy the right third of
+          // it, where the time series uses every pixel it is given.
+          module(ModuleKind.histogram, 0, 11, 11, 5),
+          module(ModuleKind.loudnessDistribution, 11, 11, 6, 5),
           module(ModuleKind.alertMeter, 17, 12, 7, 4),
         ],
       ),

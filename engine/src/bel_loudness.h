@@ -81,9 +81,18 @@ typedef struct {
   /* Sum of squares of the K-weighted signal in the sub-block being filled. */
   double accumulator[BEL_MAX_CHANNELS];
 
-  /* Completed sub-blocks, as per-channel mean squares. */
+  /* Completed sub-blocks, as per-channel mean squares.
+   *
+   * There is deliberately no write cursor beside this. The row a sub-block
+   * lands in is `subblocks_done % BEL_SHORTTERM_SUBBLOCKS`, computed where it
+   * is used, so an index into this array cannot be wrong however the counter
+   * got there. A stored cursor is the same number carried in a second place,
+   * and it has to be *trusted* at the point of use: a Phase 8 crash was a
+   * cursor of 3,262,164,031 (a float bit pattern, from something outside this
+   * file) turning one sub-block boundary into an 8-byte store 229 GB past the
+   * engine. Reducing at the point of use costs one modulo per 100 ms and
+   * bounds the store by construction. */
   double ring[BEL_SHORTTERM_SUBBLOCKS][BEL_MAX_CHANNELS];
-  uint32_t ring_write;
   uint64_t subblocks_done;
 
   bel_hist_bin gating[BEL_HIST_BINS];    /* 400 ms blocks -> integrated */

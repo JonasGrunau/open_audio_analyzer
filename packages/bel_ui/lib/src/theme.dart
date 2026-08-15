@@ -23,6 +23,16 @@ class BelTheme extends InheritedWidget {
     return theme!.colors;
   }
 
+  /// The palette if one is in scope, and null where there is none.
+  ///
+  /// For `showBelPanel`, which asks whether the application installed a palette
+  /// *above its `Navigator`* — where a route can see it — and falls back to the
+  /// one captured at the call site when it did not. Everything else wants [of]:
+  /// a widget that tolerates the palette being absent is a widget that will one
+  /// day be drawn in somebody's guess at it.
+  static BelColors? maybeOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<BelTheme>()?.colors;
+
   /// Reads the palette without subscribing to changes.
   ///
   /// For use inside `CustomPainter` construction and other places on the paint

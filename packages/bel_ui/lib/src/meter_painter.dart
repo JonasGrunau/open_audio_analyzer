@@ -27,14 +27,38 @@ import 'package:flutter/widgets.dart';
 /// draws its frame and its title and then nothing at all — which reads as a
 /// broken meter rather than as a layout mistake. Every module used to write
 /// this line; now none of them can forget it.
+///
+/// ---------------------------------------------------------------------------
+/// The clip is not decoration either
+///
+/// **A `CustomPaint` does not clip its painter to its size.** The size handed to
+/// `paint` is a statement about the room available, not a boundary that is
+/// enforced, and a painter that draws outside it draws over the module's own
+/// border, its title, and whatever module the canvas put next to it.
+///
+/// Nothing catches this. It is not an overflow — `RenderFlex` has no part in it,
+/// so there is no debug stripe and no exception — and it only appears when the
+/// signal makes it appear, which for the phase scope means a sample past full
+/// scale. The engine deliberately does not clamp those (a float WAV may
+/// legitimately exceed ±1.0, and those overshoots are the ones true-peak
+/// metering exists to find), so the scope drew its points outside its own guide
+/// circle and out through the side of the module, on exactly the material
+/// somebody is looking at it to check.
+///
+/// Clipping here rather than in each painter is the same decision as the frame:
+/// a module that owns its own boundary is a module that will drift from the
+/// others, and eleven of the twelve that existed then had never clipped at all.
+/// A painter
+/// that wants to draw a glow past its edge has to say so, and none does.
 class MeterBody extends StatelessWidget {
   const MeterBody({required this.painter, super.key});
 
   final MeterPainter painter;
 
   @override
-  Widget build(BuildContext context) =>
-      CustomPaint(painter: painter, child: const SizedBox.expand());
+  Widget build(BuildContext context) => ClipRect(
+    child: CustomPaint(painter: painter, child: const SizedBox.expand()),
+  );
 }
 
 abstract class MeterPainter extends CustomPainter {

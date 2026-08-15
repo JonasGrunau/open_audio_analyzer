@@ -22,18 +22,24 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   1.2% on a transient, which is inside the tolerance the standard allows and is
   most of why a VU feels like a VU.
 - **The spectrum is now measured.** 512 log-spaced bands from 20 Hz to 20 kHz,
-  from a 4096-point Hann transform per channel at a 1024-sample hop, taking the
-  loudest FFT bin in each band rather than their average so that a narrow
-  resonance survives the mapping. Levels are window-compensated: a full-scale
-  sine on a bin centre reads 0.0 dBFS, verified on every push. A tone between
-  two bin centres reads up to 1.4 dB low, which is inherent to reading a peak
-  bin and is not corrected.
+  from a 4096-point Hann window per channel at a 1024-sample hop, zero-padded
+  to a 16384-point transform. A band wide enough to contain bins takes the
+  loudest of them rather than their average, so that a narrow resonance
+  survives the mapping; a band too narrow to contain one — everything below
+  about 216 Hz at 48 kHz — reads the transform between its two nearest bins.
+  Levels are window-compensated: a full-scale sine on a bin centre reads
+  0.0 dBFS, verified on every push, and one falling between two bin centres
+  reads within 0.3 dB of its own level rather than up to 1.4 dB low. Frequency
+  resolution is that of the 4096-point window and the padding does not change
+  it: two tones closer than 11.7 Hz still merge. What changes is that the
+  bottom three octaves are drawn as the curve the transform measured instead
+  of as a staircase of up to twenty-five identical bands.
 - **Per-band stereo position** and the **raw stereo sample stream** are now
   published, which is what the stereo cloud and the phase scope draw.
 - **The short-term loudness distribution is now published**, together with the
   10th and 95th percentiles LRA is the difference of and the relative gate they
-  were taken above — the same population the LRA number is computed from, so
-  the histogram and the number cannot disagree.
+  were taken above — the same population the LRA number is computed from, so a
+  distribution drawn from it cannot disagree with the number beside it.
 - LRA itself is unchanged. It is now computed *through* the published
   percentiles rather than beside them, which is a refactor, not a new number.
 
@@ -134,8 +140,12 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   on concentric arcs); a **VU Meter** (0 VU at the calibration's reference
   level, not at digital full scale); an **Alert Meter** (one metric with its
   worst reading latched until reset); a **Validator** (three delivery checks and
-  a verdict); a **Histogram** (the short-term loudness distribution with the
-  LRA percentiles drawn on it); a **Spectrum Analyzer**; a **Spectrogram**; a
+  a verdict); a **Histogram** (short-term loudness over time, with the momentary
+  window banded above it and everything past the delivery target in the over
+  colour); a **Loudness Distribution** (how often the programme sat at each
+  loudness, with the two percentiles LRA is the distance between, drawn from the
+  same blocks the number is computed from); a **Spectrum Analyzer**; a
+  **Spectrogram**; a
   **Phase Scope**; and a **Stereo Cloud** (per-band stereo position, which
   answers *which part* of a mix folds badly rather than only that it does).
 - **Bel opens on a working meter bridge**, with the frequency displays on a
@@ -262,6 +272,187 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### ⚡ Changed
 
+- **Nothing is a double click any more.** Renaming a tab, adding a module by
+  clicking empty canvas, and zooming the window from the status bar were all
+  double clicks; the first two are now a long press — which also gives a tablet
+  a tab's rename, duplicate and delete for the first time — and the window is
+  zoomed with the green window button, as it always could be. See 🐛 Fixed for
+  why a double click was worth removing.
+- **Moving a module dims the rest of the canvas, and the placement grid now has
+  a border.** The grid is ruled inside a rounded border that sits one gutter
+  outside the modules, with the same corner radius they have, and for as long as
+  the pointer is down every module except the one in hand is washed toward the
+  canvas colour. A drop target among a dozen meters that are all still moving
+  was something you had to hunt for; the cells, the module being carried and
+  where it will land are now the only things at full contrast. Nothing is
+  measured differently — the meters underneath keep updating throughout.
+- **The phase scope's trail no longer smears.** It was a picture faded and
+  redrawn on every frame, so a moving dot was resampled once per frame and
+  spread outwards; it is now the last forty frames of samples, each drawn at
+  the brightness its age has earned. A dot fades where it was rather than
+  blurring, and the decay is exact instead of compounding through the rounding
+  of an 8-bit surface — the tail is fractionally longer for the same reason.
+- **The stereo cloud is accumulated as numbers rather than as a picture**, in
+  cells of two logical pixels, with each band's dot spread across the four
+  cells it falls between. The shape, the fade and the brightness are the same;
+  a close look finds dots on a two-pixel grid where they were previously at
+  arbitrary positions.
+- **A module's readings now grow with the module.** The bars, the arcs and the
+  VU face have always been sized off the tile they are in; four modules sized
+  their *numbers* off a constant instead, so the LUFS meter's LUFS-I and LRA,
+  the Super Meter's centre readout, the Alert Meter's value and the Validator's
+  measured column stayed the same size whether the module had a corner of a
+  laptop screen or a quarter of a 27" one. The labels beside them — a scale's
+  ticks, a column heading, PASS and FAIL — deliberately do not scale; they are
+  the same size in every module on the canvas.
+- **The smallest supported window is now 960x768, up from 720x480** (macOS; the
+  other platforms set no minimum). The canvas is a fixed 24x16 cells at every
+  window size, so at 480 px tall a two-row module had 12 px of body left after
+  its title bar and margin — less than a digit. 768 is the height at which the
+  smallest module in the default preset still has room for its number.
+- **A module too small to draw in now says so instead of showing an empty
+  panel.** The size a module needs is in pixels, not grid cells, so it was
+  never something the cell minimums could enforce; each painter checked it
+  privately and drew nothing when it failed. The thresholds are now declared on
+  `ModuleKind` and the frame substitutes the "too small" placeholder, which is
+  what it was always for.
+- **The status bar drops items in a stated order as the window narrows**, one
+  at a time and each at the width below which the rest stop fitting: first the
+  sample-rate readout, then the BEL wordmark, then ANALYSE FILE, then REMOTE,
+  then the `?` button. All four buttons keep their keyboard shortcuts, which
+  are listed in the `?` sheet and in
+  [docs/site/keyboard.md](docs/site/keyboard.md). What never drops is the
+  source, the elapsed clock, the delivery target, SETTINGS and RESET. There was
+  one gate before this, it was 20 px too generous, and nothing had measured it.
+- **The settings panel has been reworked, and every other panel with it.**
+  Sections are now ruled off from each other with a hairline instead of by
+  whitespace alone, so Signal, Meters, Appearance and Session read as four
+  groups rather than one column of grey; a row's explanation runs the full
+  width of the panel underneath its control instead of wrapping in whatever
+  space the control left over; and the loopback advice under Capture device is
+  two lines rather than four. The same changes reach the preset browser, the
+  delivery-target editor, the analysis report, the remote-display panel and the
+  keyboard sheet, because all six are built from the same primitives.
+
+- **REMOTE now asks which end of the link this machine is.** Pressing it opens
+  a chooser — send these meters, or show another machine's — and each answer
+  opens its own panel. Publishing used to be the whole of what the button
+  offered: turning this screen into a display was a footer button on the
+  publishing dialog marked "Use as display", which is the row a panel reserves
+  for the ways out of it. The chooser also says whether this machine is already
+  publishing and how many displays are attached, so that is answerable without
+  opening anything further.
+
+- **The remote display's connect screen is a panel like every other panel.** It
+  was the one screen in Bel that had never been near the design system — an
+  unstyled list, a stock text field with a rounded outline and Material text
+  buttons, on the hardware the feature exists for. Discovered hosts are panel
+  rows now, the typed address is a Bel field with Connect in the footer, and it
+  is the same panel the desktop opens rather than a second implementation of
+  it. The strip across the top of a live display gets the status bar's fill and
+  hairline, with the tab picker and Disconnect as controls rather than as text.
+  Disconnecting returns to the picker instead of to a dead screen.
+
+- **Every boxed control in a panel is the same height.** Buttons, menus,
+  segmented controls and text fields derived their heights independently and
+  came out at 30, 32, 31.4 and 28.9 px, so no two standing side by side in a
+  row ever quite lined up. They are all 32 px now.
+
+- **A menu looks like a menu.** The capture-device and delivery-target pickers
+  were bordered labels in caption grey — fainter than the buttons beside them,
+  which reads as disabled — with nothing to say they opened anything. They now
+  carry a caret, show their value in the same weight as the rest of the panel,
+  highlight under the pointer, mark the current choice in the open menu, and
+  can be reached and opened from the keyboard, which neither of them could
+  before. The menu also no longer arrives with a Material drop shadow.
+
+- **The selected skin is visible as selected.** Selection in a panel list was
+  carried by a single step of grey on a 1 px border; it is now a raised fill as
+  well.
+
+- **The unfilled part of a meter is now visible.** `meter_track` sat at 1.10:1
+  against the panel behind it on the dark skin and 1.22:1 on the light one —
+  close enough to the surface that a bar showed its own fill and nothing else,
+  and the Super Meter's three arcs could only be located by whichever one
+  happened to be lit. Both shipped skins now hold it at roughly 1.6:1, and
+  still about 2.5:1 below `meter_fill` so the reading stays the figure and the
+  track stays the ground. **A user skin that sets `meter_track` keeps its own
+  value**; a skin that inherits it gets the new one.
+
+- **Modules have room to breathe, and the same amount of it on every side.**
+  The inset between a module's border and its meter went from 8 px to 12 px,
+  and the title bar's inset moved with it so the title still starts where the
+  meter starts. Meters draw to the edges of what the frame hands them — a
+  painter that adds a second inset of its own is a module that sits differently
+  from the other eleven.
+
+- **A dB scale no longer reserves more room than it uses.** The gutter beside a
+  graticule was a flat 30 px whatever the labels said, so a meter with short
+  labels sat visibly off-centre in its module — thirteen pixels of empty
+  reserve on the scale side against nothing on the other. It is now measured
+  from the labels themselves. Affects the LUFS meter, the digital meter, the
+  spectrum analyser and the histogram.
+
+- **The VU dial is sized to the module rather than to a fixed sweep.** The face
+  opened 70° whatever shape the tile was, which in a wide tile drew the whole
+  instrument across the middle half of the width and left the rest bare. The
+  sweep now opens as far as the box allows, between 70° and 110°, and the dial
+  is centred on what is actually drawn.
+
+- **The frame rate is no longer in the status bar.** It was a second way to
+  reach one setting, sitting in a row otherwise reserved for what changes while
+  you work and what a reading has to be read against. It is chosen once for a
+  machine; it lives in the settings panel and only there. The delivery target
+  stays in the bar, because every `PASS` and `FAIL` on the canvas is a verdict
+  against it.
+
+- **A panel that scrolls now says so.** Settings is taller than the 760 px a
+  panel is allowed and ended on a row the viewport happened to cut in half,
+  with nothing to suggest there was more below it. A scrollbar appears when the
+  content overflows and stays hidden when it does not.
+
+- **The `REMOTE` button now looks like the rest of the status bar.** It was the
+  one stock Material button in the row — borderless where its four neighbours
+  are bordered, Material-sized rather than bar-sized, ink-rippled, and not
+  reachable by keyboard. It now carries the same border, padding, type and
+  focus ring as `ANALYSE FILE`, `SETTINGS` and `RESET`, and states what it is
+  doing on hover. Publishing is shown by the label brightening rather than by
+  the signal hue, which in this row means "in spec" and nothing else. The
+  panel behind it is built from the same pieces as the other panels.
+
+- **The macOS window has no title bar of its own.** The status bar now runs to
+  the top edge of the window, and the close, minimise and zoom buttons sit
+  inside it on the same row as the source and the elapsed clock. The strip of
+  system grey above a bar of panel grey, and the window title printed in a font
+  Bel does not choose, are both gone. Dragging the status bar moves the window
+  and double-clicking it zooms, as dragging and double-clicking the title bar
+  did. Windows and Linux are unchanged.
+- **A light skin no longer runs under dark window buttons on macOS.** The window
+  follows the skin's `light` flag, so Daylight gets light chrome and the two
+  stop disagreeing about which way up the room is.
+- **The signal hue now means one thing on the canvas.** Teal previously marked
+  both "in spec" and "selected", so a selected module was outlined in the same
+  colour as a reading that had passed its target, a few pixels from the reading
+  itself. Selection is now a brighter, heavier border; the active tab, the
+  highlighted menu row, the resize grip, the listening indicator and the drop
+  preview all moved to neutral values. Teal now appears on the canvas only when
+  something is within its delivery target.
+- The em dash that means "not measured" is drawn in a legible colour. It shared
+  a value with scale ticks and disabled controls, at 2.81:1 against the panel
+  against readings at 15:1 — the one mark in the interface that says a quantity
+  was *not* measured was the hardest one to see.
+- Selection, hover and focus borders are visible. `hairline_strong` was 1.47:1
+  against the panel — a role whose whole purpose is to be seen, set to a value
+  that could not be, which is why callers reached past it for the accent. It is
+  now roughly 3:1 in both shipped skins. **A user skin that sets
+  `hairline_strong` keeps its own value and is unaffected.**
+- `RESET` now states its scope on hover: it restarts the measurement, and
+  leaves the layout, target and skin alone.
+- The meters cap themselves at 30 fps when the system asks for reduced motion,
+  and the settings panel says so rather than showing a rate nothing is running
+  at. Bel has no decorative animation to switch off — what moves is the
+  measurement — so a lower redraw rate is the only honest reading of that
+  preference. No reading is withheld.
 - The main view is an arrangeable canvas instead of a fixed wall showing every
   metric at once. It opens on six readings — LUFS-M, LUFS-S, LUFS-I, LRA, TP
   Max and Peak Max — and the rest of the canvas is yours.
@@ -291,6 +482,261 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### 🐛 Fixed
 
+- **A long capture session no longer dies with a bus error.** The sub-block
+  ring the loudness measurements are built from carried a write cursor beside
+  it, and the store into the ring trusted that cursor. One was found holding a
+  float bit pattern after 36 minutes of capture, which turned an ordinary
+  100 ms boundary into an 8-byte write 229 GB past the engine and killed the
+  process. The row is now derived from the sub-block count where it is used, so
+  the write lands inside the ring whatever the counter holds. Every reading is
+  unchanged, bit for bit, and the EBU conformance vectors still pass. What put
+  a float there has not been identified; this stops the engine turning it into
+  a wild store.
+- **A capture device is released when the engine fails to start.** If an
+  allocation failed after the device had been started — sizing the analysis
+  buffer, or the spectrum's transforms — the engine was freed while the
+  real-time callback was still writing into the ring inside it, handing that
+  callback a dangling pointer into a block the allocator was about to reuse.
+  Startup now tears the device down on every failing path.
+- **An iPad can now find hosts on the network.** It never could: iOS and iPadOS
+  refuse an app the multicast socket Bel browses with unless it carries an
+  entitlement Apple grants per developer on request, so every send was rejected
+  and nothing was ever delivered — on the hardware the remote display exists
+  for. The tablet now searches through the system's own Bonjour responder,
+  which needs no entitlement, and finds the same hosts by the same name.
+  Typing an address still works and still always will.
+- **A search that cannot run says why.** A device that could not search showed
+  *Looking for hosts on this network…* indefinitely, which is exactly what a
+  network with no hosts on it looks like. It now names the reason where there
+  is one to name — a refused Local Network permission on macOS points at
+  System Settings — and says plainly that it cannot search where there is not.
+- **A laptop in a dock is listed at an address that answers.** A machine with a
+  second network interface — an empty dock, a Thunderbolt bridge — announces
+  every address it has, and the browser kept whichever arrived last. Half the
+  time that was the interface's self-assigned 169.254 address, which nothing on
+  the network can reach, so the host appeared in the list and the connection
+  timed out. A routable address is now preferred, and a host that moves
+  replaces its old address rather than adding to it.
+- **A panel follows a change of skin while it is open.** Choosing one in
+  Settings → Appearance repainted the canvas, the window chrome and the panel's
+  own text fields and menus, but left the panel's surface, hairlines, labels and
+  the dimming over the canvas in the previous skin until the panel was closed
+  and reopened — so the one place a skin is chosen was the one place it could
+  not be seen, and the panel was drawn in two skins at once meanwhile.
+- **A two-finger trackpad gesture no longer drags things.** Right-clicking a
+  module's title bar on a trackpad flashed the placement grid on screen, because
+  a two-finger tap is how macOS sends that click and every drag in the
+  application accepted a trackpad gesture as one: a two-finger scroll over a
+  title bar moved the module, over the corner grip resized it, and over the
+  status bar it started dragging the window. A drag now begins from a button
+  press and from nothing else. Clicking and dragging on a trackpad is
+  unaffected — that is a mouse as far as the system is concerned.
+- **The top of a meter's scale is no longer cut in half.** The `0` on the LUFS
+  meter was drawn as its own bottom half, and the same line of code clipped the
+  spectrum analyser's top label and the first and last labels on the
+  histogram's frequency axis. An end label now sits fully inside the meter; its
+  gridline has not moved.
+- **The `M` and `S` under the LUFS meter's bars are drawn at all.** They were
+  centre-aligned in an unconstrained line box, which put each letter half a
+  megapixel to the right of the meter — so the two bars had nothing naming
+  them and the space for the names was still reserved beneath them.
+- **The LUFS meter's two readings are no longer printed with their last digit
+  missing.** They were sized off the module's height alone, so a tall narrow
+  meter asked for digits wider than the column under the bar they belong to and
+  the reading stopped drawing where it ran out of room: `-17.6` was shown as
+  `-17.`, which reads as a different number rather than as a clipped one. Both
+  now take the largest size that fits the column as well as the height, and are
+  hidden — as they already were on a short module — when that size would be too
+  small to read.
+- **The super meter's ring names sit beside the arcs they name.** `M`, `S` and
+  `I` led their arcs by a fixed angle, which is a fixed fraction of each
+  radius, so the outer name stood nearly twice as far from its arc as the inner
+  one did from its and the three read as a diagonal drifting off the gauge.
+  They are now the same distance from every arc.
+- **Buttons no longer take a third of a second to respond.** Every control in
+  the status bar on macOS, every tab, and clicking empty canvas to clear the
+  selection fired 300 ms after the click that pressed them. Each sat under a
+  gesture that also recognised a double click, and Flutter's double-tap
+  recogniser holds the gesture arena from the first tap until it times out —
+  so the button's own tap could not be resolved until the wait for a second
+  click had expired. The double clicks are gone (see ⚡ Changed) and the
+  controls answer on release.
+- **Bel crashed after a few minutes with a spectrogram, phase scope or stereo
+  cloud on the canvas, and grew without bound until it did.** One report showed
+  the application holding 266 GB before macOS stopped it. Those three modules
+  accumulated their history into an image taken with `toImageSync`, which
+  retains the display list that drew it for as long as the image lives — so
+  every frame's image pinned the frame before it, back to the first one, and
+  disposing the handle released none of it. The application then died on the
+  raster thread when that chain was finally dropped and its destructors
+  recursed once per retained frame, 3,286 deep in the report that found this.
+  All three now keep their history as data and redraw it, which costs memory
+  proportional to the module's size rather than to how long Bel has been open.
+- **A spectrogram opened before any audio arrived began with a column of full
+  scale, and the stereo cloud with a bright line down its centre.** Both were
+  reading the zeroed arrays of a source that has not published yet, which as
+  dB is 0 dBFS on every band. A source that has measured nothing now draws
+  nothing.
+- **The LUFS meter's two readouts sat under the wrong things.** They were laid
+  out against the middle of the module, but the bars begin after the scale's
+  gutter — so LUFS-I printed under the scale numbers and LRA under the middle
+  of the momentary bar. Both now line up with the bars they sit below. No
+  reading changed; the two numbers are the same numbers, in the right column.
+- **Six Number Boxes rendered as empty panels on a small window.** On anything
+  under about 700 px tall a two-row Number Box had less body than a digit is
+  tall, and the painter's own size check meant it drew nothing rather than
+  saying so. Every module now shows the "too small" placeholder instead, and
+  the supported minimum window is large enough that the default preset never
+  reaches it.
+- **The status bar ran 121 px past the edge of the window** at the smallest
+  size the window could be dragged to. In a debug build that is a striped
+  overflow warning; in a release build the controls past the edge are simply
+  not there.
+- **The signal source overflowed its own place in the bar** whenever the name
+  of the capture device came close to filling the room the bar had left for it
+  — a striped warning across the source label in a debug build, and a name
+  clipped without a mark in a release one. The name now shortens with an
+  ellipsis to whatever the row can spare, as the delivery target beside it
+  already did.
+- **The Stereo Cloud looked broken on a mono source.** A built-in laptop
+  microphone has one channel, per-band stereo position needs two, and the
+  engine reports mono as dead centre — so every band plotted at the middle of
+  the display and the module drew one bright vertical line and nothing else,
+  which reads as a rendering fault rather than as a mono signal. It now says
+  **MONO SOURCE** across the face and leaves the axis empty. No measurement
+  changed; a stereo source draws exactly as before.
+
+- **Selecting a capture device did nothing.** Only the source chosen at launch
+  ever opened; every change made afterwards — from the status bar or from
+  Settings, to a microphone, an interface, a loopback device, Silence or back
+  to the test tone — was discarded. The choice was saved and reappeared as
+  selected the next time you looked, so the meters looked like the failure:
+  they went on showing the previous source, with its label, its channel count
+  and its elapsed clock still running, exactly as though no input were
+  reaching the machine. Each attempt also opened the device and held it with
+  nothing reading it, which is why the system's recording indicator came on
+  while the meters stayed on the test tone. Relaunching with the device already
+  selected was the only way through, and is no longer needed.
+
+- **Every panel's four corners were missing their border.** The surface is a
+  rounded clip over a square border, so the clip removed the corner of the
+  hairline along with everything else outside the arc: the border ran the flat
+  edges and stopped dead at each tangent, leaving four bare arcs of panel fill
+  fading into the barrier. The border now carries the same radius as the clip
+  and runs continuously around the corner. Settings, the preset browser, the
+  calibration editor, the report, the remote display panel and the shortcuts
+  sheet are all built from that one surface, so all six are corrected — as is
+  the startup notice, which had the same defect at a smaller radius.
+
+- **The elapsed clock sat two pixels high in the status bar.** It is painted
+  rather than built, and it was drawn from the top-left corner of a box taller
+  than the line it holds, so every spare pixel fell below the digits and the
+  clock rode above the optical centre of every label beside it. It now centres
+  its line in its box, which is what a `Text` does with the space it is given.
+
+- **Everything in the tab strip's action row sat a pixel below the tab names**
+  — most visibly the `+` that adds a tab, which stands directly beside the last
+  one. A tab reserves the height of the active-tab rule whether or not it is
+  the active tab, and the buttons reserved nothing, so the two rows of text
+  were centred in boxes of different heights. The `+` was low for a second
+  reason as well: a lone plus is drawn on the font's math axis, below the
+  middle of the band the words around it fill, and it is now raised onto their
+  line.
+
+- **The LUFS meter's two bars, and the digital meter's channels, shared one
+  background.** The gap between bars was painted in the trough colour, so it
+  only showed where one bar's fill had risen past the other's: two channels at
+  the same level read as a single wide bar, and two at different levels as one
+  bar with a step in it. Each bar now has its own trough and the gap shows the
+  module behind it. The scale, the target band and the integrated rule still
+  cross it — they belong to the meter, not to either bar.
+
+- **The VU meter's face had four drawing defects.** The needle was drawn from
+  behind its own pivot with a tail longer than the cap meant to hide it, so a
+  second short needle stuck out of the bottom pointing the other way. At rest
+  it lay along the −20 mark and struck that label through — and every reading
+  on the lower half of the face had the needle across it, because the labels
+  were inside the sweep. The six scale numbers were centred on a common radius
+  rather than cleared from the arc by a common gap, so they scattered, with `0`
+  hanging below its own tick. And the dial sat high and left in the tile with
+  the `VU` badge adrift in the empty corner. The needle now runs outwards only,
+  the labels sit outside the arc where nothing can cross them, each one clears
+  the arc by the same gap whatever its angle, and the badge sits under the
+  pivot where the needle cannot reach. **The ballistics and the scale are
+  unchanged — the needle points at the same mark it did before.**
+
+- **Four modules drew their contents in a corner instead of in the box.** A
+  Number Box put its reading against the left edge, which on an unavailable
+  reading left a single em dash alone in the corner of a four-cell tile,
+  looking like a rendering fault rather than "not measured yet". An Alert Meter
+  hung its block from the top edge of a module more than twice its height. The
+  Super Meter centred itself as though it were a full circle when it opens 120°
+  at the bottom, leaving a dead band a fifth of the module deep beneath it. The
+  Validator stopped its rows at 34 px each and left the rest of the tile blank.
+
+- **A one-row Number Box drew a title bar and nothing else.** A single grid row
+  is about 55 px, and the title bar and the module's inset account for all of
+  it, so the reading had no room and the painter returned without drawing —
+  blank, rather than the "too small" a module says when it cannot be read. The
+  minimum is two rows now, and a stored layout holding a one-row box is
+  clamped up rather than rejected.
+
+- **The delivery-target menu did not show which target was selected.** Both
+  arms of the ternary that picks the row colour returned the same value, so
+  every entry was drawn identically and the active target was indistinguishable
+  from the five it was listed with.
+
+- **The right-hand end of the status bar drifted away from the right edge.**
+  The elapsed clock, the calibration and the four buttons sat
+  progressively further from the window's right side the wider the window got,
+  leaving a growing empty stretch of bar beside them. They are now flush with
+  the edge at every width.
+
+- **The remote display panel could not be opened.** Pressing `REMOTE` in the
+  status bar threw "No BelTheme in scope" and left the panel unbuilt, in
+  release as well as debug — it was pushed with `showDialog`, so the
+  `Navigator` built it above the palette the application provides. It is now
+  pushed with `showBelPanel` like the other five, and a test opens it through
+  the button.
+
+- **Bel could not be built for iPadOS at all.** The engine was compiled as C on
+  every platform, but miniaudio's Core Audio backend is Objective-C on iOS —
+  it configures an `AVAudioSession`, which has no C interface — so the build
+  ended in several hundred errors inside Apple's `Foundation` headers, none of
+  which named a file in Bel. The iOS build now compiles as Objective-C and
+  links the frameworks miniaudio needs there. The tablet build is the remote
+  display, and it now runs on an iPad.
+- **The iPad build would have been terminated by iOS the first time an input
+  was chosen.** `NSMicrophoneUsageDescription` was missing from the app's
+  `Info.plist`, which is not an error the app can catch — the system kills a
+  process that touches the microphone without one.
+
+- **An iPad remembered nothing between launches** and opened with "no
+  configuration directory". Bel resolved its configuration from `HOME`, which
+  iOS does not set — so every layout, skin and connection was lost when the app
+  was closed. iPadOS now keeps its configuration in `Library/Application
+  Support/Bel` inside the app's own container, which Bel locates through the
+  temporary directory rather than the environment. An Android tablet still
+  persists nothing, and still says so at launch.
+
+- **A module's resize grip was drawn outside the module.** Both ticks ran to
+  the corner of the module's slot, which is past the frame's rounded border —
+  so they crossed the border and finished in the gutter between modules, and on
+  a selected module they cut through the selection outline. They now sit inside
+  the panel in both states; the area you can grab is unchanged.
+- **Selecting a module broke its own outline in two places.** The rule under
+  the title bar ran the full width of the frame and was painted after the
+  border, so it printed the dim hairline colour over the bright selection
+  border at each end. The rule now stops at the border's inner edge.
+
+- **Nothing in a panel could be reached from the keyboard.** Every control Bel
+  paints itself — buttons, toggles, segmented controls, list rows, icon targets
+  — was a bare gesture detector, so none of them took focus, none responded to
+  Enter or Space, none drew a focus ring, and none was visible to a screen
+  reader. Settings, presets and the delivery-target editor were mouse-only with
+  nothing on screen to say so. All of them are now focusable, keyboard
+  operable, and announced.
+
 - Changing the signal source could replace every meter on the canvas with a red
   error box reading "A MeterClock was used after being disposed". The old clock
   was torn down before the new one was installed, so any painter still mounted
@@ -309,9 +755,27 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   something was clicked. Focus fell back to the navigator's scope, which sits
   above the bindings, and a key event travels up from the focused node — so
   there was nothing below it to reach.
+- **Closing the host picker on a tablet while it was still searching threw.**
+  Ending the Bonjour browse suspends on the channel, and the rest of the stop —
+  which publishes an empty list of hosts — ran after the picker had already
+  disposed the notifier it publishes to. It surfaced as "A
+  ValueNotifier&lt;List&lt;DiscoveredHost&gt;&gt; was used after being disposed"
+  in the log, most reliably on a hot restart. The search is now published as
+  ended before anything is awaited, and teardown releases the browse without
+  publishing at all.
 
 ### 🚧 Internal
 
+- **Stopping the engine decides whether to join on the flag that tracks the
+  thread.** It tested `should_run` — the flag stop itself clears — so anything
+  that ever cleared it elsewhere would have turned destroying an engine into a
+  free underneath a live analysis thread. It now tests whether a thread was
+  started and not yet joined.
+- **`PersistenceLayer` is gone, and with it the last `toImageSync` in the
+  application.** `PointBuckets` replaces it: marks sorted by the colour they
+  are drawn in, so a display of thirty thousand of them is a few dozen calls
+  rather than thirty thousand. `test/history_modules_test.dart` fails if any of
+  the three modules creates an image between frames again.
 - **`packages/bel_wire`** — the wire protocol, pure Dart and MIT, specified
   byte for byte in `docs/WIRE.md`. Three implementations speak it and none of
   them was written against another: the app's host, the app's display, and the
@@ -388,9 +852,9 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   three times as much and could disagree about where a peak is.
 - Three primitives came out of writing the modules rather than being guessed at
   in advance: a shared dB scale and graticule, a paragraph cache that re-lays
-  out only when a formatted string actually changes, and a persistence layer
-  that owns the `toImageSync` ping-pong **and its disposal** — a dropped GPU
-  texture leaks video memory on a machine that reports plenty of free memory.
+  out only when a formatted string actually changes, and a buffer of marks
+  sorted by the colour they are drawn in, which is how a display made of tens
+  of thousands of them stays a few dozen draw calls.
 - The accumulating modules advance on the engine's publish counter rather than
   on every paint, so a resize or a theme change cannot scroll a spectrogram
   through time that no audio passed through.

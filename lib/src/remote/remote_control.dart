@@ -5,13 +5,15 @@ import 'package:bel_ui/bel_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../app/bar_controls.dart';
 import '../canvas/workspace.dart';
 import '../data/providers.dart';
 import 'display_screen.dart';
+import 'host_picker.dart';
 import 'mdns/mdns_service.dart';
 import 'remote_display_service.dart';
 
-/// The status-bar entry for the remote display, and the panel behind it.
+/// The status-bar entry for the remote display, and the panels behind it.
 ///
 /// This is the whole of Phase 6's footprint in the desktop app: one widget in
 /// one row. It owns the [RemoteDisplayService] rather than putting it in a
@@ -47,8 +49,6 @@ class _RemoteDisplayControlState extends ConsumerState<RemoteDisplayControl> {
 
   @override
   Widget build(BuildContext context) {
-    final colors = BelTheme.of(context);
-
     // The service holds no configuration of its own: name, port and rate live
     // in the settings, are persisted with everything else, and arrive here.
     // Whether to *publish* is deliberately not among them — see the panel.
@@ -69,48 +69,170 @@ class _RemoteDisplayControlState extends ConsumerState<RemoteDisplayControl> {
       calibration: ref.watch(calibrationProvider),
     );
 
+    // A `BarButton` like the four beside it, not a `TextButton`. A stock
+    // Material button in this row has no border where its neighbours have one,
+    // Material's own minimum size rather than the bar's, an ink ripple nothing
+    // else in Bel draws, and no keyboard focus ring — five differences that
+    // read as one: the button that does not belong here.
     return ValueListenableBuilder<bool>(
       valueListenable: _service.isPublishing,
       builder: (context, publishing, _) => ValueListenableBuilder<int>(
         valueListenable: _service.clients,
-        builder: (context, clients, _) => TextButton(
+        builder: (context, clients, _) => BarButton(
+          // "Listening" and "being watched" are different facts, and both have
+          // to be legible from the bar: publishing on an unauthenticated socket
+          // is something the user has to be able to see without opening
+          // anything. Brightness carries the first and the count carries the
+          // second — see `BarButton.lit` for why neither is a hue.
+          label: publishing
+              ? (clients == 0 ? 'REMOTE · ON' : 'REMOTE · $clients')
+              : 'REMOTE',
+          lit: publishing,
+          tooltip: switch ((publishing, clients)) {
+            (false, _) =>
+              'Send these meters to another screen, or show another '
+                  'machine’s here.',
+            (true, 0) => 'Publishing to this network. No displays attached.',
+            (true, 1) => 'Publishing to this network. 1 display attached.',
+            (true, final n) =>
+              'Publishing to this network. $n displays attached.',
+          },
           onPressed: () => _open(context),
-          child: Text(
-            publishing
-                ? (clients == 0 ? 'REMOTE · ON' : 'REMOTE · $clients')
-                : 'REMOTE',
-            style: BelType.label.copyWith(
-              // Lit only when something is actually attached. "Listening" and
-              // "being watched" are different facts and the second is the one
-              // worth a colour.
-              color: clients > 0
-                  ? colors.accent
-                  : (publishing ? colors.textPrimary : colors.textMuted),
-            ),
-          ),
         ),
       ),
     );
   }
 
   void _open(BuildContext context) {
-    showDialog<void>(
+    // `showBelPanel`, not `showDialog`. A route is built by the `Navigator`,
+    // which sits above `MaterialApp.home` and therefore above the application's
+    // `BelTheme` — so a panel that reads the palette the obvious way throws
+    // "No BelTheme in scope" the moment it opens, in release as well as debug.
+    // This one did, for the whole of Phase 6: the button was unclickable and
+    // nothing said so until somebody pressed it.
+    showBelPanel<void>(
       context: context,
-      builder: (context) => _RemotePanel(service: _service),
+      builder: (context) => _PairingPanel(service: _service),
     );
   }
 }
 
-class _RemotePanel extends ConsumerStatefulWidget {
-  const _RemotePanel({required this.service});
+/// Which end of the link this machine is.
+///
+/// **The question is asked before either answer is configured, because the two
+/// answers have nothing in common.** Sending is a socket, a name and a rate on
+/// *this* machine; receiving is a search for somebody else's. They were one
+/// dialog with the receiving half behind a footer button marked "Use as
+/// display" — which put a whole second mode in the row where a panel says "the
+/// ways out of here are", so the tablet half of the feature was reachable only
+/// by pressing the button that looked most like Cancel.
+///
+/// The second panel is *pushed* rather than this one swapping its own body.
+/// `showBelPanel` is a `showGeneralDialog` route with a zero-length transition,
+/// so pushing costs nothing on screen, Escape and the system back gesture
+/// return here for free, and each panel stays a plain widget with its own
+/// title. A panel that mutated its own body would have to hand-roll the back
+/// stack the Navigator is already keeping.
+class _PairingPanel extends StatelessWidget {
+  const _PairingPanel({required this.service});
 
   final RemoteDisplayService service;
 
   @override
-  ConsumerState<_RemotePanel> createState() => _RemotePanelState();
+  Widget build(BuildContext context) {
+    return PanelScaffold(
+      title: 'Remote',
+      onClose: () => Navigator.of(context).pop(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          PanelSection(
+            title: 'Send or receive',
+            ruled: false,
+            note:
+                'Bel can send these meters to another screen, or become a '
+                'screen for a Bel running somewhere else.',
+            children: [
+              ValueListenableBuilder<bool>(
+                valueListenable: service.isPublishing,
+                builder: (context, publishing, _) =>
+                    ValueListenableBuilder<int>(
+                      valueListenable: service.clients,
+                      builder: (context, clients, _) => PanelListRow(
+                        title: 'Send these meters',
+                        // The row carries the live state, so "am I already
+                        // publishing" is answered on the first screen rather
+                        // than one panel deeper.
+                        note: switch ((publishing, clients)) {
+                          (false, _) =>
+                            'Publish this machine’s measurements to tablets '
+                                'and laptops on this network.',
+                          (true, 0) => 'Publishing. No displays attached.',
+                          (true, 1) => 'Publishing. 1 display attached.',
+                          (true, final n) =>
+                            'Publishing. $n displays attached.',
+                        },
+                        selected: publishing,
+                        onTap: () => showBelPanel<void>(
+                          context: context,
+                          builder: (context) => _SendPanel(service: service),
+                        ),
+                      ),
+                    ),
+              ),
+              PanelListRow(
+                title: 'Show another machine',
+                note:
+                    'Turn this screen into a display for a Bel running '
+                    'elsewhere. It shows only — it cannot change what that '
+                    'machine is measuring.',
+                onTap: () => _receive(context),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Picks a host, then leaves the panels behind for the display itself.
+  ///
+  /// Both panels come off the stack before the screen goes on. A display is
+  /// where a tablet stays, and a modal left open underneath it would put the
+  /// canvas back the first time somebody pressed Escape at the meters.
+  Future<void> _receive(BuildContext context) async {
+    final navigator = Navigator.of(context);
+
+    await showBelPanel<void>(
+      context: context,
+      builder: (context) => HostPickerPanel(
+        onClose: () => Navigator.of(context).pop(),
+        onConnect: (host, port) {
+          navigator
+            ..pop()
+            ..pop();
+          navigator.push(
+            MaterialPageRoute<void>(
+              builder: (_) => RemoteDisplayScreen(host: host, port: port),
+            ),
+          );
+        },
+      ),
+    );
+  }
 }
 
-class _RemotePanelState extends ConsumerState<_RemotePanel> {
+/// The sending half: the socket, what it is called, and how often it speaks.
+class _SendPanel extends ConsumerStatefulWidget {
+  const _SendPanel({required this.service});
+
+  final RemoteDisplayService service;
+
+  @override
+  ConsumerState<_SendPanel> createState() => _SendPanelState();
+}
+
+class _SendPanelState extends ConsumerState<_SendPanel> {
   late final TextEditingController _port = TextEditingController(
     text: '${widget.service.port}',
   );
@@ -161,197 +283,134 @@ class _RemotePanelState extends ConsumerState<_RemotePanel> {
     // frame after somebody chose it.
     final settings = ref.watch(settingsProvider);
 
-    return AlertDialog(
-      backgroundColor: colors.panel,
-      title: Text(
-        'Remote display',
-        style: BelType.body.copyWith(
-          color: colors.textPrimary,
-          fontWeight: FontWeight.w600,
-        ),
+    return PanelScaffold(
+      title: 'Send these meters',
+      onClose: () => Navigator.of(context).pop(),
+      footer: Row(
+        children: [
+          const Spacer(),
+          BelButton(
+            label: 'Done',
+            emphasis: ButtonEmphasis.primary,
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+        ],
       ),
-      content: SizedBox(
-        width: 420,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Publishes these meters to tablets on this network. Displays can '
-              'only watch — they cannot reset, retarget or reconfigure this '
-              'machine. There is no password on the connection, so leave it '
-              'off on a network you do not trust.',
-              style: BelType.label.copyWith(color: colors.textMuted),
-            ),
-            const SizedBox(height: Space.md),
-
-            ValueListenableBuilder<bool>(
-              valueListenable: service.isPublishing,
-              builder: (context, publishing, _) => Row(
-                children: [
-                  Switch(
-                    value: publishing,
-                    onChanged: (value) async {
-                      await service.setEnabled(value);
-                      if (context.mounted) setState(() {});
-                    },
-                  ),
-                  const SizedBox(width: Space.sm),
-                  Text(
-                    publishing ? 'Publishing' : 'Off',
-                    style: BelType.body.copyWith(color: colors.textPrimary),
-                  ),
-                  const Spacer(),
-                  ValueListenableBuilder<int>(
-                    valueListenable: service.clients,
-                    builder: (context, clients, _) => Text(
-                      clients == 1 ? '1 display' : '$clients displays',
-                      style: BelType.label.copyWith(color: colors.textMuted),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            ValueListenableBuilder<String?>(
-              valueListenable: service.failure,
-              builder: (context, failure, _) => failure == null
-                  ? const SizedBox.shrink()
-                  : Padding(
-                      padding: const EdgeInsets.only(top: Space.sm),
-                      child: Text(
-                        // Named out loud, because the common cause is a refused
-                        // local-network permission, and the symptom without
-                        // this line is a host nobody can find for no stated
-                        // reason.
-                        'Could not publish: $failure',
-                        style: BelType.label.copyWith(color: colors.over),
-                      ),
-                    ),
-            ),
-
-            const SizedBox(height: Space.md),
-            Row(
-              children: [
-                Expanded(
-                  child: _Field(
-                    label: 'Name',
-                    controller: _name,
-                    onSubmitted: _apply,
-                  ),
-                ),
-                const SizedBox(width: Space.sm),
-                SizedBox(
-                  width: 96,
-                  child: _Field(
-                    label: 'Port',
-                    controller: _port,
-                    onSubmitted: _apply,
-                  ),
-                ),
-                const SizedBox(width: Space.sm),
-                TextButton(onPressed: _apply, child: const Text('APPLY')),
-              ],
-            ),
-
-            const SizedBox(height: Space.md),
-            Text(
-              'Update rate',
-              style: BelType.label.copyWith(color: colors.textMuted),
-            ),
-            const SizedBox(height: Space.xs),
-            Row(
-              children: [
-                for (final fps in kRemoteFpsOptions)
-                  Padding(
-                    padding: const EdgeInsets.only(right: Space.xs),
-                    child: TextButton(
-                      onPressed: () {
-                        ref
-                            .read(settingsProvider.notifier)
-                            .setRemoteDisplay(fps: fps);
-                        setState(() {});
-                      },
-                      child: Text(
-                        '$fps',
-                        style: BelType.label.copyWith(
-                          color: settings.remoteDisplayFps == fps
-                              ? colors.accent
-                              : colors.textMuted,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          PanelSection(
+            title: 'Publishing',
+            ruled: false,
+            note:
+                'Sends these meters to displays on this network. A display can '
+                'only watch — it cannot reset, retarget or reconfigure this '
+                'machine.',
+            children: [
+              ValueListenableBuilder<bool>(
+                valueListenable: service.isPublishing,
+                builder: (context, publishing, _) =>
+                    ValueListenableBuilder<int>(
+                      valueListenable: service.clients,
+                      builder: (context, clients, _) => PanelRow(
+                        label: 'Publish to this network',
+                        note: switch ((publishing, clients)) {
+                          (false, _) => 'Off.',
+                          (true, 0) => 'Publishing. No displays attached.',
+                          (true, 1) => 'Publishing. 1 display attached.',
+                          (true, final n) =>
+                            'Publishing. $n displays attached.',
+                        },
+                        child: BelToggle(
+                          value: publishing,
+                          semanticLabel: 'Publish to this network',
+                          onChanged: (value) async {
+                            await service.setEnabled(value);
+                            if (context.mounted) setState(() {});
+                          },
                         ),
                       ),
                     ),
-                  ),
-                const Spacer(),
-                Text(
-                  'measurements per second',
-                  style: BelType.label.copyWith(color: colors.textMuted),
+              ),
+              PanelRow(
+                label: 'Update rate',
+                note: 'Measurements per second sent to each display.',
+                child: SegmentedControl<int>(
+                  value: settings.remoteDisplayFps,
+                  segments: [
+                    for (final fps in kRemoteFpsOptions)
+                      (value: fps, label: '$fps'),
+                  ],
+                  onChanged: (fps) {
+                    ref
+                        .read(settingsProvider.notifier)
+                        .setRemoteDisplay(fps: fps);
+                    setState(() {});
+                  },
                 ),
-              ],
-            ),
-
-            if (_addresses.isNotEmpty) ...[
-              const SizedBox(height: Space.md),
-              Text(
-                // Shown whether or not discovery is working. A tablet on a
-                // network that blocks multicast needs somewhere to look, and
-                // being told after it has already failed is too late.
-                'If a tablet cannot find this machine, enter '
-                '${_addresses.first}:${settings.remoteDisplayPort}',
-                style: BelType.label.copyWith(color: colors.textMuted),
+              ),
+              PanelNote(
+                'There is no password on the connection. Anyone on this '
+                'network who can find it can watch these meters, so leave it '
+                'off on a network you do not trust.',
+                tone: colors.warn,
+              ),
+              ValueListenableBuilder<String?>(
+                valueListenable: service.failure,
+                builder: (context, failure, _) => failure == null
+                    ? const SizedBox.shrink()
+                    // Named out loud, because the common cause is a refused
+                    // local-network permission, and the symptom without this
+                    // line is a host nobody can find for no stated reason.
+                    : PanelNote(
+                        'Could not publish: $failure',
+                        tone: colors.over,
+                      ),
               ),
             ],
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () {
-            Navigator.of(context).pop();
-            Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) => const RemoteDisplayScreen(),
+          ),
+
+          PanelSection(
+            title: 'Where to find this machine',
+            note:
+                'The name displays list this machine under, and the port it '
+                'listens on.',
+            children: [
+              PanelRow(
+                label: 'Name',
+                child: BelTextField(
+                  controller: _name,
+                  width: 220,
+                  onSubmitted: (_) => _apply(),
+                ),
               ),
-            );
-          },
-          child: const Text('USE AS DISPLAY'),
-        ),
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('CLOSE'),
-        ),
-      ],
-    );
-  }
-}
-
-class _Field extends StatelessWidget {
-  const _Field({
-    required this.label,
-    required this.controller,
-    required this.onSubmitted,
-  });
-
-  final String label;
-  final TextEditingController controller;
-  final VoidCallback onSubmitted;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = BelTheme.of(context);
-
-    return TextField(
-      controller: controller,
-      style: BelType.body.copyWith(color: colors.textPrimary),
-      onSubmitted: (_) => onSubmitted(),
-      decoration: InputDecoration(
-        labelText: label,
-        labelStyle: BelType.label.copyWith(color: colors.textMuted),
-        isDense: true,
-        border: OutlineInputBorder(
-          borderRadius: BelRadius.allMd,
-          borderSide: BorderSide(color: colors.hairline),
-        ),
+              PanelRow(
+                label: 'Port',
+                child: BelTextField(
+                  controller: _port,
+                  width: 96,
+                  numeric: true,
+                  onSubmitted: (_) => _apply(),
+                ),
+              ),
+              // Unlike the settings panel, these two do not write through as
+              // they are typed: a port is not a valid port until it is
+              // finished, and binding to each prefix of one as it is entered
+              // would move the socket three times on the way to 5560.
+              PanelActions(
+                children: [BelButton(label: 'Apply', onPressed: _apply)],
+              ),
+              // Shown whether or not discovery is working. A tablet on a
+              // network that blocks multicast needs somewhere to look, and
+              // being told after it has already failed is too late.
+              if (_addresses.isNotEmpty)
+                PanelNote(
+                  'If a display cannot find this machine, type '
+                  '${_addresses.first}:${settings.remoteDisplayPort} into it.',
+                ),
+            ],
+          ),
+        ],
       ),
     );
   }

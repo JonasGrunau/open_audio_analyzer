@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:bel_core/bel_core.dart';
@@ -12,7 +13,7 @@ import '../data/metric_reader.dart';
 /// One measurement, watched, with the worst it has been **latched**.
 ///
 /// The latch is the entire module. Every other meter here answers "what is it
-/// doing now", and nobody watches twelve of those continuously — you play a
+/// doing now", and nobody watches thirteen of those continuously — you play a
 /// mix, you talk to someone, and the one moment true peak went over is three
 /// minutes in the past and gone from every display. This one keeps it until it
 /// is cleared, which is the only way a warning about a transient is any use.
@@ -158,8 +159,6 @@ class _AlertPainter extends MeterPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (size.width < 48 || size.height < 28) return;
-
     final value = readMetric(engine, metric);
     final reading = classify(metric, value, calibration);
     state.observe(reading, value);
@@ -184,36 +183,70 @@ class _AlertPainter extends MeterPainter {
     _rule.color = latched;
     canvas.drawLine(const Offset(1, 0), Offset(1, size.height), _rule);
 
-    canvas.drawParagraph(state._name!, const Offset(Space.sm, 0));
-
-    final fontSize = (size.height * 0.42).clamp(14.0, 44.0);
+    final name = state._name!;
+    // **Sized off both axes, and not capped at a size a large module dwarfs.**
+    // Height alone overflowed a wide, short module, and the old ceiling of 44
+    // meant an Alert Meter given a quarter of a 27" display drew the same
+    // digits as one in a corner — the module this one exists to be read from
+    // across a room, at the size where that matters least. The width term is
+    // what keeps a long reading inside the box; the ceiling is now high enough
+    // that the box is what limits it.
+    final fontSize = math
+        .min(size.height * 0.42, size.width * 0.30)
+        .clamp(14.0, 96.0)
+        .toDouble();
     final live = state._value.of(
       metric.format(value),
       BelType.reading(fontSize).copyWith(color: color),
-      maxWidth: size.width - Space.sm,
+      maxWidth: size.width - _textLeft,
     );
-    canvas.drawParagraph(
-      live,
-      Offset(Space.sm, state._name!.height + Space.xxs),
-    );
+
+    // **The block is centred in the module, not hung from its top edge.**
+    // Drawn from the origin it sat in the top-left corner of a module more
+    // than twice its height, leaving two thirds of the tile empty below it —
+    // and since the latched line is conditional, the amount of emptiness
+    // changed depending on whether there was room for it.
+    // The latched value tracks the live one at roughly a third of its size, so
+    // the two keep the same relationship at every module size. Its label does
+    // not: `WORST` is a label, and labels are the same everywhere on the
+    // canvas — scaling those is how thirteen modules end up with thirteen type
+    // scales.
+    final worstSize = (fontSize * 0.32).clamp(12.0, 26.0).toDouble();
+    final worstHeight = worstSize + Space.xxs;
+    final hasWorst =
+        name.height + Space.xxs + live.height + worstHeight < size.height;
+
+    final blockHeight =
+        name.height + Space.xxs + live.height + (hasWorst ? worstHeight : 0);
+    var top = (size.height - blockHeight) / 2;
+    if (top < 0) top = 0;
+
+    canvas.drawParagraph(name, Offset(_textLeft, top));
+
+    final liveTop = top + name.height + Space.xxs;
+    canvas.drawParagraph(live, Offset(_textLeft, liveTop));
 
     // The latched value, small, under the live one. Small on purpose: it is
     // history, and history that shouts is history that gets ignored.
-    final worstTop = state._name!.height + Space.xxs + live.height + Space.xxs;
-    if (worstTop + BelType.readingSmall.fontSize! < size.height) {
-      canvas.drawParagraph(state._worstLabel!, Offset(Space.sm, worstTop));
+    if (hasWorst) {
+      final worstTop = liveTop + live.height + Space.xxs;
+      canvas.drawParagraph(state._worstLabel!, Offset(_textLeft, worstTop));
       canvas.drawParagraph(
         state._worstValue.of(
           metric.format(state.worstValue),
-          BelType.readingSmall.copyWith(color: latched),
+          BelType.reading(worstSize).copyWith(color: latched),
         ),
         Offset(
-          Space.sm + state._worstLabel!.longestLine + Space.xs,
+          _textLeft + state._worstLabel!.longestLine + Space.xs,
           worstTop - 1,
         ),
       );
     }
   }
+
+  /// Clear of the latched-state rule down the left edge, which is 2 px wide
+  /// and centred on x = 1.
+  static const double _textLeft = Space.sm;
 
   @override
   bool shouldRepaint(_AlertPainter oldDelegate) =>

@@ -72,12 +72,69 @@ void main() {
       );
     });
 
+    test('iOS uses the data container the temporary directory names', () {
+      // An iPad has no HOME at all, which is why the Unix branch used to
+      // resolve to nothing there and the app opened remembering nothing.
+      const container = '/private/var/mobile/Containers/Data/Application/A1B2';
+      expect(
+        resolveConfigRoot(
+          operatingSystem: 'ios',
+          environment: {},
+          temporaryDirectory: '$container/tmp',
+        ),
+        '$container/Library/Application Support/Bel',
+      );
+      // TMPDIR arrives with a trailing slash on a device.
+      expect(
+        resolveConfigRoot(
+          operatingSystem: 'ios',
+          environment: {},
+          temporaryDirectory: '$container/tmp/',
+        ),
+        '$container/Library/Application Support/Bel',
+      );
+    });
+
+    test('iOS resolves to nothing rather than to a path outside the app', () {
+      // `/tmp` is what a process with no TMPDIR gets. Its parent is `/`, and
+      // `/Library/Application Support/Bel` would fail at write time as a
+      // permission error, which reads like a broken install.
+      for (final temp in ['/tmp', '/tmp/', 'tmp', '/', '']) {
+        expect(
+          resolveConfigRoot(
+            operatingSystem: 'ios',
+            environment: {'HOME': '/var/mobile'},
+            temporaryDirectory: temp,
+          ),
+          isNull,
+          reason: 'temporary directory "$temp"',
+        );
+      }
+      expect(
+        resolveConfigRoot(operatingSystem: 'ios', environment: {}),
+        isNull,
+      );
+    });
+
+    test('the temporary directory is ignored off iOS', () {
+      expect(
+        resolveConfigRoot(
+          operatingSystem: 'macos',
+          environment: {'HOME': '/Users/jo'},
+          temporaryDirectory: '/private/var/mobile/Containers/Data/App/A1/tmp',
+        ),
+        '/Users/jo/Library/Application Support/Bel',
+      );
+    });
+
     test('the override beats every platform rule', () {
-      for (final os in ['macos', 'windows', 'linux']) {
+      for (final os in ['macos', 'windows', 'linux', 'ios']) {
         expect(
           resolveConfigRoot(
             operatingSystem: os,
             environment: {kConfigDirEnvVar: '/tmp/bel', 'HOME': '/home/jo'},
+            temporaryDirectory:
+                '/private/var/mobile/Containers/Data/App/A1/tmp',
           ),
           '/tmp/bel',
         );

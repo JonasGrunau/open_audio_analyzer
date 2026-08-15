@@ -23,6 +23,28 @@ import '../clock/meter_clock.dart';
 /// whatever leaked into it. Over a few seconds the persistent parts of the
 /// image emerge from the noise and the transient parts fade, which is exactly
 /// the distinction a mix engineer is trying to make.
+///
+/// ---------------------------------------------------------------------------
+/// The accumulation is a grid of numbers, not a picture
+///
+/// This module used to accumulate into an image: draw last frame's picture back
+/// at 96.5%, add this frame's dots, keep the result. The image came from
+/// `toImageSync`, which holds the display list that drew it for as long as the
+/// image lives — so each frame's image pinned the one before it, back to the
+/// first, and none of it was ever released. See the header of
+/// `spectrogram.dart` for what that cost.
+///
+/// What the image actually held was one number per cell: how bright this bit of
+/// the plot is right now. So that is what is kept — a `Float32List` of
+/// [_cell]-sized cells, faded in place on each published frame and splatted
+/// into by the bands that are loud enough. The whole grid is then drawn as
+/// points sorted into [_alphaSteps] brightness buckets, which is that many draw
+/// calls rather than one per cell.
+///
+/// It costs one pass over the grid per published frame and one to emit it,
+/// which is proportional to the module's *area* rather than to how long the
+/// session has been running. That is the property the image version did not
+/// have.
 class StereoCloudModule extends StatefulWidget {
   const StereoCloudModule({
     required this.engine,
@@ -37,29 +59,101 @@ class StereoCloudModule extends StatefulWidget {
   State<StereoCloudModule> createState() => _StereoCloudModuleState();
 }
 
-/// How many brightness passes the bands are sorted into. Each is one
+/// How many brightness buckets the accumulated grid is drawn in. Each is one
 /// `drawRawPoints` call, so this is also the number of draw calls per frame.
-const int _levels = 5;
+/// Sixteen steps of alpha on a soft cloud are not distinguishable from a
+/// continuous ramp.
+const int _alphaSteps = 16;
+
+/// The side of an accumulator cell, in logical pixels — and the size of the dot
+/// drawn for it, which is the dot size this module has always used. Cells any
+/// finer would cost four times the passes to draw the same picture.
+const double _cell = 2.0;
 
 class _StereoCloudModuleState extends State<StereoCloudModule> {
-  final _cloud = PersistenceLayer();
+  /// Brightness per cell, `0..1`. The picture the module used to keep, as the
+  /// numbers it was a picture of.
+  Float32List _grid = Float32List(0);
+  int _columns = 0;
+  int _rows = 0;
 
-  /// One buffer, refilled and drawn once per brightness pass. Sized for the
-  /// worst case of every band landing in the same pass.
-  final Float32List _points = Float32List(kBelSpectrumBands * 2);
+  /// The emitted grid, sorted by brightness.
+  final _marks = PointBuckets(_alphaSteps);
 
+  /// One [Paint] per brightness bucket.
   List<Paint> _passes = const [];
   Color? _builtFor;
   ui.Paragraph? _left;
   ui.Paragraph? _right;
+  ui.Paragraph? _mono;
   List<ui.Paragraph> _frequencyLabels = const [];
 
-  int lastGeneration = -1;
+  /// Generation 0 is "nothing has been measured yet". The arrays behind a fresh
+  /// source are zeroed, which as dB is full scale on every band, at a pan of
+  /// dead centre — a bright line down the middle of the cloud that then takes
+  /// several seconds to fade, before any audio has arrived.
+  int lastGeneration = 0;
 
-  @override
-  void dispose() {
-    _cloud.dispose();
-    super.dispose();
+  /// Reallocates the grid when the plot changes size, and reports whether it
+  /// did. The accumulation is dropped: it is in cells, and the same cell means
+  /// a different pan and a different band once the plot has moved under it.
+  bool resize(Size plot) {
+    final columns = (plot.width / _cell).ceil();
+    final rows = (plot.height / _cell).ceil();
+    if (columns == _columns && rows == _rows) return false;
+    _columns = columns;
+    _rows = rows;
+    _grid = Float32List(columns * rows);
+    return true;
+  }
+
+  /// Everything dims by [decay], once per published frame.
+  void fade(double decay) {
+    for (var cell = 0; cell < _grid.length; cell++) {
+      _grid[cell] *= decay;
+    }
+  }
+
+  /// Adds a dot of [alpha] at ([x], [y]) in cells, spread across the four cells
+  /// it lies between.
+  ///
+  /// The spread is what keeps the cloud smooth. Rounding to the nearest cell
+  /// instead would quantise every band's pan to two logical pixels, and a bass
+  /// note drifting slowly off centre — the thing this module exists to show —
+  /// would move in visible steps rather than sliding.
+  void splat(double x, double y, double alpha) {
+    final left = x.floor();
+    final top = y.floor();
+    final fx = x - left;
+    final fy = y - top;
+
+    _add(left, top, alpha * (1 - fx) * (1 - fy));
+    _add(left + 1, top, alpha * fx * (1 - fy));
+    _add(left, top + 1, alpha * (1 - fx) * fy);
+    _add(left + 1, top + 1, alpha * fx * fy);
+  }
+
+  void _add(int column, int row, double alpha) {
+    if (column < 0 || column >= _columns || row < 0 || row >= _rows) return;
+    final cell = row * _columns + column;
+    final was = _grid[cell];
+    // What drawing a dot of this alpha over the cell would have done.
+    _grid[cell] = was + alpha * (1 - was);
+  }
+
+  /// Sorts every cell that is above one part in 255 — the point below which a
+  /// surface cannot show it — into a brightness bucket.
+  void emit() {
+    _marks.clear();
+    for (var row = 0; row < _rows; row++) {
+      final base = row * _columns;
+      for (var column = 0; column < _columns; column++) {
+        final value = _grid[base + column];
+        if (value < 1 / 255) continue;
+        final bucket = (value * _alphaSteps).ceil().clamp(1, _alphaSteps) - 1;
+        _marks.point(bucket, (column + 0.5) * _cell, (row + 0.5) * _cell);
+      }
+    }
   }
 
   @override
@@ -69,17 +163,26 @@ class _StereoCloudModuleState extends State<StereoCloudModule> {
     if (_builtFor != colors.accent) {
       _builtFor = colors.accent;
       _passes = [
-        for (var level = 0; level < _levels; level++)
+        for (var step = 0; step < _alphaSteps; step++)
           Paint()
-            ..color = colors.accent.withValues(
-              alpha: 0.12 + 0.88 * (level / (_levels - 1)),
-            )
+            ..color = colors.accent.withValues(alpha: (step + 1) / _alphaSteps)
+            // A round, antialiased dot per cell, half again as wide as the
+            // cell so that neighbours overlap. Square dots tile the grid
+            // exactly and are cheaper, but they turn the cloud into a mosaic;
+            // round ones at exactly the cell pitch leave the corners between
+            // them dark, which reads as a halftone screen. The shape of the
+            // cloud is the whole reading, so it is worth the overlap.
+            ..strokeWidth = _cell * 1.5
             ..strokeCap = StrokeCap.round,
       ];
 
       final style = BelType.tick.copyWith(color: colors.textFaint);
       _left = layoutParagraph('L', style);
       _right = layoutParagraph('R', style);
+      _mono = layoutParagraph(
+        'MONO SOURCE',
+        BelType.label.copyWith(color: colors.textMuted),
+      );
       _frequencyLabels = [
         for (final hz in _axisHz)
           layoutParagraph(
@@ -93,9 +196,7 @@ class _StereoCloudModuleState extends State<StereoCloudModule> {
       painter: _StereoCloudPainter(
         engine: widget.engine,
         colors: colors,
-        cloud: _cloud,
         state: this,
-        devicePixelRatio: MediaQuery.devicePixelRatioOf(context),
         repaint: widget.clock,
       ),
     );
@@ -108,14 +209,9 @@ class _StereoCloudPainter extends MeterPainter {
   _StereoCloudPainter({
     required this.engine,
     required this.colors,
-    required this.cloud,
     required this.state,
-    required this.devicePixelRatio,
     required Listenable repaint,
-  }) : _fade = (Paint()
-         ..color = const Color(0xFFFFFFFF).withValues(alpha: _decay)),
-       _blit = Paint(),
-       _guide = (Paint()
+  }) : _guide = (Paint()
          ..color = colors.hairline
          ..strokeWidth = BelStroke.hairline
          ..isAntiAlias = false),
@@ -127,12 +223,8 @@ class _StereoCloudPainter extends MeterPainter {
 
   final MeterSource engine;
   final BelColors colors;
-  final PersistenceLayer cloud;
   final _StereoCloudModuleState state;
-  final double devicePixelRatio;
 
-  final Paint _fade;
-  final Paint _blit;
   final Paint _guide;
   final Paint _centreGuide;
 
@@ -147,32 +239,59 @@ class _StereoCloudPainter extends MeterPainter {
   static const double _floorDb = -78;
   static const double _ceilingDb = -12;
 
-  static const double _pointSize = 2.0;
   static const double _labelStrip = 12;
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (size.width < 80 || size.height < 60 || state._passes.isEmpty) return;
+    if (state._passes.isEmpty) return;
 
     final plot = Size(size.width, size.height - _labelStrip);
-    if (plot.height < 40) return;
+    if (plot.height < 40 || plot.width <= 0) return;
 
-    if (engine.generation != state.lastGeneration) {
+    // A one-channel source has no stereo position to plot, and the engine says
+    // so the way it says it for `correlation` and `balance`: mono is dead
+    // centre. Drawing that is a confident bright line down the middle of the
+    // display for every band at once — which is indistinguishable from a broken
+    // module, and was reported as one. The fade still runs, so switching to a
+    // mono device dissolves the previous cloud rather than freezing it.
+    final stereo = engine.channels >= 2;
+
+    var stale = state.resize(plot);
+
+    if (engine.generation != 0 && engine.generation != state.lastGeneration) {
       state.lastGeneration = engine.generation;
-      cloud.update(plot, devicePixelRatio, (layer, previous) {
-        cloud.replay(layer, previous, plot, _fade);
-        if (engine.hasSpectrum) _plot(layer, plot);
-      });
+      state.fade(_decay);
+      if (stereo && engine.hasSpectrum) _accumulate(plot);
+      stale = true;
     }
 
-    cloud.paint(canvas, plot, _blit);
+    if (stale) state.emit();
+    state._marks.draw(canvas, ui.PointMode.points, state._passes);
 
     // --- Guides -------------------------------------------------------------
-    canvas.drawLine(
-      Offset(plot.width / 2, 0),
-      Offset(plot.width / 2, plot.height),
-      _centreGuide,
-    );
+    final centre = plot.width / 2;
+    if (stereo) {
+      canvas.drawLine(
+        Offset(centre, 0),
+        Offset(centre, plot.height),
+        _centreGuide,
+      );
+    } else {
+      // Broken around the notice below. A hairline through the middle of a
+      // word reads as a strikethrough, which is the opposite of what the
+      // notice says.
+      final gap = state._mono!.height / 2 + Space.xs;
+      canvas.drawLine(
+        Offset(centre, 0),
+        Offset(centre, plot.height / 2 - gap),
+        _centreGuide,
+      );
+      canvas.drawLine(
+        Offset(centre, plot.height / 2 + gap),
+        Offset(centre, plot.height),
+        _centreGuide,
+      );
+    }
     for (var i = 0; i < _axisHz.length; i++) {
       final y = _y(plot, bandOfHz(_axisHz[i]));
       canvas.drawLine(Offset(0, y), Offset(plot.width, y), _guide);
@@ -186,40 +305,39 @@ class _StereoCloudPainter extends MeterPainter {
       right,
       Offset(size.width - right.longestLine, plot.height + Space.xxs),
     );
+
+    if (!stereo) {
+      // The axis stays drawn beneath it. The module is not unavailable — it is
+      // showing everything a mono signal has, which is why it names the reason
+      // rather than blanking the face.
+      final mono = state._mono!;
+      canvas.drawParagraph(
+        mono,
+        Offset(
+          (plot.width - mono.longestLine) / 2,
+          (plot.height - mono.height) / 2,
+        ),
+      );
+    }
   }
 
-  /// One pass per brightness level, each a single call.
-  ///
-  /// Sorting into passes rather than drawing points one at a time is what keeps
-  /// this to five draw calls instead of five hundred, and `drawRawPoints` takes
-  /// exactly one colour — so brightness has to *be* the grouping.
-  void _plot(Canvas layer, Size plot) {
-    for (var level = 0; level < _levels; level++) {
-      var written = 0;
+  /// Splats this frame's bands into the grid.
+  void _accumulate(Size plot) {
+    for (var band = 0; band < kBelSpectrumBands; band++) {
+      final db = engine.spectrum[band];
+      if (db <= _floorDb) continue;
 
-      for (var band = 0; band < kBelSpectrumBands; band++) {
-        final db = engine.spectrum[band];
-        if (db <= _floorDb) continue;
+      final loudness = ((db - _floorDb) / (_ceilingDb - _floorDb)).clamp(
+        0.0,
+        1.0,
+      );
+      final pan = engine.spectrumPan[band].clamp(-1.0, 1.0);
 
-        final loudness = ((db - _floorDb) / (_ceilingDb - _floorDb)).clamp(
-          0.0,
-          1.0,
-        );
-        if ((loudness * (_levels - 1)).round() != level) continue;
-
-        final pan = engine.spectrumPan[band].clamp(-1.0, 1.0);
-        state._points[written++] = plot.width / 2 * (1 + pan);
-        state._points[written++] = _y(plot, band.toDouble());
-      }
-
-      if (written == 0) continue;
-      final paint = state._passes[level]..strokeWidth = _pointSize;
-      layer.drawRawPoints(
-        ui.PointMode.points,
-        // A view, not a copy — and the only allocation in this module's frame,
-        // which buys skipping the bands that are not in this pass.
-        Float32List.sublistView(state._points, 0, written),
-        paint,
+      state.splat(
+        plot.width / 2 * (1 + pan) / _cell,
+        _y(plot, band.toDouble()) / _cell,
+        // The alpha this band's dot was drawn at before there was a grid.
+        0.12 + 0.88 * loudness,
       );
     }
   }
@@ -230,7 +348,5 @@ class _StereoCloudPainter extends MeterPainter {
 
   @override
   bool shouldRepaint(_StereoCloudPainter oldDelegate) =>
-      oldDelegate.colors != colors ||
-      oldDelegate.devicePixelRatio != devicePixelRatio ||
-      !identical(oldDelegate.engine, engine);
+      oldDelegate.colors != colors || !identical(oldDelegate.engine, engine);
 }
