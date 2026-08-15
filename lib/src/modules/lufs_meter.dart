@@ -105,7 +105,13 @@ class _LufsMeterPainter extends MeterPainter {
     required Listenable repaint,
   }) : _track = (Paint()..color = colors.meterTrack),
        _momentary = (Paint()..color = colors.meterFill),
-       _short = (Paint()..color = colors.textMuted),
+       // Derived from the same token as the momentary bar rather than borrowing
+       // a text colour, so the two stay in a fixed relationship under any skin.
+       // `textMuted` was the obvious pick and is wrong: under the dark palette
+       // it is *lighter* than `meterFill` and under a light one it is darker, so
+       // switching skins silently swapped which of these two bars looked like
+       // the emphasised one. A meter fill is not a text colour.
+       _short = (Paint()..color = colors.meterFill.withValues(alpha: 0.55)),
        _targetBand = (Paint()
          ..color = colors.textFaint.withValues(alpha: 0.18)),
        _targetLine = (Paint()

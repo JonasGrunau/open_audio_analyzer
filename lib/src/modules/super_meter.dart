@@ -147,7 +147,16 @@ class _SuperMeterPainter extends MeterPainter {
       engine.lufsShort,
       engine.lufsIntegrated,
     ];
-    final fills = [colors.meterFill, colors.textMuted, colors.accent];
+    // Both derived from `meterFill`, never from a text colour: `textMuted` sits
+    // lighter than `meterFill` under the dark palette and darker under a light
+    // one, so the momentary and short-term arcs would swap which looked
+    // emphasised when the skin changed. The third entry is unused — the
+    // integrated arc takes its colour from the target check below.
+    final fills = [
+      colors.meterFill,
+      colors.meterFill.withValues(alpha: 0.55),
+      colors.accent,
+    ];
 
     for (var i = 0; i < 3; i++) {
       final radius = outer - i * (ring + gap);
