@@ -13,12 +13,13 @@ modular canvas is the best interaction model anybody has found for this problem.
 The measurement work, the architecture and the visual language are our own, and
 where Bel cannot honestly match Decibel it says so rather than approximating.
 
-> **Status: Phase 2 complete.** Bel measures real audio from a real device, and
-> the canvas is arrangeable: add, move, resize, duplicate, delete, tabs, undo.
-> Loudness — momentary, short-term, integrated, LRA and true peak — is verified
-> against the EBU Tech 3341/3342 cases on Linux, macOS and Windows on every
-> push. **One of the twelve modules exists so far**; the other eleven can be
-> placed and say `NOT BUILT YET` where their meter will go. That is next. See
+> **Status: Phase 3 complete.** **All twelve modules exist and measure
+> something.** Bel opens on a working meter bridge — loudness, super, digital,
+> VU, validator, histogram, alert — with the analyser, spectrogram, phase scope
+> and stereo cloud on a second tab, and the canvas is arrangeable: add, move,
+> resize, duplicate, delete, tabs, undo. Loudness and true peak are verified
+> against the EBU Tech 3341/3342 cases, and the spectrum against a sine of known
+> amplitude on a bin centre, on Linux, macOS and Windows on every push. See
 > [Roadmap](#roadmap), and [docs/PLAN.md](docs/PLAN.md) for the full plan.
 >
 > Layouts are not saved yet — a rearranged canvas is gone when the app closes.
@@ -318,8 +319,8 @@ hardware anywhere near it.
 | 0 | Skeleton, engine spike, the render path, design tokens | ✅ done |
 | 1 | K-weighting, M/S/I, LRA, true peak, **EBU conformance in CI**, device capture | ✅ done |
 | 2 | The 24×16 canvas: add, move, resize, duplicate, tabs, undo; bundled type | ✅ done |
-| 3 | The twelve modules | next |
-| 4 | Presets, calibrations, skins, audio settings, persistence | |
+| 3 | The twelve modules, the FFT, the scope and the loudness distribution | ✅ done |
+| 4 | Presets, calibrations, skins, audio settings, persistence | next |
 | 5 | Offline file analysis, report panel, exports, `bel` CLI | |
 | 6 | Remote display: mDNS discovery, wire protocol, tablet mode | |
 | 7 | VST3 and Audio Unit plugin, DAW transport and timecode | |

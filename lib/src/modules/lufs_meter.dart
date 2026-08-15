@@ -155,10 +155,15 @@ class _LufsMeterPainter extends MeterPainter {
     graticule.paint(canvas, track);
 
     // --- Target band --------------------------------------------------------
-    // Drawn under the bars, so a bar crossing it stays readable. A band rather
-    // than a line because every delivery spec states a tolerance, and a target
-    // drawn as a hairline is a pass/fail on an infinitely thin edge that no
-    // real programme lands on.
+    // A band rather than a line, because every delivery spec states a tolerance
+    // and a target drawn as a hairline is a pass/fail on an infinitely thin
+    // edge that no real programme lands on.
+    //
+    // The band goes under the bars so a bar crossing it stays readable, but the
+    // *line* goes over them further down. Both underneath looked right in a
+    // mock-up and is wrong in use: a programme above its target — which is the
+    // case you are looking at the meter to fix — hides the target completely
+    // behind the bars, exactly when you need to see how far above it you are.
     final targetTop = _y(
       track,
       calibration.lufsTarget + calibration.lufsTolerance,
@@ -170,12 +175,6 @@ class _LufsMeterPainter extends MeterPainter {
     canvas.drawRect(
       Rect.fromLTRB(track.left, targetTop, track.right, targetBottom),
       _targetBand,
-    );
-    final targetY = _y(track, calibration.lufsTarget);
-    canvas.drawLine(
-      Offset(track.left, targetY),
-      Offset(track.right, targetY),
-      _targetLine,
     );
 
     // --- Bars ---------------------------------------------------------------
@@ -190,6 +189,14 @@ class _LufsMeterPainter extends MeterPainter {
       barWidth,
       engine.lufsShort,
       _short,
+    );
+
+    // The target line, over the bars — see the note above the band.
+    final targetY = _y(track, calibration.lufsTarget);
+    canvas.drawLine(
+      Offset(track.left, targetY),
+      Offset(track.right, targetY),
+      _targetLine,
     );
 
     // --- Integrated ---------------------------------------------------------

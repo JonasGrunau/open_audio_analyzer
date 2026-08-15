@@ -11,6 +11,32 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### 📐 Measurement
 
+- **The VU meter reads differently, and lower on most material.** It was a
+  one-pole smoother over mean square — an RMS meter with a 300 ms time
+  constant. It is now what a VU movement actually is: **average-responding and
+  RMS-calibrated**, through a second-order mechanism. A steady sine still reads
+  its own RMS exactly, so a calibration tone is unchanged; anything peakier now
+  reads **lower**, by 9 dB on a signal with a 10% duty cycle and typically 1 to
+  4 dB on dense modern masters. If you have been matching levels by VU against
+  Bel's previous readings, re-check them. The needle also overshoots by about
+  1.2% on a transient, which is inside the tolerance the standard allows and is
+  most of why a VU feels like a VU.
+- **The spectrum is now measured.** 512 log-spaced bands from 20 Hz to 20 kHz,
+  from a 4096-point Hann transform per channel at a 1024-sample hop, taking the
+  loudest FFT bin in each band rather than their average so that a narrow
+  resonance survives the mapping. Levels are window-compensated: a full-scale
+  sine on a bin centre reads 0.0 dBFS, verified on every push. A tone between
+  two bin centres reads up to 1.4 dB low, which is inherent to reading a peak
+  bin and is not corrected.
+- **Per-band stereo position** and the **raw stereo sample stream** are now
+  published, which is what the stereo cloud and the phase scope draw.
+- **The short-term loudness distribution is now published**, together with the
+  10th and 95th percentiles LRA is the difference of and the relative gate they
+  were taken above — the same population the LRA number is computed from, so
+  the histogram and the number cannot disagree.
+- LRA itself is unchanged. It is now computed *through* the published
+  percentiles rather than beside them, which is a refactor, not a new number.
+
 - **Loudness is now measured.** LUFS-M, LUFS-S, LUFS-I and LRA previously read
   as a dash and now report real values, verified against the EBU Tech 3341
   cases within the standard's ±0.1 LU on every push, on all three desktop
@@ -42,6 +68,21 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   meter the laptop microphone.
 
 ### ✨ Added
+
+- **All twelve modules.** The eleven that said `NOT BUILT YET` now measure
+  something: a **LUFS Meter** (momentary and short-term as bars, integrated as a
+  rule they pass through, the target as a band); a **Digital Meter** (per
+  channel to 7.1, RMS as the column and peak as a floating tick, so the gap
+  between them is the crest factor); a **Super Meter** (the three integrations
+  on concentric arcs); a **VU Meter** (0 VU at the calibration's reference
+  level, not at digital full scale); an **Alert Meter** (one metric with its
+  worst reading latched until reset); a **Validator** (three delivery checks and
+  a verdict); a **Histogram** (the short-term loudness distribution with the
+  LRA percentiles drawn on it); a **Spectrum Analyzer**; a **Spectrogram**; a
+  **Phase Scope**; and a **Stereo Cloud** (per-band stereo position, which
+  answers *which part* of a mix folds badly rather than only that it does).
+- **Bel opens on a working meter bridge**, with the frequency displays on a
+  second tab, instead of six readings on an empty grid.
 
 - **The canvas is arrangeable.** A 24-column by 16-row grid: drag a module by
   its title bar to move it, drag the corner grip to resize, alt-drag to
@@ -76,9 +117,10 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The main view is an arrangeable canvas instead of a fixed wall showing every
   metric at once. It opens on six readings — LUFS-M, LUFS-S, LUFS-I, LRA, TP
   Max and Peak Max — and the rest of the canvas is yours.
-- Eleven of the twelve module kinds can now be **placed** on a tab, and say
-  `NOT BUILT YET` where their meter will go. Laying out a tab before every meter
-  exists is useful; an empty panel that looks like a broken meter is not.
+- A module's default measurement now follows its kind rather than always being
+  integrated loudness, so a freshly placed Alert Meter watches true peak — which
+  is what an alert is for. A saved layout that omitted the key reads back
+  differently for alert meters.
 - The DAW plugin will ship as **VST3 and Audio Unit** rather than CLAP. CLAP's
   SDK is the nicest of the three, but Ableton Live does not host CLAP, and a
   metering plugin that cannot be inserted in Live is one most people cannot
@@ -93,10 +135,29 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Loudness is asserted to be independent of both sample rate and push block
   size — properties the standard does not state but which catch two classes of
   error that 48 kHz single-block tests cannot.
+- pffft vendored under `engine/third_party/` (FFTPACK licence, permissive), and
+  the maths-constant feature macro added to the build hook's POSIX defines —
+  `M_PI` is XSI rather than ISO C, and asking glibc for a POSIX level hides it.
+  Linux-only compile failure, the same shape as the Phase 0 `clock_gettime` one.
+- One set of transforms feeds the analyser, the spectrogram and the stereo
+  cloud. Three modules running their own FFT over the same audio would cost
+  three times as much and could disagree about where a peak is.
+- Three primitives came out of writing the modules rather than being guessed at
+  in advance: a shared dB scale and graticule, a paragraph cache that re-lays
+  out only when a formatted string actually changes, and a persistence layer
+  that owns the `toImageSync` ping-pong **and its disposal** — a dropped GPU
+  texture leaks video memory on a machine that reports plenty of free memory.
+- The accumulating modules advance on the engine's publish counter rather than
+  on every paint, so a resize or a theme change cannot scroll a spectrogram
+  through time that no audio passed through.
 - The canvas placement rules — overlap, clamping, id allocation — are pure
   functions over `TabSpec` in `bel_core`, so they are covered by tests that need
   no window, and so the remote display cannot come to a different conclusion
   about where a module goes than the app did.
+- The canvas and workspace tests build their own sparse layouts instead of
+  reading geometry off the default preset. What the app opens with is a product
+  decision, and a drag test that measured itself against it failed the day the
+  default improved.
 - Dragging a module rebuilds nothing. The module stays where it is and one
   painter draws where it would land, so pointer movement cannot stall a canvas
   of live meters.

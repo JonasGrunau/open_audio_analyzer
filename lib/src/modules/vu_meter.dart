@@ -130,10 +130,14 @@ class _VuPainter extends MeterPainter {
   final Paint _needle;
   final Paint _pivot;
 
-  /// The needle sweeps 50°, centred on vertical. Wider than a real movement's
-  /// travel looks like a speedometer; narrower and the last few VU are
-  /// indistinguishable.
-  static const double _halfSweep = 25 * math.pi / 180;
+  /// The needle sweeps 70°, centred on vertical.
+  ///
+  /// Started at 50°, which is close to a real movement's travel and turned out
+  /// to be unreadable here: the eleven marks and their six labels have to fit
+  /// along that arc, and at 50° on a five-row module the labels overlap into a
+  /// grey smear. Real VU faces get away with it because they are physically
+  /// large. Wider than about 80° and it starts reading as a speedometer.
+  static const double _halfSweep = 35 * math.pi / 180;
 
   /// Ends of the scale, in VU. The face crowds towards the bottom end because
   /// deflection is linear in voltage.

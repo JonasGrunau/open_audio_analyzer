@@ -205,6 +205,14 @@ Each phase is independently shippable.
   add/move/resize/duplicate/delete; tabs.
 - **Phase 3 — The twelve modules,** in dependency order: Number Box → LUFS → Digital → Alert →
   Validator → Super → Histogram → VU → Spectrum → Phase Scope → Spectrogram → Stereo Cloud.
+
+  Nine of them draw something the engine did not compute, so the phase splits in two. **3a**
+  adds the measurements — pffft and a 4096-point Hann STFT at a 1024 hop mapped onto the 512
+  log bands the ABI already declared, per-band stereo position, the raw stereo sample stream
+  for the goniometer, the short-term loudness distribution with the percentiles LRA is the
+  difference of, and a real second-order VU movement replacing the one-pole placeholder — each
+  with the test that holds it against arithmetic. **3b** is the eleven painters. Building the
+  measurement first is what stops a module inventing a number to draw.
 - **Phase 4 — Presets, Calibration, Skins, audio settings, persistence.**
 - **Phase 5 — Offline analysis, report panel, exports, `bel` CLI.**
 - **Phase 6 — Remote display:** mDNS discovery, binary snapshot wire format, tablet mode

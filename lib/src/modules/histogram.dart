@@ -161,14 +161,24 @@ class _HistogramPainter extends MeterPainter {
         _percentile,
       );
 
-      canvas.drawParagraph(
-        state._lowLabel!,
-        Offset(left + Space.xxs, plot.top),
-      );
-      canvas.drawParagraph(
-        state._highLabel!,
-        Offset(right - state._highLabel!.longestLine - Space.xxs, plot.top),
-      );
+      // Labelled only when there is room between the two lines. On steady
+      // material the percentiles sit a fraction of a decibel apart — a correct
+      // reading, and one that would otherwise print both labels in the same
+      // place.
+      final room =
+          state._lowLabel!.longestLine +
+          state._highLabel!.longestLine +
+          Space.sm;
+      if (right - left > room) {
+        canvas.drawParagraph(
+          state._lowLabel!,
+          Offset(left + Space.xxs, plot.top),
+        );
+        canvas.drawParagraph(
+          state._highLabel!,
+          Offset(right - state._highLabel!.longestLine - Space.xxs, plot.top),
+        );
+      }
     }
 
     // --- The target ---------------------------------------------------------

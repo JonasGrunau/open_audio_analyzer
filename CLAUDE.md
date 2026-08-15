@@ -13,8 +13,9 @@ skins. A free reimplementation of the ideas in
 the licensing split and the honest list of gaps. Read it before changing
 anything non-trivial. `docs/PLAN.md` is the full phased plan.
 
-**Currently Phase 0.** The architecture is proven end to end and the app runs.
-Loudness is not measured yet and the UI says so.
+**Currently Phase 3 complete.** All twelve modules measure something, loudness
+and true peak are held against the EBU conformance cases in CI, and the spectrum
+against a sine of known amplitude. Layouts do not persist yet.
 
 ## Key Files
 
@@ -24,6 +25,10 @@ Loudness is not measured yet and the UI says so.
 | `lib/src/clock/meter_clock.dart` | The only `Ticker` in the app. Everything repaints from it. |
 | `packages/bel_engine/hook/build.dart` | Compiles `engine/` and bundles it as a code asset. The only native build description in the repo. |
 | `packages/bel_ui/lib/src/tokens.dart` | `Space`, `BelRadius`, `BelStroke`, `BelColors`, `BelType`. Nothing outside this file invents a spatial or colour value. |
+| `packages/bel_ui/lib/src/scale.dart` | `MeterScale` and `ScaleGraticule`. Five modules draw a dB scale; two side by side whose ticks disagree look like a rendering bug. |
+| `packages/bel_ui/lib/src/persistence_layer.dart` | The `toImageSync` ping-pong behind the spectrogram, phase scope and stereo cloud — and the texture disposal. |
+| `engine/src/bel_spectrum.h` | The 4096-point Hann STFT. One set of transforms serves all three frequency modules. |
+| `lib/src/canvas/module_host.dart` | The only place that knows which `ModuleKind`s exist as code. Exhaustive switch, no default arm. |
 | `packages/bel_core/lib/src/layout.dart` | `ModuleSpec` / `TabSpec` / `PresetSpec` — the serialised layout model. |
 | `packages/bel_core/lib/src/grid.dart` | Every rule about where a module may go, as pure functions. No pixels. |
 | `lib/src/canvas/grid_canvas.dart` | The canvas: drag, resize, selection, the preview overlay. |
@@ -104,8 +109,20 @@ Loudness is not measured yet and the UI says so.
   `_Notice` in `lib/src/app/bel_app.dart`.
 
 - **`toImageSync()` persistence layers hold GPU textures.** The spectrogram,
-  phase scope, stereo cloud and histogram all keep one. Dispose on resize and
-  teardown or leak VRAM.
+  phase scope and stereo cloud each keep one. Dispose on resize and teardown or
+  leak VRAM — use `PersistenceLayer`, which owns both the ping-pong and the
+  disposal, rather than a fourth hand-rolled copy of it.
+
+- **A module that accumulates advances on `engine.generation`, not on `paint`.**
+  Paint also runs on a resize or a theme change, and a spectrogram that scrolled
+  on those would invent time no audio passed through — convincingly.
+
+- **Run the app and look at a module before calling it finished.** Five real
+  defects in the first eleven passed `flutter analyze` and the widget suite and
+  were obvious on sight: text offset by its own width twice, a target line
+  hidden under the bars precisely when it mattered, arc gaps too small to read,
+  a crowded VU face, and two labels printed in the same place. Tests do not
+  catch layout that is merely wrong to look at.
 
 - **Bump `BEL_ABI_VERSION` when `bel.h` changes shape,** and regenerate the
   bindings (`cd packages/bel_engine && dart run ffigen --config ffigen.yaml`).

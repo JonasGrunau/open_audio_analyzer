@@ -9,7 +9,7 @@ The application. GPL-3.0-or-later.
 | `src/canvas/` | The grid canvas, the tab strip and the layout controller. See its own `AGENTS.md`. |
 | `src/clock/` | `MeterClock` — the only `Ticker` in the app. |
 | `src/data/` | Riverpod providers (configuration only) and `metric_reader.dart`. |
-| `src/modules/` | One file per meter module. Bodies only — the frame is the canvas's. |
+| `src/modules/` | One file per meter module, all twelve. Bodies only — the frame is the canvas's. |
 
 ## Rules
 
@@ -35,4 +35,27 @@ The application. GPL-3.0-or-later.
   Phase 6 adds a second implementation of the same signature backed by the wire
   protocol, and every module keeps working unchanged. Keep that seam narrow.
 - **Nothing allocates inside `paint()`** — no `Paint`, `Path`, `TextPainter`,
-  list or string concatenation. Cache in the `State`.
+  list or string concatenation. Cache in the `State`. In practice that means:
+  `Paint`s built in the painter's constructor; static labels laid out once with
+  `layoutParagraph`; changing readouts through `ValueParagraph`, which re-lays
+  out only when the *formatted string* differs; and bulk geometry written into a
+  preallocated `Float32List` and drawn with one `drawRawPoints`. A filled
+  spectrum is 512 vertical segments in a single call, not a `Path`.
+- **A module that accumulates advances on `engine.generation`, never on
+  `paint`.** Paint also runs on a resize, a theme change, or an ancestor marking
+  the subtree dirty. A spectrogram that scrolled on those would invent time that
+  no audio passed through, and it would look completely plausible.
+- **Anything from `toImageSync` holds a GPU texture and must be disposed.** The
+  garbage collector sees a small handle and feels no pressure, so a layer
+  dropped per frame leaks video memory on a machine reporting plenty free. Use
+  `PersistenceLayer`, which owns both the ping-pong and the disposal, and call
+  its `dispose` from `State.dispose`.
+- **Look at the module running before you call it done.** Five defects in the
+  first eleven were invisible to `flutter analyze` and to the widget tests, and
+  obvious within a second of seeing the app: a right-aligned paragraph offset by
+  its own width (so every validator reading sat on top of the limit beside it),
+  a target line drawn under the bars that hid it exactly when the programme was
+  over target, two arcs whose gap was too small to read as two, a VU face whose
+  labels overlapped into a smear, and two percentile labels printed in the same
+  place on steady material. None of those are things a test would have been
+  written to catch.

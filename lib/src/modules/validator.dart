@@ -172,13 +172,16 @@ class _ValidatorPainter extends MeterPainter {
       final baseline = top + (rowHeight - name.height) / 2;
       canvas.drawParagraph(name, Offset(0, baseline));
 
+      // Laid out left-aligned and *positioned* right, rather than laid out with
+      // TextAlign.right. A right-aligned paragraph already pushes its text to
+      // the far edge of the width it was given, so offsetting it by its own
+      // longestLine as well moves it right twice — which put every reading on
+      // top of the limit beside it.
       final reading = state._values[i].of(
         check.metric.format(value),
         BelType.readingSmall.copyWith(
           color: outcome == _Outcome.fail ? colors.over : colors.textPrimary,
         ),
-        align: TextAlign.right,
-        maxWidth: valueRight - name.longestLine,
       );
       canvas.drawParagraph(
         reading,

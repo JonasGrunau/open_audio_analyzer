@@ -131,8 +131,13 @@ class _SuperMeterPainter extends MeterPainter {
 
     // Three rings and two gaps, sized off the module rather than fixed, so the
     // meter reads the same at 6x6 cells and at 12x12.
-    final ring = outer * 0.13;
-    final gap = ring * 0.35;
+    //
+    // The gap is nearly as wide as a ring on purpose. At a third of a ring the
+    // arithmetic is fine and the display is not: two adjacent rings at similar
+    // brightness read as one thick band with a seam, and the whole point of
+    // three concentric arcs is being able to tell which is which at a glance.
+    final ring = outer * 0.115;
+    final gap = ring * 0.85;
 
     _track.strokeWidth = ring;
     _arc.strokeWidth = ring;
