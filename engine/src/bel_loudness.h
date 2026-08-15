@@ -111,4 +111,32 @@ double bel_loudness_shortterm(const bel_loudness *l);
 double bel_loudness_integrated(const bel_loudness *l);
 double bel_loudness_range(const bel_loudness *l);
 
+/*
+ * The two percentiles the range is the difference of, and the relative gate
+ * they were taken above. All three are NaN exactly when the range is.
+ *
+ * These are published because a histogram of the distribution without them is
+ * a picture rather than a measurement: the whole question somebody asks of an
+ * LRA of 9 LU is *which* 9 LU, and the answer is two lines on that plot.
+ */
+void bel_loudness_range_bounds(const bel_loudness *l, double *low, double *high,
+                               double *gate);
+
+/*
+ * The gated short-term distribution, resampled onto `count` equal bins between
+ * `min_lufs` and `max_lufs`, as fractions of the total that sum to 1.
+ *
+ * The same population LRA is computed from, deliberately: a plot drawn from a
+ * different set of blocks than the number beside it is a plot that will
+ * eventually be used to argue the number is wrong. Blocks outside the range
+ * clamp into the end bins rather than vanishing, for the same reason the
+ * internal histogram clamps — quietly dropping the loudest blocks would make
+ * the picture disagree with the reading.
+ *
+ * Writes zeros when nothing has cleared the gates yet.
+ */
+void bel_loudness_distribution(const bel_loudness *l, float *bins,
+                               uint32_t count, double min_lufs,
+                               double max_lufs);
+
 #endif /* BEL_LOUDNESS_H */

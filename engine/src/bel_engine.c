@@ -158,6 +158,7 @@ static void bel_clear_measurements(bel_engine *engine) {
   memset(engine->channel, 0, sizeof(engine->channel));
   bel_loudness_reset(&engine->loudness);
   bel_truepeak_reset(&engine->truepeak);
+  bel_spectrum_reset(&engine->spectrum);
   if (engine->ring_ready) {
     /* Clears the warning, not the ring: the audio already in flight is still
      * wanted, it is only the record of past losses that this measurement no
@@ -181,6 +182,9 @@ static void bel_clear_measurements(bel_engine *engine) {
   s->lufs_short = NAN;
   s->lufs_integrated = NAN;
   s->lra = NAN;
+  s->lra_low = NAN;
+  s->lra_high = NAN;
+  s->lra_gate = NAN;
   s->true_peak = NAN;
   s->true_peak_max = NAN;
   s->dr_short = NAN;
@@ -202,7 +206,10 @@ static void bel_clear_measurements(bel_engine *engine) {
   for (uint32_t b = 0; b < BEL_SPECTRUM_BANDS; b++) {
     s->spectrum[b] = BEL_DB_FLOOR;
     s->spectrum_peak[b] = BEL_DB_FLOOR;
+    s->spectrum_pan[b] = 0.0f;
   }
+  memset(s->scope, 0, sizeof(s->scope));
+  memset(s->histogram, 0, sizeof(s->histogram));
 }
 
 /* ------------------------------------------------------------------------ */
@@ -379,6 +386,13 @@ bel_engine *bel_engine_create(const bel_config *cfg) {
   bel_loudness_init(&engine->loudness, resolved.channels, resolved.sample_rate);
   bel_truepeak_init(&engine->truepeak, resolved.channels, resolved.sample_rate);
 
+  if (!bel_spectrum_init(&engine->spectrum, resolved.channels,
+                         resolved.sample_rate)) {
+    free(engine->block);
+    free(engine);
+    return NULL;
+  }
+
   bel_clear_measurements(engine);
 
   /* Publish once before anybody starts, so a UI that paints before start()
@@ -404,6 +418,7 @@ void bel_engine_destroy(bel_engine *engine) {
     bel_ring_free(&engine->ring);
   }
 
+  bel_spectrum_free(&engine->spectrum);
   free(engine->block);
   free(engine);
 }

@@ -151,6 +151,21 @@ external ffi.Pointer<ffi.Float> bel_snapshot_spectrum_peak(
   ffi.Pointer<bel_snapshot> snapshot,
 );
 
+@ffi.Native<ffi.Pointer<ffi.Float> Function(ffi.Pointer<bel_snapshot>)>()
+external ffi.Pointer<ffi.Float> bel_snapshot_spectrum_pan(
+  ffi.Pointer<bel_snapshot> snapshot,
+);
+
+@ffi.Native<ffi.Pointer<ffi.Float> Function(ffi.Pointer<bel_snapshot>)>()
+external ffi.Pointer<ffi.Float> bel_snapshot_scope(
+  ffi.Pointer<bel_snapshot> snapshot,
+);
+
+@ffi.Native<ffi.Pointer<ffi.Float> Function(ffi.Pointer<bel_snapshot>)>()
+external ffi.Pointer<ffi.Float> bel_snapshot_histogram(
+  ffi.Pointer<bel_snapshot> snapshot,
+);
+
 /// ------------------------------------------------------------------------ */
 /// /* Status codes                                                              */
 /// /* ------------------------------------------------------------------------
@@ -346,12 +361,58 @@ final class bel_snapshot extends ffi.Struct {
   @ffi.Array.multi([8])
   external ffi.Array<ffi.Uint32> clip;
 
-  /// --- Spectrum, dBFS per log-spaced band -------------------------------
+  /// --- Spectrum, dBFS per log-spaced band ------------------------------- */
+  /// /* The most recent FFT frame. Instantaneous, so it is a measurement of a
+  /// moment rather than an average of several.
   @ffi.Array.multi([512])
   external ffi.Array<ffi.Float> spectrum;
 
+  /// Peak hold over *every* FFT frame since the last publish, then a 1.5 s hold
+  /// and a 12 dB/s fall.
+  ///
+  /// This is not redundant with a hold the UI could keep itself, and the reason
+  /// is worth stating: the analyser runs an FFT every hop, and a publish carries
+  /// only the last one. A hold computed from published frames would therefore
+  /// miss every transient that landed between them, which is the single thing a
+  /// peak hold exists to catch.
   @ffi.Array.multi([512])
   external ffi.Array<ffi.Float> spectrum_peak;
+
+  /// 10th percentile of the gated short-term distribution
+  @ffi.Float()
+  external double lra_low;
+
+  /// 95th percentile
+  @ffi.Float()
+  external double lra_high;
+
+  /// relative gate: ungated mean - 20 LU
+  @ffi.Float()
+  external double lra_gate;
+
+  @ffi.Float()
+  external double reserved3;
+
+  /// Energy balance per spectrum band: -1 entirely left, +1 entirely right, 0
+  /// centred. Zero for mono, and meaningless for a band with no energy in it —
+  /// read `spectrum` first and skip bands at the floor, because the pan of
+  /// silence is not a direction.
+  @ffi.Array.multi([512])
+  external ffi.Array<ffi.Float> spectrum_pan;
+
+  /// The last BEL_SCOPE_POINTS stereo frames, interleaved x=left, y=right,
+  /// oldest first. Raw sample values, **not** rotated into goniometer axes:
+  /// that rotation is a display choice, and doing it here would bake one
+  /// module's convention into the ABI every other consumer has to undo. Mono
+  /// publishes the same value in both, which draws the diagonal it should.
+  @ffi.Array.multi([2048])
+  external ffi.Array<ffi.Float> scope;
+
+  /// Fraction of the gated short-term blocks that fell in each bin, so the bins
+  /// sum to 1 and the UI needs no total. All zero before the first gated block
+  /// exists.
+  @ffi.Array.multi([120])
+  external ffi.Array<ffi.Float> histogram;
 }
 
 final class bel_device_info extends ffi.Struct {
@@ -409,11 +470,23 @@ final class bel_config extends ffi.Struct {
 
 final class bel_engine extends ffi.Opaque {}
 
-const int BEL_ABI_VERSION = 2;
+const int BEL_ABI_VERSION = 3;
 
 const int BEL_MAX_CHANNELS = 8;
 
 const int BEL_SPECTRUM_BANDS = 512;
+
+const double BEL_SPECTRUM_HZ_LOW = 20.0;
+
+const double BEL_SPECTRUM_HZ_HIGH = 20000.0;
+
+const int BEL_SCOPE_POINTS = 1024;
+
+const int BEL_HISTOGRAM_BINS = 120;
+
+const double BEL_HISTOGRAM_MIN_LUFS = -60.0;
+
+const double BEL_HISTOGRAM_MAX_LUFS = 0.0;
 
 const double BEL_DB_FLOOR = -144.0;
 

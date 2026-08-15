@@ -19,6 +19,7 @@ library;
 
 import 'dart:convert';
 import 'dart:ffi';
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:ffi/ffi.dart';
@@ -32,8 +33,48 @@ const int kBelMaxChannels = 8;
 /// Number of log-spaced spectrum bands published to the UI.
 const int kBelSpectrumBands = 512;
 
+/// The frequency range those bands span, log-spaced, at every sample rate.
+///
+/// Fixed rather than derived from Nyquist: an analyser whose axis moves when
+/// you change interface is one you cannot compare two readings on. Bands above
+/// Nyquist read [kBelDbFloor].
+const double kBelSpectrumHzLow = 20.0;
+const double kBelSpectrumHzHigh = 20000.0;
+
+/// Stereo sample pairs published for the phase scope. One analysis block at the
+/// default settings, so at 48 kHz the scope sees every sample.
+const int kBelScopePoints = 1024;
+
+/// Bins in the published short-term loudness distribution, and the range they
+/// span in LUFS.
+const int kBelHistogramBins = 120;
+const double kBelHistogramMinLufs = -60.0;
+const double kBelHistogramMaxLufs = 0.0;
+
 /// The floor every dB reading clamps to. Mirrors `BEL_DB_FLOOR` in `bel.h`.
 const double kBelDbFloor = -144.0;
+
+/// The geometric centre frequency of spectrum band [band], in Hz.
+///
+/// Declared here beside the constants it is derived from rather than
+/// rediscovered by each painter that draws a frequency axis. Two modules that
+/// disagree by one band about where 1 kHz is are two modules whose graticules
+/// do not line up when they sit side by side.
+double bandCentreHz(int band) =>
+    kBelSpectrumHzLow *
+    math.pow(
+      kBelSpectrumHzHigh / kBelSpectrumHzLow,
+      (band + 0.5) / kBelSpectrumBands,
+    );
+
+/// The band a frequency falls in — the inverse of [bandCentreHz], for placing
+/// an axis label or a cursor. Not clamped: a caller asking about 30 kHz gets an
+/// index past the end, which is the honest answer.
+double bandOfHz(double hz) =>
+    kBelSpectrumBands *
+        math.log(hz / kBelSpectrumHzLow) /
+        math.log(kBelSpectrumHzHigh / kBelSpectrumHzLow) -
+    0.5;
 
 /// Where the engine takes its signal from.
 enum BelSource {
@@ -159,10 +200,19 @@ class BelEngine {
           .asTypedList(kBelSpectrumBands),
       spectrumPeak = native
           .bel_snapshot_spectrum_peak(snapshot)
-          .asTypedList(kBelSpectrumBands);
+          .asTypedList(kBelSpectrumBands),
+      spectrumPan = native
+          .bel_snapshot_spectrum_pan(snapshot)
+          .asTypedList(kBelSpectrumBands),
+      scope = native
+          .bel_snapshot_scope(snapshot)
+          .asTypedList(kBelScopePoints * 2),
+      histogram = native
+          .bel_snapshot_histogram(snapshot)
+          .asTypedList(kBelHistogramBins);
 
   /// The ABI this Dart code was written against. Mirrors `BEL_ABI_VERSION`.
-  static const int expectedAbiVersion = 2;
+  static const int expectedAbiVersion = 3;
 
   final Pointer<native.bel_engine> _handle;
 
@@ -186,7 +236,13 @@ class BelEngine {
   /// Per-channel RMS, dBFS, with meter decay applied.
   final Float32List rms;
 
-  /// Per-channel VU deflection.
+  /// Per-channel VU deflection, dBFS.
+  ///
+  /// Average-responding and RMS-calibrated, through a second-order movement —
+  /// so it reads below [rms] on peaky material and above nothing at all on a
+  /// sine. **0 VU is not 0 dBFS**: the reference level is a property of the
+  /// calibration, not of the signal, so the offset is applied where the meter
+  /// is drawn.
   final Float32List vu;
 
   /// Per-channel count of consecutive full-scale samples.
@@ -196,7 +252,32 @@ class BelEngine {
   final Float32List spectrum;
 
   /// Per-band peak hold for [spectrum].
+  ///
+  /// Held in the engine rather than accumulated here, and that is not
+  /// redundancy: a transform runs every hop but a publish carries only the last
+  /// one, so a hold computed from what reaches Dart would miss every transient
+  /// that landed between two publishes.
   final Float32List spectrumPeak;
+
+  /// Per-band stereo position, −1 left to +1 right.
+  ///
+  /// Meaningless for a band with no energy in it — read [spectrum] first and
+  /// skip bands at [kBelDbFloor], because the pan of silence is not a
+  /// direction.
+  final Float32List spectrumPan;
+
+  /// The last [kBelScopePoints] stereo frames, interleaved x=left, y=right,
+  /// oldest first.
+  ///
+  /// Raw sample values, not rotated into goniometer axes — that rotation is a
+  /// display choice and belongs in the painter's transform, where it costs
+  /// nothing.
+  final Float32List scope;
+
+  /// Fraction of the gated short-term loudness blocks in each of
+  /// [kBelHistogramBins] bins between [kBelHistogramMinLufs] and
+  /// [kBelHistogramMaxLufs]. Sums to 1, or to 0 before anything is measured.
+  final Float32List histogram;
 
   /// The engine's version string.
   static String get versionString =>
@@ -379,18 +460,32 @@ class BelEngine {
 
   /// Whether the loudness readings are measured in this build.
   ///
-  /// False until Phase 1 lands K-weighting, R128 gating and the EBU
-  /// conformance suite together. While false, [lufsIntegrated] and friends are
-  /// NaN and the UI must show a dash — not a zero, and not a guess.
+  /// True since Phase 1. Kept because it is how a future source that cannot
+  /// produce loudness says so, and because an individual reading can still be
+  /// NaN when it is not yet *defined* — momentary loudness needs 400 ms of
+  /// signal before it means anything.
   bool get hasLoudness => _snapshot.flags & (1 << 1) == 0;
 
   /// Whether [spectrum] holds measured data.
+  ///
+  /// False for the first full transform window — about 85 ms — during which
+  /// the bands sit at the floor and are indistinguishable from silence.
   bool get hasSpectrum => _snapshot.flags & (1 << 2) == 0;
 
   double get lufsMomentary => _snapshot.lufs_momentary;
   double get lufsShort => _snapshot.lufs_short;
   double get lufsIntegrated => _snapshot.lufs_integrated;
   double get loudnessRange => _snapshot.lra;
+
+  /// The 10th and 95th percentiles [loudnessRange] is the difference of, and
+  /// the relative gate they were taken above. All three are NaN exactly when
+  /// [loudnessRange] is.
+  ///
+  /// A histogram of the distribution without these is a picture rather than a
+  /// measurement: the question anybody asks of an LRA of 9 LU is *which* 9 LU.
+  double get loudnessRangeLow => _snapshot.lra_low;
+  double get loudnessRangeHigh => _snapshot.lra_high;
+  double get loudnessRangeGate => _snapshot.lra_gate;
 
   double get truePeak => _snapshot.true_peak;
   double get truePeakMax => _snapshot.true_peak_max;

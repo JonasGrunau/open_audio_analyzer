@@ -63,16 +63,43 @@ extern "C" {
  * side asserts against it at startup, because a stale prebuilt library that
  * silently reads a reordered struct produces plausible-looking wrong numbers,
  * which is the worst failure mode a measurement tool has. */
-#define BEL_ABI_VERSION 2
+#define BEL_ABI_VERSION 3
 
 /* 7.1 is the widest layout the Digital Meter renders, so it is the widest the
  * graph carries. */
 #define BEL_MAX_CHANNELS 8
 
 /* Log-spaced spectrum bands published to the UI. Deliberately a *display*
- * resolution, not an FFT size: the FFT may be 8192 points, but the analyzer
- * only ever draws this many columns, so this is what crosses the boundary. */
+ * resolution, not an FFT size: the FFT is 4096 points, but the analyzer only
+ * ever draws this many columns, so this is what crosses the boundary. */
 #define BEL_SPECTRUM_BANDS 512
+
+/* The frequency range those bands span, log-spaced, at every sample rate.
+ *
+ * Fixed rather than derived from Nyquist on purpose: an analyser whose axis
+ * shifts when you change interfaces is one you cannot compare two readings on.
+ * Bands above Nyquist read BEL_DB_FLOOR, which below a 40 kHz sample rate means
+ * the top of the display is honestly empty rather than quietly rescaled. */
+#define BEL_SPECTRUM_HZ_LOW 20.0f
+#define BEL_SPECTRUM_HZ_HIGH 20000.0f
+
+/* Consecutive stereo sample pairs published for the phase scope, oldest first.
+ *
+ * 1024 is one analysis block at the default settings — about 21 ms — so at
+ * 48 kHz the scope shows *every* sample rather than a decimation of them. A
+ * goniometer that skips samples still draws a plausible figure, which is
+ * exactly why the skipping would never be noticed. */
+#define BEL_SCOPE_POINTS 1024
+
+/* Bins in the published short-term loudness distribution, spanning
+ * BEL_HISTOGRAM_MIN_LUFS to BEL_HISTOGRAM_MAX_LUFS.
+ *
+ * Far coarser than the 8000-bin histogram the engine gates and takes
+ * percentiles on internally — this one is for drawing, and 0.5 LU is finer than
+ * a pixel column on any real display. */
+#define BEL_HISTOGRAM_BINS 120
+#define BEL_HISTOGRAM_MIN_LUFS (-60.0f)
+#define BEL_HISTOGRAM_MAX_LUFS (0.0f)
 
 /* The floor every dB quantity clamps to, chosen a little below the noise floor
  * of 24-bit audio. Real -INFINITY is avoided deliberately: differences of dB
@@ -141,8 +168,10 @@ typedef enum {
  * momentary loudness needs 400 ms of signal before it means anything. */
 #define BEL_FLAG_LOUDNESS_UNAVAILABLE (1u << 1)
 
-/* Likewise for the spectrum arrays, which stay at BEL_DB_FLOOR until the FFT
- * lands with the analyser module that draws it. Still set. */
+/* Likewise for the spectrum arrays. **This build does not set it** — the FFT
+ * landed with the analyser and spectrogram that draw it. Kept in the ABI for
+ * the same reason as the flag above: a source that cannot produce a spectrum
+ * needs a way to say so. */
 #define BEL_FLAG_SPECTRUM_UNAVAILABLE (1u << 2)
 
 /* Audio has been lost since the last reset — see `dropped_frames`. Sticky
@@ -232,8 +261,50 @@ typedef struct bel_snapshot {
   uint32_t clip[BEL_MAX_CHANNELS]; /* consecutive full-scale samples seen */
 
   /* --- Spectrum, dBFS per log-spaced band ------------------------------- */
+  /* The most recent FFT frame. Instantaneous, so it is a measurement of a
+   * moment rather than an average of several. */
   float spectrum[BEL_SPECTRUM_BANDS];
+
+  /* Peak hold over *every* FFT frame since the last publish, then a 1.5 s hold
+   * and a 12 dB/s fall.
+   *
+   * This is not redundant with a hold the UI could keep itself, and the reason
+   * is worth stating: the analyser runs an FFT every hop, and a publish carries
+   * only the last one. A hold computed from published frames would therefore
+   * miss every transient that landed between them, which is the single thing a
+   * peak hold exists to catch. */
   float spectrum_peak[BEL_SPECTRUM_BANDS];
+
+  /* --- Appended in ABI 3 ------------------------------------------------- */
+  /* New fields go at the end, so that adding one cannot shift any field a
+   * previously compiled consumer already knows the offset of. */
+
+  /* The two percentiles LRA is the difference of, LUFS, and the relative gate
+   * they were taken above. Published because a histogram that shows the
+   * distribution without showing where the range was drawn from is a picture,
+   * not a measurement. NaN together with `lra`. */
+  float lra_low;  /* 10th percentile of the gated short-term distribution */
+  float lra_high; /* 95th percentile */
+  float lra_gate; /* relative gate: ungated mean - 20 LU */
+  float reserved3;
+
+  /* Energy balance per spectrum band: -1 entirely left, +1 entirely right, 0
+   * centred. Zero for mono, and meaningless for a band with no energy in it —
+   * read `spectrum` first and skip bands at the floor, because the pan of
+   * silence is not a direction. */
+  float spectrum_pan[BEL_SPECTRUM_BANDS];
+
+  /* The last BEL_SCOPE_POINTS stereo frames, interleaved x=left, y=right,
+   * oldest first. Raw sample values, **not** rotated into goniometer axes:
+   * that rotation is a display choice, and doing it here would bake one
+   * module's convention into the ABI every other consumer has to undo. Mono
+   * publishes the same value in both, which draws the diagonal it should. */
+  float scope[BEL_SCOPE_POINTS * 2];
+
+  /* Fraction of the gated short-term blocks that fell in each bin, so the bins
+   * sum to 1 and the UI needs no total. All zero before the first gated block
+   * exists. */
+  float histogram[BEL_HISTOGRAM_BINS];
 } bel_snapshot;
 
 /* ------------------------------------------------------------------------ */
@@ -337,8 +408,14 @@ BEL_API const bel_snapshot *bel_snapshot_buffer(bel_engine *engine);
  *
  * This is the only function called every frame, so it is the only one whose
  * cost is worth arguing about. It is a seqlock read: an atomic load, a memcpy
- * of a few kilobytes, and a second atomic load to confirm no writer intervened.
- * It never blocks the analysis thread and it never waits on a mutex.
+ * of the snapshot — about 15 kB, most of it the scope and the spectrum — and a
+ * second atomic load to confirm no writer intervened. It never blocks the
+ * analysis thread and it never waits on a mutex.
+ *
+ * Fifteen kilobytes at 120 fps is under 2 MB/s and roughly a microsecond a
+ * frame, which is the argument for copying the whole thing rather than growing
+ * a second, narrower path for the modules that only want one number. Two ways
+ * to read a measurement is two ways for them to disagree.
  *
  * Returns the same value as the previous call when nothing new was published,
  * which is the caller's cue to skip repainting.
@@ -394,6 +471,9 @@ BEL_API const float *bel_snapshot_vu(const bel_snapshot *snapshot);
 BEL_API const uint32_t *bel_snapshot_clip(const bel_snapshot *snapshot);
 BEL_API const float *bel_snapshot_spectrum(const bel_snapshot *snapshot);
 BEL_API const float *bel_snapshot_spectrum_peak(const bel_snapshot *snapshot);
+BEL_API const float *bel_snapshot_spectrum_pan(const bel_snapshot *snapshot);
+BEL_API const float *bel_snapshot_scope(const bel_snapshot *snapshot);
+BEL_API const float *bel_snapshot_histogram(const bel_snapshot *snapshot);
 
 #ifdef __cplusplus
 } /* extern "C" */

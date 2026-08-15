@@ -99,3 +99,15 @@ const float *bel_snapshot_spectrum(const bel_snapshot *snapshot) {
 const float *bel_snapshot_spectrum_peak(const bel_snapshot *snapshot) {
   return snapshot == NULL ? NULL : snapshot->spectrum_peak;
 }
+
+const float *bel_snapshot_spectrum_pan(const bel_snapshot *snapshot) {
+  return snapshot == NULL ? NULL : snapshot->spectrum_pan;
+}
+
+const float *bel_snapshot_scope(const bel_snapshot *snapshot) {
+  return snapshot == NULL ? NULL : snapshot->scope;
+}
+
+const float *bel_snapshot_histogram(const bel_snapshot *snapshot) {
+  return snapshot == NULL ? NULL : snapshot->histogram;
+}

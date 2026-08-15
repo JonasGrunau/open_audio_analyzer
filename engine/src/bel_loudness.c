@@ -228,11 +228,14 @@ double bel_loudness_integrated(const bel_loudness *l) {
   return loudness_from_energy(gated);
 }
 
-double bel_loudness_range(const bel_loudness *l) {
+/* The first bin of the relative-gated short-term distribution, and the number
+ * of blocks in it. Returns -1 when nothing has cleared the gates. */
+static int range_gate_start(const bel_loudness *l, uint64_t *total_out,
+                            double *gate_out) {
   uint64_t count = 0;
   const double ungated_mean = gated_mean(l->shortterm, 0, &count);
   if (count == 0) {
-    return NAN;
+    return -1;
   }
 
   const double relative =
@@ -245,7 +248,27 @@ double bel_loudness_range(const bel_loudness *l) {
     total += l->shortterm[bin].count;
   }
   if (total == 0) {
-    return NAN;
+    return -1;
+  }
+
+  if (gate_out != NULL) {
+    *gate_out = relative;
+  }
+  *total_out = total;
+  return start;
+}
+
+void bel_loudness_range_bounds(const bel_loudness *l, double *low, double *high,
+                               double *gate) {
+  *low = NAN;
+  *high = NAN;
+  *gate = NAN;
+
+  uint64_t total = 0;
+  double relative = NAN;
+  const int start = range_gate_start(l, &total, &relative);
+  if (start < 0) {
+    return;
   }
 
   /* EBU Tech 3342: the range is the 10th to the 95th percentile of what
@@ -276,6 +299,56 @@ double bel_loudness_range(const bel_loudness *l) {
     cumulative = next;
   }
 
-  const double range = loudness_of_bin(high_bin) - loudness_of_bin(low_bin);
+  *low = loudness_of_bin(low_bin);
+  *high = loudness_of_bin(high_bin);
+  *gate = relative;
+}
+
+double bel_loudness_range(const bel_loudness *l) {
+  double low = NAN, high = NAN, gate = NAN;
+  bel_loudness_range_bounds(l, &low, &high, &gate);
+  if (isnan(low) || isnan(high)) {
+    return NAN;
+  }
+  const double range = high - low;
   return range < 0.0 ? 0.0 : range;
+}
+
+void bel_loudness_distribution(const bel_loudness *l, float *bins,
+                               uint32_t count, double min_lufs,
+                               double max_lufs) {
+  for (uint32_t i = 0; i < count; i++) {
+    bins[i] = 0.0f;
+  }
+  if (count == 0 || !(max_lufs > min_lufs)) {
+    return;
+  }
+
+  uint64_t total = 0;
+  const int start = range_gate_start(l, &total, NULL);
+  if (start < 0) {
+    return;
+  }
+
+  const double span = max_lufs - min_lufs;
+  const double inverse_total = 1.0 / (double)total;
+
+  for (int bin = start; bin < BEL_HIST_BINS; bin++) {
+    const uint32_t bin_count = l->shortterm[bin].count;
+    if (bin_count == 0) {
+      continue;
+    }
+    const double loudness = loudness_of_bin(bin);
+
+    double position = (loudness - min_lufs) / span * (double)count;
+    if (position < 0.0) {
+      position = 0.0;
+    }
+    uint32_t index = (uint32_t)position;
+    if (index >= count) {
+      index = count - 1;
+    }
+
+    bins[index] += (float)((double)bin_count * inverse_total);
+  }
 }

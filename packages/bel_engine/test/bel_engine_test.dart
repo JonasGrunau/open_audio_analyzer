@@ -116,12 +116,25 @@ void main() {
     // waveform passes through every sample.
     expect(engine.truePeakMax, greaterThanOrEqualTo(engine.samplePeakMax));
 
-    // The spectrum is still unmeasured, and says so rather than publishing an
-    // array of zeroes, which would draw as a flat line at full scale.
-    expect(engine.hasSpectrum, isFalse);
-    for (final band in engine.spectrum) {
-      expect(band, kBelDbFloor);
+    // The spectrum is measured now, and the test tone is a 1 kHz sine, so the
+    // loudest band has to be the one containing 1 kHz. A spectrum that is
+    // merely *present* proves nothing — an FFT with its bands mapped backwards
+    // still fills the array.
+    expect(engine.hasSpectrum, isTrue);
+
+    var loudest = 0;
+    for (var band = 1; band < kBelSpectrumBands; band++) {
+      if (engine.spectrum[band] > engine.spectrum[loudest]) loudest = band;
     }
+    expect(bandCentreHz(loudest), closeTo(1000, 20));
+
+    // Amplitude 0.5 on the left and up to 0.65 on the tilted right, so the
+    // louder of the two sits between -6.02 and -3.74 dBFS, less up to 1.4 dB
+    // of Hann scalloping — 1 kHz does not land on a bin centre at 48 kHz.
+    expect(engine.spectrum[loudest], inInclusiveRange(-8.0, -3.0));
+
+    // And the rest of the spectrum is not merely a copy of it.
+    expect(engine.spectrum[10], lessThan(-40.0));
   });
 
   test(

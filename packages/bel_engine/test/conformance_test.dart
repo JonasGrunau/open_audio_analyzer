@@ -275,6 +275,64 @@ void main() {
 
       expect(engine.loudnessRange, lessThan(1.0));
     });
+
+    test('the published percentiles are the ones the range is taken from', () {
+      final engine = _pushEngine();
+      addTearDown(engine.dispose);
+
+      _pushSegments(engine, const [_Segment(20, -20.0), _Segment(20, -30.0)]);
+
+      // The histogram module draws these two as lines across the
+      // distribution. If they were computed separately from `loudnessRange` —
+      // a second percentile walk, a different gate — they would drift apart
+      // under exactly the material that makes LRA interesting, and the plot
+      // would start disagreeing with the number printed beside it.
+      expect(
+        engine.loudnessRangeHigh - engine.loudnessRangeLow,
+        closeTo(engine.loudnessRange, 1e-6),
+      );
+
+      // Both percentiles are inside the programme, and the gate is below both.
+      expect(engine.loudnessRangeLow, closeTo(-30.0, 1.5));
+      expect(engine.loudnessRangeHigh, closeTo(-20.0, 1.5));
+      expect(engine.loudnessRangeGate, lessThan(engine.loudnessRangeLow));
+    });
+
+    test('the distribution is a distribution', () {
+      final engine = _pushEngine();
+      addTearDown(engine.dispose);
+
+      _pushSegments(engine, const [_Segment(20, -20.0), _Segment(20, -30.0)]);
+
+      final total = engine.histogram.fold<double>(0, (sum, bin) => sum + bin);
+      expect(total, closeTo(1.0, 1e-4));
+
+      // Two level plateaus, so the mass sits in two places with a gap between.
+      // A distribution that had quietly become "everything in one bin" would
+      // still sum to one.
+      int binOf(double lufs) =>
+          ((lufs - kBelHistogramMinLufs) /
+                  (kBelHistogramMaxLufs - kBelHistogramMinLufs) *
+                  kBelHistogramBins)
+              .floor();
+
+      expect(engine.histogram[binOf(-30)], greaterThan(0.2));
+      expect(engine.histogram[binOf(-20)], greaterThan(0.2));
+      expect(engine.histogram[binOf(-25)], lessThan(0.05));
+    });
+
+    test('nothing measured means an empty distribution, not a flat one', () {
+      final engine = _pushEngine();
+      addTearDown(engine.dispose);
+
+      _pushSegments(engine, const [_Segment(1, null)]);
+
+      expect(engine.loudnessRange.isNaN, isTrue);
+      expect(engine.loudnessRangeLow.isNaN, isTrue);
+      for (final bin in engine.histogram) {
+        expect(bin, 0.0);
+      }
+    });
   });
 
   group('true peak', () {

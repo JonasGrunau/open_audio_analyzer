@@ -15,6 +15,7 @@
 #include "bel_atomic.h"
 #include "bel_loudness.h"
 #include "bel_ring.h"
+#include "bel_spectrum.h"
 #include "bel_truepeak.h"
 
 #include <stdint.h>
@@ -49,8 +50,13 @@ typedef struct {
   float peak_linear;     /* current held peak, linear */
   float peak_hold_left;  /* seconds remaining before the hold releases */
   float rms_mean_square; /* smoothed mean square, linear */
-  float vu_value;        /* smoothed VU deflection, linear */
   uint32_t clip_run;     /* consecutive samples at or above full scale */
+
+  /* The VU needle, as a position and a velocity, because a VU meter is a
+   * second-order system and its overshoot is most of what it feels like. See
+   * the ballistics section of bel_analysis.c. */
+  float vu_position;
+  float vu_velocity;
 } bel_channel_state;
 
 /* ------------------------------------------------------------------------ */
@@ -100,6 +106,12 @@ struct bel_engine {
    * against the document that defines it. */
   bel_loudness loudness;
   bel_truepeak truepeak;
+
+  /* Feeds the analyser, the spectrogram and the stereo cloud from one set of
+   * transforms. Three modules drawing three independent FFTs of the same audio
+   * would cost three times as much and, worse, could disagree with each other
+   * about where a peak is. */
+  bel_spectrum spectrum;
 
   /* Live only for BEL_SOURCE_DEVICE. The ring is what makes the capture
    * callback's job a bounded memcpy; `device` is opaque so that miniaudio's

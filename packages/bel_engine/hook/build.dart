@@ -37,7 +37,12 @@ const _engineSources = <String>[
   '../../engine/src/bel_ring.c',
   '../../engine/src/bel_snapshot.c',
   '../../engine/src/bel_source.c',
+  '../../engine/src/bel_spectrum.c',
   '../../engine/src/bel_truepeak.c',
+
+  // Vendored. pffft is one translation unit and has no build system of its
+  // own, which is most of why it was chosen over a library that does.
+  '../../engine/third_party/pffft/pffft.c',
 ];
 
 /// Feature-test macros, which must be defined before any system header is
@@ -54,6 +59,14 @@ Map<String, String?> _defines(OS targetOS) {
   return {
     // POSIX.1-2008: clock_gettime, CLOCK_MONOTONIC, nanosleep, pthreads.
     '_POSIX_C_SOURCE': '200809L',
+
+    // The maths constants — M_PI and friends — are XSI/BSD rather than ISO C,
+    // and asking glibc for a specific POSIX level switches off everything it
+    // considers "misc", which is where it keeps them. Our own code declares its
+    // own pi for exactly this reason, but vendored pffft uses M_PI, and the
+    // failure is a compile error on Linux only. Same class of trap as the
+    // POSIX line above, found the same way.
+    '_DEFAULT_SOURCE': null,
 
     // Asking for _POSIX_C_SOURCE on Darwin narrows the SDK to exactly POSIX and
     // hides the Apple-specific half of the headers. We do not use any of it
@@ -92,7 +105,11 @@ void main(List<String> args) async {
       assetName: '${input.packageName}_bindings_generated.dart',
 
       sources: _engineSources,
-      includes: ['../../engine/include', '../../engine/third_party/miniaudio'],
+      includes: [
+        '../../engine/include',
+        '../../engine/third_party/miniaudio',
+        '../../engine/third_party/pffft',
+      ],
 
       // miniaudio dlopen()s the Linux backends at runtime and needs the maths
       // and threading libraries everywhere POSIX. On Apple platforms it talks

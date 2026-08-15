@@ -9,6 +9,7 @@
 | `bel_kweight.h/.c` | The BS.1770-4 K-weighting biquads, **designed at the stream's sample rate** rather than tabulated, plus the channel weight table. |
 | `bel_loudness.h/.c` | Sub-block accumulation, R128 gating, momentary/short-term/integrated, and the LRA histogram. |
 | `bel_truepeak.h/.c` | The BS.1770-4 Annex 2 4x polyphase oversampler. |
+| `bel_spectrum.h/.c` | The 4096-point Hann STFT behind the analyser, the spectrogram and the stereo cloud. One set of transforms serves all three. |
 | `bel_ring.h/.c` | The SPSC ring between the audio callback and analysis. Drops are **counted and published**, never silently overwritten. |
 | `bel_device.h/.c` | miniaudio, cut down to enumeration and capture. The only file that includes miniaudio.h. |
 | `bel_analysis.c` | One pass over a block: the simple meters inline, the two standards-defined ones driven. |
@@ -51,7 +52,15 @@
   under the 📐 section.** Users make delivery decisions from these numbers; a
   reading that moves without being announced silently invalidates somebody's
   master.
-- **When an approximation is used, say so and say what is missing.** See the VU
-  comment in `bel_analysis.c`: a one-pole matches the 300 ms figure and has none
-  of the overshoot that makes a VU meter feel like one. Do not let a comment
-  like that quietly get deleted as the thing gets promoted to "good enough".
+- **When an approximation is used, say so and say what is missing.** The VU used
+  to be a one-pole, which matched the 300 ms figure and had none of the
+  overshoot that makes a VU meter feel like one; the comment saying so is what
+  eventually got it replaced with the second-order movement that is there now.
+  Do not let a comment like that quietly get deleted as the thing gets promoted
+  to "good enough".
+- **Display ballistics belong here, display *choices* do not.** The spectrum's
+  peak hold is in the engine because a transform runs every hop and a publish
+  carries only the last one, so a hold computed downstream would miss whatever
+  landed between them. The goniometer's 45° rotation is not, because it is a
+  convention one module has and the CLI does not — and baking it into the ABI
+  would make every other consumer undo it.
