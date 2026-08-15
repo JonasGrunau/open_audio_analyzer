@@ -129,6 +129,14 @@ against a sine of known amplitude. Layouts do not persist yet.
   The Dart side asserts the version at startup, because a stale library does not
   crash — it reads a reordered struct and displays plausible wrong numbers.
 
+  **`BEL_ABI_VERSION` and `BelEngine.expectedAbiVersion` move in the same
+  commit, always.** The constant is not an independent value; it is an assertion
+  *about* the header. Committing one without the other is a build where the
+  library says 3 and Dart demands 4, which fails every job on every platform.
+  Easy to get wrong when somebody else's uncommitted header makes your half of
+  the pair look right locally — verify against committed state with
+  `git worktree add --detach <tmp> HEAD` before pushing an ABI change.
+
 ### CHANGELOG.md Format
 
 `CHANGELOG.md` is written for the person deciding whether to update, not for
