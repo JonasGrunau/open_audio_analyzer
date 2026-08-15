@@ -19,6 +19,7 @@ import 'package:bel/src/canvas/module_host.dart';
 import 'package:bel/src/canvas/tab_strip.dart';
 import 'package:bel/src/canvas/workspace.dart';
 import 'package:bel/src/clock/meter_clock.dart';
+import 'package:bel/src/modules/spectrum_analyzer.dart';
 import 'package:bel_core/bel_core.dart';
 import 'package:bel_engine/bel_engine.dart';
 import 'package:bel_ui/bel_ui.dart';
@@ -91,6 +92,43 @@ Future<ProviderContainer> _pump(WidgetTester tester) async {
   return container;
 }
 
+/// Builds the canvas and switches to a **deliberately sparse** tab of the
+/// tests' own making.
+///
+/// Not the default preset. What Bel opens with is a product decision — what a
+/// new user should see first — and it is dense on purpose. Geometry tests that
+/// read strides off it and drag modules into the space below it would fail the
+/// day somebody adds a meter, for a reason that has nothing to do with dragging.
+/// Here the tests own their canvas and assert geometry rather than taste.
+///
+/// Three number boxes at the top left, four columns apart and three rows tall,
+/// with the rest of the grid empty.
+Future<ProviderContainer> _pumpSparse(WidgetTester tester) async {
+  final container = await _pump(tester);
+  final controller = container.read(workspaceProvider.notifier);
+
+  controller.addTab();
+  for (final (index, metric) in const [
+    Metric.lufsMomentary,
+    Metric.lufsShort,
+    Metric.loudnessRange,
+  ].indexed) {
+    controller.addModule(
+      ModuleKind.numberBox,
+      at: GridRect(column: index * 4, row: 0, columns: 4, rows: 3),
+    );
+    controller.setModuleOption(
+      container.read(workspaceProvider).selectedModuleId!,
+      'metric',
+      metric.id,
+    );
+  }
+  controller.select(null);
+
+  await tester.pump();
+  return container;
+}
+
 /// Advances time by a fixed amount.
 ///
 /// Deliberately not `pumpAndSettle`, which never returns here: the meter clock
@@ -135,22 +173,39 @@ ModuleSpec _spec(ProviderContainer container, Metric metric) => container
 
 void main() {
   testWidgets('the default preset arrives on screen', (tester) async {
-    await _pump(tester);
+    final container = await _pump(tester);
+    final preset = container.read(workspaceProvider).preset;
 
-    expect(find.byType(ModuleHost), findsNWidgets(6));
+    expect(preset.tabs, hasLength(2));
+    expect(
+      find.byType(ModuleHost),
+      findsNWidgets(preset.tabs.first.modules.length),
+    );
     expect(find.text('LUFS-I'), findsOneWidget);
     expect(find.text('TP MAX'), findsOneWidget);
 
-    // No module says "too small" at the default window size. A minimum that
-    // the default layout violates would greet every new user with six
-    // placeholders.
-    expect(find.byType(ModuleTooSmall), findsNothing);
+    // Every module on both tabs is legible at the size the preset gives it.
+    // This is the assertion that catches a default layout laid out against a
+    // module's old minimum: the symptom is a new user greeted by a canvas of
+    // "TOO SMALL" placeholders, and it is invisible until somebody launches
+    // the app.
+    for (var tab = 0; tab < preset.tabs.length; tab++) {
+      container.read(workspaceProvider.notifier).selectTab(tab);
+      await tester.pump();
+
+      expect(
+        find.byType(ModuleTooSmall),
+        findsNothing,
+        reason: 'tab "${preset.tabs[tab].name}" has a module below its minimum',
+      );
+      expect(tester.takeException(), isNull);
+    }
   });
 
   testWidgets('a module is selected by clicking its body, not just its bar', (
     tester,
   ) async {
-    final container = await _pump(tester);
+    final container = await _pumpSparse(tester);
 
     // The regression this guards: CustomPainter.hitTest defaults to absorbing
     // pointer events, which makes the whole face of every meter dead to the
@@ -175,7 +230,7 @@ void main() {
   testWidgets('dragging the title bar moves the module by whole cells', (
     tester,
   ) async {
-    final container = await _pump(tester);
+    final container = await _pumpSparse(tester);
     final rows = _rowStride(tester);
     final id = _spec(container, Metric.lufsMomentary).id;
 
@@ -197,7 +252,7 @@ void main() {
   testWidgets('alt-dragging leaves the original behind and drops a copy', (
     tester,
   ) async {
-    final container = await _pump(tester);
+    final container = await _pumpSparse(tester);
     final rows = _rowStride(tester);
     final id = _spec(container, Metric.lufsMomentary).id;
 
@@ -211,7 +266,7 @@ void main() {
     await tester.pump();
 
     final workspace = container.read(workspaceProvider);
-    expect(workspace.tab.modules, hasLength(7));
+    expect(workspace.tab.modules, hasLength(4));
 
     // The original has not moved. That is the whole difference between this
     // and a plain drag, and getting it backwards would silently destroy a
@@ -227,7 +282,7 @@ void main() {
   testWidgets('a drop that would overlap is refused, and nothing moves', (
     tester,
   ) async {
-    final container = await _pump(tester);
+    final container = await _pumpSparse(tester);
     final columns = _columnStride(tester);
     final id = _spec(container, Metric.lufsMomentary).id;
     final before = container.read(workspaceProvider).tab.moduleById(id)!.rect;
@@ -246,7 +301,7 @@ void main() {
   testWidgets('the corner grip resizes without moving the module', (
     tester,
   ) async {
-    final container = await _pump(tester);
+    final container = await _pumpSparse(tester);
     final rows = _rowStride(tester);
     final rect = tester.getRect(_moduleTitled('LUFS-M'));
     final id = _spec(container, Metric.lufsMomentary).id;
@@ -267,7 +322,7 @@ void main() {
   testWidgets('right-clicking empty canvas adds a module where you clicked', (
     tester,
   ) async {
-    final container = await _pump(tester);
+    final container = await _pumpSparse(tester);
 
     // Below the six default boxes, which occupy the top three rows.
     final canvas = tester.getRect(find.byType(GridCanvas));
@@ -282,21 +337,57 @@ void main() {
     await _settle(tester);
 
     final workspace = container.read(workspaceProvider);
-    expect(workspace.tab.modules, hasLength(7));
+    expect(workspace.tab.modules, hasLength(4));
 
     final added = workspace.tab.moduleById(workspace.selectedModuleId!)!;
     expect(added.kind, ModuleKind.spectrumAnalyzer);
     expect(added.rect.row, greaterThanOrEqualTo(3));
 
-    // And it is honest about not existing yet rather than showing an empty
-    // panel, which reads as a meter that is broken.
-    expect(find.text('NOT BUILT YET'), findsOneWidget);
+    // And it is a real analyser, not a placeholder. Every one of the twelve
+    // kinds the menu offers now draws something.
+    expect(find.byType(SpectrumAnalyzerModule), findsOneWidget);
+  });
+
+  testWidgets('every module kind the menu offers actually builds', (
+    tester,
+  ) async {
+    // The exhaustive switch in ModuleHost makes *omitting* a kind a compile
+    // error, which is most of the protection. What it cannot catch is a
+    // painter that throws on its first frame — a null label cache, a division
+    // by a zero-height module — so every kind is placed and painted here.
+    //
+    // One tab per kind, because twelve modules at their default sizes do not
+    // fit on one and the canvas would correctly refuse half of them.
+    final container = await _pump(tester);
+    final controller = container.read(workspaceProvider.notifier);
+
+    for (final kind in ModuleKind.values) {
+      controller.addTab();
+      controller.addModule(kind);
+      await _settle(tester);
+
+      expect(
+        tester.takeException(),
+        isNull,
+        reason: '${kind.label} threw while painting',
+      );
+      expect(
+        find.byType(ModuleHost),
+        findsOneWidget,
+        reason: '${kind.label} did not reach the canvas',
+      );
+      expect(
+        find.byType(ModuleTooSmall),
+        findsNothing,
+        reason: '${kind.label} does not fit at its own default size',
+      );
+    }
   });
 
   testWidgets('delete removes the selection and undo brings it back', (
     tester,
   ) async {
-    final container = await _pump(tester);
+    final container = await _pumpSparse(tester);
 
     await tester.tapAt(tester.getCenter(_moduleTitled('LRA')));
     await tester.pump();
@@ -304,7 +395,7 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.delete);
     await tester.pump();
 
-    expect(find.byType(ModuleHost), findsNWidgets(5));
+    expect(find.byType(ModuleHost), findsNWidgets(2));
     expect(find.text('LRA'), findsNothing);
     expect(container.read(workspaceProvider).selectedModuleId, isNull);
 
@@ -318,11 +409,13 @@ void main() {
 
   testWidgets('a new tab is empty, and says so', (tester) async {
     final container = await _pump(tester);
+    final before = container.read(workspaceProvider).preset.tabs.length;
+    final firstTab = container.read(workspaceProvider).tab.modules.length;
 
     await tester.tap(find.text('+'));
     await _settle(tester);
 
-    expect(container.read(workspaceProvider).activeTab, 1);
+    expect(container.read(workspaceProvider).activeTab, before);
     expect(find.byType(ModuleHost), findsNothing);
     expect(find.text('EMPTY TAB'), findsOneWidget);
 
@@ -331,6 +424,6 @@ void main() {
     await tester.pump();
 
     expect(container.read(workspaceProvider).activeTab, 0);
-    expect(find.byType(ModuleHost), findsNWidgets(6));
+    expect(find.byType(ModuleHost), findsNWidgets(firstTab));
   });
 }

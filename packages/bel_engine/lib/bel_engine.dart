@@ -212,7 +212,7 @@ class BelEngine {
           .asTypedList(kBelHistogramBins);
 
   /// The ABI this Dart code was written against. Mirrors `BEL_ABI_VERSION`.
-  static const int expectedAbiVersion = 3;
+  static const int expectedAbiVersion = 4;
 
   final Pointer<native.bel_engine> _handle;
 
@@ -387,6 +387,15 @@ class BelEngine {
     _generation = generation;
     return true;
   }
+
+  /// Increments once per published measurement.
+  ///
+  /// Modules that *accumulate* — a spectrogram column, an afterglow layer, an
+  /// infinite peak hold — advance on a change in this rather than once per
+  /// `paint`. A paint also happens on a resize, a theme change or an ancestor
+  /// marking the subtree dirty, and a spectrogram that scrolled on those would
+  /// invent time that no audio passed through.
+  int get generation => _generation;
 
   /// Measure [interleaved] and publish the result, synchronously.
   ///

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import 'package:flutter/rendering.dart';
+import 'package:flutter/widgets.dart';
 
 /// The base class every module painter extends.
 ///
@@ -20,6 +20,23 @@ import 'package:flutter/rendering.dart';
 /// So meters are display surfaces and do not take input. A module that genuinely
 /// needs it — scrubbing a histogram, dragging a spectrum cursor — overrides
 /// [hitTest] again and opts back in deliberately.
+/// A meter's body: one painter, filling whatever room the frame gives it.
+///
+/// The `SizedBox.expand` is not decoration. A [CustomPaint] with no child has
+/// no intrinsic size and collapses to nothing, and the symptom is a module that
+/// draws its frame and its title and then nothing at all — which reads as a
+/// broken meter rather than as a layout mistake. Every module used to write
+/// this line; now none of them can forget it.
+class MeterBody extends StatelessWidget {
+  const MeterBody({required this.painter, super.key});
+
+  final MeterPainter painter;
+
+  @override
+  Widget build(BuildContext context) =>
+      CustomPaint(painter: painter, child: const SizedBox.expand());
+}
+
 abstract class MeterPainter extends CustomPainter {
   const MeterPainter({super.repaint});
 

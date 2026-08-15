@@ -40,10 +40,10 @@ PopupMenuItem<T> belMenuItem<T>(
 
 /// Offers all twelve module kinds.
 ///
-/// The eleven that have no painter yet are listed and marked rather than hidden
-/// or disabled. Hiding them would misrepresent what Bel is; disabling them
-/// would stop somebody laying out a tab now and filling it in when the meters
-/// land in Phase 3.
+/// In declaration order, which is roughly simplest first, and not alphabetical:
+/// somebody who has used this menu twice reaches for a position rather than
+/// reading it, and sorting by name would put the Alert Meter above the LUFS
+/// Meter for no reason anybody could name.
 Future<ModuleKind?> showModuleKindMenu(
   BuildContext context,
   Offset globalPosition,
@@ -55,16 +55,7 @@ Future<ModuleKind?> showModuleKindMenu(
     position: menuPositionAt(context, globalPosition),
     items: [
       for (final kind in ModuleKind.values)
-        belMenuItem(
-          context,
-          kind,
-          kind == ModuleKind.numberBox
-              ? kind.label
-              : '${kind.label}  ·  not built',
-          color: kind == ModuleKind.numberBox
-              ? colors.textPrimary
-              : colors.textFaint,
-        ),
+        belMenuItem(context, kind, kind.label),
     ],
   );
 }

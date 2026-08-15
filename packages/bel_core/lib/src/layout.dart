@@ -55,6 +55,7 @@ enum ModuleKind {
     minRows: 2,
     defaultColumns: 4,
     defaultRows: 3,
+    defaultMetric: Metric.truePeakMax,
   ),
   validator(
     'validator',
@@ -112,6 +113,7 @@ enum ModuleKind {
     required this.minRows,
     required this.defaultColumns,
     required this.defaultRows,
+    this.defaultMetric = Metric.lufsIntegrated,
   });
 
   /// Stable identifier for presets and the wire protocol.
@@ -126,6 +128,15 @@ enum ModuleKind {
   /// on resize.
   final int minColumns;
   final int minRows;
+
+  /// Which measurement this kind shows when nothing has chosen one.
+  ///
+  /// Only the kinds that show a single quantity use it — a Number Box, an
+  /// Alert. It exists so that a freshly placed Alert Meter watches true peak,
+  /// which is what an alert is for, rather than integrated loudness, which
+  /// cannot go "over" anything and would make the module look broken until
+  /// somebody found its menu.
+  final Metric defaultMetric;
 
   /// The size a freshly placed module gets.
   ///
@@ -234,10 +245,9 @@ class ModuleSpec {
   final GridRect rect;
   final Map<String, Object?> options;
 
-  /// The metric a Number Box shows. Meaningless for other kinds.
+  /// The metric this module shows, for the kinds that show one.
   Metric get metric =>
-      Metric.fromId(options['metric'] as String? ?? '') ??
-      Metric.lufsIntegrated;
+      Metric.fromId(options['metric'] as String? ?? '') ?? kind.defaultMetric;
 
   /// What the title bar says.
   ///

@@ -6,7 +6,18 @@ import 'package:bel_ui/bel_ui.dart';
 import 'package:flutter/widgets.dart';
 
 import '../clock/meter_clock.dart';
+import '../modules/alert_meter.dart';
+import '../modules/digital_meter.dart';
+import '../modules/histogram.dart';
+import '../modules/lufs_meter.dart';
 import '../modules/number_box.dart';
+import '../modules/phase_scope.dart';
+import '../modules/spectrogram.dart';
+import '../modules/spectrum_analyzer.dart';
+import '../modules/stereo_cloud.dart';
+import '../modules/super_meter.dart';
+import '../modules/validator.dart';
+import '../modules/vu_meter.dart';
 
 /// Turns a [ModuleSpec] into a widget.
 ///
@@ -65,53 +76,48 @@ class ModuleHost extends StatelessWidget {
         metric: spec.metric,
         calibration: calibration,
       ),
-      ModuleKind.lufsMeter ||
-      ModuleKind.digitalMeter ||
-      ModuleKind.superMeter ||
-      ModuleKind.vuMeter ||
-      ModuleKind.alertMeter ||
-      ModuleKind.validator ||
-      ModuleKind.histogram ||
-      ModuleKind.spectrumAnalyzer ||
-      ModuleKind.spectrogram ||
-      ModuleKind.phaseScope ||
-      ModuleKind.stereoCloud => const _NotBuiltYet(),
-    };
-  }
-}
-
-/// Stands in for a module kind the canvas can place but this build cannot draw.
-///
-/// Placing one is allowed deliberately: laying out a tab is useful before every
-/// meter exists, and a canvas that refuses eleven of twelve kinds hides the
-/// shape of the finished product. What it must never do is look like a meter —
-/// an empty panel with a title bar reads as a meter showing nothing, which is
-/// indistinguishable from a meter that is broken. So it says what it is.
-class _NotBuiltYet extends StatelessWidget {
-  const _NotBuiltYet();
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = BelTheme.of(context);
-    // Inert, like every meter body. Text absorbs pointer events, and a module
-    // you cannot drag by its own middle is a module that looks broken.
-    return IgnorePointer(
-      child: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              'NOT BUILT YET',
-              style: BelType.label.copyWith(color: colors.textFaint),
-            ),
-            const SizedBox(height: Space.xs),
-            Text(
-              'Phase 3',
-              style: BelType.caption.copyWith(color: colors.textFaint),
-            ),
-          ],
-        ),
+      ModuleKind.lufsMeter => LufsMeterModule(
+        engine: engine,
+        clock: clock,
+        calibration: calibration,
       ),
-    );
+      ModuleKind.digitalMeter => DigitalMeterModule(
+        engine: engine,
+        clock: clock,
+      ),
+      ModuleKind.superMeter => SuperMeterModule(
+        engine: engine,
+        clock: clock,
+        calibration: calibration,
+      ),
+      ModuleKind.vuMeter => VuMeterModule(
+        engine: engine,
+        clock: clock,
+        calibration: calibration,
+      ),
+      ModuleKind.alertMeter => AlertMeterModule(
+        engine: engine,
+        clock: clock,
+        metric: spec.metric,
+        calibration: calibration,
+      ),
+      ModuleKind.validator => ValidatorModule(
+        engine: engine,
+        clock: clock,
+        calibration: calibration,
+      ),
+      ModuleKind.histogram => HistogramModule(
+        engine: engine,
+        clock: clock,
+        calibration: calibration,
+      ),
+      ModuleKind.spectrumAnalyzer => SpectrumAnalyzerModule(
+        engine: engine,
+        clock: clock,
+      ),
+      ModuleKind.spectrogram => SpectrogramModule(engine: engine, clock: clock),
+      ModuleKind.phaseScope => PhaseScopeModule(engine: engine, clock: clock),
+      ModuleKind.stereoCloud => StereoCloudModule(engine: engine, clock: clock),
+    };
   }
 }

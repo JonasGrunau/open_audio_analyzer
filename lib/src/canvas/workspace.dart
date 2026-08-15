@@ -261,11 +261,17 @@ class WorkspaceController extends Notifier<Workspace> {
 
 /// What Bel opens with.
 ///
-/// Six readings across the top of an otherwise empty canvas: the three loudness
-/// integrations, the range, and the two peaks that decide whether a master
-/// passes. It is the layout somebody checking a mix actually wants, and it
-/// leaves most of the canvas empty so that the first thing a new user sees is
-/// obviously arrangeable.
+/// A working meter bridge on the first tab and the frequency displays on the
+/// second, rather than an empty canvas with an invitation to build one. The
+/// argument for starting empty is that it shows the canvas is arrangeable; the
+/// argument against is that somebody who opened a metering tool wants to meter
+/// something, and a blank grid asks them to design a layout before they have
+/// heard a single reading.
+///
+/// The row of number boxes stays across the top because it is the part people
+/// actually read. Everything under it is the *why* behind those six numbers —
+/// where the loudness has been, how it sits in the target, whether the stereo
+/// image survives a mono fold.
 ///
 /// Nothing persists this yet — a rearranged canvas is gone when the app closes.
 /// Preset saving is Phase 4, and saying so in the README is better than a
@@ -280,6 +286,21 @@ PresetSpec defaultPreset() {
     Metric.samplePeakMax,
   ];
 
+  var next = 0;
+  ModuleSpec module(
+    ModuleKind kind,
+    int column,
+    int row,
+    int columns,
+    int rows, [
+    Map<String, Object?> options = const {},
+  ]) => ModuleSpec(
+    id: 'm${++next}',
+    kind: kind,
+    rect: GridRect(column: column, row: row, columns: columns, rows: rows),
+    options: options,
+  );
+
   return PresetSpec(
     name: 'Loudness',
     tabs: [
@@ -287,12 +308,29 @@ PresetSpec defaultPreset() {
         name: 'Loudness',
         modules: [
           for (var i = 0; i < metrics.length; i++)
-            ModuleSpec(
-              id: 'm${i + 1}',
-              kind: ModuleKind.numberBox,
-              rect: GridRect(column: i * 4, row: 0, columns: 4, rows: 3),
-              options: {'metric': metrics[i].id},
-            ),
+            module(ModuleKind.numberBox, i * 4, 0, 4, 2, {
+              'metric': metrics[i].id,
+            }),
+          module(ModuleKind.lufsMeter, 0, 2, 5, 9),
+          module(ModuleKind.superMeter, 5, 2, 8, 9),
+          module(ModuleKind.digitalMeter, 13, 2, 4, 9),
+          module(ModuleKind.validator, 17, 2, 7, 5),
+          module(ModuleKind.vuMeter, 17, 7, 7, 5),
+          module(ModuleKind.histogram, 0, 11, 17, 5),
+          module(ModuleKind.alertMeter, 17, 12, 7, 4),
+        ],
+      ),
+      TabSpec(
+        name: 'Spectrum',
+        modules: [
+          // The analyser spans the full width because frequency is the axis
+          // that benefits most from it: at 24 columns each of its 512 bands
+          // gets more than two pixels, and below about half that the display
+          // starts throwing away detail the engine measured.
+          module(ModuleKind.spectrumAnalyzer, 0, 0, 24, 8),
+          module(ModuleKind.spectrogram, 0, 8, 12, 8),
+          module(ModuleKind.phaseScope, 12, 8, 6, 8),
+          module(ModuleKind.stereoCloud, 18, 8, 6, 8),
         ],
       ),
     ],
