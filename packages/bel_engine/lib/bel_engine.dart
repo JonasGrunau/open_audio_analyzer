@@ -212,7 +212,7 @@ class BelEngine {
           .asTypedList(kBelHistogramBins);
 
   /// The ABI this Dart code was written against. Mirrors `BEL_ABI_VERSION`.
-  static const int expectedAbiVersion = 4;
+  static const int expectedAbiVersion = 3;
 
   final Pointer<native.bel_engine> _handle;
 
