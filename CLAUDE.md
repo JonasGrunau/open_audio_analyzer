@@ -198,6 +198,22 @@ is unaffected: it never links JUCE — it talks to the plugin over a socket.
   a crowded VU face, and two labels printed in the same place. Tests do not
   catch layout that is merely wrong to look at.
 
+  **`--open-panel=<name>` opens one of the five panels at startup**, in a debug
+  build, which is how a panel gets looked at without clicking through to it:
+  `open -a build/macos/Build/Products/Debug/bel.app --args --open-panel=settings`.
+
+  **`screencapture` returns a black frame without screen-recording permission,**
+  and macOS grants that per terminal application, so an agent usually cannot
+  take one at all. The route that works headless and needs no permission is to
+  render the tree in a widget test: a `RepaintBoundary` above `MaterialApp`,
+  `boundary.toImage(...)` inside `tester.runAsync`, and the real fonts loaded
+  through `FontLoader` — otherwise every glyph is a box. Read the font bytes
+  with `readAsBytesSync`; an awaited real read inside a `testWidgets` body never
+  completes. Two of the three layout defects found in Phase 8 were found this
+  way and by nothing else. Anchor the boundary above `MaterialApp` or the panel,
+  which the `Navigator` builds, is not in the picture — and open the panel from
+  a context *below* `BelTheme`, or `showBelPanel` asserts.
+
 - **Bump `BEL_ABI_VERSION` when `bel.h` changes shape,** and regenerate the
   bindings (`cd packages/bel_engine && dart run ffigen --config ffigen.yaml`).
   The Dart side asserts the version at startup, because a stale library does not
