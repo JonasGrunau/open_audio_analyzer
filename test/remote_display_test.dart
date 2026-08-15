@@ -1,0 +1,305 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+//
+// The remote display, end to end over a real socket.
+//
+// `packages/bel_wire` proves the codec in isolation; this proves the two halves
+// that use it actually talk. It runs a DisplayHost and a DisplayClient in one
+// process over the loopback interface, which is a genuine TCP connection with
+// genuine framing — no fakes between them — so a mistake in the handshake, the
+// frame boundaries or the publish loop fails here rather than on a tablet in
+// somebody's live room.
+
+import 'dart:typed_data';
+
+import 'package:bel/src/remote/display_client.dart';
+import 'package:bel/src/remote/display_host.dart';
+import 'package:bel_core/bel_core.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+void main() {
+  late _FakeSource source;
+  late DisplayHost host;
+  late DisplayClient client;
+
+  setUp(() {
+    source = _FakeSource();
+    host = DisplayHost(source: source, hostName: 'Test Host', abiVersion: 4);
+    client = DisplayClient(staleAfter: const Duration(milliseconds: 300));
+  });
+
+  tearDown(() async {
+    await client.disconnect();
+    client.dispose();
+    await host.stop();
+    host.dispose();
+  });
+
+  Future<void> connect() async {
+    // Port 0 asks the OS for a free one, so the suite cannot collide with a
+    // developer running the real app on the default port while it runs.
+    await host.start(port: 0);
+    await client.connect('127.0.0.1', host.port!);
+    await _settle();
+  }
+
+  test('a display learns who it is attached to', () async {
+    await connect();
+
+    expect(client.state.value, RemoteLinkState.live);
+    expect(client.hostName.value, 'Test Host');
+    expect(client.hostAbiVersion, 4);
+    expect(host.clientCount.value, 1);
+  });
+
+  test('measurements arrive and match what the host is reading', () async {
+    source
+      ..generation = 1
+      ..lufsIntegrated = -14.2
+      ..truePeakMax = -0.8
+      ..correlation = 0.35
+      ..channels = 2
+      ..sampleRate = 48000
+      ..isRunning = true;
+    source.peak[0] = -3.5;
+    source.peak[1] = -4.25;
+    source.spectrum[100] = -37.5;
+
+    await connect();
+    await _settle(milliseconds: 200);
+
+    expect(client.snapshot.lufsIntegrated, closeTo(-14.2, 1e-5));
+    expect(client.snapshot.truePeakMax, closeTo(-0.8, 1e-5));
+    expect(client.snapshot.correlation, closeTo(0.35, 1e-6));
+    expect(client.snapshot.peak[0], closeTo(-3.5, 1e-6));
+    expect(client.snapshot.peak[1], closeTo(-4.25, 1e-6));
+    expect(client.snapshot.spectrum[100], closeTo(-37.5, 1e-5));
+    expect(client.snapshot.sampleRate, 48000);
+    expect(client.snapshot.channels, 2);
+    expect(client.snapshot.isRunning, isTrue);
+  });
+
+  test('an unmeasured quantity arrives unmeasured', () async {
+    // The rule that matters most on this path. A remote display that turned a
+    // NaN into a zero somewhere between two machines would show a confident
+    // reading nobody took, and it would look exactly like a real one.
+    source
+      ..generation = 1
+      ..lufsIntegrated = double.nan
+      ..loudnessRange = double.nan;
+
+    await connect();
+    await _settle(milliseconds: 200);
+
+    expect(client.snapshot.lufsIntegrated.isNaN, isTrue);
+    expect(client.snapshot.loudnessRange.isNaN, isTrue);
+  });
+
+  test('the layout, skin and target reach the display', () async {
+    final preset = PresetSpec(
+      name: 'Mastering',
+      tabs: const [
+        TabSpec(
+          name: 'Main',
+          modules: [
+            ModuleSpec(
+              id: 'a',
+              kind: ModuleKind.lufsMeter,
+              rect: GridRect(column: 0, row: 0, columns: 6, rows: 8),
+              options: {'metric': 'lufs_i'},
+            ),
+          ],
+        ),
+      ],
+    );
+    final calibration = BuiltInCalibrations.all.first;
+
+    host
+      ..publishLayout(preset)
+      ..publishCalibration(calibration);
+
+    await connect();
+
+    expect(client.layout.value?.name, 'Mastering');
+    expect(client.layout.value?.tabs.single.modules.single.id, 'a');
+    expect(
+      client.layout.value?.tabs.single.modules.single.kind,
+      ModuleKind.lufsMeter,
+    );
+    expect(client.calibration.value.id, calibration.id);
+
+    // The built-in skin travels as an empty payload, which the display reads as
+    // "use the default" rather than as a missing frame.
+    expect(client.skin.value, isNull);
+  });
+
+  test(
+    'a display that joins mid-session is caught up, not left blank',
+    () async {
+      await connect();
+
+      final preset = PresetSpec(
+        name: 'Later',
+        tabs: const [TabSpec(name: 'Main', modules: [])],
+      );
+      host.publishLayout(preset);
+      await _settle();
+
+      expect(client.layout.value?.name, 'Later');
+    },
+  );
+
+  test('a quiet link stops claiming to be current', () async {
+    source
+      ..generation = 1
+      ..lufsShort = -18.0
+      ..isRunning = true;
+
+    await connect();
+    await _settle(milliseconds: 200);
+    expect(client.snapshot.lufsShort, closeTo(-18.0, 1e-5));
+
+    // The host goes away without closing cleanly — the tablet's Wi-Fi drops,
+    // the laptop lid closes. The socket does not necessarily notice.
+    await host.stop();
+    await _settle(milliseconds: 700);
+
+    expect(client.state.value, isNot(RemoteLinkState.live));
+    expect(
+      client.snapshot.lufsShort.isNaN,
+      isTrue,
+      reason: 'a frozen reading is indistinguishable from a quiet passage',
+    );
+    expect(client.snapshot.isRunning, isFalse);
+    expect(client.snapshot.hasLoudness, isFalse);
+  });
+
+  test('the host notices a display leaving', () async {
+    await connect();
+    expect(host.clientCount.value, 1);
+
+    await client.disconnect();
+    await _settle();
+
+    expect(host.clientCount.value, 0);
+  });
+
+  test('publishing is off until it is switched on', () async {
+    expect(host.isListening, isFalse);
+    expect(host.port, isNull);
+  });
+}
+
+/// Real time, not fake: these are real sockets and a real periodic timer, so
+/// the test has to actually wait for them.
+Future<void> _settle({int milliseconds = 120}) =>
+    Future<void>.delayed(Duration(milliseconds: milliseconds));
+
+class _FakeSource implements MeterSource {
+  @override
+  int generation = 0;
+
+  @override
+  double elapsedSeconds = 0;
+
+  @override
+  int sampleRate = 48000;
+
+  @override
+  int channels = 2;
+
+  @override
+  bool isRunning = false;
+
+  @override
+  int droppedFrames = 0;
+
+  @override
+  bool hasOverrun = false;
+
+  @override
+  bool hasLoudness = true;
+
+  @override
+  bool hasSpectrum = true;
+
+  @override
+  double lufsMomentary = double.nan;
+
+  @override
+  double lufsShort = double.nan;
+
+  @override
+  double lufsIntegrated = double.nan;
+
+  @override
+  double loudnessRange = double.nan;
+
+  @override
+  double loudnessRangeLow = double.nan;
+
+  @override
+  double loudnessRangeHigh = double.nan;
+
+  @override
+  double loudnessRangeGate = double.nan;
+
+  @override
+  double truePeak = double.nan;
+
+  @override
+  double truePeakMax = double.nan;
+
+  @override
+  double samplePeakMax = double.nan;
+
+  @override
+  double dynamicRangeShort = double.nan;
+
+  @override
+  double dynamicRangeIntegrated = double.nan;
+
+  @override
+  double crestFactor = double.nan;
+
+  @override
+  double peakToLoudnessRatio = double.nan;
+
+  @override
+  double peakToShortTermRatio = double.nan;
+
+  @override
+  double correlation = double.nan;
+
+  @override
+  double balance = double.nan;
+
+  @override
+  final Float32List peak = Float32List(MeterShape.maxChannels);
+
+  @override
+  final Float32List rms = Float32List(MeterShape.maxChannels);
+
+  @override
+  final Float32List vu = Float32List(MeterShape.maxChannels);
+
+  @override
+  final Uint32List clip = Uint32List(MeterShape.maxChannels);
+
+  @override
+  final Float32List spectrum = Float32List(MeterShape.spectrumBands);
+
+  @override
+  final Float32List spectrumPeak = Float32List(MeterShape.spectrumBands);
+
+  @override
+  final Float32List spectrumPan = Float32List(MeterShape.spectrumBands);
+
+  @override
+  final Float32List scope = Float32List(MeterShape.scopePoints * 2);
+
+  @override
+  final Float32List histogram = Float32List(MeterShape.histogramBins);
+
+  @override
+  bool refresh() => true;
+}

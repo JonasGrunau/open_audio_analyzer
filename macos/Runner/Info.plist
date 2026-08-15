@@ -30,5 +30,11 @@
 	<string>MainMenu</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Bel finds and connects to Bel hosts on your local network so that a tablet can display another machine's meters. It never sends audio.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_bel._tcp</string>
+	</array>
 </dict>
 </plist>

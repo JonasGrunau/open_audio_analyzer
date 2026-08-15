@@ -4,12 +4,16 @@ The application. GPL-3.0-or-later.
 
 | Path | Purpose |
 |------|---------|
-| `main.dart` | `runApp(ProviderScope(...))` and nothing else. |
-| `src/app/` | The shell: window, status bar. |
+| `main.dart` | Parses the command line, loads the configuration, `runApp(ProviderScope(...))`. Nothing else. |
+| `src/app/` | The shell: window, status bar, the keyboard shortcut table, and the launch options. See its own `AGENTS.md`. |
 | `src/canvas/` | The grid canvas, the tab strip and the layout controller. See its own `AGENTS.md`. |
 | `src/clock/` | `MeterClock` — the only `Ticker` in the app. |
 | `src/data/` | Riverpod providers (configuration only) and `metric_reader.dart`. |
 | `src/modules/` | One file per meter module, all twelve. Bodies only — the frame is the canvas's. |
+| `src/panels/` | Settings, presets, the delivery-target editor, the report. See its own `AGENTS.md`. |
+| `src/storage/` | Where configuration lives and how it is read and written. See its own `AGENTS.md`. |
+| `src/remote/` | Both ends of the remote display — the desktop host and the tablet client — plus mDNS. See its own `AGENTS.md`. |
+| `src/plugin/` | The listener the VST3 / AU plugin connects to, and the transport it sends. Loopback only. |
 
 ## Rules
 
@@ -32,8 +36,13 @@ The application. GPL-3.0-or-later.
   module. The symptom is a meter that cannot be selected or dragged by its own
   face, with nothing reported anywhere.
 - **`metric_reader.dart` is the only place `bel_core` meets `bel_engine`.**
-  Phase 6 adds a second implementation of the same signature backed by the wire
-  protocol, and every module keeps working unchanged. Keep that seam narrow.
+  There is now a second implementation of the same signature backed by the wire
+  protocol — `WireSnapshot`, in `bel_wire` — and every module works unchanged
+  against either. That is what lets a tablet with no engine draw the desktop's
+  meters with the desktop's painters. Keep the seam narrow: a module reads
+  `MeterSource`, never a concrete engine, and if something cannot be drawn from
+  a `MeterSource` the fix is to widen the interface rather than to write a
+  second painter.
 - **Nothing allocates inside `paint()`** — no `Paint`, `Path`, `TextPainter`,
   list or string concatenation. Cache in the `State`. In practice that means:
   `Paint`s built in the painter's constructor; static labels laid out once with

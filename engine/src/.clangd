@@ -8,6 +8,9 @@ CompileFlags:
   Add:
     - -xc
     - -I../include
+    - -I../third_party/miniaudio
+    - -I../third_party/pffft
+    - -I../third_party/dr_libs
     - -std=c11
     - -Wall
     - -Wextra

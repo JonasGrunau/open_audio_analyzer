@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Bel's msix manifest.
+
+  SPDX-License-Identifier: GPL-3.0-or-later
+
+  Two placeholders are substituted by make_msix.ps1 before packing:
+
+      {{VERSION}}    four-part, from pubspec.yaml. Windows requires four parts
+                     and requires the last to be 0 for a Store package; it is
+                     written as major.minor.patch.0.
+      {{PUBLISHER}}  the *exact* subject of the signing certificate, e.g.
+                     CN=Jonas Grunau. This is not a name field: if it does not
+                     match the certificate byte for byte, installation fails
+                     with 0x800B0100 and no useful message.
+
+  The microphone capability is the one that matters. Without it capture opens
+  and returns silence — not an error, silence — so a user sees a meter that
+  never moves and concludes the application is broken. `runFullTrust` is what
+  makes an msix able to host an unpackaged Win32 application at all.
+-->
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+  IgnorableNamespaces="uap rescap">
+
+  <Identity
+    Name="dev.belmeter.bel"
+    Publisher="{{PUBLISHER}}"
+    Version="{{VERSION}}"
+    ProcessorArchitecture="x64" />
+
+  <Properties>
+    <DisplayName>Bel</DisplayName>
+    <PublisherDisplayName>The Bel contributors</PublisherDisplayName>
+    <Description>Loudness and spectrum metering for mixing, mastering and delivery</Description>
+    <Logo>images\StoreLogo.png</Logo>
+  </Properties>
+
+  <Dependencies>
+    <!-- 10.0.17763 is the first build with the msix runFullTrust behaviour
+         Flutter's Windows embedder relies on. Claiming an older minimum
+         produces a package that installs and then fails to launch. -->
+    <TargetDeviceFamily
+      Name="Windows.Desktop"
+      MinVersion="10.0.17763.0"
+      MaxVersionTested="10.0.22621.0" />
+  </Dependencies>
+
+  <Resources>
+    <Resource Language="en-us" />
+  </Resources>
+
+  <Capabilities>
+    <rescap:Capability Name="runFullTrust" />
+    <DeviceCapability Name="microphone" />
+  </Capabilities>
+
+  <Applications>
+    <Application Id="Bel" Executable="bel.exe" EntryPoint="Windows.FullTrustApplication">
+      <uap:VisualElements
+        DisplayName="Bel"
+        Description="Loudness and spectrum metering for mixing, mastering and delivery"
+        BackgroundColor="#0B0C0E"
+        Square150x150Logo="images\Square150x150Logo.png"
+        Square44x44Logo="images\Square44x44Logo.png" />
+    </Application>
+  </Applications>
+</Package>

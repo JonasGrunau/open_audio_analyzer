@@ -4,6 +4,8 @@ import 'package:bel_core/bel_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../data/providers.dart';
+
 /// The layout the user is editing: tabs, the active one, and the selection.
 ///
 /// This is configuration, not measurement, and that is exactly why it belongs
@@ -69,8 +71,20 @@ class WorkspaceController extends Notifier<Workspace> {
   /// because this is a meter that stays open for days.
   static const int historyLimit = 64;
 
+  /// The canvas opens where it was left.
+  ///
+  /// Restoring here rather than assigning after the first frame is what keeps
+  /// the app from painting the default layout and then visibly replacing it.
+  /// It also keeps the restore out of the undo history, which is correct:
+  /// yesterday's session is the starting point, not an edit to be undone.
   @override
-  Workspace build() => Workspace(preset: defaultPreset(), activeTab: 0);
+  Workspace build() {
+    final session = ref.watch(startupConfigProvider).session;
+    if (session != null) {
+      return Workspace(preset: session.preset, activeTab: session.activeTab);
+    }
+    return Workspace(preset: defaultPreset(), activeTab: 0);
+  }
 
   bool get canUndo => _past.isNotEmpty;
   bool get canRedo => _future.isNotEmpty;
@@ -92,6 +106,34 @@ class WorkspaceController extends Notifier<Workspace> {
     if (_future.isEmpty) return;
     _past.add(state);
     state = _future.removeLast();
+  }
+
+  // --- Presets ------------------------------------------------------------
+
+  /// Replaces the entire layout with a saved one.
+  ///
+  /// An undoable edit, deliberately. Loading the wrong preset is exactly the
+  /// mistake somebody wants back out of, and having spent the history to get
+  /// here is a smaller loss than losing the arrangement it replaced.
+  void loadPreset(PresetSpec preset) {
+    if (preset.tabs.isEmpty) return;
+    _commit(Workspace(preset: preset, activeTab: 0));
+  }
+
+  /// Renames the open layout. What "Save preset" will call the file.
+  void renamePreset(String name) {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty || trimmed == state.preset.name) return;
+    _commit(
+      state.copyWith(
+        preset: PresetSpec(
+          name: trimmed,
+          tabs: state.preset.tabs,
+          calibrationId: state.preset.calibrationId,
+          skinId: state.preset.skinId,
+        ),
+      ),
+    );
   }
 
   // --- Selection ----------------------------------------------------------

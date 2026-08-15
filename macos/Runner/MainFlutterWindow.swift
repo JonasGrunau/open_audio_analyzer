@@ -9,7 +9,22 @@ class MainFlutterWindow: NSWindow {
   private static let minimumSize = NSSize(width: 720, height: 480)
 
   override func awakeFromNib() {
-    let flutterViewController = FlutterViewController()
+    // The Windows and Linux runners forward the command line to the Dart
+    // entrypoint themselves; the stock macOS one builds a bare
+    // FlutterViewController and forwards nothing. Without these two lines
+    // `--config-dir` and `--open-panel` work on two platforms out of three and
+    // are silently ignored on the one where they exist for — `open --args` is
+    // the only way to hand a Mac application arguments without launching the
+    // binary inside the bundle, which is what breaks device capture.
+    //
+    // argv[0] is dropped. Everything else is passed through, including the
+    // `-psn_0_…` the Finder appends and the flags Xcode adds in a debug launch,
+    // because the parser ignores what it does not recognise and a runner that
+    // filtered here would be a second place to keep that list.
+    let project = FlutterDartProject()
+    project.dartEntrypointArguments = Array(CommandLine.arguments.dropFirst())
+
+    let flutterViewController = FlutterViewController(project: project)
     self.contentViewController = flutterViewController
 
     self.contentMinSize = MainFlutterWindow.minimumSize

@@ -1,49 +1,80 @@
 # bel_engine
 
-A new Dart FFI package project.
+Dart bindings for Bel's C measurement engine, and the build hook that compiles
+it. **MIT**, like the engine itself, so that anybody can embed and audit the
+measurement code.
 
-## Getting Started
+This package is **not publishable**. `hook/build.dart` reaches out to
+`../../engine` with relative paths that no published archive would contain; it
+is a workspace package and must stay one. See `AGENTS.md` for the rules that
+are not obvious from the code.
 
-This project is a starting point for a Flutter
-[FFI package](https://flutter.dev/to/ffi-package),
-a specialized package that includes native code directly invoked with Dart FFI.
+## What is in here
 
-## Project structure
+| Path | Job |
+|------|-----|
+| `hook/build.dart` | Compiles `../../engine/src/*.c` through `native_toolchain_c` and bundles the result as a code asset. No podspec, no `build.gradle`, no per-platform CMake. |
+| `ffigen.yaml` | Generates `lib/bel_engine_bindings_generated.dart` from `engine/include/bel/bel.h`. |
+| `lib/bel_engine.dart` | The `BelEngine` facade, the zero-copy typed views, and the ABI assertion. |
+| `lib/src/bel_ffi.dart` | The one hand-written binding: `bel_snapshot_acquire`, declared `isLeaf: true`. |
+| `lib/src/bel_file.dart` | File decoding — `bel_file_open` / `read` / `seek` / `close`. Measures nothing. |
+| `lib/src/offline.dart` | `analyseFile`: the decode-push-read loop the app and the `bel` CLI both drive files through. |
 
-This template uses the following structure:
+## Reading a measurement
 
-* `src`: Contains the native source code, and a CmakeFile.txt file for building
-  that source code into a dynamic library.
+The engine publishes into a seqlock-protected snapshot in native memory. The
+Dart side acquires it once per frame and reads `Float32List` views that were
+built **once at startup** over memory that never moves — no copy into the Dart
+heap, no allocation per frame.
 
-* `lib`: Contains the Dart code that defines the API of the plugin, and which
-  calls into the native code using `dart:ffi`.
+```dart
+final engine = BelEngine.start(
+  source: BelSource.testTone,
+  sampleRate: 48000,
+  channels: 2,
+);
+engine.refresh();          // one FFI call: atomic load, memcpy, atomic load
+print(engine.lufsIntegrated);
+engine.dispose();          // the typed views are invalid after this
+```
 
-* `bin`: Contains the `build.dart` that performs the external native builds.
+The typed lists are **windows onto native memory, not copies.** Writing to one
+corrupts the engine's snapshot, and every one of them dangles after `dispose()`.
 
-## Building and bundling native code
+`BelEngine` implements `bel_core`'s `MeterSource`, which is the interface the
+twelve meter modules read. The remote display's `WireSnapshot` implements the
+same interface over a socket, so a module cannot tell an engine from a network
+link — that is what lets a tablet with no engine draw the desktop's meters with
+the desktop's painters.
 
-`build.dart` does the building of native components.
+## Regenerating the bindings
 
-Bundling is done by Flutter based on the output from `build.dart`.
+After **every** change to `engine/include/bel/bel.h`:
 
-## Binding to native code
+```sh
+cd packages/bel_engine
+dart run ffigen --config ffigen.yaml
+```
 
-To use the native code, bindings in Dart are needed.
-To avoid writing these by hand, they are generated from the header file
-(`src/bel_engine.h`) by `package:ffigen`.
-Regenerate the bindings by running `dart run ffigen --config ffigen.yaml`.
+The generated file is committed on purpose: `flutter analyze` and the IDE need
+it before any build hook has run, and a contributor who only touches Dart should
+never need a C toolchain.
 
-## Invoking native code
+**`BEL_ABI_VERSION` and `BelEngine.expectedAbiVersion` move in the same commit,
+always.** The Dart constant is not an independent value — it is an assertion
+*about* the header, checked at startup. A stale library does not crash; it reads
+a reordered struct and displays plausible wrong numbers, which is the worst
+failure a measurement tool has.
 
-Very short-running native functions can be directly invoked from any isolate.
-For example, see `sum` in `lib/bel_engine.dart`.
+## Tests
 
-Longer-running functions should be invoked on a helper isolate to avoid
-dropping frames in Flutter applications.
-For example, see `sumAsync` in `lib/bel_engine.dart`.
+```sh
+cd packages/bel_engine && dart test
+```
 
-## Flutter help
-
-For help getting started with Flutter, view our
-[online documentation](https://docs.flutter.dev), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+Plain `dart test` — it drives `hook/build.dart` itself, so there is no separate
+native build step. The suite holds the meters against arithmetic (a sine of
+amplitude *A* peaks at *A* and has an RMS of *A*/√2, exactly 3.0103 dB lower),
+runs the EBU Tech 3341/3342 conformance cases, checks the spectrum against a
+full-scale sine on a bin centre, and asserts that decoding a file does not
+change a reading. CI runs all of it on Linux, macOS and Windows on every push.

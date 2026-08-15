@@ -2,6 +2,7 @@
 
 import 'dart:ui' as ui;
 
+import 'package:bel_core/bel_core.dart';
 import 'package:bel_engine/bel_engine.dart';
 import 'package:bel_ui/bel_ui.dart';
 import 'package:flutter/widgets.dart';
@@ -26,7 +27,7 @@ class DigitalMeterModule extends StatefulWidget {
     super.key,
   });
 
-  final BelEngine engine;
+  final MeterSource engine;
   final MeterClock clock;
 
   @override
@@ -112,7 +113,7 @@ class _DigitalMeterPainter extends MeterPainter {
        _clipIdle = (Paint()..color = colors.hairline),
        super(repaint: repaint);
 
-  final BelEngine engine;
+  final MeterSource engine;
   final BelColors colors;
   final ScaleGraticule graticule;
   final List<ui.Paragraph> labels;

@@ -1,0 +1,61 @@
+# lib/src/panels/
+
+The panels that sit over the canvas. GPL-3.0-or-later.
+
+| File | Purpose |
+|------|---------|
+| `settings_panel.dart` | Signal and capture device, refresh rate and delivery target, skins, session. The hub the other two open from. |
+| `preset_browser.dart` | Save the current arrangement; open or delete a saved one. |
+| `calibration_editor.dart` | The six numbers a delivery target is. |
+| `report_panel.dart` | Offline analysis: drop a file, watch it run, cancel it, export the result. |
+| `report_card.dart` | The report as a **PNG** — a fixed layout drawn deliberately, not a screenshot of the panel, so two people exporting the same report get the same picture. It lives here rather than beside the other exports in `bel_core` because rendering needs `dart:ui`. |
+| `shortcuts_sheet.dart` | The keyboard shortcuts, drawn from the table in `lib/src/app/shortcuts.dart`. Holds no list of its own. |
+
+The primitives they are assembled from — `PanelScaffold`, `PanelSection`,
+`PanelRow`, `PanelListRow`, `SegmentedControl`, `BelButton`, `BelToggle`,
+`BelTextField`, `showBelPanel` — live in `bel_ui/src/panel.dart`. A panel that
+rolls its own bordered box will drift from the others within a month.
+
+## Rules
+
+- **Open with `showBelPanel`, and build on `PanelScaffold`.** A route is built by
+  the `Navigator`, which sits *above* both the application's `Material` and its
+  `BelTheme`. Without those two, `BelTheme.of` asserts and every `PopupMenuButton`
+  and `TextField` becomes an error box — whose intrinsic width is near 100 000 px,
+  so what you actually see is a `RenderFlex` overflow blaming an innocent `Row`.
+
+- **There is no OK button.** Every control writes through as it is touched. A
+  panel with an OK button can be abandoned in a state the interface has already
+  shown, and then the meters and the settings disagree.
+
+- **A destructive action confirms in place.** The delete button becomes
+  `Delete?` and takes a second press. No modal over a modal, and no undo stack
+  for files.
+
+- **Say why something failed, where it failed.** A save that did not happen puts
+  the store's own message in the panel — not a log line, and never nothing.
+  These panels are the only place a user finds out that persistence is not
+  working.
+
+- **Parse numbers leniently.** Accept the typographic minus (U+2212) and the
+  comma decimal separator: the interface renders "−14 LUFS" itself, so anybody
+  who copies a target out of Bel and pastes it back in is pasting a character
+  `double.parse` rejects, and half of Europe types "−0,5".
+
+- **Nothing here is on the frame path.** These are ordinary widgets that rebuild
+  when a human does something; the no-allocation-in-`paint` rule that governs
+  `lib/src/modules/` does not apply. Do not import a meter or read a
+  measurement — a panel that showed a live number would rebuild at meter rate.
+
+## Testing
+
+`test/panels_test.dart` drives them through the pointer. Two things it has to do
+that are not obvious, both documented at the helpers:
+
+- **Scroll a control into view before tapping it.** A panel body scrolls; a
+  control below the fold still has a render box, `tap` still derives an offset
+  from it, and the hit test lands on the backdrop.
+- **Alternate `tester.runAsync` and `tester.pump` when waiting for a save.** The
+  I/O only progresses on the real event loop; the continuation that records it
+  only runs when the fake zone drains. Poll inside `runAsync` alone and the write
+  completes with nothing to show for it.

@@ -1,0 +1,212 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# Installers, one per platform, attached to a GitHub release.
+#
+# ---------------------------------------------------------------------------
+# Why this is not part of ci.yml
+#
+# CI answers "is this correct?" on every push and has to stay fast. This answers
+# "can somebody install it?" and takes an order of magnitude longer — four
+# release builds, a notarisation round trip to Apple, a flatpak runtime
+# download. Running it on every commit would make the signal everybody actually
+# waits on slower for a question nobody asked on that commit.
+#
+# It runs on a tag, and on demand. The manual trigger is not a convenience: an
+# installer that is only ever built at release time is one whose script has been
+# broken for six weeks by the time anybody finds out.
+#
+# ---------------------------------------------------------------------------
+# The AppImage runner is deliberately old
+#
+# glibc is forward-compatible and not backward-compatible, so an AppImage built
+# against a newer one refuses to start on an older distribution — with a loader
+# error and nothing else. `ubuntu-22.04` is therefore pinned rather than
+# `ubuntu-latest`, and moving it forward silently narrows who can run Bel. The
+# flatpak has no such constraint because its runtime carries its own libc,
+# which is most of the reason to have both.
+#
+# ---------------------------------------------------------------------------
+# Unsigned artefacts are published, and labelled
+#
+# Signing needs secrets a fork does not have. Rather than fail, each script
+# produces an unsigned package and says so on stdout; the release notes repeat
+# it. A build that quietly published something a user cannot install would be
+# worse than one that failed.
+
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+env:
+  FLUTTER_VERSION: 3.44.5
+
+jobs:
+  macos:
+    name: dmg
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Build and package
+        env:
+          BEL_SIGNING_IDENTITY: ${{ secrets.BEL_SIGNING_IDENTITY }}
+          BEL_NOTARY_PROFILE: ${{ secrets.BEL_NOTARY_PROFILE }}
+        run: sh packaging/macos/make_dmg.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bel-macos-dmg
+          path: build/packaging/*.dmg
+          if-no-files-found: error
+
+  windows:
+    name: msix
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Build and package
+        shell: pwsh
+        env:
+          BEL_WINDOWS_CERT: ${{ secrets.BEL_WINDOWS_CERT }}
+          BEL_WINDOWS_CERT_PASS: ${{ secrets.BEL_WINDOWS_CERT_PASS }}
+          BEL_WINDOWS_PUBLISHER: ${{ secrets.BEL_WINDOWS_PUBLISHER }}
+        run: pwsh packaging/windows/make_msix.ps1
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bel-windows-msix
+          path: build/packaging/*.msix
+          if-no-files-found: error
+
+  appimage:
+    name: AppImage
+    # Pinned, and not to latest. See the header.
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      # Flutter's Linux embedder is GTK on GL; libasound is what miniaudio opens
+      # a capture device through. Both are build-time as well as run-time.
+      - name: Toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            clang cmake ninja-build pkg-config \
+            libgtk-3-dev liblzma-dev libstdc++-12-dev libasound2-dev \
+            fuse libfuse2
+
+      - name: Build and package
+        run: sh packaging/linux/make_appimage.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bel-linux-appimage
+          path: build/packaging/*.AppImage
+          if-no-files-found: error
+
+  flatpak:
+    name: flatpak
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            clang cmake ninja-build pkg-config \
+            libgtk-3-dev liblzma-dev libstdc++-12-dev libasound2-dev \
+            flatpak flatpak-builder
+          flatpak remote-add --if-not-exists --user \
+            flathub https://flathub.org/repo/flathub.flatpakrepo
+          flatpak install -y --user flathub \
+            org.freedesktop.Platform//24.08 org.freedesktop.Sdk//24.08
+
+      - name: Build and package
+        run: sh packaging/linux/make_flatpak.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bel-linux-flatpak
+          path: build/packaging/*.flatpak
+          if-no-files-found: error
+
+  cli:
+    name: bel CLI
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      # A standalone binary, because the CLI's whole point is being usable in
+      # somebody else's CI, where a Flutter SDK is not going to be installed.
+      - name: Compile
+        working-directory: cli
+        run: |
+          dart pub get
+          dart compile exe bin/bel.dart -o bel
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bel-cli-${{ matrix.os }}
+          path: |
+            cli/bel
+            cli/bel.exe
+          if-no-files-found: error
+
+  publish:
+    name: Publish
+    needs: [macos, windows, appimage, flatpak, cli]
+    runs-on: ubuntu-latest
+    # Only a tag becomes a release. A manual run is a check that the scripts
+    # still work, and it leaves its artefacts on the run rather than publishing
+    # a release nobody asked for.
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            --title "Bel ${GITHUB_REF_NAME}" \
+            --notes-file <(sed -n '/^## \[/,/^## \[/p' CHANGELOG.md | sed '$d') \
+            $(find artifacts -type f | sort)

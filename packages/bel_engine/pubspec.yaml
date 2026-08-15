@@ -9,6 +9,14 @@ environment:
   sdk: ^3.12.2
 
 dependencies:
+  # For MeterSource only — the interface BelEngine declares it satisfies, so
+  # that a module can be written once and drawn from either a local engine or a
+  # remote display's socket. bel_core is pure Dart with no dependencies of its
+  # own, so this costs nothing at build or link time, and the arrow points this
+  # way rather than the other: bel_core still knows nothing about dart:ffi.
+  bel_core:
+    path: ../bel_core
+
   code_assets: ^1.0.0
   # Needed at runtime, not just for codegen: bel_version_string returns a
   # Pointer<Char> and Utf8 conversion lives here.

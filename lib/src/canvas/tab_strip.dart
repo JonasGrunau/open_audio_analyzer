@@ -43,6 +43,18 @@ class _TabStripState extends ConsumerState<TabStrip> {
         extentOffset: current.length,
       );
     });
+
+    // **Asked for again on the next frame, and the field's own `autofocus` is
+    // not enough.** Renaming from the context menu runs while that menu's route
+    // is still being popped, and a popping `ModalRoute` hands focus back to
+    // whatever held it before it opened — the canvas — *after* the field has
+    // autofocused. The result is a rename field sitting there ready, with the
+    // caret in it, that swallows nothing you type. Double-clicking a tab
+    // involves no route and was never affected, which is what made this
+    // invisible: the two ways in behaved differently.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _editing == index) _renameFocus.requestFocus();
+    });
   }
 
   void _commitRename() {
@@ -52,6 +64,17 @@ class _TabStripState extends ConsumerState<TabStrip> {
     // a build that still believes it is editing rebuilds the text field, which
     // takes focus again — and the tab cannot be left.
     setState(() => _editing = null);
+
+    // **Focus has to be handed somewhere, and the somewhere matters.** Left on
+    // a field that is about to be removed from the tree, it ends up nowhere at
+    // all — and with no focused node there is nothing for a key event to travel
+    // up from, so every shortcut in the application is dead until the user
+    // clicks. `previouslyFocusedChild` gives it back to whatever held it before
+    // the rename began, which is the canvas.
+    _renameFocus.unfocus(
+      disposition: UnfocusDisposition.previouslyFocusedChild,
+    );
+
     ref.read(workspaceProvider.notifier).renameTab(index, _rename.text);
   }
 
@@ -124,7 +147,14 @@ class _TabStripState extends ConsumerState<TabStrip> {
           padding: const EdgeInsets.symmetric(horizontal: Space.md),
           child: Row(
             children: [
-              Flexible(
+              // **`Expanded`, and no `Spacer` after it.** It was a `Flexible`
+              // beside a `Spacer`, which is two flex children of equal weight:
+              // the strip handed half of its free width to the gap and then
+              // clipped the last tab off the end of a strip that was visibly
+              // half empty. Three tabs in an 800 px window was enough to do it.
+              // With the gap gone the tabs have every pixel the actions do not,
+              // and scroll only when they genuinely do not fit.
+              Expanded(
                 child: SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
                   child: Row(
@@ -144,12 +174,14 @@ class _TabStripState extends ConsumerState<TabStrip> {
                             onRename: () => _startRename(i, tabs[i].name),
                             onMenu: (position) => _tabMenu(i, position),
                           ),
+                      // Inside the scroller, so that "add a tab" stays beside
+                      // the last tab instead of being carried to the far end of
+                      // the strip and sitting against UNDO.
+                      _StripButton(label: '+', onPressed: controller.addTab),
                     ],
                   ),
                 ),
               ),
-              _StripButton(label: '+', onPressed: controller.addTab),
-              const Spacer(),
               _StripButton(
                 label: 'UNDO',
                 enabled: controller.canUndo,

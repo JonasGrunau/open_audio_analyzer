@@ -4,7 +4,7 @@ import 'package:bel_core/bel_core.dart';
 import 'package:bel_engine/bel_engine.dart';
 import 'package:bel_ui/bel_ui.dart';
 
-/// Reads a [Metric] out of a [BelEngine].
+/// Reads a [Metric] out of a [MeterSource].
 ///
 /// This function is the only place the domain vocabulary meets the engine, and
 /// it lives in the app rather than in either package on purpose: `bel_core`
@@ -14,7 +14,7 @@ import 'package:bel_ui/bel_ui.dart';
 ///
 /// Phase 6 adds a second implementation of exactly this signature backed by the
 /// wire protocol, and every module keeps working unchanged.
-double readMetric(BelEngine engine, Metric metric) => switch (metric) {
+double readMetric(MeterSource engine, Metric metric) => switch (metric) {
   Metric.lufsMomentary => engine.lufsMomentary,
   Metric.lufsShort => engine.lufsShort,
   Metric.lufsIntegrated => engine.lufsIntegrated,

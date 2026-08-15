@@ -3,7 +3,6 @@
 import 'dart:ui' as ui;
 
 import 'package:bel_core/bel_core.dart';
-import 'package:bel_engine/bel_engine.dart';
 import 'package:bel_ui/bel_ui.dart';
 import 'package:flutter/widgets.dart';
 
@@ -31,7 +30,7 @@ class ValidatorModule extends StatefulWidget {
     super.key,
   });
 
-  final BelEngine engine;
+  final MeterSource engine;
   final MeterClock clock;
   final Calibration calibration;
 
@@ -134,7 +133,7 @@ class _ValidatorPainter extends MeterPainter {
          ..isAntiAlias = false),
        super(repaint: repaint);
 
-  final BelEngine engine;
+  final MeterSource engine;
   final Calibration calibration;
   final BelColors colors;
   final _ValidatorModuleState state;

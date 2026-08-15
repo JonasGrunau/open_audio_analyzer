@@ -41,17 +41,33 @@ class BelTheme extends InheritedWidget {
 /// A Material theme derived from [colors], so the stock widgets Bel does use
 /// do not arrive with their own opinions about blue.
 ThemeData belThemeData(BelColors colors) {
-  final scheme = ColorScheme.dark(
-    surface: colors.panel,
-    onSurface: colors.textPrimary,
-    primary: colors.accent,
-    onPrimary: colors.background,
-    secondary: colors.accent,
-    onSecondary: colors.background,
-    error: colors.over,
-    onError: colors.background,
-    outline: colors.hairline,
-  );
+  // The brightness comes from the palette rather than from a guess at its
+  // background, because Material uses it for things no Bel colour covers —
+  // menu scrims, overlay tints, the text-selection handle. A light skin under
+  // a dark scheme gets all three wrong at once.
+  final scheme = colors.isLight
+      ? ColorScheme.light(
+          surface: colors.panel,
+          onSurface: colors.textPrimary,
+          primary: colors.accent,
+          onPrimary: colors.panel,
+          secondary: colors.accent,
+          onSecondary: colors.panel,
+          error: colors.over,
+          onError: colors.panel,
+          outline: colors.hairline,
+        )
+      : ColorScheme.dark(
+          surface: colors.panel,
+          onSurface: colors.textPrimary,
+          primary: colors.accent,
+          onPrimary: colors.background,
+          secondary: colors.accent,
+          onSecondary: colors.background,
+          error: colors.over,
+          onError: colors.background,
+          outline: colors.hairline,
+        );
 
   return ThemeData(
     useMaterial3: true,

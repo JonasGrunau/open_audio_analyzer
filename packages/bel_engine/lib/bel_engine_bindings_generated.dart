@@ -72,8 +72,14 @@ external ffi.Pointer<bel_snapshot> bel_snapshot_buffer(
 ///
 /// This is the only function called every frame, so it is the only one whose
 /// cost is worth arguing about. It is a seqlock read: an atomic load, a memcpy
-/// of a few kilobytes, and a second atomic load to confirm no writer intervened.
-/// It never blocks the analysis thread and it never waits on a mutex.
+/// of the snapshot — about 15 kB, most of it the scope and the spectrum — and a
+/// second atomic load to confirm no writer intervened. It never blocks the
+/// analysis thread and it never waits on a mutex.
+///
+/// Fifteen kilobytes at 120 fps is under 2 MB/s and roughly a microsecond a
+/// frame, which is the argument for copying the whole thing rather than growing
+/// a second, narrower path for the modules that only want one number. Two ways
+/// to read a measurement is two ways for them to disagree.
 ///
 /// Returns the same value as the previous call when nothing new was published,
 /// which is the caller's cue to skip repainting.
@@ -165,6 +171,57 @@ external ffi.Pointer<ffi.Float> bel_snapshot_scope(
 external ffi.Pointer<ffi.Float> bel_snapshot_histogram(
   ffi.Pointer<bel_snapshot> snapshot,
 );
+
+/// Opens `path`, a UTF-8 filename, and identifies its format. Returns NULL if
+/// the file cannot be read or is not a format this build decodes — which is a
+/// normal outcome for a user dropping an arbitrary file on the window, not an
+/// error worth crashing over. Close with bel_file_close.
+///
+/// The file is reported at its own sample rate and channel count, and nothing
+/// resamples or remixes it: resampling in front of a measurement changes the
+/// measurement. Configure the engine from bel_file_get_info rather than the
+/// other way round. A file with more than BEL_MAX_CHANNELS channels opens
+/// successfully and reports its true channel count, so that the caller can say
+/// what it found instead of guessing; the engine will refuse it.
+@ffi.Native<ffi.Pointer<bel_file> Function(ffi.Pointer<ffi.Char>)>()
+external ffi.Pointer<bel_file> bel_file_open(ffi.Pointer<ffi.Char> path);
+
+@ffi.Native<
+  ffi.Int32 Function(ffi.Pointer<bel_file>, ffi.Pointer<bel_file_info>)
+>()
+external int bel_file_get_info(
+  ffi.Pointer<bel_file> file,
+  ffi.Pointer<bel_file_info> out,
+);
+
+/// Reads up to `frames` frames of interleaved float samples into `interleaved`,
+/// which must have room for `frames * channels` floats. Returns the number of
+/// frames actually read; 0 means end of file.
+///
+/// Sample values are not clamped. A float WAV may legitimately contain values
+/// outside ±1.0, and clamping them here would destroy exactly the overshoots
+/// true-peak metering exists to find.
+@ffi.Native<
+  ffi.Uint64 Function(ffi.Pointer<bel_file>, ffi.Pointer<ffi.Float>, ffi.Uint64)
+>()
+external int bel_file_read(
+  ffi.Pointer<bel_file> file,
+  ffi.Pointer<ffi.Float> interleaved,
+  int frames,
+);
+
+/// Seeks to `frame`. Returns BEL_ERR_UNSUPPORTED if the decoder could not seek,
+/// which some malformed or streamed files will do.
+///
+/// Analysis never uses this — an integrating measurement over a file that was
+/// seeked through is a measurement of a programme nobody played. It exists for
+/// a future waveform view that needs to read a region without re-reading the
+/// whole file.
+@ffi.Native<ffi.Int32 Function(ffi.Pointer<bel_file>, ffi.Uint64)>()
+external int bel_file_seek(ffi.Pointer<bel_file> file, int frame);
+
+@ffi.Native<ffi.Void Function(ffi.Pointer<bel_file>)>()
+external void bel_file_close(ffi.Pointer<bel_file> file);
 
 /// ------------------------------------------------------------------------ */
 /// /* Status codes                                                              */
@@ -470,7 +527,91 @@ final class bel_config extends ffi.Struct {
 
 final class bel_engine extends ffi.Opaque {}
 
-const int BEL_ABI_VERSION = 3;
+/// Decoding a file into blocks of samples, for offline analysis.
+///
+/// There is deliberately no `bel_analyse_file()` here. The caller opens a file,
+/// creates a BEL_SOURCE_PUSH engine configured to match it, and loops: read a
+/// block, push it, read the snapshot. That is more code at the call site than a
+/// single function would be, and it buys two things worth more than the
+/// brevity.
+///
+/// The first is that offline analysis is not a second implementation. It runs
+/// the identical `bel_analyse` over identical buffers, so "the offline number
+/// equals the realtime number" is true by construction rather than by
+/// inspection — which is the whole argument for trusting a file report.
+///
+/// The second is progress and cancellation. An hour of audio takes seconds to
+/// analyse, and a one-shot call would own those seconds with no way to report
+/// how far it had got or to be told to stop. The loop belongs to the caller
+/// because the user interface belongs to the caller.
+///
+/// **Push in blocks, not in one call.** The gated loudness measurements are
+/// sample-accurate and genuinely independent of block size, but RMS, crest and
+/// the VU ballistics are computed per pushed block — pushing an entire file at
+/// once yields one RMS reading averaged over the whole programme and a VU
+/// needle that moves exactly once. Use the engine's configured `block_frames`
+/// and the offline readings match the realtime ones.
+enum bel_file_format {
+  BEL_FILE_FORMAT_UNKNOWN(0),
+
+  /// RIFF or RIFX
+  BEL_FILE_FORMAT_WAV(1),
+  BEL_FILE_FORMAT_AIFF(2),
+
+  /// RIFF's 64-bit successor, for files over 4 GB
+  BEL_FILE_FORMAT_RF64(3),
+
+  /// Sony Wave64
+  BEL_FILE_FORMAT_W64(4),
+  BEL_FILE_FORMAT_FLAC(5),
+  BEL_FILE_FORMAT_MP3(6);
+
+  final int value;
+  const bel_file_format(this.value);
+
+  static bel_file_format fromValue(int value) => switch (value) {
+    0 => BEL_FILE_FORMAT_UNKNOWN,
+    1 => BEL_FILE_FORMAT_WAV,
+    2 => BEL_FILE_FORMAT_AIFF,
+    3 => BEL_FILE_FORMAT_RF64,
+    4 => BEL_FILE_FORMAT_W64,
+    5 => BEL_FILE_FORMAT_FLAC,
+    6 => BEL_FILE_FORMAT_MP3,
+    _ => throw ArgumentError('Unknown value for bel_file_format: $value'),
+  };
+}
+
+final class bel_file_info extends ffi.Struct {
+  @ffi.Uint32()
+  external int sample_rate;
+
+  @ffi.Uint32()
+  external int channels;
+
+  /// Total frames in the file, or 0 when the decoder could not determine it.
+  /// Zero means unknown, never empty: treat it as an indeterminate length
+  /// rather than as a file with nothing in it.
+  @ffi.Uint64()
+  external int frames;
+
+  /// frames / sample_rate. Zero when `frames` is unknown.
+  @ffi.Double()
+  external double duration_seconds;
+
+  /// bel_file_format
+  @ffi.Uint32()
+  external int format;
+
+  /// Bits per sample in the source encoding, or 0 for a lossy format where the
+  /// question has no answer. Reported so a file report can describe its input;
+  /// the samples themselves always arrive as float regardless.
+  @ffi.Uint32()
+  external int bits_per_sample;
+}
+
+final class bel_file extends ffi.Opaque {}
+
+const int BEL_ABI_VERSION = 4;
 
 const int BEL_MAX_CHANNELS = 8;
 

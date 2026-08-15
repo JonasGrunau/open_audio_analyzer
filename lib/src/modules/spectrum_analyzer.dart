@@ -3,6 +3,7 @@
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
+import 'package:bel_core/bel_core.dart';
 import 'package:bel_engine/bel_engine.dart';
 import 'package:bel_ui/bel_ui.dart';
 import 'package:flutter/widgets.dart';
@@ -30,7 +31,7 @@ class SpectrumAnalyzerModule extends StatefulWidget {
     super.key,
   });
 
-  final BelEngine engine;
+  final MeterSource engine;
   final MeterClock clock;
 
   @override
@@ -134,7 +135,7 @@ class _SpectrumPainter extends MeterPainter {
          ..isAntiAlias = false),
        super(repaint: repaint);
 
-  final BelEngine engine;
+  final MeterSource engine;
   final BelColors colors;
   final ScaleGraticule graticule;
   final _SpectrumAnalyzerModuleState state;

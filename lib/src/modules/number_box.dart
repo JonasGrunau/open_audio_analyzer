@@ -3,7 +3,6 @@
 import 'dart:ui' as ui;
 
 import 'package:bel_core/bel_core.dart';
-import 'package:bel_engine/bel_engine.dart';
 import 'package:bel_ui/bel_ui.dart';
 import 'package:flutter/widgets.dart';
 
@@ -37,7 +36,7 @@ class NumberBoxModule extends StatefulWidget {
     super.key,
   });
 
-  final BelEngine engine;
+  final MeterSource engine;
   final MeterClock clock;
   final Metric metric;
   final Calibration calibration;
@@ -91,7 +90,7 @@ class _NumberBoxPainter extends MeterPainter {
     required Listenable repaint,
   }) : super(repaint: repaint);
 
-  final BelEngine engine;
+  final MeterSource engine;
   final Metric metric;
   final Calibration calibration;
   final BelColors colors;
@@ -169,7 +168,7 @@ class _NumberBoxPainter extends MeterPainter {
 class ElapsedReadout extends StatefulWidget {
   const ElapsedReadout({required this.engine, required this.clock, super.key});
 
-  final BelEngine engine;
+  final MeterSource engine;
   final MeterClock clock;
 
   @override
@@ -226,7 +225,7 @@ class _ElapsedPainter extends MeterPainter {
     required Listenable repaint,
   }) : super(repaint: repaint);
 
-  final BelEngine engine;
+  final MeterSource engine;
   final BelColors colors;
   final _ElapsedReadoutState state;
 

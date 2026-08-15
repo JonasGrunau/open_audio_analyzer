@@ -63,7 +63,7 @@ extern "C" {
  * side asserts against it at startup, because a stale prebuilt library that
  * silently reads a reordered struct produces plausible-looking wrong numbers,
  * which is the worst failure mode a measurement tool has. */
-#define BEL_ABI_VERSION 3
+#define BEL_ABI_VERSION 4
 
 /* 7.1 is the widest layout the Digital Meter renders, so it is the widest the
  * graph carries. */
@@ -474,6 +474,111 @@ BEL_API const float *bel_snapshot_spectrum_peak(const bel_snapshot *snapshot);
 BEL_API const float *bel_snapshot_spectrum_pan(const bel_snapshot *snapshot);
 BEL_API const float *bel_snapshot_scope(const bel_snapshot *snapshot);
 BEL_API const float *bel_snapshot_histogram(const bel_snapshot *snapshot);
+
+/* ------------------------------------------------------------------------ */
+/* Files                                                                     */
+/* ------------------------------------------------------------------------ */
+
+/*
+ * Decoding a file into blocks of samples, for offline analysis.
+ *
+ * There is deliberately no `bel_analyse_file()` here. The caller opens a file,
+ * creates a BEL_SOURCE_PUSH engine configured to match it, and loops: read a
+ * block, push it, read the snapshot. That is more code at the call site than a
+ * single function would be, and it buys two things worth more than the
+ * brevity.
+ *
+ * The first is that offline analysis is not a second implementation. It runs
+ * the identical `bel_analyse` over identical buffers, so "the offline number
+ * equals the realtime number" is true by construction rather than by
+ * inspection — which is the whole argument for trusting a file report.
+ *
+ * The second is progress and cancellation. An hour of audio takes seconds to
+ * analyse, and a one-shot call would own those seconds with no way to report
+ * how far it had got or to be told to stop. The loop belongs to the caller
+ * because the user interface belongs to the caller.
+ *
+ * **Push in blocks, not in one call.** The gated loudness measurements are
+ * sample-accurate and genuinely independent of block size, but RMS, crest and
+ * the VU ballistics are computed per pushed block — pushing an entire file at
+ * once yields one RMS reading averaged over the whole programme and a VU
+ * needle that moves exactly once. Use the engine's configured `block_frames`
+ * and the offline readings match the realtime ones.
+ */
+
+typedef enum {
+  BEL_FILE_FORMAT_UNKNOWN = 0,
+  BEL_FILE_FORMAT_WAV = 1,  /* RIFF or RIFX */
+  BEL_FILE_FORMAT_AIFF = 2,
+  BEL_FILE_FORMAT_RF64 = 3, /* RIFF's 64-bit successor, for files over 4 GB */
+  BEL_FILE_FORMAT_W64 = 4,  /* Sony Wave64 */
+  BEL_FILE_FORMAT_FLAC = 5,
+  BEL_FILE_FORMAT_MP3 = 6
+} bel_file_format;
+
+typedef struct bel_file_info {
+  uint32_t sample_rate;
+  uint32_t channels;
+
+  /* Total frames in the file, or 0 when the decoder could not determine it.
+   * Zero means unknown, never empty: treat it as an indeterminate length
+   * rather than as a file with nothing in it. */
+  uint64_t frames;
+
+  /* frames / sample_rate. Zero when `frames` is unknown. */
+  double duration_seconds;
+
+  uint32_t format; /* bel_file_format */
+
+  /* Bits per sample in the source encoding, or 0 for a lossy format where the
+   * question has no answer. Reported so a file report can describe its input;
+   * the samples themselves always arrive as float regardless. */
+  uint32_t bits_per_sample;
+} bel_file_info;
+
+typedef struct bel_file bel_file;
+
+/*
+ * Opens `path`, a UTF-8 filename, and identifies its format. Returns NULL if
+ * the file cannot be read or is not a format this build decodes — which is a
+ * normal outcome for a user dropping an arbitrary file on the window, not an
+ * error worth crashing over. Close with bel_file_close.
+ *
+ * The file is reported at its own sample rate and channel count, and nothing
+ * resamples or remixes it: resampling in front of a measurement changes the
+ * measurement. Configure the engine from bel_file_get_info rather than the
+ * other way round. A file with more than BEL_MAX_CHANNELS channels opens
+ * successfully and reports its true channel count, so that the caller can say
+ * what it found instead of guessing; the engine will refuse it.
+ */
+BEL_API bel_file *bel_file_open(const char *path);
+
+BEL_API int32_t bel_file_get_info(const bel_file *file, bel_file_info *out);
+
+/*
+ * Reads up to `frames` frames of interleaved float samples into `interleaved`,
+ * which must have room for `frames * channels` floats. Returns the number of
+ * frames actually read; 0 means end of file.
+ *
+ * Sample values are not clamped. A float WAV may legitimately contain values
+ * outside ±1.0, and clamping them here would destroy exactly the overshoots
+ * true-peak metering exists to find.
+ */
+BEL_API uint64_t bel_file_read(bel_file *file, float *interleaved,
+                               uint64_t frames);
+
+/*
+ * Seeks to `frame`. Returns BEL_ERR_UNSUPPORTED if the decoder could not seek,
+ * which some malformed or streamed files will do.
+ *
+ * Analysis never uses this — an integrating measurement over a file that was
+ * seeked through is a measurement of a programme nobody played. It exists for
+ * a future waveform view that needs to read a region without re-reading the
+ * whole file.
+ */
+BEL_API int32_t bel_file_seek(bel_file *file, uint64_t frame);
+
+BEL_API void bel_file_close(bel_file *file);
 
 #ifdef __cplusplus
 } /* extern "C" */

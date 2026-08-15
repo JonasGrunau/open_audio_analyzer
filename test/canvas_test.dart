@@ -14,6 +14,7 @@
 // the one thing that makes this arrangement work — that measurements never pass
 // through the widget tree at all.
 
+import 'package:bel/src/app/shortcuts.dart';
 import 'package:bel/src/canvas/grid_canvas.dart';
 import 'package:bel/src/canvas/module_host.dart';
 import 'package:bel/src/canvas/tab_strip.dart';
@@ -61,13 +62,20 @@ class _HarnessState extends State<_Harness>
     colors: BelColors.precisionInstrument,
     child: Material(
       color: BelColors.precisionInstrument.background,
-      child: Column(
-        children: [
-          const TabStrip(),
-          Expanded(
-            child: GridCanvas(engine: engine, clock: clock),
-          ),
-        ],
+      // The keyboard reaches the canvas from above it, exactly as it does in
+      // the application — see lib/src/app/shortcuts.dart. Without this the
+      // canvas is mouse-only, which is a fair description of what it would be
+      // if somebody deleted the layer.
+      child: BelShortcuts(
+        onReset: engine.reset,
+        child: Column(
+          children: [
+            const TabStrip(),
+            Expanded(
+              child: GridCanvas(engine: engine, clock: clock),
+            ),
+          ],
+        ),
       ),
     ),
   );

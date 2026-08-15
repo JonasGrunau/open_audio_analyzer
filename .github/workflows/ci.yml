@@ -17,6 +17,11 @@
 #
 # From Phase 1 this file also runs the EBU R128 conformance vectors, and a red
 # conformance run blocks the release. See docs/METRICS.md.
+#
+# Two other workflows sit beside this one and are deliberately not part of it:
+# `docs.yml` builds and publishes the documentation site, and `release.yml`
+# builds the four installers. Both are an order of magnitude slower than this
+# file and answer a question nobody asked on the commit being pushed.
 
 name: CI
 
@@ -60,6 +65,25 @@ jobs:
           dart pub get
           dart test
 
+      # The remote display's protocol, including the golden that holds this
+      # implementation against the C++ producer byte for byte. Pure Dart, so it
+      # runs beside the domain tests and needs no toolchain — three
+      # implementations of docs/WIRE.md agreeing is the entire point of having
+      # written it down.
+      - name: Wire protocol tests
+        working-directory: packages/bel_wire
+        run: |
+          dart pub get
+          dart test
+
+      # The engine has two build descriptions — hook/build.dart for the app and
+      # engine/CMakeLists.txt for the plugin — and somebody adding a source file
+      # will eventually add it to one. The failure that produces is an undefined
+      # symbol at link time in whichever consumer was forgotten, usually on a
+      # platform the author was not building. This turns it into a one-line diff.
+      - name: Engine source lists agree
+        run: sh plugin/test/sources_match.sh
+
       - name: Widget tests
         run: flutter test
 
@@ -87,6 +111,16 @@ jobs:
       # run is a red build: these numbers are what users deliver against.
       - name: Engine and conformance tests
         working-directory: packages/bel_engine
+        run: |
+          dart pub get
+          dart test
+
+      # Runs the real `bel` binary as a subprocess and asserts on its exit
+      # codes. On all three platforms because file decoding is where they
+      # differ most: Windows takes a UTF-16 path, and a filename with an umlaut
+      # in it fails there and nowhere else.
+      - name: CLI tests
+        working-directory: cli
         run: |
           dart pub get
           dart test

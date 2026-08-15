@@ -1,10 +1,34 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
+<!--
+	Deliberately NOT sandboxed, and this is a decision rather than an omission.
+
+	The sandbox redirects HOME into ~/Library/Containers/<bundle id>/Data, which
+	moves settings, presets, skins and delivery targets somewhere most people do
+	not know exists. Bel's configuration is designed to be edited by hand, mailed
+	to somebody and kept in version control — see the Configuration section of
+	README.md — and a container defeats all three. It also stops BEL_CONFIG_DIR
+	from pointing anywhere outside itself, and the denial surfaces as "could not
+	read <file>", which reads like a corrupt file rather than a permission.
+
+	The cost is Mac App Store eligibility, which Bel does not want: docs/PLAN.md
+	ships dmg, msix, AppImage and flatpak. Notarisation and the hardened runtime,
+	which dmg distribution does need, do not require the sandbox.
+
+	The entitlements below are kept because they are correct declarations of what
+	Bel does, and because they are what the sandbox would need if it ever comes
+	back. Do not re-add app-sandbox without moving the configuration story with
+	it.
+-->
 <dict>
-	<key>com.apple.security.app-sandbox</key>
-	<true/>
 	<key>com.apple.security.device.audio-input</key>
+	<true/>
+	<key>com.apple.security.network.server</key>
+	<true/>
+	<key>com.apple.security.network.client</key>
+	<true/>
+	<key>com.apple.security.files.user-selected.read-write</key>
 	<true/>
 </dict>
 </plist>

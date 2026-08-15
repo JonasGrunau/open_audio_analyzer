@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import 'package:bel_engine/bel_engine.dart';
+import 'package:bel_core/bel_core.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/foundation.dart';
 
@@ -30,7 +30,7 @@ class MeterClock extends ChangeNotifier {
   }
 
   /// The engine these ticks read from.
-  final BelEngine engine;
+  final MeterSource engine;
   late final Ticker _ticker;
 
   Duration _lastPublished = Duration.zero;
@@ -82,9 +82,20 @@ class MeterClock extends ChangeNotifier {
     }
     _lastPublished = elapsed;
 
-    // The single FFI call on the frame path. Returns false when the engine has
-    // published nothing since the last look, which is the common case.
-    if (engine.refresh()) {
+    // The single FFI call on the frame path.
+    engine.refresh();
+
+    // Whether there is anything new is decided by comparing generations, not by
+    // trusting what `refresh` returned. That looks like a pointless extra field
+    // until you notice there can be a second caller: the remote display's host
+    // publishes on its own timer, because a `Ticker` stops when the window is
+    // occluded and that is exactly when the tablet is the screen being used.
+    // `refresh` answers "is this new *to whoever asked*", so with two askers
+    // the first one to call consumes the answer and the second is told nothing
+    // happened. One of them would then stop repainting — silently, and only on
+    // the machines where somebody was using both screens at once.
+    if (engine.generation != _seenGeneration) {
+      _seenGeneration = engine.generation;
       _framesPainted++;
       if (engine.hasOverrun != overrun.value) {
         overrun.value = engine.hasOverrun;
@@ -94,6 +105,8 @@ class MeterClock extends ChangeNotifier {
       _framesSkipped++;
     }
   }
+
+  int _seenGeneration = 0;
 
   @override
   void dispose() {

@@ -3,7 +3,6 @@
 import 'dart:ui' as ui;
 
 import 'package:bel_core/bel_core.dart';
-import 'package:bel_engine/bel_engine.dart';
 import 'package:bel_ui/bel_ui.dart';
 import 'package:flutter/widgets.dart';
 
@@ -32,7 +31,7 @@ class AlertMeterModule extends StatefulWidget {
     super.key,
   });
 
-  final BelEngine engine;
+  final MeterSource engine;
   final MeterClock clock;
   final Metric metric;
   final Calibration calibration;
@@ -148,7 +147,7 @@ class _AlertPainter extends MeterPainter {
          ..isAntiAlias = false),
        super(repaint: repaint);
 
-  final BelEngine engine;
+  final MeterSource engine;
   final Metric metric;
   final Calibration calibration;
   final BelColors colors;

@@ -1,9 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import 'dart:async';
-
 import 'package:bel_core/bel_core.dart';
-import 'package:bel_engine/bel_engine.dart';
 import 'package:bel_ui/bel_ui.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
@@ -13,6 +10,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../clock/meter_clock.dart';
 import '../data/providers.dart';
+import 'canvas_notice.dart';
 import 'menus.dart';
 import 'module_host.dart';
 import 'workspace.dart';
@@ -51,10 +49,19 @@ import 'workspace.dart';
 /// That only works because meter painters do not absorb pointer events. See
 /// [MeterPainter]: Flutter's default is that a `CustomPaint` swallows them,
 /// which would make the entire body of every module dead to the mouse.
+///
+/// ---------------------------------------------------------------------------
+/// The keyboard is not here
+///
+/// The canvas keeps a `Focus`, because a key event needs a focused node to
+/// start from. It no longer keeps the bindings: they moved to
+/// `lib/src/app/shortcuts.dart` in Phase 8 and now wrap the whole workspace,
+/// because a table installed here stopped working the moment focus left the
+/// canvas — opening the source picker was enough to silently disable undo.
 class GridCanvas extends ConsumerStatefulWidget {
   const GridCanvas({required this.engine, required this.clock, super.key});
 
-  final BelEngine engine;
+  final MeterSource engine;
   final MeterClock clock;
 
   @override
@@ -65,11 +72,6 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
   /// Where the module being dragged would land. Null when nothing is dragging.
   final ValueNotifier<_Preview?> _preview = ValueNotifier<_Preview?>(null);
 
-  /// Refusals that would otherwise be invisible — "no room for that" — shown
-  /// briefly at the foot of the canvas.
-  final ValueNotifier<String?> _message = ValueNotifier<String?>(null);
-  Timer? _messageTimer;
-
   _DragSession? _session;
 
   /// Side of the square resize grip at a module's bottom-right corner.
@@ -77,21 +79,18 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
 
   @override
   void dispose() {
-    _messageTimer?.cancel();
     _preview.dispose();
-    _message.dispose();
     super.dispose();
   }
 
   WorkspaceController get _controller => ref.read(workspaceProvider.notifier);
 
-  void _report(String message) {
-    _message.value = message;
-    _messageTimer?.cancel();
-    _messageTimer = Timer(const Duration(seconds: 4), () {
-      _message.value = null;
-    });
-  }
+  /// Refusals that would otherwise be invisible — "no room for that".
+  ///
+  /// The canvas is one of two things that can refuse; the keyboard is the
+  /// other, and it lives above this widget. See [canvasNoticeProvider].
+  void _report(String message) =>
+      ref.read(canvasNoticeProvider.notifier).say(message);
 
   // --- Dragging -----------------------------------------------------------
 
@@ -251,50 +250,6 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
     _controller.setModuleOption(module.id, 'metric', metric.id);
   }
 
-  // --- Keyboard -----------------------------------------------------------
-
-  Map<ShortcutActivator, VoidCallback> _bindings() {
-    void withSelection(void Function(String id) action) {
-      final id = ref.read(workspaceProvider).selectedModuleId;
-      if (id != null) action(id);
-    }
-
-    return {
-      const SingleActivator(LogicalKeyboardKey.delete): () =>
-          withSelection(_controller.removeModule),
-      const SingleActivator(LogicalKeyboardKey.backspace): () =>
-          withSelection(_controller.removeModule),
-      const SingleActivator(LogicalKeyboardKey.escape): () =>
-          _controller.select(null),
-
-      // Both modifiers, unconditionally. Checking the platform to decide which
-      // one to accept is a way to get it wrong on a Mac with an external PC
-      // keyboard, and there is nothing else these chords could mean.
-      const SingleActivator(LogicalKeyboardKey.keyZ, meta: true):
-          _controller.undo,
-      const SingleActivator(LogicalKeyboardKey.keyZ, control: true):
-          _controller.undo,
-      const SingleActivator(LogicalKeyboardKey.keyZ, meta: true, shift: true):
-          _controller.redo,
-      const SingleActivator(
-        LogicalKeyboardKey.keyZ,
-        control: true,
-        shift: true,
-      ): _controller.redo,
-      const SingleActivator(LogicalKeyboardKey.keyD, meta: true): () =>
-          withSelection(_controller.duplicateModule),
-      const SingleActivator(LogicalKeyboardKey.keyD, control: true): () =>
-          withSelection(_controller.duplicateModule),
-
-      // Bare digits switch tabs, as they do in Decibel. There is no text entry
-      // on the canvas to compete with them; the one field in the application —
-      // renaming a tab — holds focus while it is open and consumes its own
-      // keystrokes.
-      for (var i = 0; i < 9; i++)
-        SingleActivator(_digitKeys[i]): () => _controller.selectTab(i),
-    };
-  }
-
   // --- Build --------------------------------------------------------------
 
   @override
@@ -304,101 +259,104 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
     final calibration = ref.watch(calibrationProvider);
     final tab = workspace.tab;
 
-    return CallbackShortcuts(
-      bindings: _bindings(),
-      child: Focus(
-        autofocus: true,
-        child: Padding(
-          padding: const EdgeInsets.all(Space.md),
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final geometry = GridGeometry(size: constraints.biggest);
+    // The `Focus` stays and the bindings do not — see the class comment. It is
+    // `autofocus` so that a launch straight into the canvas has somewhere for a
+    // key event to begin without the user clicking first.
+    return Focus(
+      autofocus: true,
+      child: Padding(
+        padding: const EdgeInsets.all(Space.md),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final geometry = GridGeometry(size: constraints.biggest);
 
-              return Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  // Bottom: empty canvas. Left click clears the selection,
-                  // right click and double click add a module where the pointer
-                  // is. A single left click deliberately does not open a menu —
-                  // every stray click on the background would.
-                  Positioned.fill(
-                    child: GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: () => _controller.select(null),
-                      onDoubleTapDown: (details) => _showAddMenu(
-                        details.globalPosition,
-                        at: _rectAt(geometry, details.localPosition),
-                      ),
-                      onSecondaryTapUp: (details) => _showAddMenu(
-                        details.globalPosition,
-                        at: _rectAt(geometry, details.localPosition),
-                      ),
+            return Stack(
+              clipBehavior: Clip.none,
+              children: [
+                // Bottom: empty canvas. Left click clears the selection,
+                // right click and double click add a module where the pointer
+                // is. A single left click deliberately does not open a menu —
+                // every stray click on the background would.
+                Positioned.fill(
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => _controller.select(null),
+                    onDoubleTapDown: (details) => _showAddMenu(
+                      details.globalPosition,
+                      at: _rectAt(geometry, details.localPosition),
+                    ),
+                    onSecondaryTapUp: (details) => _showAddMenu(
+                      details.globalPosition,
+                      at: _rectAt(geometry, details.localPosition),
+                    ),
+                  ),
+                ),
+
+                if (tab.modules.isEmpty)
+                  const Positioned.fill(child: IgnorePointer(child: _Empty())),
+
+                for (final module in tab.modules)
+                  Positioned.fromRect(
+                    rect: geometry.rectFor(module.rect),
+                    // Keyed by module id so that moving one preserves its
+                    // State — and with it the laid-out paragraphs its painter
+                    // has cached. Without the key, Flutter matches children
+                    // by position in the list and a move throws that cache
+                    // away.
+                    key: ValueKey<String>(module.id),
+                    child: _ModuleSlot(
+                      module: module,
+                      engine: widget.engine,
+                      clock: widget.clock,
+                      calibration: calibration,
+                      selected: module.id == workspace.selectedModuleId,
+                      gripSize: _gripSize,
+                      onSelect: () => _controller.select(module.id),
+                      onMenu: (position) => _showModuleMenu(position, module),
+                      onDragStart: (resize) =>
+                          _beginDrag(module, resize: resize),
+                      onDragUpdate: (details) => _updateDrag(details, geometry),
+                      onDragEnd: _endDrag,
                     ),
                   ),
 
-                  if (tab.modules.isEmpty)
-                    const Positioned.fill(
-                      child: IgnorePointer(child: _Empty()),
-                    ),
-
-                  for (final module in tab.modules)
-                    Positioned.fromRect(
-                      rect: geometry.rectFor(module.rect),
-                      // Keyed by module id so that moving one preserves its
-                      // State — and with it the laid-out paragraphs its painter
-                      // has cached. Without the key, Flutter matches children
-                      // by position in the list and a move throws that cache
-                      // away.
-                      key: ValueKey<String>(module.id),
-                      child: _ModuleSlot(
-                        module: module,
-                        engine: widget.engine,
-                        clock: widget.clock,
-                        calibration: calibration,
-                        selected: module.id == workspace.selectedModuleId,
-                        gripSize: _gripSize,
-                        onSelect: () => _controller.select(module.id),
-                        onMenu: (position) => _showModuleMenu(position, module),
-                        onDragStart: (resize) =>
-                            _beginDrag(module, resize: resize),
-                        onDragUpdate: (details) =>
-                            _updateDrag(details, geometry),
-                        onDragEnd: _endDrag,
-                      ),
-                    ),
-
-                  // Top: the drag preview. Repaints from its own notifier and
-                  // is the only thing on screen that changes while a module is
-                  // being moved.
-                  Positioned.fill(
-                    child: IgnorePointer(
-                      child: CustomPaint(
-                        painter: _PreviewPainter(
-                          preview: _preview,
-                          geometry: geometry,
-                          colors: colors,
-                        ),
+                // Top: the drag preview. Repaints from its own notifier and
+                // is the only thing on screen that changes while a module is
+                // being moved.
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: CustomPaint(
+                      painter: _PreviewPainter(
+                        preview: _preview,
+                        geometry: geometry,
+                        colors: colors,
                       ),
                     ),
                   ),
+                ),
 
-                  Positioned(
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    child: IgnorePointer(
-                      child: ValueListenableBuilder<String?>(
-                        valueListenable: _message,
-                        builder: (context, message, _) => message == null
+                // The refusal line. A `Consumer` so that the message can
+                // arrive from the keyboard as well as from a dropped drag,
+                // and so that saying it rebuilds this corner rather than the
+                // twelve meters above it.
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: IgnorePointer(
+                    child: Consumer(
+                      builder: (context, ref, _) {
+                        final message = ref.watch(canvasNoticeProvider);
+                        return message == null
                             ? const SizedBox.shrink()
-                            : _Toast(message: message),
-                      ),
+                            : _Toast(message: message);
+                      },
                     ),
                   ),
-                ],
-              );
-            },
-          ),
+                ),
+              ],
+            );
+          },
         ),
       ),
     );
@@ -409,18 +367,6 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
     return GridRect(column: column, row: row, columns: 1, rows: 1);
   }
 }
-
-const List<LogicalKeyboardKey> _digitKeys = [
-  LogicalKeyboardKey.digit1,
-  LogicalKeyboardKey.digit2,
-  LogicalKeyboardKey.digit3,
-  LogicalKeyboardKey.digit4,
-  LogicalKeyboardKey.digit5,
-  LogicalKeyboardKey.digit6,
-  LogicalKeyboardKey.digit7,
-  LogicalKeyboardKey.digit8,
-  LogicalKeyboardKey.digit9,
-];
 
 enum _ModuleAction { metric, duplicate, delete }
 
@@ -441,7 +387,7 @@ class _ModuleSlot extends StatelessWidget {
   });
 
   final ModuleSpec module;
-  final BelEngine engine;
+  final MeterSource engine;
   final MeterClock clock;
   final Calibration calibration;
   final bool selected;

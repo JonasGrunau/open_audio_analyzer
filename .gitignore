@@ -51,8 +51,24 @@ packages/*/.dart_tool/
 # The engine's out-of-tree CMake build (C tests, Phase 1).
 engine/build/
 
+# The plugin's CMake build tree.
+plugin/build/
+
+# JUCE, fetched rather than vendored. It is ~110 MB of framework that belongs
+# to somebody else and is pinned by tag in plugin/CMakeLists.txt, so committing
+# it would multiply the size of this repository to record a version number we
+# already record in one line. CMake falls back to FetchContent when it is
+# absent, so a fresh clone builds without doing anything special.
+plugin/third_party/JUCE/
+
 # The plan and design docs are committed; scratch notes are not.
 docs/scratch/
+
+# flatpak-builder's `dir` source may not reach outside the manifest's own
+# directory, so make_flatpak.sh copies a whole Flutter bundle in beside it and
+# removes it again. Ignored because a failed run leaves it there, and it is
+# forty megabytes of build output sitting in a source tree.
+packaging/linux/flatpak/staging/
 
 # Local agent/tooling state. Session-scoped and machine-specific, and the
 # replay logs contain transcript content — never publish these.

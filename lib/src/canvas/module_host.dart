@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import 'package:bel_core/bel_core.dart';
-import 'package:bel_engine/bel_engine.dart';
 import 'package:bel_ui/bel_ui.dart';
 import 'package:flutter/widgets.dart';
 
@@ -40,7 +39,7 @@ class ModuleHost extends StatelessWidget {
   });
 
   final ModuleSpec spec;
-  final BelEngine engine;
+  final MeterSource engine;
   final MeterClock clock;
   final Calibration calibration;
   final bool selected;

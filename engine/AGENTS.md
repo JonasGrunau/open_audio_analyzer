@@ -12,8 +12,21 @@ no UI vocabulary and no file I/O outside `bel_decode.c`**.
 |------|----------|
 | `include/bel/bel.h` | The entire public ABI. One header. If it is not here, it is not part of the engine. |
 | `src/` | Implementation (see `src/AGENTS.md`). |
-| `third_party/` | Vendored permissive C libraries. Empty until Phase 1. |
-| `test/` | C unit tests and the EBU conformance vectors. Phase 1. |
+| `third_party/` | Vendored permissive C libraries: `miniaudio` (capture), `pffft` (FFT), `dr_libs` (file decoding). |
+| `CMakeLists.txt` | `libbel` as a static library, for consumers that are not Dart — the plugin, and a CI runner with no Flutter SDK. |
+
+**There is no `test/` here, deliberately.** The engine is tested through FFI
+from `packages/bel_engine/test/` — the arithmetic cases, the EBU Tech 3341/3342
+conformance suite, the spectrum against a known sine, and the assertion that
+decoding a file does not change a reading. One suite that CI already runs on
+three platforms beats two suites where the second is the one nobody runs
+locally. A C-only test would need `ctest` in the loop to prove anything the
+Dart suite does not already prove.
+
+**A new `.c` file goes in two places** — `CMakeLists.txt` and
+`packages/bel_engine/hook/build.dart`. Sources are listed rather than globbed so
+that adding one is a decision somebody made. `plugin/test/sources_match.sh`
+fails the build when the two lists disagree.
 
 ## Rules
 

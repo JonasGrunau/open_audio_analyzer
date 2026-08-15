@@ -19,6 +19,18 @@ renders as an em dash — never as a zero.
 | `LUFS-I` | LUFS | Gated integrated loudness since reset. 400 ms blocks at 75% overlap; absolute gate −70 LUFS; relative gate 10 LU below the ungated mean of the surviving blocks. ITU-R BS.1770-4 §3. | **now** |
 | `LRA` | LU | Loudness range. Distribution of 3 s short-term values, gated absolutely at −70 LUFS and relatively at −20 LU, then the 95th percentile minus the 10th. EBU Tech 3342. | **now** |
 
+Both gated distributions are **histograms of 0.01 LU per bin holding exact
+energy sums** — 8000 bins over the useful range — rather than a growing sorted
+list. That is O(1) per update in constant memory, which is what makes an
+integration that runs for hours cost the same as one that runs for seconds, and
+the bin is an order of magnitude finer than the ±0.1 LU the standard asks the
+answer to be within. `docs/PLAN.md` says 0.1 LU; the implementation went finer.
+
+The 120-bin histogram published in the snapshot is a **different, coarser
+thing** — it is for drawing, spans −60 to 0 LUFS at 0.5 LU, and is finer than a
+pixel column on any real display. The number and the picture are taken from the
+same population, so the histogram module and the LRA readout cannot disagree.
+
 K-weighting is the BS.1770-4 two-stage filter: a high-frequency shelf followed
 by an RLB high-pass. Coefficients are computed from the analog prototype **at
 the stream's actual sample rate**, not read from a 48 kHz table, so 44.1, 88.2,
@@ -85,8 +97,21 @@ than reporting nothing, and it is also true.
 
 | Metric | Unit | Definition | Availability |
 |---|---|---|---|
-| `Spectrum` | dBFS | 512 log-spaced bands. Hann window, FFT size 1024–8192, **peak per band** rather than mean so that narrow peaks survive the mapping. A, C or Z weighting. | Phase 1 |
-| `Spectrum peak` | dBFS | Per-band hold. | Phase 1 |
+| `Spectrum` | dBFS | 512 log-spaced bands from 20 Hz to 20 kHz. A 4096-point Hann transform per channel at a 1024-sample hop, taking the **loudest FFT bin in each band** rather than their mean so that a narrow resonance survives the mapping. | **now** |
+| `Spectrum peak` | dBFS | Per-band hold, computed in the engine because a transform runs every hop and a publish carries only the last one. | **now** |
+| `Spectrum pan` | — | Per-band stereo position, `−1` hard left to `+1` hard right. What the stereo cloud draws. | **now** |
+
+Levels are window-compensated: a full-scale sine on a bin centre reads
+0.0 dBFS, and that is asserted on every push. A tone **between** two bin centres
+reads up to 1.4 dB low. That is inherent to reading a peak bin rather than
+interpolating across two, and it is not corrected — an interpolated reading
+would be right for a pure tone and wrong for everything else, which is the worse
+trade for a display whose job is showing where the energy is.
+
+A/C/Z weighting and selectable FFT sizes are named in `docs/PLAN.md` and are
+**not built**: the transform is 4096 points, unweighted (Z). One set of
+transforms feeds the analyser, the spectrogram and the stereo cloud, so three
+modules cannot disagree about where a peak is.
 
 ## Conventions
 
@@ -123,5 +148,45 @@ directly but which no correct implementation can violate:
 - **Block size independence.** Pushing ten seconds in one call, in 512-frame
   device blocks, and in 377-frame chunks agree to within 0.001 LU.
 
-Phase 5 adds the official BS.2217 WAV vectors as an independent second check,
-once there is a decoder to read them with.
+- **Decoding does not change a reading.** A generated signal analysed directly
+  and the same signal written to a WAV, decoded and analysed again produce
+  identical numbers, to the bit. That is the property offline analysis rests on,
+  and it is asserted rather than assumed — see
+  `packages/bel_engine/test/decode_test.dart`.
+
+The official BS.2217 WAV vectors are **still not used.** There is now a decoder
+that could read them, so the remaining obstacle is not technical: the EBU and
+ITU test material is not licensed for redistribution in this repository, and
+fetching it in CI would put a network dependency in front of the one suite that
+must never be flaky. Running them locally against `bel` is worthwhile and the
+CLI makes it a one-liner; they are not a gate.
+
+---
+
+## What a file report states
+
+A snapshot mixes two kinds of quantity, and a report has to treat them
+differently or it describes the wrong thing.
+
+**Integrating** — read once at the end, which is correct for them: `LUFS-I`,
+`LRA` and its percentiles, `TP Max`, `Peak Max`.
+
+**Instantaneous** — these describe the moment they are read, so at the end of a
+file they describe the final block, which is usually the fade-out or silence.
+A report watches them across the whole programme instead:
+
+| Reported as | Is |
+|---|---|
+| `LUFS-M` | the **highest** momentary loudness reached |
+| `LUFS-S` | the **highest** short-term loudness reached |
+| Correlation | the **mean** across the file; the panel also shows the range |
+| Peak per channel | the **highest** on each channel |
+
+`PLR` and `DR-I` are derived — `TP Max` minus `LUFS-I` — rather than stored, so
+they cannot disagree with the numbers they are computed from.
+
+A file is analysed in blocks of the same size the realtime path uses. The gated
+loudness measurements are sample-accurate and genuinely independent of block
+size, but RMS, crest and the VU ballistics are computed per block, so pushing a
+whole file in one call would report one RMS averaged across the entire
+programme.

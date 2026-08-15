@@ -30,7 +30,7 @@ class HistogramModule extends StatefulWidget {
     super.key,
   });
 
-  final BelEngine engine;
+  final MeterSource engine;
   final MeterClock clock;
   final Calibration calibration;
 
@@ -115,7 +115,7 @@ class _HistogramPainter extends MeterPainter {
          ..isAntiAlias = false),
        super(repaint: repaint);
 
-  final BelEngine engine;
+  final MeterSource engine;
   final Calibration calibration;
   final BelColors colors;
   final ScaleGraticule graticule;

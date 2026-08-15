@@ -30,6 +30,7 @@ import 'package:native_toolchain_c/native_toolchain_c.dart';
 /// Everything under `engine/src`, relative to this package's root.
 const _engineSources = <String>[
   '../../engine/src/bel_analysis.c',
+  '../../engine/src/bel_decode.c',
   '../../engine/src/bel_device.c',
   '../../engine/src/bel_engine.c',
   '../../engine/src/bel_kweight.c',
@@ -95,6 +96,18 @@ List<String> _frameworks(OS targetOS) => switch (targetOS) {
 
 void main(List<String> args) async {
   await build(args, (input, output) async {
+    // `flutter run` invokes every build hook once in a pass that asks for no
+    // asset types at all, and `input.config.code` is only meaningful when code
+    // assets were requested. Reading it in that pass throws — in code_assets
+    // 1.0.0 as a bare null-check failure inside `CodeConfig._fromJson`, which
+    // names neither this file nor the reason.
+    //
+    // The symptom is worth stating because it is so misleading: `flutter test`
+    // and `flutter build` never make that pass, so the whole suite stays green
+    // and only `flutter run` fails — the app will not start while every test
+    // says it is fine. Guard, and let the empty pass produce nothing.
+    if (!input.config.buildCodeAssets) return;
+
     final builder = CBuilder.library(
       name: input.packageName,
 
@@ -107,6 +120,7 @@ void main(List<String> args) async {
       sources: _engineSources,
       includes: [
         '../../engine/include',
+        '../../engine/third_party/dr_libs',
         '../../engine/third_party/miniaudio',
         '../../engine/third_party/pffft',
       ],

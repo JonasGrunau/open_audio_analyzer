@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  SPDX-License-Identifier: GPL-3.0-or-later
+
+  AppStream metadata. Required by flatpak (flatpak-builder validates it) and
+  read by GNOME Software, KDE Discover and AppImage catalogues.
+
+  `project_license` is the application's licence, not the repository's. Bel is
+  several licences at once — the engine is MIT, the plugin is AGPL — and what
+  ships in this bundle is the GPL-3.0-or-later application linked against the
+  MIT engine. GPL-3.0-or-later is therefore the correct and honest answer for
+  the binary a user installs from here; see README.md for the full split.
+-->
+<component type="desktop-application">
+  <id>dev.belmeter.bel</id>
+  <launchable type="desktop-id">dev.belmeter.bel.desktop</launchable>
+
+  <name>Bel</name>
+  <summary>Loudness and spectrum metering for mixing, mastering and delivery</summary>
+
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+
+  <developer id="dev.belmeter">
+    <name>The Bel contributors</name>
+  </developer>
+
+  <description>
+    <p>
+      Bel is a free and open-source loudness and spectrum analyzer: an
+      arrangeable canvas of meter modules driven by presets, delivery targets
+      and skins.
+    </p>
+    <p>
+      Loudness follows EBU R 128 and ITU-R BS.1770-4 — momentary, short-term and
+      integrated LUFS, loudness range, and true peak by four-times oversampling —
+      and is held against the EBU Tech 3341 and 3342 conformance vectors on every
+      build. What Bel has not measured it does not draw: an unavailable quantity
+      is a dash, never a zero.
+    </p>
+    <p>Twelve modules:</p>
+    <ul>
+      <li>Number Box, LUFS Meter, Digital Meter and Super Meter</li>
+      <li>Alert Meter, Validator and Histogram</li>
+      <li>VU Meter with a real second-order movement</li>
+      <li>Spectrum Analyzer, Spectrogram, Phase Scope and Stereo Cloud</li>
+    </ul>
+    <p>
+      Files can be analysed offline against a delivery target, from the
+      application or from the bundled command-line analyser. A tablet on the
+      same network can mirror the canvas as a second display.
+    </p>
+  </description>
+
+  <categories>
+    <category>AudioVideo</category>
+    <category>Audio</category>
+  </categories>
+
+  <url type="homepage">https://github.com/JonasGrunau/open_music_analyzer</url>
+  <url type="bugtracker">https://github.com/JonasGrunau/open_music_analyzer/issues</url>
+  <url type="vcs-browser">https://github.com/JonasGrunau/open_music_analyzer</url>
+
+  <supports>
+    <control>pointing</control>
+    <control>keyboard</control>
+    <control>touch</control>
+  </supports>
+
+  <!-- A canvas of twelve meters does not fit on a phone. -->
+  <requires>
+    <display_length compare="ge">768</display_length>
+  </requires>
+
+  <content_rating type="oars-1.1"/>
+
+  <releases>
+    <release version="0.1.0" date="2026-08-15">
+      <description>
+        <p>First release.</p>
+      </description>
+    </release>
+  </releases>
+</component>

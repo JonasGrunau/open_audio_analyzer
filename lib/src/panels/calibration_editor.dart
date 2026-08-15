@@ -1,0 +1,307 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+import 'package:bel_core/bel_core.dart';
+import 'package:bel_ui/bel_ui.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../data/providers.dart';
+import '../storage/config_paths.dart';
+
+/// Opens the delivery-target editor.
+///
+/// [base] is the target to start from — the active one, usually. Null starts
+/// from the streaming default, which is the one most people are aiming at.
+Future<void> showCalibrationEditor(BuildContext context, {Calibration? base}) =>
+    showBelPanel<void>(
+      context: context,
+      builder: (context) => CalibrationEditor(base: base),
+    );
+
+/// A form over the six numbers that decide whether a master passes.
+///
+/// Every field is a number somebody publishes, so every field is editable and
+/// nothing here is computed. The point of the panel is that a delivery spec
+/// nobody anticipated — a label's house standard, a game platform's submission
+/// requirement — is twenty seconds of typing rather than a feature request.
+class CalibrationEditor extends ConsumerStatefulWidget {
+  const CalibrationEditor({this.base, super.key});
+
+  final Calibration? base;
+
+  @override
+  ConsumerState<CalibrationEditor> createState() => _CalibrationEditorState();
+}
+
+class _CalibrationEditorState extends ConsumerState<CalibrationEditor> {
+  late final Calibration _base = widget.base ?? BuiltInCalibrations.fallback;
+
+  late final _name = TextEditingController(text: _base.name);
+  late final _note = TextEditingController(text: _base.note);
+  late final _target = _field(_base.lufsTarget);
+  late final _tolerance = _field(_base.lufsTolerance);
+  late final _truePeak = _field(_base.truePeakMax);
+  late final _range = _field(_base.loudnessRangeMax);
+  late final _vu = _field(_base.vuReference);
+
+  String? _error;
+
+  TextEditingController _field(double value) =>
+      TextEditingController(text: _format(value));
+
+  @override
+  void dispose() {
+    for (final controller in [
+      _name,
+      _note,
+      _target,
+      _tolerance,
+      _truePeak,
+      _range,
+      _vu,
+    ]) {
+      controller.dispose();
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = BelTheme.of(context);
+    final library = ref.watch(calibrationLibraryProvider.notifier);
+    final isBuiltIn = library.isBuiltIn(_base.id);
+
+    return PanelScaffold(
+      title: 'Delivery target',
+      onClose: () => Navigator.of(context).pop(),
+      footer: Row(
+        children: [
+          if (!isBuiltIn && widget.base != null)
+            BelButton(
+              label: 'Delete',
+              emphasis: ButtonEmphasis.destructive,
+              onPressed: _delete,
+            ),
+          const Spacer(),
+          BelButton(
+            label: 'Save as new',
+            onPressed: () => _save(keepId: false),
+          ),
+          const SizedBox(width: Space.sm),
+          BelButton(
+            label: isBuiltIn ? 'Replace built-in' : 'Save',
+            emphasis: ButtonEmphasis.primary,
+            onPressed: () => _save(keepId: true),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (_error != null) ...[
+            Padding(
+              padding: const EdgeInsets.only(bottom: Space.smd),
+              child: Text(
+                _error!,
+                style: BelType.caption.copyWith(color: colors.over),
+              ),
+            ),
+          ],
+          PanelSection(
+            title: 'Identity',
+            children: [
+              PanelRow(
+                label: 'Name',
+                child: BelTextField(controller: _name, width: 260),
+              ),
+              PanelRow(
+                label: 'Note',
+                note: 'Where the numbers come from.',
+                child: BelTextField(controller: _note, width: 260),
+              ),
+            ],
+          ),
+          PanelSection(
+            title: 'Loudness',
+            note:
+                'The integrated target and how far from it still counts as '
+                'hitting it.',
+            children: [
+              PanelRow(label: 'Target', child: _number(_target, 'LUFS')),
+              PanelRow(label: 'Tolerance', child: _number(_tolerance, 'LU')),
+              PanelRow(
+                label: 'Loudness range ceiling',
+                note: 'Above this, the programme is flagged as too dynamic.',
+                child: _number(_range, 'LU'),
+              ),
+            ],
+          ),
+          PanelSection(
+            title: 'Peak',
+            note:
+                'A ceiling of −1 dBTP is the convention where a platform states '
+                'none: lossy transcoding downstream routinely adds a few tenths '
+                'of a dB, and a master at 0 dBTP will clip after it.',
+            children: [
+              PanelRow(
+                label: 'True peak ceiling',
+                child: _number(_truePeak, 'dBTP'),
+              ),
+            ],
+          ),
+          PanelSection(
+            title: 'Analogue',
+            children: [
+              PanelRow(
+                label: 'VU reference',
+                note:
+                    'The level that reads as 0 VU. Only the VU meter uses it.',
+                child: _number(_vu, 'dBFS'),
+              ),
+            ],
+          ),
+          if (isBuiltIn)
+            Text(
+              'This is a target Bel ships with. "Replace built-in" writes a file '
+              'that shadows it everywhere, including in presets that already '
+              'name it; deleting that file brings the original back.',
+              style: BelType.caption.copyWith(color: colors.textFaint),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _number(TextEditingController controller, String unit) {
+    final colors = BelTheme.of(context);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        BelTextField(controller: controller, numeric: true, width: 84),
+        const SizedBox(width: Space.sm),
+        SizedBox(
+          width: 40,
+          child: Text(
+            unit,
+            style: BelType.unit.copyWith(color: colors.textFaint),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _save({required bool keepId}) async {
+    final name = _name.text.trim();
+    if (name.isEmpty) {
+      setState(() => _error = 'A target needs a name.');
+      return;
+    }
+
+    final values = <String, double?>{
+      'target': _parse(_target.text, min: -60, max: 0),
+      'tolerance': _parse(_tolerance.text, min: 0, max: 12),
+      'true peak ceiling': _parse(_truePeak.text, min: -30, max: 0),
+      'loudness range ceiling': _parse(_range.text, min: 0, max: 60),
+      'VU reference': _parse(_vu.text, min: -40, max: 0),
+    };
+
+    for (final entry in values.entries) {
+      if (entry.value == null) {
+        setState(
+          () => _error =
+              'The ${entry.key} is not a number in the range this field '
+              'accepts.',
+        );
+        return;
+      }
+    }
+
+    final id = keepId ? _base.id : _uniqueId(name);
+    final calibration = Calibration(
+      id: id,
+      name: name,
+      lufsTarget: values['target']!,
+      lufsTolerance: values['tolerance']!,
+      truePeakMax: values['true peak ceiling']!,
+      loudnessRangeMax: values['loudness range ceiling']!,
+      vuReference: values['VU reference']!,
+      note: _note.text.trim(),
+    );
+
+    final saved = await ref
+        .read(calibrationLibraryProvider.notifier)
+        .save(calibration);
+
+    if (!mounted) return;
+    if (!saved) {
+      setState(
+        () => _error =
+            ref.read(storageNoticeProvider) ?? 'The target could not be saved.',
+      );
+      return;
+    }
+
+    // Selecting it is the obvious next thing and saves a trip to the menu.
+    ref.read(settingsProvider.notifier).setCalibrationId(id);
+    Navigator.of(context).pop();
+  }
+
+  Future<void> _delete() async {
+    final removed = await ref
+        .read(calibrationLibraryProvider.notifier)
+        .remove(_base.id);
+
+    if (!mounted) return;
+    if (!removed) {
+      setState(
+        () => _error =
+            ref.read(storageNoticeProvider) ??
+            'The target could not be deleted.',
+      );
+      return;
+    }
+    Navigator.of(context).pop();
+  }
+
+  String _uniqueId(String name) {
+    final library = ref.read(calibrationLibraryProvider);
+    final taken = {for (final calibration in library) calibration.id};
+    // The same slug rule the filename uses, so that a target's id and its file
+    // do not need a mapping table to find each other.
+    final base = slugify(name);
+
+    if (!taken.contains(base)) return base;
+    for (var suffix = 2; suffix < 1000; suffix++) {
+      if (!taken.contains('$base-$suffix')) return '$base-$suffix';
+    }
+    return '$base-${taken.length}';
+  }
+}
+
+String _format(double value) {
+  // Trailing ".0" on a whole number is noise in a field somebody is about to
+  // type over.
+  final rounded = double.parse(value.toStringAsFixed(2));
+  return rounded == rounded.roundToDouble()
+      ? rounded.toStringAsFixed(0)
+      : rounded.toString();
+}
+
+/// Parses a typed number, or null if it is not one or is outside [min]–[max].
+///
+/// Accepts the typographic minus and the comma decimal separator. Both arrive
+/// constantly: the interface itself renders "−14 LUFS" with U+2212, so anybody
+/// who copies a target out of Bel and pastes it back in is pasting a character
+/// `double.parse` rejects, and half of Europe types "−0,5".
+double? _parse(String text, {required double min, required double max}) {
+  final normalised = text
+      .trim()
+      .replaceAll('−', '-')
+      .replaceAll('–', '-')
+      .replaceAll(',', '.');
+
+  final value = double.tryParse(normalised);
+  if (value == null || !value.isFinite) return null;
+  if (value < min || value > max) return null;
+  return value;
+}

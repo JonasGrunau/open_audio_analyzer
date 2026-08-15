@@ -1,5 +1,29 @@
 # Bel — a free, open-source loudness & spectrum analyzer
 
+> **This is the plan as it was approved, kept as the record of intent. It is
+> written in the future tense and most of it has happened.** Phases 0–7 are
+> done and Phase 8 is in progress; `README.md`'s Roadmap is the live status and
+> `CHANGELOG.md` is what actually shipped.
+>
+> Where the build and this document disagree, **the build is what exists** — but
+> a divergence is a decision somebody made, so it is recorded here rather than
+> left to be discovered. The ones that matter:
+>
+> | This document says | What was built | Why |
+> |---|---|---|
+> | `plugin/` is GPL-3.0, built on JUCE under its GPL option | **AGPL-3.0-or-later** | JUCE 7 and 8 are AGPLv3-or-commercial; only JUCE 6 offered GPLv3. See `plugin/AGENTS.md`. |
+> | VST3 SDK is a second copyleft dependency | MIT, vendored inside JUCE | Steinberg relicensed it. No separate SDK checkout. |
+> | LRA histogram at 0.1 LU per bin | **0.01 LU**, 8000 bins | An order of magnitude inside the ±0.1 LU the standard asks for, at the same O(1) cost. |
+> | True peak 2× at ≥96 kHz | **4× at every rate** | 2× needs a second filter design to be correct, and 4× is never *less* accurate. See `docs/METRICS.md`. |
+> | FFT sizes 1024–8192, A/C/Z weighting | **4096 points, unweighted** | One transform serves the analyser, spectrogram and stereo cloud. Selectable size and weighting are not built. |
+> | `engine/test/` C unit tests, `cmake --build engine/build && ctest` | The engine is tested **through FFI** from `packages/bel_engine/test/` | The tests need no C runner, and one suite that CI already runs beats two. |
+> | `tool/conformance.dart` | `packages/bel_engine/test/conformance_test.dart` | Same job, inside the suite that gates every push. |
+> | Cross-check against `libebur128` as an oracle | Not done | The EBU Tech 3341/3342 cases are generated and asserted directly, with sample-rate and block-size independence on top. |
+> | BS.2217 WAV vectors in CI | Not used | The material is not licensed for redistribution here, and fetching it in CI would make the one suite that must never be flaky depend on the network. |
+> | Elapsed & Timecode LUFS modes arrive with the plugin in Phase 7 | **Not built.** The plugin ships and delivers the playhead, the timecode and a discontinuity flag; no module offers the modes. | Tying an integration window to the transport means restarting it when the playhead moves, and that command travels app→plugin: it needs a control frame, and so **wire protocol 2**. |
+> | `third_party/stb_vorbis`, `tool/` | Neither exists | Ogg is not decoded; see the README's gaps. |
+> | `engine/` has a `CMakeLists.txt` "only for the C test runner and the plugin build" | It exists, for the plugin and for non-Dart consumers | `plugin/test/sources_match.sh` holds it against `hook/build.dart`. |
+
 ## Context
 
 [Decibel](https://process.audio/de/products/decibel/manual) by process.audio is a commercial

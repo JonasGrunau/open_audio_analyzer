@@ -22,10 +22,20 @@ import 'dart:ffi';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
+import 'package:bel_core/bel_core.dart';
 import 'package:ffi/ffi.dart';
 
 import 'bel_engine_bindings_generated.dart' as native;
 import 'src/bel_ffi.dart';
+
+/// Decoding files for offline analysis. Kept in its own file because it shares
+/// nothing with the per-frame path this library is otherwise entirely about —
+/// see the note at the top of `src/bel_file.dart`.
+export 'src/bel_file.dart';
+
+/// Driving a whole file through the engine. Lives here rather than in the app
+/// or the CLI because both need it and neither can import the other.
+export 'src/offline.dart';
 
 /// Widest channel layout the engine carries (7.1).
 const int kBelMaxChannels = 8;
@@ -94,13 +104,16 @@ enum BelSource {
   /// out what it settled on.
   device(2),
 
-  /// A decoded file, run as fast as the CPU allows. Not implemented yet.
+  /// Reserved. File analysis does **not** use this — it decodes with [BelFile]
+  /// and drives the engine through [push], so that offline and realtime share
+  /// one `bel_analyse` rather than one having a path of its own. See
+  /// [analyseFile].
   file(3),
 
   /// The caller supplies audio through [BelEngine.push]. No thread, no clock,
   /// no device — the engine becomes a pure function of the samples given to
-  /// it, which is what the conformance suite needs and what file analysis will
-  /// be built on.
+  /// it, which is what the conformance suite needs and what file analysis is
+  /// built on.
   push(4);
 
   const BelSource(this.value);
@@ -185,7 +198,18 @@ class BelEngineException implements Exception {
 ///
 /// Create one with [BelEngine.start] and [dispose] it when done. Instances own
 /// a native thread, so leaking one leaks a thread.
-class BelEngine {
+///
+/// It `implements MeterSource`, which is the whole of what a meter module is
+/// allowed to see: the readings and nothing else — no start, no stop, no reset,
+/// no device. The other implementation of that interface decodes measurements
+/// off a socket for a tablet that has no engine in it at all, and because the
+/// modules are written against the interface rather than against this class,
+/// the two screens draw from the same painters and cannot drift into
+/// disagreeing about what the signal did.
+///
+/// The dependency points this way deliberately. `bel_core` still knows nothing
+/// about `dart:ffi`; this package knows about one pure-Dart interface.
+class BelEngine implements MeterSource {
   BelEngine._(
     this._handle,
     Pointer<native.bel_snapshot> snapshot,
@@ -212,7 +236,7 @@ class BelEngine {
           .asTypedList(kBelHistogramBins);
 
   /// The ABI this Dart code was written against. Mirrors `BEL_ABI_VERSION`.
-  static const int expectedAbiVersion = 3;
+  static const int expectedAbiVersion = 4;
 
   final Pointer<native.bel_engine> _handle;
 
@@ -231,9 +255,11 @@ class BelEngine {
   // `Vertices.raw` without any conversion. Treat them as read-only.
 
   /// Per-channel peak, dBFS, with meter hold applied.
+  @override
   final Float32List peak;
 
   /// Per-channel RMS, dBFS, with meter decay applied.
+  @override
   final Float32List rms;
 
   /// Per-channel VU deflection, dBFS.
@@ -243,12 +269,15 @@ class BelEngine {
   /// sine. **0 VU is not 0 dBFS**: the reference level is a property of the
   /// calibration, not of the signal, so the offset is applied where the meter
   /// is drawn.
+  @override
   final Float32List vu;
 
   /// Per-channel count of consecutive full-scale samples.
+  @override
   final Uint32List clip;
 
   /// Spectrum magnitudes, dBFS per log-spaced band.
+  @override
   final Float32List spectrum;
 
   /// Per-band peak hold for [spectrum].
@@ -257,6 +286,7 @@ class BelEngine {
   /// redundancy: a transform runs every hop but a publish carries only the last
   /// one, so a hold computed from what reaches Dart would miss every transient
   /// that landed between two publishes.
+  @override
   final Float32List spectrumPeak;
 
   /// Per-band stereo position, −1 left to +1 right.
@@ -264,6 +294,7 @@ class BelEngine {
   /// Meaningless for a band with no energy in it — read [spectrum] first and
   /// skip bands at [kBelDbFloor], because the pan of silence is not a
   /// direction.
+  @override
   final Float32List spectrumPan;
 
   /// The last [kBelScopePoints] stereo frames, interleaved x=left, y=right,
@@ -272,11 +303,13 @@ class BelEngine {
   /// Raw sample values, not rotated into goniometer axes — that rotation is a
   /// display choice and belongs in the painter's transform, where it costs
   /// nothing.
+  @override
   final Float32List scope;
 
   /// Fraction of the gated short-term loudness blocks in each of
   /// [kBelHistogramBins] bins between [kBelHistogramMinLufs] and
   /// [kBelHistogramMaxLufs]. Sums to 1, or to 0 before anything is measured.
+  @override
   final Float32List histogram;
 
   /// The engine's version string.
@@ -379,6 +412,7 @@ class BelEngine {
   /// published something new since the previous call — at 120 fps against a
   /// ~47 Hz measurement rate, most frames have nothing new to show, and
   /// skipping those is free.
+  @override
   bool refresh() {
     final generation = belSnapshotAcquireLeaf(_handle);
     if (generation == _generation) {
@@ -395,6 +429,7 @@ class BelEngine {
   /// `paint`. A paint also happens on a resize, a theme change or an ancestor
   /// marking the subtree dirty, and a spectrogram that scrolled on those would
   /// invent time that no audio passed through.
+  @override
   int get generation => _generation;
 
   /// Measure [interleaved] and publish the result, synchronously.
@@ -450,10 +485,14 @@ class BelEngine {
   // see [hasLoudness]. Zero is a legitimate reading for correlation, balance
   // and several dB quantities, so it cannot double as "no data".
 
+  @override
   int get sampleRate => _snapshot.sample_rate;
+  @override
   int get channels => _snapshot.channels;
+  @override
   double get elapsedSeconds => _snapshot.elapsed_seconds;
 
+  @override
   bool get isRunning => _snapshot.flags & 1 != 0;
 
   /// Frames the capture callback had to discard because analysis fell behind.
@@ -462,9 +501,11 @@ class BelEngine {
   /// reset, so dropped audio does not make the reading stale — it makes it an
   /// average of a different programme than the one that played. Non-zero means
   /// the integrated reading cannot be trusted, and the UI has to say so.
+  @override
   int get droppedFrames => _snapshot.dropped_frames;
 
   /// Whether any audio has been lost since the last reset. Sticky until reset.
+  @override
   bool get hasOverrun => _snapshot.flags & (1 << 3) != 0;
 
   /// Whether the loudness readings are measured in this build.
@@ -473,17 +514,23 @@ class BelEngine {
   /// produce loudness says so, and because an individual reading can still be
   /// NaN when it is not yet *defined* — momentary loudness needs 400 ms of
   /// signal before it means anything.
+  @override
   bool get hasLoudness => _snapshot.flags & (1 << 1) == 0;
 
   /// Whether [spectrum] holds measured data.
   ///
   /// False for the first full transform window — about 85 ms — during which
   /// the bands sit at the floor and are indistinguishable from silence.
+  @override
   bool get hasSpectrum => _snapshot.flags & (1 << 2) == 0;
 
+  @override
   double get lufsMomentary => _snapshot.lufs_momentary;
+  @override
   double get lufsShort => _snapshot.lufs_short;
+  @override
   double get lufsIntegrated => _snapshot.lufs_integrated;
+  @override
   double get loudnessRange => _snapshot.lra;
 
   /// The 10th and 95th percentiles [loudnessRange] is the difference of, and
@@ -492,24 +539,37 @@ class BelEngine {
   ///
   /// A histogram of the distribution without these is a picture rather than a
   /// measurement: the question anybody asks of an LRA of 9 LU is *which* 9 LU.
+  @override
   double get loudnessRangeLow => _snapshot.lra_low;
+  @override
   double get loudnessRangeHigh => _snapshot.lra_high;
+  @override
   double get loudnessRangeGate => _snapshot.lra_gate;
 
+  @override
   double get truePeak => _snapshot.true_peak;
+  @override
   double get truePeakMax => _snapshot.true_peak_max;
+  @override
   double get samplePeakMax => _snapshot.sample_peak_max;
 
+  @override
   double get dynamicRangeShort => _snapshot.dr_short;
+  @override
   double get dynamicRangeIntegrated => _snapshot.dr_integrated;
+  @override
   double get crestFactor => _snapshot.crest;
+  @override
   double get peakToLoudnessRatio => _snapshot.plr;
+  @override
   double get peakToShortTermRatio => _snapshot.psr;
 
   /// −1 fully out of phase, +1 mono.
+  @override
   double get correlation => _snapshot.correlation;
 
   /// −1 hard left, +1 hard right.
+  @override
   double get balance => _snapshot.balance;
 
   /// Stop the analysis thread and release the engine.

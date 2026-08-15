@@ -5,16 +5,17 @@ The arrangeable canvas. GPL-3.0-or-later.
 | File | Purpose |
 |------|---------|
 | `workspace.dart` | `Workspace` state, the Riverpod controller every layout edit goes through, undo/redo, and the default preset. |
-| `grid_canvas.dart` | The canvas: positioning, drag, resize, selection, the drag preview overlay, keyboard shortcuts. |
+| `grid_canvas.dart` | The canvas: positioning, drag, resize, selection, the drag preview overlay. |
+| `canvas_notice.dart` | The one line the canvas says out loud. Refusals only. |
 | `module_host.dart` | The only place that knows which `ModuleKind`s exist as code. |
 | `tab_strip.dart` | Tabs, inline rename, and the add/undo/redo buttons. |
 | `menus.dart` | The popup menus the canvas and the strip share. |
 
 The placement rules themselves are **not here** — they are pure functions over
 `TabSpec` in `bel_core/src/grid.dart`, so the same rules hold for a preset
-loaded from disk and for the Phase 6 remote display, and so they can be tested
-with no window. Anything that decides *where a module may go* belongs there;
-anything that decides *what a pointer means* belongs here.
+loaded from disk and for the remote display, and so they can be tested with no
+window. Anything that decides *where a module may go* belongs there; anything
+that decides *what a pointer means* belongs here.
 
 ## Rules
 
@@ -38,9 +39,20 @@ anything that decides *what a pointer means* belongs here.
   nothing pushes a neighbour aside. Validity is shown live while the pointer is
   down and an invalid release leaves the layout untouched.
 
-- **A refusal must say so.** "No room for that" surfaces in the canvas; a click
-  that silently does nothing is indistinguishable from a broken canvas, and the
-  user's next move is to click again.
+- **A refusal must say so, through `canvasNoticeProvider` and nowhere else.**
+  "No room for that" surfaces at the foot of the canvas; a click that silently
+  does nothing is indistinguishable from a broken canvas, and the user's next
+  move is to click again. Two paths can refuse — a drop the grid will not take,
+  and a module added from the keyboard — and the second lives *above* this
+  directory, which is why the notice is a provider rather than a
+  `ValueNotifier` in `grid_canvas.dart`. A second toast is two timeouts, two
+  positions and eventually two wordings for one refusal.
+
+- **The keyboard is not here.** `grid_canvas.dart` keeps a `Focus`, because a
+  key event needs a focused node to start from; the bindings are one table in
+  `lib/src/app/shortcuts.dart`, wrapped around the whole workspace. They used to
+  live here and stopped working whenever focus left the canvas — opening the
+  source picker was enough to silently disable undo. Add a shortcut there.
 
 - **Selection is not an edit.** It never enters the undo history. Undo that
   walks back through every click before it undoes anything is undo nobody uses.

@@ -1,0 +1,229 @@
+# plugin/CMakeLists.txt — the headless VST3 / Audio Unit metering plugin.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# ---------------------------------------------------------------------------
+# What this builds, and why it is nearly empty
+#
+# The plugin's entire job is three lines of real work: take the DAW's buffer,
+# get it to `bel_engine_push`, and stream the resulting snapshot and the DAW's
+# transport position to the Bel app over a socket. It draws no meters. Flutter
+# cannot be a plugin GUI, and rewriting twelve meter modules a second time in
+# C++ so that the plugin could draw them itself is precisely the outcome this
+# architecture exists to avoid — there would then be two implementations of
+# every measurement's *presentation*, and they would drift.
+#
+# So the plugin is a sensor and the app is the display, and the socket between
+# them is the whole design.
+#
+# ---------------------------------------------------------------------------
+# Licensing — this differs from docs/PLAN.md, deliberately, and it matters
+#
+# The plan says "Built with JUCE under its GPL-3.0 option". That was true of
+# JUCE 6. **JUCE 7 and 8 are AGPLv3 or commercial, not GPLv3.** We take the
+# AGPLv3 option, which is available to us and costs nothing we were not already
+# giving away, but it does change what this directory is licensed as:
+#
+#   engine/            MIT             unchanged; the plugin links it, so MIT
+#                                      flows in without obligation
+#   packages/bel_core  MIT             unchanged, not involved here
+#   lib/ (the app)     GPL-3.0-or-later  unchanged — the app never links JUCE.
+#                                      It talks to this plugin over a socket,
+#                                      which is not linking, so nothing about
+#                                      JUCE reaches it
+#   plugin/ (here)     AGPL-3.0-or-later  because it combines with JUCE
+#
+# GPLv3 section 13 expressly permits combining a GPLv3 work with AGPLv3 code,
+# and the app being "GPL-3.0-**or-later**" is what makes the combination clean
+# rather than merely arguable. The practical consequence of AGPL over GPL is
+# its network clause, and since Bel publishes all of its source anyway, that
+# clause asks us for nothing we were not already doing.
+#
+# One piece of good news the plan did not anticipate: **Steinberg relicensed the
+# VST3 SDK to MIT**, and JUCE 8 vendors it (in juce_audio_processors_headless).
+# So there is no second copyleft dependency and no separate SDK checkout. JUCE
+# is the only reason this directory is AGPL.
+#
+# ---------------------------------------------------------------------------
+# Building
+#
+#   cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+#   cmake --build build
+#
+# Products land in build/BelPlugin_artefacts/. Nothing is installed into a
+# system plugin folder unless you ask for it — see COPY_PLUGIN_AFTER_BUILD.
+
+cmake_minimum_required(VERSION 3.22)
+
+project(bel_plugin
+  VERSION 0.1.0
+  DESCRIPTION "Bel — headless metering plugin"
+  LANGUAGES C CXX
+)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+# ---------------------------------------------------------------------------
+# JUCE
+#
+# Pinned, not floating. A framework this large moving underneath a build is a
+# class of failure that costs an afternoon to even identify, and "it worked last
+# week" is not a diagnosis. Bumping this is a deliberate one-line decision.
+#
+# 8.0.15 rather than 9.x: it is the final release of the mature 8 line, the
+# AudioPlayHead and CMake APIs this plugin is written against are stable there,
+# and a metering plugin gains nothing from 9's new features. Revisit when
+# there is a reason, not on a schedule.
+set(BEL_JUCE_TAG "8.0.15" CACHE STRING "JUCE release tag to build against.")
+
+# A checkout at plugin/third_party/JUCE wins if it is there, so that a working
+# tree that already paid the ~110 MB download does not pay it again, and so
+# that an offline build is possible at all. Otherwise fetch it.
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/JUCE/CMakeLists.txt")
+  message(STATUS "Bel: using vendored JUCE at third_party/JUCE")
+  add_subdirectory(third_party/JUCE EXCLUDE_FROM_ALL)
+else()
+  message(STATUS "Bel: fetching JUCE ${BEL_JUCE_TAG}")
+  include(FetchContent)
+  FetchContent_Declare(JUCE
+    GIT_REPOSITORY https://github.com/juce-framework/JUCE.git
+    GIT_TAG        ${BEL_JUCE_TAG}
+    GIT_SHALLOW    TRUE
+  )
+  FetchContent_MakeAvailable(JUCE)
+endif()
+
+# ---------------------------------------------------------------------------
+# libbel
+#
+# Built from source rather than located as an installed package. The plugin and
+# the engine are versioned together in one repository and there is no scenario
+# where you want this plugin against a different engine than the one beside it
+# — that is exactly the stale-library case bel.h's ABI assertion exists to
+# catch, and not creating the opportunity is better than catching it.
+#
+# The plugin never opens a file: the DAW hands it audio. So the decode sources
+# and their dr_libs dependency are switched off, which is a couple of hundred
+# kilobytes of vendored MP3 and FLAC decoders that would otherwise be linked
+# into every plugin bundle to do nothing.
+set(BEL_BUILD_DECODE OFF CACHE BOOL "" FORCE)
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../engine ${CMAKE_CURRENT_BINARY_DIR}/engine)
+
+# ---------------------------------------------------------------------------
+# Formats
+#
+# AU is an Apple technology and its build requires the macOS SDK, so asking for
+# it elsewhere is not a portability problem to solve — it is a request that
+# cannot be honoured. Standalone is built everywhere because it is how you test
+# the socket path without opening a DAW.
+set(BEL_FORMATS VST3 Standalone)
+if(APPLE)
+  list(APPEND BEL_FORMATS AU)
+endif()
+
+juce_add_plugin(BelPlugin
+  PRODUCT_NAME              "Bel"
+  COMPANY_NAME              "Bel"
+  COMPANY_WEBSITE           "https://github.com/JonasGrunau/open_music_analyzer"
+  BUNDLE_ID                 "io.github.jonasgrunau.bel"
+
+  # Four characters each, at least one uppercase — an Audio Unit requirement,
+  # not a JUCE one, and a lowercase-only code fails validation at load time in
+  # Logic rather than at build time here.
+  PLUGIN_MANUFACTURER_CODE  BelA
+  PLUGIN_CODE               BelM
+
+  FORMATS                   ${BEL_FORMATS}
+
+  IS_SYNTH                  FALSE
+  NEEDS_MIDI_INPUT          FALSE
+  NEEDS_MIDI_OUTPUT         FALSE
+  IS_MIDI_EFFECT            FALSE
+
+  # The DAW's audio is the measurement; the plugin must not alter it. Declaring
+  # this lets a host place the plugin on a bus without reserving a separate
+  # output buffer, and documents the intent to the next reader.
+  VST3_CATEGORIES           "Analyzer" "Tools"
+  AU_MAIN_TYPE              kAudioUnitType_Effect
+
+  EDITOR_WANTS_KEYBOARD_FOCUS FALSE
+
+  # Off deliberately. A build that silently writes into ~/Library/Audio/Plug-Ins
+  # means the DAW you have open is now running a binary you did not knowingly
+  # install, which is a genuinely bad surprise while iterating on the audio
+  # thread. Install explicitly, or flip this in your own local cache.
+  COPY_PLUGIN_AFTER_BUILD   FALSE
+)
+
+target_sources(BelPlugin PRIVATE
+  src/BelPluginProcessor.cpp
+  src/BelPluginEditor.cpp
+  src/BelStreamer.cpp
+  src/BelWire.cpp
+)
+
+target_compile_definitions(BelPlugin PUBLIC
+  JUCE_WEB_BROWSER=0
+  JUCE_USE_CURL=0
+
+  # This plugin has no VST2 ancestor to replace, and claiming otherwise makes
+  # hosts substitute it for an unrelated plugin that happens to share an ID.
+  JUCE_VST3_CAN_REPLACE_VST2=0
+
+  # Lets the editor report the format it is loaded in, which is the first thing
+  # you want to know when a bug reproduces in one host and not another.
+  JUCE_VST3_HOST_CROSS_PLATFORM_UUID=1
+
+  # Note: JUCE_DISPLAY_SPLASH_SCREEN is deliberately NOT set. JUCE 8 removed
+  # the splash screen, and defining the flag only earns a compiler warning
+  # saying so.
+)
+
+target_link_libraries(BelPlugin
+  PRIVATE
+    bel::bel
+    juce::juce_audio_utils   # pulls in audio_basics / devices / processors
+    juce::juce_gui_basics
+  PUBLIC
+    juce::juce_recommended_config_flags
+    juce::juce_recommended_warning_flags
+)
+
+# Link-time optimisation on release builds only. It is worth having on the
+# analysis path and it makes a debug build considerably slower to produce for
+# no benefit at all.
+target_link_libraries(BelPlugin PUBLIC
+  $<$<CONFIG:Release>:juce::juce_recommended_lto_flags>)
+
+# ---------------------------------------------------------------------------
+# The wire fixture
+#
+# Writes a frame pair with known values so that the C++ and Dart implementations
+# of the protocol can be held against the same bytes. See the header of
+# test/wire_fixture.cpp for why a cross-implementation golden is the only test
+# that catches the failure that matters here.
+#
+# Links libbel and nothing else — no JUCE. That is deliberate: it means the
+# fixture builds on a machine with no framework, in about a second, so CI can
+# run the byte-layout check without paying for a plugin build.
+add_executable(bel_wire_fixture
+  test/wire_fixture.cpp
+  src/BelWire.cpp
+)
+target_link_libraries(bel_wire_fixture PRIVATE bel::bel)
+target_include_directories(bel_wire_fixture PRIVATE src)
+
+enable_testing()
+
+add_test(NAME wire_fixture_matches_golden
+  COMMAND ${CMAKE_COMMAND}
+    -DFIXTURE=$<TARGET_FILE:bel_wire_fixture>
+    -DGOLDEN=${CMAKE_CURRENT_SOURCE_DIR}/test/golden/wire_v1.bin
+    -DSCRATCH=${CMAKE_CURRENT_BINARY_DIR}/wire_v1.actual.bin
+    -P ${CMAKE_CURRENT_SOURCE_DIR}/test/compare_golden.cmake
+)
+
+add_test(NAME engine_sources_match
+  COMMAND sh ${CMAKE_CURRENT_SOURCE_DIR}/test/sources_match.sh
+)

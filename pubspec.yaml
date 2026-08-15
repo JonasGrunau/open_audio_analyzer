@@ -23,11 +23,18 @@ dependencies:
   bel_ui:
     path: packages/bel_ui
 
+  # The remote display's protocol. MIT, pure Dart, and used by both ends of the
+  # link — this binary is the host on a desktop and the display on a tablet.
+  bel_wire:
+    path: packages/bel_wire
+
   # Configuration and UI state only. Measurements never pass through it: they
   # go from native memory to a CustomPainter without touching the widget tree,
   # which is the entire reason this app can hold a frame budget with a dozen
   # meters live.
   flutter_riverpod: ^3.0.0
+  desktop_drop: ^0.7.1
+  file_selector: ^1.1.0
 
 dev_dependencies:
   flutter_test:

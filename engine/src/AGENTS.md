@@ -5,13 +5,14 @@
 | `bel_atomic.h` | The four atomic operations the seqlock needs, implemented twice (C11 and MSVC intrinsics). Deliberately tiny. |
 | `bel_internal.h` | The engine struct and the two OS primitives. Nothing here is ABI. |
 | `bel_snapshot.c` | The seqlock. Wait-free for the writer; the *reader* retries. |
-| `bel_source.c` | Where blocks of audio come from. Phase 0: silence and the test tone. |
+| `bel_source.c` | Where blocks of audio come from — silence, the test tone, a device, a file, or samples the caller pushes. All five behind one `bel_source_render`, which takes a frame count and a buffer and exposes nothing about their origin. |
 | `bel_kweight.h/.c` | The BS.1770-4 K-weighting biquads, **designed at the stream's sample rate** rather than tabulated, plus the channel weight table. |
 | `bel_loudness.h/.c` | Sub-block accumulation, R128 gating, momentary/short-term/integrated, and the LRA histogram. |
 | `bel_truepeak.h/.c` | The BS.1770-4 Annex 2 4x polyphase oversampler. |
 | `bel_spectrum.h/.c` | The 4096-point Hann STFT behind the analyser, the spectrogram and the stereo cloud. One set of transforms serves all three. |
 | `bel_ring.h/.c` | The SPSC ring between the audio callback and analysis. Drops are **counted and published**, never silently overwritten. |
 | `bel_device.h/.c` | miniaudio, cut down to enumeration and capture. The only file that includes miniaudio.h. |
+| `bel_decode.c` | dr_libs, as `bel_file_open/read/seek/close`. The only file that does I/O, and the only one that includes dr_wav/dr_flac/dr_mp3. No analysis: the caller pushes what it reads. |
 | `bel_analysis.c` | One pass over a block: the simple meters inline, the two standards-defined ones driven. |
 | `bel_engine.c` | Lifecycle, the analysis thread, and the OS shims. |
 
@@ -29,6 +30,20 @@
 - **The engine adopts the device's format; it never converts to its own.** A
   resampler in front of the measurement moves inter-sample peaks and shifts the
   K-weighted energy. MA_NO_DECODING is set partly to make that impossible.
+- **`MA_NO_DECODING` is now load-bearing twice.** As well as forbidding format
+  conversion on the capture path, it is what stops miniaudio compiling its own
+  bundled copies of dr_wav, dr_flac and dr_mp3 — which would collide at link
+  time with the ones `bel_decode.c` compiles. If a duplicate-symbol error ever
+  appears, removing it is not the fix.
+- **File decoding does not resample or remix either.** `bel_file_open` reports
+  the file's own rate and channel count and the caller configures the engine to
+  match. Offline analysis then pushes decoded blocks through the same
+  `bel_analyse` a device drives, which is what makes "the file report equals
+  what the meters showed" true by construction rather than by inspection.
+- **Push in blocks, not in one call.** The gated loudness measurements are
+  sample-accurate and independent of block size, but RMS, crest and the VU
+  ballistics are computed per pushed block — a whole file in one push reports
+  one RMS averaged over the entire programme and a VU needle that moves once.
 - **The analysis thread must never be delayed.** It sits downstream of a
   real-time audio callback; if it falls behind, the ring overruns and signal is
   lost for good. That is why publishing is a seqlock and not a mutex, and why

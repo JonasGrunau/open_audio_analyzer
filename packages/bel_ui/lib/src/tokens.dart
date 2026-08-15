@@ -104,6 +104,7 @@ class BelColors {
     required this.over,
     required this.meterTrack,
     required this.meterFill,
+    this.isLight = false,
   });
 
   /// The canvas behind everything.
@@ -145,6 +146,62 @@ class BelColors {
 
   /// The filled part, when it carries no pass/fail meaning of its own.
   final Color meterFill;
+
+  /// Whether this palette is dark ink on a light ground.
+  ///
+  /// Not derived from [background], because a palette is free to be low
+  /// contrast and the guess would be wrong exactly where it matters. It decides
+  /// the Material [ColorScheme]'s brightness, which is what the few stock
+  /// widgets Bel does use consult when they pick their own scrim and overlay
+  /// colours — a light skin with a dark scheme gets dark menu shadows over pale
+  /// panels and reads as a rendering fault.
+  final bool isLight;
+
+  /// Value equality, and it is load-bearing rather than tidy.
+  ///
+  /// Every module painter's `shouldRepaint` compares its palette. While the
+  /// palette was a compile-time constant, identity was equality and the
+  /// comparison was free. Skins end that: the palette is now built from a
+  /// document, and without this a rebuild that produced an identical palette
+  /// would re-rasterise all twelve modules — and `BelTheme.updateShouldNotify`
+  /// would notify the whole tree on every skin *re-read*, not every skin
+  /// change.
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BelColors &&
+          other.background == background &&
+          other.panel == panel &&
+          other.panelRaised == panelRaised &&
+          other.hairline == hairline &&
+          other.hairlineStrong == hairlineStrong &&
+          other.textPrimary == textPrimary &&
+          other.textMuted == textMuted &&
+          other.textFaint == textFaint &&
+          other.accent == accent &&
+          other.warn == warn &&
+          other.over == over &&
+          other.meterTrack == meterTrack &&
+          other.meterFill == meterFill &&
+          other.isLight == isLight;
+
+  @override
+  int get hashCode => Object.hash(
+    background,
+    panel,
+    panelRaised,
+    hairline,
+    hairlineStrong,
+    textPrimary,
+    textMuted,
+    textFaint,
+    accent,
+    warn,
+    over,
+    meterTrack,
+    meterFill,
+    isLight,
+  );
 
   /// Precision Instrument — graphite, one signal hue, no gradients.
   static const BelColors precisionInstrument = BelColors(

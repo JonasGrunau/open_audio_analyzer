@@ -30,7 +30,7 @@ class VuMeterModule extends StatefulWidget {
     super.key,
   });
 
-  final BelEngine engine;
+  final MeterSource engine;
   final MeterClock clock;
   final Calibration calibration;
 
@@ -118,7 +118,7 @@ class _VuPainter extends MeterPainter {
        _pivot = (Paint()..color = colors.textMuted),
        super(repaint: repaint);
 
-  final BelEngine engine;
+  final MeterSource engine;
   final Calibration calibration;
   final BelColors colors;
   final _VuMeterModuleState state;

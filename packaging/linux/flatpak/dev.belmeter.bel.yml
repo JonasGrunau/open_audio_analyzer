@@ -1,0 +1,93 @@
+# Bel, as a flatpak.
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# ---------------------------------------------------------------------------
+# This packages a bundle that was already built. It does not build Flutter.
+#
+# flatpak-builder runs its modules with no network, which is the whole point of
+# it: a build that cannot fetch cannot be surprised. Flutter's build resolves
+# pub packages and downloads engine artefacts, so it cannot run in there, and
+# every attempt to make it produces either a manifest with network access turned
+# on — which is not a reproducible build, only a slower one — or a hand-mirrored
+# pub cache that goes stale.
+#
+# So the split is honest: `flutter build linux --release` happens outside, and
+# this manifest packages `build/linux/*/release/bundle` as a directory source.
+# `make_flatpak.sh` does both in the right order.
+#
+# ---------------------------------------------------------------------------
+# Permissions, and why each one is here
+#
+# A metering application that cannot hear anything is a screensaver, so the
+# audio permission is not negotiable. The rest is the smallest set that leaves
+# Bel able to do what it says on the box.
+
+app-id: dev.belmeter.bel
+runtime: org.freedesktop.Platform
+runtime-version: '24.08'
+sdk: org.freedesktop.Sdk
+command: bel
+
+finish-args:
+  # Rendering. Flutter's Linux embedder is GTK on GL.
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --share=ipc
+  - --device=dri
+
+  # Capture. PipeWire is what a current desktop offers; the PulseAudio socket
+  # name is what both PipeWire and PulseAudio expose, and miniaudio opens it
+  # through ALSA or Pulse depending on what it finds.
+  - --socket=pulseaudio
+
+  # Offline analysis reads files the user chooses. `host` rather than a
+  # narrower portal path because the file picker hands back a path from
+  # anywhere, and a meter that can only analyse what is in ~/Music is a meter
+  # that cannot check the render somebody just sent you.
+  - --filesystem=host
+
+  # The remote display: mDNS discovery and a socket to a tablet on the same
+  # network. Without this the feature is present in the interface and does
+  # nothing, which is worse than not shipping it.
+  - --share=network
+
+modules:
+  - name: bel
+    buildsystem: simple
+    build-commands:
+      # The bundle is copied whole into /app/bel and the binary is put on the
+      # path by a symlink. Flutter's bundle expects `data/` and `lib/` beside
+      # the executable, so flattening it into /app/bin would break asset
+      # loading in a way that only shows up at runtime, as missing fonts.
+      - mkdir -p /app/bel
+      - cp -r bundle/* /app/bel/
+      - mkdir -p /app/bin
+      - ln -s /app/bel/bel /app/bin/bel
+
+      - install -Dm644 bel.desktop /app/share/applications/dev.belmeter.bel.desktop
+      - install -Dm644 dev.belmeter.bel.metainfo.xml
+        /app/share/metainfo/dev.belmeter.bel.metainfo.xml
+
+      - |
+        for size in 16 32 48 64 128 256 512; do
+          install -Dm644 "icons/${size}x${size}/dev.belmeter.bel.png" \
+            "/app/share/icons/hicolor/${size}x${size}/apps/dev.belmeter.bel.png"
+        done
+      - install -Dm644 bel.svg
+        /app/share/icons/hicolor/scalable/apps/dev.belmeter.bel.svg
+
+      # Both bundled font families are SIL OFL 1.1; their licences must ship
+      # with anything they are embedded in.
+      - install -Dm644 LICENSE /app/share/licenses/bel/LICENSE
+      - |
+        for licence in fonts/*-LICENSE.txt; do
+          [ -e "$licence" ] || continue
+          install -Dm644 "$licence" "/app/share/licenses/bel/$(basename "$licence")"
+        done
+
+    sources:
+      # Assembled by make_flatpak.sh, because flatpak-builder's `dir` source
+      # cannot reach outside the manifest's directory.
+      - type: dir
+        path: staging
