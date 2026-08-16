@@ -128,6 +128,23 @@ halves live here.
   threw, because its `stop` happens not to await — which is one added `await`
   away from the same defect, and why both are written the same way.
 
+- **An `EventChannel` holds one sink, so Bel subscribes to the Bonjour channel
+  once and shares it.** The companion trap to the one above, and it hides
+  better, because both halves of it are silent. A second `listen` on a channel
+  that already has a sink calls the *native* handler's `onCancel` before
+  installing the new one — so an arriving reader tears down the browse the
+  leaving one is still showing — and a `cancel` that arrives with no sink set is
+  answered `PlatformException(error, No active stream to cancel)` from inside
+  the framework's own `onCancel`, where nothing in Bel can catch it. Two host
+  pickers overlap by a frame every time one replaces another, because a route's
+  `initState` runs before the outgoing route's `dispose`, and that frame was
+  enough: the panel on screen searched a browse that had already been cancelled
+  and then logged the exception on its way out. `_SharedBrowse` in
+  `mdns/bonjour_discovery.dart` reference-counts the readers, replays the last
+  list to one that attaches mid-browse, and cancels when the last lets go. The
+  engine's rule is `SetStreamHandlerMessageHandlerOnChannel` in
+  `FlutterChannels.mm`; a second channel added here inherits the same rule.
+
 - **The DNS reader must survive anything.** Port 5353 carries every device on
   the network announcing services Bel has never heard of, some of it malformed
   and some of it hostile. `decodeMessage` returns null rather than throwing,

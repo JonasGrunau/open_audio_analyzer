@@ -737,6 +737,17 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   nothing on screen to say so. All of them are now focusable, keyboard
   operable, and announced.
 
+- **Opening the host picker a second time searched a browse that had already
+  been shut down.** A tablet's search runs over one channel, and a channel keeps
+  one subscription: opening a second picker while the first was still on screen
+  — which happens for a frame every time one replaces another — ended the first
+  one's browse, and the first one's teardown then ended the second's. The panel
+  left on screen said "Looking for hosts on this network…" over nothing that was
+  running, found no host however long it was left, and logged "No active stream
+  to cancel" when it was closed. The search is now shared: one browse for the
+  application, handed to whoever is looking, and stopped when the last of them
+  closes.
+
 - Changing the signal source could replace every meter on the canvas with a red
   error box reading "A MeterClock was used after being disposed". The old clock
   was torn down before the new one was installed, so any painter still mounted

@@ -263,6 +263,54 @@ void main() {
       discovery.dispose();
       await pumpEventQueue();
     });
+
+    test('two searches that overlap are one browse', () async {
+      var listens = 0;
+      var cancels = 0;
+      answerWith(
+        MockStreamHandler.inline(
+          onListen: (arguments, sink) {
+            listens++;
+            sink.success(<dynamic>[
+              <dynamic, dynamic>{
+                'name': 'studio-mac',
+                'host': 'studio-mac.local',
+                'port': 45678,
+                'txt': <dynamic, dynamic>{'name': 'Studio Mac'},
+              },
+            ]);
+          },
+          onCancel: (arguments) => cancels++,
+        ),
+      );
+
+      // What replacing one host picker with another does: the arriving route's
+      // `initState` runs before the leaving route's `dispose`, so for a frame
+      // there are two of these.
+      final leaving = BonjourDiscovery();
+      await leaving.start();
+      await pumpEventQueue();
+
+      final arriving = BonjourDiscovery();
+      await arriving.start();
+      leaving.dispose();
+      await pumpEventQueue();
+
+      // A channel holds one sink. A second `listen` would have cancelled the
+      // browse underneath the panel still on screen, and the `cancel` that
+      // followed it would have been answered with "No active stream to
+      // cancel" — reported from inside the framework, where Bel cannot catch
+      // it.
+      expect(listens, 1);
+      expect(cancels, isZero);
+
+      // And the search that arrived mid-browse has the list rather than an
+      // empty panel waiting for the network to change.
+      expect(arriving.hosts.value.single.displayName, 'Studio Mac');
+
+      await arriving.stop();
+      expect(cancels, 1);
+    });
   });
 
   group('what the panel says when it cannot search', () {
