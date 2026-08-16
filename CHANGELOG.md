@@ -287,14 +287,13 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the plus punctuates `+ MODULE`. The arrows are drawn, like every other mark in
   Bel, so they are the same on every platform and cost no dependency. The
   keyboard shortcuts are unchanged.
-- **The delivery target in the status bar looks like the buttons beside it.**
-  Same border, same height, same capitals. It was the quieter shape on the
-  argument that it names what the meters are measured against rather than
-  offering an action — but it opens a menu on a click exactly as the four
-  buttons to its right do, and a control that can be pressed and does not look
-  pressable is a control people do not find. The target's own name is unchanged
-  everywhere else: the menu, the settings panel and every report print it as it
-  was typed.
+- **The delivery target in the status bar is built like the buttons beside it,
+  one step quieter.** Same height and the same capitals, because it opens a menu
+  on a click exactly as the four buttons to its right do and a control that can
+  be pressed should look like one. Its border stays the fainter of the two
+  hairlines, which is what still tells the thing that reports a setting from the
+  four that do something. The target's own name is unchanged everywhere else:
+  the menu, the settings panel and every report print it as it was typed.
 - **A rule separates the tab strip's two kinds of action.** `UNDO` and `REDO`
   step back and forward through what has been done; `+ MODULE` does something
   new. They were four controls of the same size, colour and weight in one run.

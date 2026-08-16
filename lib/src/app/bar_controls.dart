@@ -36,14 +36,17 @@ const double _barControlHeight = Space.lg;
 /// A bordered readout in the bar. Not interactive on its own — the caller puts
 /// one inside a `PopupMenuButton`.
 ///
-/// **Chrome like the buttons beside it, because it does what they do.** It was
-/// the quieter shape on the argument that it names what the meters are measured
-/// against rather than offering an action — but it is the face of a menu, it
-/// opens on a click like the four to its right, and a control that can be
-/// pressed and does not look like the pressable things beside it is a control
-/// people do not find. So: the same border, the same height, and the same
-/// 10 px capitals. What is left to tell them apart is the only difference that
-/// matters — the buttons say what they do, and this says what is set.
+/// **The buttons' metrics, and one step down in tone.** It takes their height
+/// and their 10 px capitals, because it is the face of a menu and opens on a
+/// click like the four to its right — a control that can be pressed and looks
+/// nothing like the pressable things beside it is a control people do not find.
+///
+/// Its border stays `hairline` where theirs is `hairlineStrong`, and that one
+/// step is the whole distinction: matched on every other count, the row read as
+/// five buttons in a line, and the one that reports what the meters are
+/// measured against was indistinguishable from the four that do something.
+/// Tone is the right axis to separate them on — it survives the metrics being
+/// identical, which is what keeps the row a row.
 class BarChip extends StatelessWidget {
   const BarChip({required this.text, super.key});
 
@@ -60,10 +63,7 @@ class BarChip extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: Space.sm),
       decoration: BoxDecoration(
         borderRadius: BelRadius.allXs,
-        border: Border.all(
-          color: colors.hairlineStrong,
-          width: BelStroke.hairline,
-        ),
+        border: Border.all(color: colors.hairline, width: BelStroke.hairline),
       ),
       // `Center`, not `Container.alignment`: an aligned `Container` expands to
       // whatever bounded width it is offered, and this one is offered 220 px by
