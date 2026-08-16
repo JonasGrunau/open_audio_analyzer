@@ -9,7 +9,7 @@ than aspired to.
 | `src/metric.dart` | `Metric` — the closed set of sixteen things that can be measured. |
 | `src/meter_source.dart` | `MeterSource` — everything a module is allowed to read. `BelEngine` implements it over native memory and `WireSnapshot` over a socket, and the thirteen modules cannot tell them apart. |
 | `src/calibration.dart` | `Calibration` and the six built-in delivery targets. |
-| `src/layout.dart` | `GridRect`, `ModuleKind`, `ModuleSpec`, `TabSpec`, `PresetSpec`. |
+| `src/layout.dart` | `GridRect`, `ModuleKind`, `ModuleSpec`, `TabSpec`, `PresetSpec`, and the typed readings of `ModuleSpec.options` — `SpectrumResponse`. |
 | `src/grid.dart` | Every rule about where a module may go, as pure functions over `TabSpec`. No pixels, no widgets — so the same rules hold for the canvas, for a preset loaded from disk and for the remote display. |
 | `src/settings.dart` | `AppSettings`, `AudioSourceKind`, and the schema version every file Bel writes carries. |
 | `src/skin.dart` | `Skin` and the thirteen colour roles, as integers. The adapter to `BelColors` is `bel_ui`'s. |

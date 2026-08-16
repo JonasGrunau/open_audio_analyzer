@@ -269,6 +269,19 @@ class _StereoCloudPainter extends MeterPainter {
     state._marks.draw(canvas, ui.PointMode.points, state._passes);
 
     // --- Guides -------------------------------------------------------------
+    // **The frequency axis first, then the centre line over it.** The two are
+    // not peers: the horizontals are a scale to read a height against, and the
+    // vertical is the fact the module exists to show — where dead centre is.
+    // Drawn underneath, it was interrupted at all three crossings by a line
+    // dimmer than itself, which reads as a dashed line rather than as a marked
+    // centre. Crossing hairlines have to resolve one way or the other, and the
+    // one that resolves in front is the one carrying the meaning.
+    for (var i = 0; i < _axisHz.length; i++) {
+      final y = _y(plot, bandOfHz(_axisHz[i]));
+      canvas.drawLine(Offset(0, y), Offset(plot.width, y), _guide);
+      canvas.drawParagraph(state._frequencyLabels[i], Offset(Space.xxs, y));
+    }
+
     final centre = plot.width / 2;
     if (stereo) {
       canvas.drawLine(
@@ -291,11 +304,6 @@ class _StereoCloudPainter extends MeterPainter {
         Offset(centre, plot.height),
         _centreGuide,
       );
-    }
-    for (var i = 0; i < _axisHz.length; i++) {
-      final y = _y(plot, bandOfHz(_axisHz[i]));
-      canvas.drawLine(Offset(0, y), Offset(plot.width, y), _guide);
-      canvas.drawParagraph(state._frequencyLabels[i], Offset(Space.xxs, y));
     }
 
     final left = state._left!;

@@ -91,7 +91,7 @@ Three consequences worth naming, because they are what usually goes wrong:
 | Number box, LUFS, Alert, Validator | Cached `ui.Paragraph`, rebuilt on string change only |
 | Digital meter | Batched `drawRect`, one reused `Paint` |
 | VU meter | Dial face pre-rendered once to a `ui.Image`; only the needle repaints |
-| Spectrum analyzer | `drawRawPoints` over the native `Float32List` — C writes screen-space x,y directly |
+| Spectrum analyzer | `drawRawPoints` over the native `Float32List` — C writes screen-space x,y directly. The drawn level is a one-pole average of the published bands, at the time constant its `Response` menu names; the peak-hold line above it never is |
 | Phase scope | The last forty frames of samples in a ring, one `drawRawPoints` each at its age's brightness — the trail is the frames, not a faded picture |
 | Stereo cloud | A decayed accumulator per two-pixel cell, emitted as points sorted into brightness buckets |
 | Spectrogram | Run-length columns kept as data and redrawn every published frame, one `drawRawPoints` per palette step |

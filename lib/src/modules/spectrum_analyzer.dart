@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
@@ -48,11 +49,16 @@ class SpectrumAnalyzerModule extends StatefulWidget {
   const SpectrumAnalyzerModule({
     required this.engine,
     required this.clock,
+    this.response = SpectrumResponse.normal,
     super.key,
   });
 
   final MeterSource engine;
   final MeterClock clock;
+
+  /// How fast the curve follows what the engine publishes. See
+  /// [SpectrumResponse] for why this is a time constant and not a frame rate.
+  final SpectrumResponse response;
 
   @override
   State<SpectrumAnalyzerModule> createState() => _SpectrumAnalyzerModuleState();
@@ -95,6 +101,55 @@ class _SpectrumAnalyzerModuleState extends State<SpectrumAnalyzerModule> {
 
   /// x, y per band, for the curve stroked along the top of the fill.
   final Float32List _curve = Float32List(kBelSpectrumBands * 2);
+
+  /// The level actually drawn, per band, in dB.
+  ///
+  /// One pole per band, folded once per published frame — see [_advance]. On
+  /// [SpectrumResponse.fast] it holds a copy of what the engine published and
+  /// the arithmetic below collapses to an assignment.
+  final Float32List _shown = Float32List(kBelSpectrumBands);
+
+  /// The generation [_shown] was last folded for, and the engine time it was
+  /// folded at.
+  ///
+  /// **Zero is a real generation to have never seen**, so this starts at −1: an
+  /// engine that has published exactly once and then stopped — a file being
+  /// analysed, a device that dropped — must still get its one frame folded in.
+  int _seenGeneration = -1;
+  double _seenElapsed = 0;
+
+  /// Folds one published frame into [_shown].
+  ///
+  /// **Called on a change of generation, never on a paint.** Paint also runs on
+  /// a resize, a skin change and a selection, and an average that advanced on
+  /// those would settle further every time the window moved — time passing that
+  /// no audio passed through, which is the same defect the spectrogram's
+  /// scrolling has and is just as convincing to look at.
+  ///
+  /// The coefficient is derived from *engine* time rather than counted in
+  /// frames, so the setting means the same thing at every refresh rate: at
+  /// 30 fps the clock reads fewer of the engine's ~47 published frames per
+  /// second than at 120, and a fixed per-fold coefficient would make Normal
+  /// slower on a laptop than on a workstation.
+  void _advance(MeterSource engine, double tau) {
+    final elapsed = engine.elapsedSeconds;
+    final dt = elapsed - _seenElapsed;
+    _seenElapsed = elapsed;
+
+    // A reset takes the clock back to zero, and a first frame has nothing to
+    // average against. Snap rather than fade in from whatever was on screen —
+    // a curve rising slowly out of the floor after a reset is a picture of a
+    // programme that did not happen.
+    final snap = tau <= 0 || dt <= 0 || _seenGeneration < 0;
+    final alpha = snap ? 1.0 : 1 - math.exp(-dt / tau);
+
+    final spectrum = engine.spectrum;
+    for (var band = 0; band < kBelSpectrumBands; band++) {
+      _shown[band] = snap
+          ? spectrum[band]
+          : _shown[band] + (spectrum[band] - _shown[band]) * alpha;
+    }
+  }
 
   ScaleGraticule? _graticule;
 
@@ -162,6 +217,7 @@ class _SpectrumAnalyzerModuleState extends State<SpectrumAnalyzerModule> {
         engine: widget.engine,
         colors: colors,
         graticule: _graticule!,
+        response: widget.response,
         state: this,
         repaint: widget.clock,
       ),
@@ -174,6 +230,7 @@ class _SpectrumPainter extends MeterPainter {
     required this.engine,
     required this.colors,
     required this.graticule,
+    required this.response,
     required this.state,
     required Listenable repaint,
   }) : _fill = (Paint()..strokeCap = StrokeCap.butt),
@@ -197,6 +254,7 @@ class _SpectrumPainter extends MeterPainter {
   final MeterSource engine;
   final BelColors colors;
   final ScaleGraticule graticule;
+  final SpectrumResponse response;
   final _SpectrumAnalyzerModuleState state;
 
   final Paint _fill;
@@ -254,6 +312,11 @@ class _SpectrumPainter extends MeterPainter {
 
     if (!engine.hasSpectrum) return;
 
+    if (engine.generation != state._seenGeneration) {
+      state._advance(engine, response.timeConstant);
+      state._seenGeneration = engine.generation;
+    }
+
     // --- Bands --------------------------------------------------------------
     // The bands are drawn a half-band wider than they are spaced. Butt caps on
     // a stroke exactly one band wide leave a seam of background between
@@ -265,7 +328,7 @@ class _SpectrumPainter extends MeterPainter {
 
     for (var band = 0; band < kBelSpectrumBands; band++) {
       final x = plot.left + (band + 0.5) * bandWidth;
-      final y = _y(plot, engine.spectrum[band]);
+      final y = _y(plot, state._shown[band]);
 
       state._bars[band * 4] = x;
       state._bars[band * 4 + 1] = plot.bottom;
@@ -293,6 +356,7 @@ class _SpectrumPainter extends MeterPainter {
   @override
   bool shouldRepaint(_SpectrumPainter oldDelegate) =>
       oldDelegate.colors != colors ||
+      oldDelegate.response != response ||
       !identical(oldDelegate.engine, engine) ||
       !identical(oldDelegate.graticule, graticule);
 }

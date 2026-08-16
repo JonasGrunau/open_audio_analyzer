@@ -89,6 +89,18 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Sample values are **not clamped** on the way out of the decoder. A float WAV
   may legitimately hold values beyond ±1.0, and those are precisely the
   overshoots true-peak metering exists to find.
+- **The Spectrum Analyzer draws an average of the bands rather than the last
+  transform, and it now says which.** The engine publishes about 47 transforms a
+  second and the module drew every one untouched, which flickers hard enough
+  that the shape of a balance is difficult to read. A new `Response` setting in
+  the module's menu chooses Fast — no averaging, exactly what it did before —
+  Normal at 120 ms, or Slow at 500 ms; **Normal is the default**, so an existing
+  analyser reads calmer than it did and a band's drawn level now lags a change
+  by about that much. A short peak reads lower on Normal than it did on the
+  frame it happened, by as much as the difference between the peak and what
+  surrounds it. Nothing measured changed: the peak-hold line above the curve is
+  never averaged at any setting, reports and the wire protocol carry the bands
+  as measured, and the spectrogram and stereo cloud draw them as published.
 
 ### ✨ Added
 
@@ -294,6 +306,12 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   hairlines, which is what still tells the thing that reports a setting from the
   four that do something. The target's own name is unchanged everywhere else:
   the menu, the settings panel and every report print it as it was typed.
+- **A remote display's modules have no menu button.** The title bars drew one
+  and it did nothing, because there is nothing on that screen a viewer is
+  allowed to change. It is gone rather than disabled.
+- **The stereo cloud's centre line is drawn over the frequency axis.** The three
+  horizontal guides crossed in front of it, which broke the one line the module
+  exists to mark into what looked like a dashed one.
 - **A rule separates the tab strip's two kinds of action.** `UNDO` and `REDO`
   step back and forward through what has been done; `+ MODULE` does something
   new. They were four controls of the same size, colour and weight in one run.

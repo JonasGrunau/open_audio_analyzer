@@ -190,6 +190,11 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
       position: menuPositionAt(context, globalPosition),
       items: [
         if (module.kind == ModuleKind.numberBox) belMenuItem(context, _ModuleAction.metric, 'Metric — ${module.metric.label}', color: colors.textMuted),
+        // Named "Response" rather than a refresh rate, because that is what it
+        // is: the analyser draws every frame the engine publishes at every
+        // setting, and what changes is how long the drawn level takes to follow
+        // one. See `SpectrumResponse`.
+        if (module.kind == ModuleKind.spectrumAnalyzer) belMenuItem(context, _ModuleAction.response, 'Response — ${module.spectrumResponse.label}', color: colors.textMuted),
         belMenuItem(context, _ModuleAction.duplicate, 'Duplicate'),
         belMenuItem(context, _ModuleAction.delete, 'Delete', color: colors.over),
       ],
@@ -200,6 +205,8 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
     switch (action) {
       case _ModuleAction.metric:
         await _showMetricMenu(globalPosition, module);
+      case _ModuleAction.response:
+        await _showResponseMenu(globalPosition, module);
       case _ModuleAction.duplicate:
         if (!_controller.duplicateModule(module.id)) {
           _report('No room on this tab for another ${module.kind.label}.');
@@ -220,6 +227,20 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
 
     if (metric == null || !mounted) return;
     _controller.setModuleOption(module.id, 'metric', metric.id);
+  }
+
+  Future<void> _showResponseMenu(Offset globalPosition, ModuleSpec module) async {
+    final colors = BelTheme.of(context);
+    final current = module.spectrumResponse;
+    final response = await showMenu<SpectrumResponse>(
+      context: context,
+      color: colors.panelRaised,
+      position: menuPositionAt(context, globalPosition),
+      items: [for (final response in SpectrumResponse.values) belMenuItem(context, response, response.label, color: response == current ? colors.textPrimary : colors.textMuted)],
+    );
+
+    if (response == null || !mounted) return;
+    _controller.setModuleOption(module.id, 'response', response.id);
   }
 
   // --- Build --------------------------------------------------------------
@@ -334,7 +355,7 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
   }
 }
 
-enum _ModuleAction { metric, duplicate, delete }
+enum _ModuleAction { metric, response, duplicate, delete }
 
 /// One module and the four transparent layers that make it manipulable.
 class _ModuleSlot extends StatelessWidget {

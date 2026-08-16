@@ -44,7 +44,12 @@ class ModuleHost extends StatelessWidget {
   final MeterClock clock;
   final Calibration calibration;
   final bool selected;
-  final VoidCallback onMenu;
+
+  /// Null on a surface where a module has nothing to open — the remote display.
+  /// `ModuleFrame` then draws no button at all, which is the honest picture: a
+  /// viewer cannot change anything about what is on that screen, and a control
+  /// that is drawn and does nothing is worse than one that is not there.
+  final VoidCallback? onMenu;
 
   @override
   Widget build(BuildContext context) {
@@ -140,6 +145,7 @@ class ModuleHost extends StatelessWidget {
       ModuleKind.spectrumAnalyzer => SpectrumAnalyzerModule(
         engine: engine,
         clock: clock,
+        response: spec.spectrumResponse,
       ),
       ModuleKind.spectrogram => SpectrogramModule(engine: engine, clock: clock),
       ModuleKind.phaseScope => PhaseScopeModule(engine: engine, clock: clock),

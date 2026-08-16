@@ -281,6 +281,56 @@ class GridRect {
   String toString() => 'GridRect($column,$row ${columns}x$rows)';
 }
 
+/// How fast the spectrum analyser's curve follows what the engine publishes.
+///
+/// **A time constant, not a frame rate.** The obvious reading of "slow the
+/// analyser down" is to redraw it less often, and that is the one thing a meter
+/// must not do: the engine publishes a transform every 1024 samples, and a
+/// display that drew one frame in three would simply not show what happened in
+/// the other two — a transient landing between refreshes would be gone rather
+/// than smaller. An average shows all of it, in proportion.
+///
+/// So each band's *displayed* level is a one-pole average of the band levels
+/// the engine published, over [timeConstant] seconds. The averaging is in dB,
+/// on the value being drawn, which makes this a display ballistic in the sense
+/// a VU movement is one — not a power average of the signal, which would be a
+/// different quantity and would say so.
+///
+/// **The peak-hold line is never averaged.** It is the engine's own hold, and
+/// it is what keeps a slow setting honest: the curve says where the programme
+/// mostly sits, the line above it says how far it actually went.
+enum SpectrumResponse {
+  /// Every published frame, exactly as measured. What the module did before
+  /// this setting existed, and still the right choice for finding a click.
+  fast('fast', 'Fast', 0),
+
+  /// Calm enough to read a balance off, fast enough to follow a mix.
+  normal('normal', 'Normal', 0.12),
+
+  /// For the shape of a whole programme rather than the shape of a bar.
+  slow('slow', 'Slow', 0.5);
+
+  const SpectrumResponse(this.id, this.label, this.timeConstant);
+
+  /// Stable identifier for presets and the wire protocol. Never change one of
+  /// these; add a new response instead.
+  final String id;
+
+  /// What the module's menu says.
+  final String label;
+
+  /// Seconds for the drawn level to cover 63% of a step. Zero draws the
+  /// published value untouched.
+  final double timeConstant;
+
+  static SpectrumResponse? fromId(String id) {
+    for (final response in SpectrumResponse.values) {
+      if (response.id == id) return response;
+    }
+    return null;
+  }
+}
+
 /// One module on a tab.
 ///
 /// [options] is an untyped map on purpose. Every module has its own settings —
@@ -307,6 +357,18 @@ class ModuleSpec {
   /// The metric this module shows, for the kinds that show one.
   Metric get metric =>
       Metric.fromId(options['metric'] as String? ?? '') ?? kind.defaultMetric;
+
+  /// How fast the spectrum analyser follows the measurement.
+  ///
+  /// Defaults to [SpectrumResponse.normal] rather than to [SpectrumResponse
+  /// .fast], which is what every analyser did before the setting existed. At
+  /// 47 transforms a second the untouched curve flickers hard enough that the
+  /// shape of the balance is difficult to read at all, and a display nobody can
+  /// read is not a more honest one — the peak-hold line above it still carries
+  /// every maximum either way.
+  SpectrumResponse get spectrumResponse =>
+      SpectrumResponse.fromId(options['response'] as String? ?? '') ??
+      SpectrumResponse.normal;
 
   /// What the title bar says.
   ///

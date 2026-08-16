@@ -108,6 +108,16 @@ than reporting nothing, and it is also true.
 | `Spectrum peak` | dBFS | Per-band hold, computed in the engine because a transform runs every hop and a publish carries only the last one. | **now** |
 | `Spectrum pan` | — | Per-band stereo position, `−1` hard left to `+1` hard right. What the stereo cloud draws. | **now**, two channels or more |
 
+The Spectrum Analyzer **draws** an average of these bands rather than the last
+one published, and says which in its own menu: `Response` is Fast (no
+averaging), Normal (120 ms) or Slow (500 ms), and Normal is the default. The
+averaging is one pole per band on the dB value being drawn — a display
+ballistic, in the sense a VU movement is one, not a power average of the signal.
+The measurement above is untouched: the analyser's peak-hold line is never
+averaged at any setting, `Spectrum` is what a report and the wire protocol carry
+whatever a module is set to, and every other module reading these bands — the
+spectrogram, the stereo cloud — draws them as published.
+
 Spectrum pan needs a front pair. A one-channel source reports every band at `0`,
 for the same reason correlation reports `+1` — mono is dead centre, and it is
 true. The stereo cloud does not *draw* that, because a column of centred bands

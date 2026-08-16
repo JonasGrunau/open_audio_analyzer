@@ -418,8 +418,9 @@ class _RemoteCanvas extends StatelessWidget {
                     selected: false,
                     // A display has no menu. There is nothing on it a viewer is
                     // allowed to change, and a menu that opened onto disabled
-                    // items would be worse than none.
-                    onMenu: () {},
+                    // items would be worse than none — so the title bar draws
+                    // no button, rather than a button that swallows the tap.
+                    onMenu: null,
                   ),
                 ),
             ],
