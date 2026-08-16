@@ -48,6 +48,15 @@ published wire format is that things nobody asked for can talk to it.
   over 1 MiB is refused rather than allocated, because a length field is an
   instruction to allocate.
 
+- **A `FrameReader` belongs to a stream, not to the object that owns it.** It
+  accumulates until a frame is whole, so a socket that dies mid-frame leaves
+  bytes in it that are not a prefix of anything the next connection will send.
+  Reading on reassembles the dead stream's head onto the live one at exactly the
+  right length to decode — so the display draws an invented measurement instead
+  of failing, and the leftovers survive the desync that follows, which makes
+  every retry repeat it. **`reset()` on every path that ends a connection**;
+  `DisplayClient._teardown` is the one place that does.
+
 - **Nothing here decides *when* to send.** Rate, flow control and the two-second
   staleness rule live in `lib/src/remote/`. This package is a codec; giving it a
   timer would make it untestable without one.

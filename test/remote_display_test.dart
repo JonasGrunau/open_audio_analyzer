@@ -9,11 +9,14 @@
 // frame boundaries or the publish loop fails here rather than on a tablet in
 // somebody's live room.
 
+import 'dart:async';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:bel/src/remote/display_client.dart';
 import 'package:bel/src/remote/display_host.dart';
 import 'package:bel_core/bel_core.dart';
+import 'package:bel_wire/bel_wire.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -189,6 +192,77 @@ void main() {
     );
     expect(client.snapshot.isRunning, isFalse);
     expect(client.snapshot.hasLoudness, isFalse);
+  });
+
+  test('a display comes back after a link that dropped mid-frame', () async {
+    // The failure this guards against is not the drop — it is everything
+    // after it. [DisplayClient] holds one [FrameReader] for its whole life,
+    // and a socket that dies partway through a 15 kB snapshot leaves the head
+    // of that frame in it. Reading on reassembles those bytes onto the head of
+    // the *next* connection's stream, at exactly the right length to decode:
+    // the display drew one frame of confident, invented measurement, lost sync
+    // on whatever followed, and dropped the link — carrying the leftovers into
+    // the retry, which repeated it. A tablet that lost one frame to a Wi-Fi
+    // hiccup never came back, and Disconnect did not clear it either.
+    //
+    // A real DisplayHost cannot be asked to die mid-frame, so the host here is
+    // a raw socket that does exactly that once and behaves perfectly after.
+    final hello = WireHello.local(
+      abiVersion: 4,
+      producerName: 'Interrupted Host',
+    ).encodeFrame();
+    final frame = SnapshotFrame()..encode(source..generation = 77);
+
+    var connections = 0;
+    final server = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(server.close);
+
+    server.listen((socket) {
+      socket.setOption(SocketOption.tcpNoDelay, true);
+      connections++;
+
+      if (connections == 1) {
+        socket
+          ..add(hello)
+          // Partway through a snapshot, and then the network is gone.
+          ..add(Uint8List.sublistView(frame.bytes, 0, 6000));
+        Future<void>.delayed(const Duration(milliseconds: 60), socket.destroy);
+        return;
+      }
+
+      socket.add(hello);
+      final pump = Timer.periodic(const Duration(milliseconds: 30), (timer) {
+        try {
+          socket.add(frame.bytes);
+        } on Object {
+          timer.cancel();
+        }
+      });
+      addTearDown(pump.cancel);
+    }, onError: (Object _) {});
+
+    final display = DisplayClient(staleAfter: const Duration(seconds: 5));
+    addTearDown(() async {
+      await display.disconnect();
+      display.dispose();
+    });
+
+    await display.connect('127.0.0.1', server.port);
+    // Past the 1 s first retry, with room for the reconnected stream to land.
+    await _settle(milliseconds: 1800);
+
+    expect(connections, greaterThan(1), reason: 'the retry never happened');
+    expect(
+      display.state.value,
+      RemoteLinkState.live,
+      reason: 'the display never recovered: ${display.failure.value}',
+    );
+    expect(display.snapshot.isStale, isFalse);
+    expect(
+      display.snapshot.generation,
+      77,
+      reason: 'the reassembled frame was not the one the host sent',
+    );
   });
 
   test('a frame still in flight does not take the host with it', () async {

@@ -101,6 +101,18 @@ halves live here.
   flushed. Overwriting a pending buffer splices half of one measurement onto
   half of another, and the frame still parses.
 
+- **The `FrameReader` is reset on every path that ends a connection**, which is
+  `_teardown` and only `_teardown`. The same splice as the rule above, through
+  the receiving door: a socket that dies mid-frame leaves the head of that frame
+  in the reader, and it outlives the socket. The next connection's bytes land
+  behind them, reassemble at exactly the right length to decode, and the meters
+  draw a measurement nobody took — then the stream desyncs, the link drops, and
+  the leftovers survive *that* too, so every retry repeats it. A tablet that
+  lost one frame to a Wi-Fi hiccup never came back, and reattaching by hand did
+  not clear it because `connect` goes through the same `_teardown`. Held by
+  `test/remote_display_test.dart`, which drops a real socket 6 kB into a
+  snapshot and requires the display to recover.
+
 - **A socket with a `flush` outstanding is a *bound* sink, and a bound sink
   refuses `add`, `flush` and `close` alike.** `IOSink.flush` raises the same
   flag `addStream` does and lowers it when the flush completes, so every write

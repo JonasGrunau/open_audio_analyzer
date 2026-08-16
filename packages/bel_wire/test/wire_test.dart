@@ -366,6 +366,45 @@ void main() {
       expect(reader.moveNext, throwsA(isA<WireFormatException>()));
     });
 
+    test('a reset reader forgets what the previous stream left behind', () {
+      // The reader outlives the connection. A socket that dies mid-frame leaves
+      // the head of that frame here, and those bytes are not a prefix of
+      // anything the next connection sends — so without the reset the tail of
+      // a dead stream is reassembled onto the head of a live one, at exactly
+      // the right length to decode. The display drew that: a detailed,
+      // confident, entirely invented measurement.
+      final interrupted = SnapshotFrame()
+        ..encode(_FakeSource()..generation = 41);
+      final fresh = SnapshotFrame()..encode(_FakeSource()..generation = 42);
+
+      final reader = FrameReader()
+        ..add(interrupted.bytes.sublist(0, 6000))
+        ..reset()
+        ..add(fresh.bytes);
+
+      expect(reader.moveNext(), isTrue);
+      expect(reader.type, WireFrameType.snapshot);
+      expect((WireSnapshot()..decode(reader.payload)).generation, 42);
+      expect(reader.moveNext(), isFalse, reason: 'nothing of the old stream');
+    });
+
+    test('a reset keeps the reader usable, not merely empty', () {
+      // A reset in the middle of a healthy frame must leave a reader that can
+      // still reassemble across chunks, rather than one that has lost its
+      // buffer or its offsets.
+      final frame = SnapshotFrame()..encode(_FakeSource()..generation = 5);
+      final reader = FrameReader()..add(frame.bytes);
+
+      expect(reader.moveNext(), isTrue);
+      reader.reset();
+
+      reader.add(frame.bytes.sublist(0, 100));
+      expect(reader.moveNext(), isFalse);
+      reader.add(frame.bytes.sublist(100));
+      expect(reader.moveNext(), isTrue);
+      expect((WireSnapshot()..decode(reader.payload)).generation, 5);
+    });
+
     test('a frame from a future protocol version is refused', () {
       final bytes = Uint8List(WireFrame.headerBytes);
       final view = ByteData.view(bytes.buffer)

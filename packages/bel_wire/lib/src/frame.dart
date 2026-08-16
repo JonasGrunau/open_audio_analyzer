@@ -135,6 +135,28 @@ class FrameReader {
     _filled += chunk.length;
   }
 
+  /// Forgets everything received so far, so this reader can be pointed at a
+  /// different stream.
+  ///
+  /// **A reader outlives the connection it was reading, and the bytes must
+  /// not.** A socket that dies mid-frame leaves the head of that frame here,
+  /// and those bytes are not a prefix of anything the next connection will
+  /// send. Reading on without dropping them reassembles the dead stream's head
+  /// spliced onto the live stream's — which has the right *length*, so it
+  /// decodes rather than failing, and is entirely wrong, so the meters draw a
+  /// detailed picture of a signal nobody measured. The magic check then fails
+  /// on whatever follows and the link drops; the leftovers survive that too, so
+  /// every retry repeats it. A display that lost one frame to a Wi-Fi hiccup
+  /// flashed one frame of nonsense every few seconds and never came back.
+  ///
+  /// The capacity is kept. It is bounded by [WireFrame.maxPayloadBytes], and
+  /// re-growing it is the only thing releasing it would buy.
+  void reset() {
+    _filled = 0;
+    _consumed = 0;
+    _payload = null;
+  }
+
   /// Advances to the next complete frame, and reports whether there was one.
   ///
   /// Throws [WireFormatException] if the stream is not framed the way this

@@ -273,6 +273,17 @@ class DisplayClient {
     _socket?.destroy();
     _socket = null;
     _lastFrameAt = null;
+
+    // Every path that ends a connection comes through here, which is the only
+    // place this can go: the reader outlives the socket, and a link that
+    // dropped mid-frame left the head of that frame in it. See
+    // [FrameReader.reset] for what reading on would have drawn instead.
+    //
+    // **After the cancel, not before it.** A chunk already scheduled for
+    // delivery lands during the suspension above, and a reset in front of that
+    // would be undone by the last bytes of the connection it was there to
+    // forget.
+    _reader.reset();
   }
 
   static String _describe(Object error) => switch (error) {

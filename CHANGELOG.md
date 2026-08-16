@@ -576,6 +576,18 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### 🐛 Fixed
 
+- **A remote display recovers from a dropped link, instead of showing one frame
+  of invented measurement and then never coming back.** A connection that died
+  partway through a measurement left the head of that frame in the display's
+  frame reader, which nothing cleared — so the retry reassembled the dead
+  stream's bytes onto the live one. That splice is exactly the right length to
+  decode, so the meters drew a detailed, confident reading nobody took, lost
+  sync on whatever followed, and dropped the link again, carrying the leftovers
+  into every attempt after that. A tablet that lost a single frame to a Wi-Fi
+  hiccup stopped recovering until the app was restarted — Disconnect and
+  reattach did not clear it either. Nothing about how Bel measures has changed
+  and no past reading needs re-checking: the desktop and the CLI were never on
+  this path.
 - **The status bar's controls are one height.** The delivery target read 25.4 px
   tall against 22 px for the four buttons beside it, because each shape derived
   its height from its own text style plus its own padding rather than being
