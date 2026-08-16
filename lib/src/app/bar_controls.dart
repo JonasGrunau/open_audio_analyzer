@@ -17,33 +17,70 @@
 import 'package:bel_ui/bel_ui.dart';
 import 'package:flutter/material.dart';
 
-/// A bordered readout in the bar. Not interactive on its own — the two callers
-/// put one inside a `PopupMenuButton`.
+/// The height of everything bordered in the status bar.
+///
+/// `BelControl.height` for the bar, and it exists for the reason that one does.
+/// Both shapes below used to take their height from their own text style plus
+/// their own vertical padding, and the two styles are not the same: `caption` at
+/// 11 px on a 1.4 line box made the chip 25.4 px tall, `label` at 10 px on a 1.2
+/// one made the button 22. So the delivery target sat 3.4 px taller than the
+/// four buttons beside it, with its border crossing theirs — the defect nobody
+/// can name and everybody sees, in a row where the borders are the only thing
+/// drawing a horizontal line.
+///
+/// A height a control is *given* rather than one it happens to add up to. The
+/// text is centred in it, so changing a style here changes the weight of a word
+/// and nothing about the row.
+const double _barControlHeight = Space.lg;
+
+/// A bordered readout in the bar. Not interactive on its own — the caller puts
+/// one inside a `PopupMenuButton`.
+///
+/// **Chrome like the buttons beside it, because it does what they do.** It was
+/// the quieter shape on the argument that it names what the meters are measured
+/// against rather than offering an action — but it is the face of a menu, it
+/// opens on a click like the four to its right, and a control that can be
+/// pressed and does not look like the pressable things beside it is a control
+/// people do not find. So: the same border, the same height, and the same
+/// 10 px capitals. What is left to tell them apart is the only difference that
+/// matters — the buttons say what they do, and this says what is set.
 class BarChip extends StatelessWidget {
   const BarChip({required this.text, super.key});
 
+  /// Shown in capitals. The value keeps its own capitals everywhere else —
+  /// a target the user named is theirs, and the menu, the settings panel and
+  /// every report print it as they typed it.
   final String text;
 
   @override
   Widget build(BuildContext context) {
     final colors = BelTheme.of(context);
     return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: Space.sm,
-        vertical: Space.xs,
-      ),
+      height: _barControlHeight,
+      padding: const EdgeInsets.symmetric(horizontal: Space.sm),
       decoration: BoxDecoration(
         borderRadius: BelRadius.allXs,
-        border: Border.all(color: colors.hairline, width: BelStroke.hairline),
+        border: Border.all(
+          color: colors.hairlineStrong,
+          width: BelStroke.hairline,
+        ),
       ),
-      // Calibration names run long ("Streaming (−14 LUFS)"), and this chip sits
-      // in a Row that has no slack. Ellipsis rather than overflow.
-      child: Text(
-        text,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        softWrap: false,
-        style: BelType.caption.copyWith(color: colors.textMuted),
+      // `Center`, not `Container.alignment`: an aligned `Container` expands to
+      // whatever bounded width it is offered, and this one is offered 220 px by
+      // the `ConstrainedBox` around the calibration picker — so the chip would
+      // be 220 px wide whatever it said. A width factor of 1 shrink-wraps the
+      // text and still centres it in the fixed height.
+      child: Center(
+        widthFactor: 1,
+        // Calibration names run long ("Streaming (−14 LUFS)"), and this chip
+        // sits in a Row that has no slack. Ellipsis rather than overflow.
+        child: Text(
+          text.toUpperCase(),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          softWrap: false,
+          style: BelType.label.copyWith(color: colors.textMuted),
+        ),
       ),
     );
   }
@@ -87,10 +124,8 @@ class BarButton extends StatelessWidget {
       onActivate: onPressed,
       semanticLabel: semanticLabel,
       builder: (context, hovered, focused) => Container(
-        padding: const EdgeInsets.symmetric(
-          horizontal: Space.smd,
-          vertical: Space.xs,
-        ),
+        height: _barControlHeight,
+        padding: const EdgeInsets.symmetric(horizontal: Space.smd),
         decoration: BoxDecoration(
           borderRadius: BelRadius.allXs,
           color: hovered ? colors.panelRaised : null,
@@ -99,10 +134,15 @@ class BarButton extends StatelessWidget {
             width: BelStroke.hairline,
           ),
         ),
-        child: Text(
-          label,
-          style: BelType.label.copyWith(
-            color: lit ? colors.textPrimary : colors.textMuted,
+        // See `BarChip` for why the height is centred with a width factor
+        // rather than with `Container.alignment`.
+        child: Center(
+          widthFactor: 1,
+          child: Text(
+            label,
+            style: BelType.label.copyWith(
+              color: lit ? colors.textPrimary : colors.textMuted,
+            ),
           ),
         ),
       ),

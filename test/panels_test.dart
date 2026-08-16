@@ -287,7 +287,8 @@ void main() {
       final container = await _container(tester);
       await _open(tester, container, const SettingsPanel());
 
-      await _tap(tester, find.text('30 fps'));
+      // Uppercase: a segment sets its own label the way a button does.
+      await _tap(tester, find.text('30 FPS'));
 
       expect(container.read(settingsProvider).targetFps, 30);
     });
@@ -456,6 +457,95 @@ void main() {
       await _tap(tester, find.text('SAVE AS NEW'));
 
       expect(find.text('A target needs a name.'), findsOneWidget);
+    });
+  });
+
+  group('list rows', () {
+    // **A mark is a `CustomPaint`, and a `CustomPaint` swallows every pointer
+    // event that lands on it** unless its painter refuses — `hitTest` returns
+    // null by default and `RenderCustomPaint` reads that as true. So a row that
+    // gained a leading mark and a trailing chevron is a row with two dead spots
+    // in it, which is the kind of defect that ships: the row still works
+    // everywhere else, and nothing about the rendering says why the two ends of
+    // it do not.
+    testWidgets('a mark inside a row does not eat the row’s tap', (
+      tester,
+    ) async {
+      var taps = 0;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: BelTheme(
+            colors: BelColors.precisionInstrument,
+            child: Material(
+              child: PanelListRow(
+                title: 'Send these meters',
+                mark: BelMark.broadcast,
+                opens: true,
+                onTap: () => taps++,
+              ),
+            ),
+          ),
+        ),
+      );
+
+      // `tapAt` the mark's own centre rather than `tap` on the finder: a glyph
+      // that correctly refuses hits is not itself in the hit-test path, and
+      // `tap` warns about exactly that. What is being asked here is what a
+      // finger asks — press this pixel, and see whether the row answers.
+      for (final glyph in [BelMark.broadcast, BelMark.chevron]) {
+        await tester.tapAt(
+          tester.getCenter(
+            find.byWidgetPredicate(
+              (widget) => widget is BelGlyph && widget.mark == glyph,
+            ),
+          ),
+        );
+      }
+
+      expect(taps, 2);
+    });
+  });
+
+  group('notes', () {
+    // A note that carries a mark is a paragraph, and every one of them wraps —
+    // two lines beside the password warning in the sending panel, three on a
+    // phone-shaped display. Pinned to the top of the block the mark reads as
+    // belonging to the first line rather than to the note, which is what it
+    // looked like against two lines of orange.
+    testWidgets('a marked note centres its mark on the whole note', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: BelTheme(
+            colors: BelColors.precisionInstrument,
+            child: Material(
+              child: Center(
+                child: SizedBox(
+                  width: 240,
+                  child: PanelNote(
+                    'There is no password on the connection. Anyone on this '
+                    'network who can find it can watch these meters.',
+                    mark: BelMark.warning,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      final note = tester.getRect(find.textContaining('no password'));
+      final mark = tester.getRect(
+        find.byWidgetPredicate(
+          (widget) => widget is BelGlyph && widget.mark == BelMark.warning,
+        ),
+      );
+
+      // Wrapped, or the assertion below holds trivially.
+      expect(note.height, greaterThan(mark.height * 1.5));
+      expect(mark.center.dy, closeTo(note.center.dy, 0.5));
     });
   });
 

@@ -65,11 +65,15 @@ import '../panels/shortcuts_sheet.dart';
 
 /// Where a shortcut appears in the sheet and on the documentation page.
 ///
-/// Declaration order is presentation order in both.
+/// Declaration order is presentation order in both — and in the sheet it also
+/// decides where the two columns break, because the break is the point in this
+/// order that leaves them closest in height. What you do to the signal comes
+/// first, then what you do to the workspace; the pair either side of that seam
+/// is what the sheet reads down.
 enum ShortcutGroup {
   canvas('Canvas'),
-  tabs('Tabs'),
   measurement('Measurement'),
+  tabs('Tabs'),
   configuration('Configuration');
 
   const ShortcutGroup(this.title);
@@ -276,6 +280,20 @@ const List<BelShortcut> belShortcuts = [
     action: _redo,
   ),
 
+  // --- Measurement ---------------------------------------------------------
+  BelShortcut(
+    group: ShortcutGroup.measurement,
+    description: 'Reset the measurement',
+    chords: [Chord(LogicalKeyboardKey.keyR, primary: true)],
+    action: _reset,
+  ),
+  BelShortcut(
+    group: ShortcutGroup.measurement,
+    description: 'Analyse a file',
+    chords: [Chord(LogicalKeyboardKey.keyO, primary: true)],
+    action: _analyseFile,
+  ),
+
   // --- Tabs ----------------------------------------------------------------
   BelShortcut(
     group: ShortcutGroup.tabs,
@@ -308,20 +326,6 @@ const List<BelShortcut> belShortcuts = [
     description: 'New tab',
     chords: [Chord(LogicalKeyboardKey.keyT, primary: true)],
     action: _newTab,
-  ),
-
-  // --- Measurement ---------------------------------------------------------
-  BelShortcut(
-    group: ShortcutGroup.measurement,
-    description: 'Reset the measurement',
-    chords: [Chord(LogicalKeyboardKey.keyR, primary: true)],
-    action: _reset,
-  ),
-  BelShortcut(
-    group: ShortcutGroup.measurement,
-    description: 'Analyse a file',
-    chords: [Chord(LogicalKeyboardKey.keyO, primary: true)],
-    action: _analyseFile,
   ),
 
   // --- Configuration -------------------------------------------------------

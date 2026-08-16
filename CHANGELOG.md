@@ -272,6 +272,83 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### ⚡ Changed
 
+- **Every number is set in Google Sans Code instead of JetBrains Mono.** The
+  advance is 0.6 em in both faces, so nothing moves and no readout changes
+  width; the digits are a little smaller on the body and rounder in the bowls.
+  One character the old face carried is missing from the new one — `∞`, which a
+  reading only shows if it is not finite, and nothing the engine produces is —
+  so it now falls back to Inter, which Bel already bundles, rather than to
+  whatever the host offers. Both faces remain SIL OFL 1.1 and their licences
+  still ship with every package.
+- **Undo and redo in the tab strip carry a mirrored arrow beside the word.** The
+  two words differ by one letter in the middle, and a mirrored pair says which
+  way it goes before either has been read — but the arrow alone left the row's
+  two most-used controls unnamed, so it now punctuates `UNDO` and `REDO` the way
+  the plus punctuates `+ MODULE`. The arrows are drawn, like every other mark in
+  Bel, so they are the same on every platform and cost no dependency. The
+  keyboard shortcuts are unchanged.
+- **The delivery target in the status bar looks like the buttons beside it.**
+  Same border, same height, same capitals. It was the quieter shape on the
+  argument that it names what the meters are measured against rather than
+  offering an action — but it opens a menu on a click exactly as the four
+  buttons to its right do, and a control that can be pressed and does not look
+  pressable is a control people do not find. The target's own name is unchanged
+  everywhere else: the menu, the settings panel and every report print it as it
+  was typed.
+- **A rule separates the tab strip's two kinds of action.** `UNDO` and `REDO`
+  step back and forward through what has been done; `+ MODULE` does something
+  new. They were four controls of the same size, colour and weight in one run.
+- **A remote display's link bar has room to breathe, and its tabs are beside the
+  host's name.** The bar is 48 px rather than 40, so the tab picker and
+  Disconnect are not pressed against the rule under them, and the tabs now
+  follow the name of the machine being watched instead of sitting in the far
+  corner — which on a tablet is the most awkward place on the screen for the
+  control the viewer touches most. Disconnect stays on the right, alone, where
+  it is not hit by accident.
+- **Both pluses in the tab strip are larger.** At the size the words use they
+  read as specks rather than as controls. The one beside the tabs is the larger
+  of the two, because it is the only symbol in the strip carrying an action with
+  no word to help it; the one in `+ MODULE` is set between the two, visible
+  without competing with the word it belongs to.
+- **The keyboard sheet is one screen again.** Seventeen shortcuts in a single
+  narrow column were taller than the panel, so the sheet scrolled and cut the
+  line explaining that Ctrl and Cmd are interchangeable in half. It is now two
+  columns on a wider panel — Canvas and Measurement on the left, Tabs and
+  Configuration on the right — with the rows further apart and the whole list on
+  screen at once, down to the smallest window Bel supports. Below that it stacks
+  back into one column rather than clipping. Measurement now comes before Tabs
+  on the documentation site's keyboard page as well, which is the same ordering.
+- **The remote panels are marked rather than only worded.** Sending and
+  receiving were two rows of the same shape whose only difference was the
+  sentence in them; each now carries a mark — a machine broadcasting, a screen
+  on a stand — and a chevron on the rows that open a panel rather than choose in
+  place. Every host a search finds wears the broadcast mark too, and it brightens
+  under the pointer instead of sitting in the same grey as its address. A note
+  that is a warning — the link has no password, this device cannot search the
+  network, publishing failed — now has a warning mark in the margin beside it,
+  so it is a different kind of line rather than a differently coloured one. The
+  marks are drawn rather than typeset, so none of them can arrive as a tofu box
+  on a platform whose fonts differ. Sending and receiving also sit further
+  apart than the rows of a list do, since they are two directions to choose
+  between rather than entries to pick from.
+- **A machine's name, its port and the Apply that commits them are one line.**
+  They were three stacked rows, so a two-field form read as three separate
+  settings and the button that finishes it sat a row below either field. They
+  now share a line, which the panel has room for.
+- **A segmented control sets its choices in capitals**, like every button beside
+  it. Source, refresh rate, the remote update rate and a display's tab picker
+  were the only controls in the interface labelled in sentence case, which read
+  as a line of prose in a box rather than as something to press. What a menu or
+  a field holds — a device, a delivery target, a name somebody typed — is
+  unchanged, because that is a value rather than the control's own word.
+- **The Histogram's loudness line is always on screen.** It used to be drawn
+  only over the columns the programme had reached, so an empty module — before
+  the first audio, and for as long as you looked at it after a reset — had
+  nothing in it at all, and a part-filled one had a line over part of its width.
+  The line now rests on the floor of the scale and runs the full width of the
+  plot, rising where the programme starts. Resting is not a reading: the floor
+  is the bottom of the scale, nothing is filled beneath it, and it is drawn
+  where measured silence would put it.
 - **Nothing is a double click any more.** Renaming a tab, adding a module by
   clicking empty canvas, and zooming the window from the status bar were all
   double clicks; the first two are now a long press — which also gives a tablet
@@ -482,6 +559,13 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### 🐛 Fixed
 
+- **The status bar's controls are one height.** The delivery target read 25.4 px
+  tall against 22 px for the four buttons beside it, because each shape derived
+  its height from its own text style plus its own padding rather than being
+  given one. The borders in the row now start and end on the same pixel.
+- **A warning mark sits in the middle of the note it marks.** It was pinned to
+  the top of the block, so beside the sending panel's two lines of orange it
+  looked as though it belonged to the first line rather than to the warning.
 - **A long capture session no longer dies with a bus error.** The sub-block
   ring the loudness measurements are built from carried a write cursor beside
   it, and the store into the ring trusted that cursor. One was found holding a
@@ -505,6 +589,22 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   for. The tablet now searches through the system's own Bonjour responder,
   which needs no entitlement, and finds the same hosts by the same name.
   Typing an address still works and still always will.
+- **A host on a network that hands out a domain is visible again.** Most
+  routers give DHCP clients one, which makes the machine's name
+  `studio-mac.fritz.box` rather than `studio-mac.local` — and Bel advertised
+  that whole string where DNS-SD allows a single label, so the announcement
+  came out as six labels instead of four. Bel's own browser read it anyway, so
+  a Bel desktop found a Bel desktop and nothing looked wrong; every browser
+  built on the system responder — an iPad, `dns-sd`, anything Apple — dropped
+  the record, and the host answered every query on the wire while appearing to
+  no one. The instance is now one label whatever the machine is called, and the
+  name you read in the list is unchanged.
+- **Bel no longer advertises an address record for the machine's own name.**
+  The name a Mac answers to belongs to the system responder, which defends it:
+  an address record it did not publish, for a name it owns, is a conflict, and
+  the loser of a conflict renames itself. On a machine with a second network
+  interface the two sets differ, so the loser would have been the user's
+  computer. Bel publishes its own name for the service to point at.
 - **A search that cannot run says why.** A device that could not search showed
   *Looking for hosts on this network…* indefinitely, which is exactly what a
   network with no hosts on it looks like. It now names the reason where there
@@ -774,6 +874,36 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   in the log, most reliably on a hot restart. The search is now published as
   ended before anything is awaited, and teardown releases the browse without
   publishing at all.
+- **A display leaving mid-frame threw in the host it was leaving.** Closing a
+  socket that is still flushing a measurement is a `StateError` in Dart's own
+  I/O — "StreamSink is bound to a stream" — and it was raised inside the
+  socket's own close notification, where nothing could catch it. Every tablet
+  that dropped off at the wrong moment logged what reads as a crash and left
+  the connection it was there to give back.
+- **Changing the skin, the layout or the delivery target could disconnect a
+  display.** The new setting goes out the instant it changes, and a socket
+  still flushing a measurement refuses to be written to — which the host could
+  only read as "this display has gone", and act on. It was likelier the slower
+  the display was. A setting now waits for the frame in front of it and then
+  goes, in order.
+- **Attaching to another machine flashed the host picker on the way in, and
+  started a second search behind it.** The link said it was connecting one turn
+  after it began, and a display shows the picker until it does — so a screen
+  that had already been told where to attach spent a frame drawing a panel
+  asking where to attach, and a picker searches the network as soon as it is
+  built.
+- **Closing the host picker while it was still opening its socket threw.**
+  Binding is real I/O, and the search could be shut down while it was in
+  flight: what came back then was written to a notifier that had been disposed,
+  and the socket it arrived with was never closed. On macOS the window is as
+  long as the Local Network prompt is on screen.
+- **A panel row's explanation no longer runs into the control above it.** The
+  caption sat two pixels under the row, and a row is as tall as whatever sits on
+  its right — so under a bordered control it collided with the bottom edge
+  rather than reading as a line of its own. The delivery target showed it worst:
+  its note ended directly beneath the target menu and looked like part of it. It
+  now clears the control, and still sits half as far from its own row as from
+  the next one.
 
 ### 🚧 Internal
 

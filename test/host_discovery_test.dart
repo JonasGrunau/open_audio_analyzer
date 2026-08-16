@@ -179,6 +179,72 @@ void main() {
       // throws, and these are one statement from being disposed.
       expect(browser.dispose, returnsNormally);
     });
+
+    test('a browser torn down while it is still binding ends quietly', () async {
+      final browser = MdnsBrowser();
+
+      // Binding is real I/O, so `start` is suspended for as long as the
+      // machine takes — and on macOS the first bind of a session waits on the
+      // Local Network permission the system is asking somebody about. A picker
+      // closed inside that window disposes the notifiers the rest of `start`
+      // was about to write to, and abandons a bound multicast socket that
+      // nothing holds a reference to any more.
+      final starting = browser.start();
+      browser.dispose();
+
+      await expectLater(starting, completes);
+    });
+  });
+
+  group('what the responder puts on the wire', () {
+    // Everything in this group is about one rule: **a DNS-SD instance name is
+    // one label.** Bel writes a name by splitting it on dots, so a dot in the
+    // instance does not name an instance containing a dot — it invents labels,
+    // and the record stops being `<instance>._bel._tcp.local` at all.
+    //
+    // Nothing caught it because Bel's own reader takes everything before
+    // `_bel._tcp.local` as the instance, so a Bel desktop found a Bel desktop
+    // perfectly. Apple's responder drops the record, so `dns-sd -B` and every
+    // iPad saw nothing, on any network whose DHCP hands out a domain —
+    // `Platform.localHostname` is `studio-mac.fritz.box` on one of those.
+
+    test('a machine name with a domain in it is still one label', () {
+      final responder = MdnsResponder(
+        instanceName: 'studio-mac.fritz.box',
+        port: 47821,
+      );
+
+      expect(responder.instanceLabel, 'studio-mac-fritz-box');
+      expect(responder.serviceInstance, 'studio-mac-fritz-box.$belServiceType');
+      // `<instance>._bel._tcp.local` is four labels. The bug made it six, and
+      // six labels are not a service instance whatever they read as.
+      expect(responder.serviceInstance.split('.'), hasLength(4));
+    });
+
+    test('a name somebody typed with a dot in it is too', () {
+      // The friendly form is not lost; it rides in the TXT record, which is
+      // free-form and is what the picker shows.
+      final responder = MdnsResponder(instanceName: 'Mix Room 2.0', port: 1)
+        ..txt = const {'name': 'Mix Room 2.0'};
+
+      expect(responder.instanceLabel, 'Mix Room 2-0');
+      expect(responder.txt['name'], 'Mix Room 2.0');
+    });
+
+    test('the advertised host name is never the machine own .local', () {
+      // The system responder owns `studio-mac.local` and defends it: an A
+      // record it did not announce, for a name it owns, is a conflict, and the
+      // loser renames itself. The loser would be the user's Mac.
+      final responder = MdnsResponder(instanceName: 'studio-mac', port: 1);
+
+      expect(responder.hostName, isNot('studio-mac.local'));
+      expect(responder.hostName, 'studio-mac-bel.local');
+    });
+
+    test('a plain machine name is left alone', () {
+      final responder = MdnsResponder(instanceName: 'studio-mac', port: 1);
+      expect(responder.instanceLabel, 'studio-mac');
+    });
   });
 
   group('the browser iOS makes Bel use', () {

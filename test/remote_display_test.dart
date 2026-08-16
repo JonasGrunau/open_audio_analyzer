@@ -51,6 +51,24 @@ void main() {
     expect(host.clientCount.value, 1);
   });
 
+  test('a display says it is connecting before it suspends once', () async {
+    await host.start(port: 0);
+
+    // Not a nicety about a label. [DisplayClient.connect] is called from the
+    // display screen's `initState`, and that screen draws the host picker for
+    // as long as the link is idle — so a state published after the first
+    // `await` is published after that screen's first build. The display was
+    // handed a host and still built a picker nobody asked for, which searches
+    // the network in its own `initState`: a panel flashing on the way in, and
+    // a second browse started and torn down a frame later.
+    final connecting = client.connect('127.0.0.1', host.port!);
+    expect(client.state.value, RemoteLinkState.connecting);
+
+    await connecting;
+    await _settle();
+    expect(client.state.value, RemoteLinkState.live);
+  });
+
   test('measurements arrive and match what the host is reading', () async {
     source
       ..generation = 1
@@ -171,6 +189,43 @@ void main() {
     );
     expect(client.snapshot.isRunning, isFalse);
     expect(client.snapshot.hasLoudness, isFalse);
+  });
+
+  test('a frame still in flight does not take the host with it', () async {
+    await connect();
+    source.generation = 1;
+
+    // **A socket with a `flush` outstanding is a bound sink, and a bound sink
+    // refuses `close`** — with a `StateError` thrown *synchronously*, before
+    // the future the host attached a `catchError` to exists. It surfaced as an
+    // unhandled exception in the host every time a display went away
+    // mid-frame, and the `destroy` underneath it never ran.
+    host.publishNow();
+    await expectLater(host.stop(), completes);
+  });
+
+  test('a layout published mid-frame arrives rather than dropping the display', () async {
+    await connect();
+    source.generation = 1;
+
+    // The same bound sink, through the other door: `add` refuses too, and the
+    // only thing this path could do with the throw was close the connection.
+    // So changing the skin or the delivery target at the desk dropped the
+    // tablet — more often the slower the tablet was, because a display that
+    // takes longer to read is a socket that spends longer flushing.
+    host
+      ..publishNow()
+      ..publishLayout(
+        PresetSpec(
+          name: 'Mid-frame',
+          tabs: const [TabSpec(name: 'Main', modules: [])],
+        ),
+      );
+    await _settle(milliseconds: 200);
+
+    expect(client.layout.value?.name, 'Mid-frame');
+    expect(host.clientCount.value, 1);
+    expect(client.state.value, isNot(RemoteLinkState.failed));
   });
 
   test('the host notices a display leaving', () async {

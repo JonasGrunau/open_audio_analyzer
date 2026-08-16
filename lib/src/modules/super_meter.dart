@@ -281,7 +281,7 @@ class _SuperMeterPainter extends MeterPainter {
     // Every glyph in a reading is a digit, a minus or a point, and the reading
     // face is monospaced, so the width is arithmetic and not a measurement —
     // no second layout to find out whether the first one fitted. 0.62 em covers
-    // JetBrains Mono's 0.6 advance with a little slack.
+    // Google Sans Code's 0.6 advance with a little slack.
     final text = Metric.lufsIntegrated.format(integrated);
     final fontSize = math
         .min(dial * 0.16, textWidth / (text.length * 0.62))

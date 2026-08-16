@@ -22,6 +22,7 @@ library;
 
 export 'src/drag_devices.dart';
 export 'src/focusable.dart';
+export 'src/glyph.dart';
 export 'src/grid_geometry.dart';
 export 'src/meter_painter.dart';
 export 'src/module_frame.dart';

@@ -127,16 +127,27 @@ class DisplayHost {
     _timer?.cancel();
     _timer = null;
 
-    final server = _server;
-    _server = null;
-    await server?.close();
-
+    // The displays go before anything is awaited. `server.close()` suspends,
+    // and every turn between here and the resumption is one in which a frame
+    // can still be written to a socket that is on its way out.
     for (final client in List<_RemoteClient>.of(_clients)) {
       client.close();
     }
     _clients.clear();
     clientCount.value = 0;
+
+    final server = _server;
+    _server = null;
+    await server?.close();
   }
+
+  /// One publish, now, rather than on the next tick.
+  ///
+  /// The suite needs a frame that is *still in flight* — the state in which a
+  /// socket's sink is bound and refuses `add` and `close` alike — and it
+  /// cannot wait for a timer to hand it one.
+  @visibleForTesting
+  void publishNow() => _publish();
 
   /// Publishes a new layout to every attached display, and to every display
   /// that attaches later.
@@ -296,11 +307,28 @@ class _RemoteClient {
   /// the next frame is skipped rather than queued behind this one.
   _FrameSlot? _inFlight;
 
+  /// One-off frames that arrived while a pooled one was still flushing.
+  ///
+  /// **A socket with a `flush` outstanding is a *bound* sink, and a bound sink
+  /// refuses `add`, `flush` and `close` alike** — `IOSink.flush` sets the same
+  /// flag `addStream` does, for as long as it takes. So a layout, a skin or a
+  /// delivery target published between a snapshot frame and its flush threw
+  /// `StateError("StreamSink is bound to a stream")` out of `add`, which this
+  /// class caught the only way it could and closed the connection: changing
+  /// the skin at the desk dropped the tablet, more often the slower the tablet
+  /// was. These frames are rare, small and must not be dropped, so they wait
+  /// for the flush instead.
+  final List<Uint8List> _waiting = [];
+
   /// Sends a one-off frame that owns its own bytes: hello, layout, skin.
   ///
   /// These are rare, small and must not be dropped, so they queue normally.
   void sendOnce(Uint8List bytes) {
     if (_closed) return;
+    if (_inFlight != null) {
+      _waiting.add(bytes);
+      return;
+    }
     try {
       _socket.add(bytes);
     } on Object {
@@ -325,13 +353,32 @@ class _RemoteClient {
 
     unawaited(
       _socket.flush().then(
-        (_) => _release(),
+        (_) {
+          _release();
+          _drain();
+        },
         onError: (Object _) {
           _release();
           close();
         },
       ),
     );
+  }
+
+  /// Writes whatever was published while the sink was bound. The socket is
+  /// free from the moment the flush completes, and the next pooled frame is a
+  /// timer tick away, so these keep their order and their place ahead of it.
+  void _drain() {
+    if (_closed || _waiting.isEmpty) return;
+    final pending = List<Uint8List>.of(_waiting);
+    _waiting.clear();
+    try {
+      for (final bytes in pending) {
+        _socket.add(bytes);
+      }
+    } on Object {
+      close();
+    }
   }
 
   void _release() {
@@ -345,8 +392,19 @@ class _RemoteClient {
     if (_closed) return;
     _closed = true;
     _release();
+    _waiting.clear();
     _onGone(this);
-    unawaited(_socket.close().catchError((Object _) {}));
+    // **`destroy`, and not `close` before it.** `Socket.close` throws
+    // `StateError("StreamSink is bound to a stream")` while a `flush` is
+    // outstanding, *synchronously* — before it returns the future the
+    // `catchError` here was attached to. This is called from the socket's own
+    // `onDone`, which is precisely when a flush is most likely to be in
+    // flight: the display went away mid-frame. So the throw came out of a
+    // stream callback in the root zone, where nothing catches it, it was an
+    // unhandled exception in the *host* every time a tablet left at the wrong
+    // moment, and the `destroy` under it never ran — leaving the socket it was
+    // there to give back. `destroy` can always be called, and the graceful
+    // close bought nothing anyway with a `destroy` on the next line.
     _socket.destroy();
   }
 }

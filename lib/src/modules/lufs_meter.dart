@@ -149,7 +149,7 @@ class _LufsMeterPainter extends MeterPainter {
   /// reading is chrome rather than a number, and the bars keep the space.
   static const double _minimumValueSize = 11;
 
-  /// Advance of one glyph of [BelType.reading], in ems. JetBrains Mono is 0.6
+  /// Advance of one glyph of [BelType.reading], in ems. Google Sans Code is 0.6
   /// and the style tightens it by half a pixel; the slack is what keeps this an
   /// upper bound rather than a measurement.
   static const double _advance = 0.62;

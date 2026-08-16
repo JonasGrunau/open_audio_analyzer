@@ -67,5 +67,5 @@ all four on a tag and on demand.
   committed.
 
 - **Licences travel with the binary.** Every script copies `LICENSE` and both
-  font licences into the package. Inter and JetBrains Mono are SIL OFL 1.1 and
+  font licences into the package. Inter and Google Sans Code are SIL OFL 1.1 and
   their licence files must ship with anything they are embedded in.

@@ -160,6 +160,13 @@ class _PairingPanel extends StatelessWidget {
                       valueListenable: service.clients,
                       builder: (context, clients, _) => PanelListRow(
                         title: 'Send these meters',
+                        // The two rows are the same shape and say opposite
+                        // things, so the mark is the first thing that tells
+                        // them apart — and it is brightness rather than hue,
+                        // like the bar button, because the signal colour means
+                        // "in spec" and nothing else.
+                        mark: BelMark.broadcast,
+                        opens: true,
                         // The row carries the live state, so "am I already
                         // publishing" is answered on the first screen rather
                         // than one panel deeper.
@@ -180,8 +187,15 @@ class _PairingPanel extends StatelessWidget {
                       ),
                     ),
               ),
+              // The two rows are opposite directions rather than two entries in
+              // a list, and at the list's own [Space.xs] they read as one
+              // block of text to choose a line from. A gap the width of the
+              // mark column separates the choices without opening a section.
+              const SizedBox(height: Space.sm),
               PanelListRow(
                 title: 'Show another machine',
+                mark: BelMark.display,
+                opens: true,
                 note:
                     'Turn this screen into a display for a Bel running '
                     'elsewhere. It shows only — it cannot change what that '
@@ -354,6 +368,7 @@ class _SendPanelState extends ConsumerState<_SendPanel> {
                 'network who can find it can watch these meters, so leave it '
                 'off on a network you do not trust.',
                 tone: colors.warn,
+                mark: BelMark.warning,
               ),
               ValueListenableBuilder<String?>(
                 valueListenable: service.failure,
@@ -365,6 +380,7 @@ class _SendPanelState extends ConsumerState<_SendPanel> {
                     : PanelNote(
                         'Could not publish: $failure',
                         tone: colors.over,
+                        mark: BelMark.warning,
                       ),
               ),
             ],
@@ -376,29 +392,38 @@ class _SendPanelState extends ConsumerState<_SendPanel> {
                 'The name displays list this machine under, and the port it '
                 'listens on.',
             children: [
-              PanelRow(
-                label: 'Name',
-                child: BelTextField(
-                  controller: _name,
-                  width: 220,
-                  onSubmitted: (_) => _apply(),
-                ),
-              ),
-              PanelRow(
-                label: 'Port',
-                child: BelTextField(
-                  controller: _port,
-                  width: 96,
-                  numeric: true,
-                  onSubmitted: (_) => _apply(),
-                ),
-              ),
-              // Unlike the settings panel, these two do not write through as
+              // One line, because this is one edit. The name and the port are
+              // the same fact — where a display should look — and Apply commits
+              // both at once, so three stacked rows made a two-field form look
+              // like three separate settings and put the button that finishes
+              // it a row away from either field. There is room: the panel is
+              // 620 px wide and the three controls take under 400 of it.
+              //
+              // Unlike the settings panel, the fields do not write through as
               // they are typed: a port is not a valid port until it is
               // finished, and binding to each prefix of one as it is entered
               // would move the socket three times on the way to 5560.
-              PanelActions(
-                children: [BelButton(label: 'Apply', onPressed: _apply)],
+              PanelRow(
+                label: 'Name and port',
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    BelTextField(
+                      controller: _name,
+                      width: 200,
+                      onSubmitted: (_) => _apply(),
+                    ),
+                    const SizedBox(width: Space.sm),
+                    BelTextField(
+                      controller: _port,
+                      width: 88,
+                      numeric: true,
+                      onSubmitted: (_) => _apply(),
+                    ),
+                    const SizedBox(width: Space.sm),
+                    BelButton(label: 'Apply', onPressed: _apply),
+                  ],
+                ),
               ),
               // Shown whether or not discovery is working. A tablet on a
               // network that blocks multicast needs somewhere to look, and

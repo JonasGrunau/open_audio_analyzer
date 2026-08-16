@@ -47,7 +47,7 @@ The repo is currently empty (one commit, no files). Everything below is greenfie
 |---|---|
 | **Scope** | All three tiers: standalone app → LAN remote display → headless DAW plugin. Phased so each ships alone. |
 | **License** | Dual. `engine/` + `packages/bel_core` → **MIT**. App, UI, plugin, CLI → **GPL-3.0-or-later**. Rationale: the DSP engine is worth embedding everywhere and needs outside scrutiny; the finished product should not be re-closable. MIT→GPL is one-way compatible, so this composes cleanly. |
-| **Visual language** | "Precision Instrument" — graphite black `#0B0C0E`, panel `#121417`, 1px hairline `#1F2328`, single accent `#35E0C4`, warn `#F2B01E`, over `#FF4D4D`. Inter + JetBrains Mono (tabular figures). No shadows, no gradients, flat. |
+| **Visual language** | "Precision Instrument" — graphite black `#0B0C0E`, panel `#121417`, 1px hairline `#1F2328`, single accent `#35E0C4`, warn `#F2B01E`, over `#FF4D4D`. Inter + Google Sans Code (tabular figures). No shadows, no gradients, flat. |
 | **State** | Riverpod for UI/config. **Meter data never enters it** — see the performance thesis. |
 | **Flutter** | Pin `3.44.5-stable` in `.tool-versions` (matches `gather-v2-app`). |
 | **Native** | `flutter create --template=package_ffi` + `hook/build.dart` + `native_toolchain_c`. Recommended since Flutter 3.38; no `CMakeLists.txt`/podspec/gradle per platform. |
@@ -199,7 +199,7 @@ lands in Phase 1, not "later".
   code** — enforced as a review rule in `CLAUDE.md`.
 - **Radii** `0, 2, 4, 8`. **Borders** 1px hairline only. **Elevation: none** — depth comes from
   background steps and hairlines, which is how professional audio tools read.
-- **Type** Inter (UI) + JetBrains Mono for every numeric readout, with
+- **Type** Inter (UI) + Google Sans Code for every numeric readout, with
   `FontFeature.tabularFigures()` — non-negotiable; jittering digits look amateur.
 - **Reused primitives** (the "reuse components" requirement is met structurally): `ModuleFrame`
   (title bar, burger menu, resize affordance, min-size placeholder), `Readout`, `ScaleAxis`,

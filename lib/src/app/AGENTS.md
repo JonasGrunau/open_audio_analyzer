@@ -46,7 +46,12 @@ The shell everything else is mounted in. GPL-3.0-or-later.
   `TextButton`, and not `BelButton` either — `bel_ui`'s buttons are sized for a
   panel, where a control has a row to itself, and these are sized for a 40 px
   bar that also holds the source, the clock, the calibration and the frame
-  rate. The bar is not assembled in one file, which is how `RemoteDisplayControl`
+  rate. Both take their height from `_barControlHeight` rather than adding one
+  up out of a text style and a padding — `BelControl.height`'s argument applied
+  to this bar, and for the same reason: the two styles differ, so the chip stood
+  3.4 px taller than the buttons and its border crossed theirs in a row where
+  the borders are the only horizontal line.
+  The bar is not assembled in one file, which is how `RemoteDisplayControl`
   spent a phase putting a borderless, ink-rippled, keyboard-unreachable Material
   button between four bordered ones.
 

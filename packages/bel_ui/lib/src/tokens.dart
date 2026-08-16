@@ -319,7 +319,7 @@ abstract final class BelType {
   /// keep the interface legible rather than blank if an asset ever fails to
   /// load.
   static const String uiFamily = 'Inter';
-  static const String monoFamily = 'JetBrains Mono';
+  static const String monoFamily = 'Google Sans Code';
 
   static const List<String> _uiFallback = [
     'SF Pro Text',
@@ -328,7 +328,25 @@ abstract final class BelType {
     'DejaVu Sans',
   ];
 
+  /// The other bundled face heads the mono list, ahead of the platform's own.
+  ///
+  /// Google Sans Code carries 674 glyphs where JetBrains Mono carried 1,363,
+  /// and one character the application can actually print is not among them:
+  /// `∞` U+221E, which `Metric.format` returns for a reading that is not
+  /// finite. Nothing the engine produces is — every dB quantity is floored at
+  /// `BEL_DB_FLOOR` before it leaves C — so this is the defensive branch of a
+  /// formatter rather than a number on screen today, and a wire packet or a
+  /// hand-built report can still reach it. Leaving it to the host means a
+  /// glyph from Menlo on macOS, from Consolas on Windows and a tofu box on a
+  /// machine with neither. Inter has it, Inter ships in this repository, and a
+  /// deterministic wrong-width glyph beats three different right-width ones.
+  ///
+  /// Everything else the interface prints in this face — digits, the em dash
+  /// that marks an unmeasured quantity, `−`, `±`, `·`, `×`, the box-drawing
+  /// runs — is in Google Sans Code at the same 0.6 em advance as every other
+  /// glyph in it, so the width arithmetic the readouts do is untouched.
   static const List<String> _monoFallback = [
+    uiFamily,
     'SF Mono',
     'Menlo',
     'Consolas',

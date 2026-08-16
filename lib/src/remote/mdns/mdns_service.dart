@@ -134,12 +134,41 @@ class MdnsResponder {
   Timer? _announceTimer;
   int _announcements = 0;
 
+  /// The instance as **one label**, which is what DNS-SD says it is.
+  ///
+  /// **A dot in here does not name an instance with a dot in it; it invents
+  /// labels.** Names are written by splitting on `.`, so a machine called
+  /// `studio-mac.fritz.box` — which is what `Platform.localHostname` returns on
+  /// any network whose DHCP server hands out a domain — was advertised as
+  /// `studio-mac` `fritz` `box` `_bel` `_tcp` `local`, six labels where DNS-SD
+  /// expects four. Bel's own reader takes everything before `_bel._tcp.local`
+  /// as the instance and is perfectly happy, so desktop-to-desktop discovery
+  /// worked and hid this completely; Apple's responder is not, and drops the
+  /// record. The symptom is a host that answers every query on the wire and is
+  /// invisible to `dns-sd -B` and to every iPad in the building.
+  ///
+  /// The friendly name is not lost: it rides in the TXT record's `name`, which
+  /// is free-form and is what a picker shows.
+  @visibleForTesting
+  String get instanceLabel => instanceName.replaceAll('.', '-');
+
   /// The `<instance>._bel._tcp.local` name the records hang off.
-  String get _serviceInstance => '$instanceName.$belServiceType';
+  @visibleForTesting
+  String get serviceInstance => '$instanceLabel.$belServiceType';
 
   /// A host name for the SRV target and the A records. `.local` because that is
   /// the only domain multicast DNS claims.
-  String get _hostName => '${_sanitise(instanceName)}.local';
+  ///
+  /// **Deliberately not the machine's own `.local` name**, which is what
+  /// sanitising the instance alone would produce. That name belongs to the
+  /// system responder, which defends it: an A record it did not announce, for a
+  /// name it owns, is a conflict, and RFC 6762 says the loser renames itself.
+  /// Bel advertises every interface's address on every interface, so its set
+  /// differs from the system's per-interface set as soon as a machine has two —
+  /// and the machine that renames itself is the user's, in System Settings,
+  /// because a meter announced itself carelessly.
+  @visibleForTesting
+  String get hostName => '${_sanitise(instanceLabel)}-bel.local';
 
   bool get isAdvertising => _socket != null;
 
@@ -199,8 +228,8 @@ class MdnsResponder {
     final asked = message.questions.any(
       (q) =>
           (q.name == belServiceType ||
-              q.name == _serviceInstance ||
-              q.name == _hostName) &&
+              q.name == serviceInstance ||
+              q.name == hostName) &&
           (q.type == DnsType.ptr ||
               q.type == DnsType.srv ||
               q.type == DnsType.txt ||
@@ -220,18 +249,18 @@ class MdnsResponder {
         name: belServiceType,
         type: DnsType.ptr,
         ttl: ttl,
-        target: _serviceInstance,
+        target: serviceInstance,
       ),
       DnsRecord(
-        name: _serviceInstance,
+        name: serviceInstance,
         type: DnsType.srv,
         ttl: ttl,
         cacheFlush: true,
         port: port,
-        target: _hostName,
+        target: hostName,
       ),
       DnsRecord(
-        name: _serviceInstance,
+        name: serviceInstance,
         type: DnsType.txt,
         ttl: ttl,
         cacheFlush: true,
@@ -242,7 +271,7 @@ class MdnsResponder {
     for (final address in await _localAddresses()) {
       records.add(
         DnsRecord(
-          name: _hostName,
+          name: hostName,
           type: DnsType.a,
           ttl: ttl,
           cacheFlush: true,
@@ -290,6 +319,18 @@ class MdnsBrowser implements HostDiscovery {
   Timer? _queryTimer;
   Timer? _pruneTimer;
 
+  /// Whether anybody still wants this search.
+  ///
+  /// **Binding is real I/O and the browser can be torn down while it is in
+  /// flight** — a panel closed on the frame it opened, a hot restart, the
+  /// display screen replacing its own picker. The socket that arrives after
+  /// that belongs to nobody: closing it is all there is left to do with it, and
+  /// everything else [start] would go on to do writes to a `ValueNotifier` that
+  /// [dispose] has already disposed. On macOS the window is wide enough to hit
+  /// by hand, because the first bind of a session waits on the Local Network
+  /// permission the system is asking about.
+  bool _wanted = false;
+
   final Map<String, DiscoveredHost> _found = {};
 
   /// Instance names seen in a PTR whose SRV has not arrived, and the addresses
@@ -304,10 +345,19 @@ class MdnsBrowser implements HostDiscovery {
 
   @override
   Future<void> start() async {
-    if (_socket != null) return;
+    if (_wanted) return;
+    _wanted = true;
 
     final (socket, error) = await _bindMulticast();
+    // Checked before the failure below it, not after: a bind that failed while
+    // the browser was going away must not report that to a disposed notifier
+    // either.
+    if (!_wanted) {
+      socket?.close();
+      return;
+    }
     if (socket == null) {
+      _wanted = false;
       isBrowsing.value = false;
       failure.value = describeDiscoveryFailure(error);
       return;
@@ -343,6 +393,7 @@ class MdnsBrowser implements HostDiscovery {
   /// that: a write to a disposed `ValueNotifier` throws, and teardown is
   /// precisely when the two would meet.
   void _release() {
+    _wanted = false;
     _queryTimer?.cancel();
     _pruneTimer?.cancel();
     _queryTimer = null;

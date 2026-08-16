@@ -402,7 +402,7 @@ Two rules are enforced rather than merely encouraged:
    you watch it. It is the single most obvious tell of a meter written by
    somebody who does not use meters.
 
-**Inter** (labels and prose) and **JetBrains Mono** (every number) are bundled
+**Inter** (labels and prose) and **Google Sans Code** (every number) are bundled
 rather than requested from the system, in the three and two weights the type
 scale actually names. Falling through to the platform's own faces means digit
 width, tracking and cap height all differ between macOS, Windows and Linux, and
@@ -426,7 +426,7 @@ packages/
   bel_wire/        The remote-display protocol. Pure Dart, no I/O.           MIT
   bel_ui/          Design tokens and the primitives modules are built from.  GPL
 lib/               The application.                                          GPL
-assets/fonts/      Inter and JetBrains Mono, with their licences.        SIL OFL
+assets/fonts/      Inter and Google Sans Code, with their licences.      SIL OFL
 cli/               The `bel` command-line analyser.                          GPL
 plugin/            Headless VST3 + AU plugin.                              AGPL
 docs/              PLAN.md, METRICS.md, WIRE.md.

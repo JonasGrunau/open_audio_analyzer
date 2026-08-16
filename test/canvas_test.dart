@@ -547,7 +547,10 @@ void main() {
     final before = container.read(workspaceProvider).preset.tabs.length;
     final firstTab = container.read(workspaceProvider).tab.modules.length;
 
-    await tester.tap(find.text('+'));
+    // By tooltip, not by glyph. Two controls in the strip are a `+` — this one
+    // and the plus inside `+ MODULE` — and `find.text('+')` matched both the
+    // day the second stopped being part of one string.
+    await tester.tap(find.byTooltip('New tab'));
     await _settle(tester);
 
     expect(container.read(workspaceProvider).activeTab, before);

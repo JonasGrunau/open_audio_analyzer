@@ -14,6 +14,7 @@ The design system. Every visual decision in Bel is made here exactly once.
 | `src/grid_geometry.dart` | Grid cells to pixels. The one place the 24×16 canvas becomes a rectangle. |
 | `src/point_buckets.dart` | Marks sorted by the colour they are drawn in, so a display of tens of thousands of them is a few dozen `drawRawPoints` calls. Behind the spectrogram and the stereo cloud. |
 | `src/panel.dart` | `PanelScaffold` and the controls panels are assembled from, plus `showBelPanel`. |
+| `src/glyph.dart` | `BelMark` and `BelGlyph` — the closed set of marks the interface draws, as paths. There is no icon font, and a mark that is a codepoint is a mark that can go missing. |
 | `src/skin_palette.dart` | The one adapter between a `Skin` (data, in `bel_core`) and a `BelColors`. |
 | `src/focusable.dart` | `BelFocusable` — keyboard focus, Enter/Space activation and the screen-reader identity every control Bel paints itself would otherwise be missing. |
 | `src/drag_devices.dart` | `kDragDevices` — the `supportedDevices` every drag detector needs, and why a trackpad is not one of them. |
@@ -87,15 +88,30 @@ they were open, which is precisely when skins are chosen.
   else, and selection *inside* a panel is `hairlineStrong`. The exception buys
   the affirmative button and nothing else.
 - **One way out per panel.** A Done next to a Close is two.
+- **`width:` is for a panel of rows, and the keyboard sheet is the one
+  exception.** 620 is a column of labels and controls read left to right in
+  short lines; the sheet is a reference *table* read by scanning down it, and at
+  that width its seventeen rows did not fit the scaffold's 760 px of height, so
+  it scrolled and cut its own footnote in half. It takes 880 and two columns.
+  A second panel wanting the same is a panel to look at twice — but this is the
+  shape that fixes it, and the way it is kept honest is
+  `test/scaling_test.dart`, which fails if the sheet ever needs to scroll at the
+  smallest window the application supports.
+- **A panel wider than the window is a panel the window shrinks.** `width:` is a
+  maximum, so a layout that only works at that maximum breaks quietly below it —
+  text wraps, which is fine, and boxed controls do not, which is not. The sheet
+  stacks its two columns into one under a `LayoutBuilder` rather than letting
+  its keycaps run past the edge, where a `Row` clips them in release with
+  nothing said.
 
 ### The body
 
 | Use | For |
 |---|---|
 | `PanelSection(title:, note:, ruled:, children:)` | A group of rows. Draws a hairline above itself — **`ruled: false` on the first section in a panel only**, where a rule under the title bar is a doubled line. |
-| `PanelRow(label:, child:, note:)` | A label and a control on one line, with the explanation full-width beneath. The note is *not* beside the control: sharing the line means every note wraps at whatever the control left over. |
-| `PanelListRow(title:, note:, selected:, onTap:, trailing:)` | A row that selects rather than acts — a preset, a skin, a discovered host, one arm of a chooser. |
-| `PanelNote(text, tone:)` | Prose below the rows it explains. `tone:` only for the ones that are warnings. |
+| `PanelRow(label:, child:, note:)` | A label and a control on one line, with the explanation full-width beneath. The note is *not* beside the control: sharing the line means every note wraps at whatever the control left over. The gap above it clears the control rather than hugging the label, because the row is as tall as whatever sits on its right. |
+| `PanelListRow(title:, note:, selected:, onTap:, trailing:, mark:, opens:)` | A row that selects rather than acts — a preset, a skin, a discovered host, one arm of a chooser. `mark:` for a list whose rows are *kinds* rather than peers; `opens:` puts a chevron on the ones that push a panel instead of choosing in place. The title brightens on hover and focus, so a list nothing is ever selected in does not read as disabled. |
+| `PanelNote(text, tone:, mark:)` | Prose below the rows it explains. `tone:` only for the ones that are warnings, and `mark:` with it — a panel is mostly caption-sized prose in one grey, and one step of colour is enough to see once you are looking and not enough to stop you scrolling past. |
 | `PanelActions(children:)` | The button row that ends a section. |
 | `SegmentedControl` / `BelButton` / `BelToggle` / `BelTextField` / `PanelMenu` | The controls. There are no others. |
 
@@ -118,6 +134,15 @@ derived its height from its own type style and its own padding they came out at
 a row with these takes the same constant. `BelToggle` is exempt and so is
 `PanelListRow` — a switch and a block of text are not boxed controls.
 
+**A control's own word is uppercase; a value it holds is not.** `BelButton` and
+`SegmentedControl` set their labels in `BelType.label` — the caps face, tracked
+out — the same way the tabs and every section heading do, and both uppercase in
+the widget so call sites stay sentence case. `PanelMenu` and `BelTextField` do
+not, because what they show is a device name, a target or something typed, and
+shouting a user's own words at them is a different statement. The segmented
+control was the exception for eight phases and it read as prose that happened to
+have a box around it: `Test tone` beside a `RESCAN` in the row below.
+
 **A control that opens something is a `BelFocusable`, not a
 `PopupMenuButton`.** The Bel theme sets `NoSplash` and a transparent highlight,
 so a `PopupMenuButton`'s `InkWell` renders no hover and no focus ring at all —
@@ -130,7 +155,50 @@ lands as the one floating card in an interface of panels sitting flush.
 
 **A mark is geometry, not a glyph.** `▾` and `✓` are in neither Inter nor most
 of the fallback stack, and the first build of `PanelMenu` put a tofu box where
-the caret should be, on both menus, on every platform. Draw it — see `_Caret`.
+the caret should be, on both menus, on every platform. Draw it — `src/glyph.dart`
+holds the set, `_Caret` is the one that predates it.
+
+**The set of marks is closed, and it is six.** `BelMark.broadcast`,
+`display`, `chevron`, `warning`, `undo` and `redo`. A vocabulary that gains a
+mark per panel is one nobody learns — the reader stops to decode each one, which
+is slower than the word it replaced — so a new mark is a decision to make in
+`glyph.dart`, with a sentence saying what it tells the reader that the text
+beside it does not. There is no icon font here and there is not going to be one.
+
+**A mark on a `PanelNote` centres on the note, not on its first line.** The
+mark annotates the whole sentence, and every note that carries one wraps — two
+lines in a panel, three on a phone-shaped display. Hung at the top of a wrapped
+paragraph it reads as belonging to the first line rather than to the note, which
+is what the remote panel's password warning looked like against its two lines of
+orange.
+
+**A mark's stroke weight is a property of the mark, not of its size.**
+`_MarkPainter._weight`, and it is `BelStroke.mark` for all six: every one of
+them sits beside the words that name the thing, and a mark heavier than the
+graticules a few pixels away is a second idea of "thin" in one interface.
+Nothing scales the stroke with `size` — a mark beside a caption and a mark
+beside a title are the same line. `undo` and `redo` were briefly set at
+`BelStroke.emphasis`, which was right while they stood alone in the tab strip
+carrying an action with no word to be found by; beside `UNDO` and `REDO` that
+weight is a mark shouting over its own label. A second weight here needs a
+second reason of that kind.
+
+That last part is a decision and not an oversight, so it is worth writing down
+why the obvious escape does not apply. `Icons.undo` and
+`CupertinoIcons.arrow_uturn_left` **are** platform-independent — both are
+ordinary TTFs Flutter rasterises itself, not lookups into the host's symbol set
+the way SF Symbols is, and the Material font is already bundled by
+`uses-material-design: true`. The objection is not portability. It is that both
+are filled shapes drawn on a 24 dp grid: at the sizes this interface uses them
+they carry several times the optical weight of the hairlines everything else is
+made of, and one imported vocabulary beside a drawn one is two.
+
+**A mark inside a control must refuse hits.** `CustomPainter.hitTest` returns
+null by default and `RenderCustomPaint` reads that as *true*, so a glyph dropped
+into a row is a dead spot in the middle of it — the row still works everywhere
+else, which is what makes it ship. `_MarkPainter` returns false, for the same
+reason `MeterPainter` does; `test/panels_test.dart` presses a row on its own
+mark.
 
 The rule is about *symbols* — arrows, carets, ticks, geometric shapes, box
 drawing — and deliberately not about a codepoint range. Punctuation is fine and

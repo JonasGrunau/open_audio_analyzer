@@ -494,24 +494,43 @@ class _HistogramPainter extends MeterPainter {
 
   /// The two bands and the short-term curve, newest column at the right edge.
   void _paintProgramme(Canvas canvas, Rect plot, int columns, double targetY) {
-    if (history.filled == 0) return;
     final visible = math.min(history.filled, columns);
 
     final shortBars = state._shortBars;
     final momentaryBars = state._momentaryBars;
     final curve = state._curve;
 
-    for (var i = 0; i < columns; i++) {
-      // Past the oldest column the buffers repeat it exactly — same x, same y.
-      // The segments then stack on one another and the polyline's extra points
-      // are zero length, so a part-filled display draws nothing in the room it
-      // has not reached yet. Writing every slot is what lets the whole buffer be
-      // handed over as it is; a `sublistView` would be an allocation per frame.
-      final slot = i < visible ? i : visible - 1;
-      final x = plot.right - (slot + 0.5) * columnWidth;
+    // The curve is stroked, so a reading pinned to either end of the scale has
+    // half its width outside the plot and is clipped to a thread. That is worst
+    // exactly where it is most visible — a display at rest is nothing but the
+    // line along the floor — so the *curve* is held half a stroke inside. The
+    // bars are not: they carry the extent of the reading and keep it exact.
+    final curveTop = plot.top + BelStroke.mark / 2;
+    final curveBottom = plot.bottom - BelStroke.mark / 2;
 
-      final shortY = _y(plot, history.shortAt(slot));
-      var momentaryY = _y(plot, history.momentaryAt(slot));
+    for (var i = 0; i < columns; i++) {
+      final x = plot.right - (i + 0.5) * columnWidth;
+
+      // Past the oldest measured column the line rests on the floor of the
+      // scale and runs flat to the left edge, so the curve spans the plot from
+      // the first frame and survives a reset. It used to stop where the history
+      // did — which on an empty display is nowhere at all, and a module with no
+      // line in it reads as one that has failed rather than one that is waiting.
+      //
+      // Resting is not reading. The floor is the bottom of the scale, the bars
+      // are zero length there so nothing is filled beneath it, and it is drawn
+      // exactly where measured silence would put it — which it has to be, or
+      // the display would claim to know the difference between "no signal yet"
+      // and "signal below −48 LUFS" at a resolution it does not have.
+      //
+      // Every slot is written either way, which is what lets the whole buffer
+      // be handed over as it is; a `sublistView` would be an allocation per
+      // frame.
+      final measured = i < visible;
+      final shortY = measured ? _y(plot, history.shortAt(i)) : plot.bottom;
+      var momentaryY = measured
+          ? _y(plot, history.momentaryAt(i))
+          : plot.bottom;
       // Momentary quieter than short-term is an ordinary reading, not an error,
       // and it has no band — the area is only ever drawn upwards from the line.
       if (momentaryY > shortY) momentaryY = shortY;
@@ -527,7 +546,7 @@ class _HistogramPainter extends MeterPainter {
       momentaryBars[i * 4 + 3] = momentaryY;
 
       curve[i * 2] = x;
-      curve[i * 2 + 1] = shortY;
+      curve[i * 2 + 1] = shortY.clamp(curveTop, curveBottom);
     }
 
     // Under the target and over it, as two clipped passes of the same buffers.

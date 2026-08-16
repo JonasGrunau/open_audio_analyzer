@@ -8,7 +8,7 @@ The arrangeable canvas. GPL-3.0-or-later.
 | `grid_canvas.dart` | The canvas: positioning, drag, resize, selection, the drag preview overlay. |
 | `canvas_notice.dart` | The one line the canvas says out loud. Refusals only. |
 | `module_host.dart` | The only place that knows which `ModuleKind`s exist as code, and where "too small" is decided — in cells *and* in pixels. |
-| `tab_strip.dart` | Tabs, inline rename, and the add/undo/redo buttons. |
+| `tab_strip.dart` | Tabs, inline rename, and the add/undo/redo buttons. Three of the four are a word with a `BelMark` or a `+` beside it; only the tab plus stands alone. |
 | `menus.dart` | The popup menus the canvas and the strip share. |
 
 The placement rules themselves are **not here** — they are pure functions over
@@ -97,3 +97,25 @@ that decides *what a pointer means* belongs here.
   the rule while an unbordered button is centred in the whole of it. Add a
   control to the strip without that reservation and its label sits a pixel
   below every tab name, which is invisible in a review and obvious on screen.
+
+- **A mark in the strip is not aligned by centring it, and the offset is
+  measured rather than derived.** Centring puts the middle of a *line box* in
+  the middle of the row, and a line box is taller than the cap band inside it
+  and not concentric with it — so every word in the strip is off by the same
+  amount and agrees with itself, while a drawn mark or a larger glyph centred
+  beside them is not. `_HistoryAction._drop` and `_Plus._drop` are those
+  offsets.
+
+  The formula is tempting and it does not work. Cap band as a fraction of the
+  label size, math axis as a fraction of the plus size, subtract: that lands
+  the lone plus and is out by two thirds of a pixel on the one inside
+  `+ MODULE`, because the two do not sit in the same kind of box — one is
+  centred alone in the row, the other by a `Row` against a line box two thirds
+  its height. One number per site, measured, beats one formula that is nearly
+  right.
+
+  Eyeballing this in a widget test finds nothing, and neither does looking at
+  the app. Render the strip to a PNG (`RepaintBoundary` above `MaterialApp`,
+  `toImage` inside `tester.runAsync`, real fonts via `FontLoader` — see
+  `CLAUDE.md`), threshold it, and compare ink bounding boxes. Re-measure when a
+  size changes.

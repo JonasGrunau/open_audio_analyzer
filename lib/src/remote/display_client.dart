@@ -126,8 +126,15 @@ class DisplayClient {
     final port = _port;
     if (host == null || port == null || !_wantConnection) return;
 
-    await _teardown();
+    // Said before the first `await`, never after it. [connect] is called from
+    // a screen's `initState`, and a suspension there lands after that screen's
+    // first build — so a display handed a host built one frame of the host
+    // picker, which is what it shows while the link is idle. That frame is not
+    // only a panel flashing on the way in: the picker starts a search in its
+    // own `initState`, so entering a display opened a second browse and tore it
+    // down again a frame later.
     state.value = RemoteLinkState.connecting;
+    await _teardown();
 
     try {
       final socket = await Socket.connect(

@@ -160,6 +160,13 @@ class _HostPickerPanelState extends State<HostPickerPanel> {
                     PanelListRow(
                       title: host.displayName,
                       note: _describe(host),
+                      // A found host is a machine that is publishing, which is
+                      // the same fact the sending half of the pairing panel
+                      // wears — one mark, one meaning, in both directions of
+                      // the link. Nothing in this list is ever `selected`, so
+                      // the row brightens under the pointer instead.
+                      mark: BelMark.broadcast,
+                      opens: true,
                       onTap: () => widget.onConnect(host.address, host.port),
                     ),
                   // Stated rather than shown as an empty list, which reads as
@@ -176,6 +183,7 @@ class _HostPickerPanelState extends State<HostPickerPanel> {
                           'This device cannot search the network for hosts. '
                               'Enter an address below.',
                       tone: colors.warn,
+                      mark: BelMark.warning,
                     ),
                 ],
               );

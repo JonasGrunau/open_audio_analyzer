@@ -9,7 +9,7 @@ The panels that sit over the canvas. GPL-3.0-or-later.
 | `calibration_editor.dart` | The six numbers a delivery target is. |
 | `report_panel.dart` | Offline analysis: drop a file, watch it run, cancel it, export the result. |
 | `report_card.dart` | The report as a **PNG** — a fixed layout drawn deliberately, not a screenshot of the panel, so two people exporting the same report get the same picture. It lives here rather than beside the other exports in `bel_core` because rendering needs `dart:ui`. |
-| `shortcuts_sheet.dart` | The keyboard shortcuts, drawn from the table in `lib/src/app/shortcuts.dart`. Holds no list of its own. |
+| `shortcuts_sheet.dart` | The keyboard shortcuts, drawn from the table in `lib/src/app/shortcuts.dart`. Holds no list of its own. The one panel that is wider than 620 and laid out in two columns, because it is a reference table rather than a column of controls — see `packages/bel_ui/AGENTS.md` § Panels, and `test/scaling_test.dart`, which fails if it ever needs to scroll again. |
 
 The primitives they are assembled from — `PanelScaffold`, `PanelSection`,
 `PanelRow`, `PanelListRow`, `PanelNote`, `PanelActions`, `PanelMenu`,

@@ -22,6 +22,8 @@
 //     bar's width gates cannot see it: the name was capped at 220 px but never
 //     made flexible, so it took its natural width however little the bar had
 //     left to give it and the dot beside it went over the edge.
+//   - The keyboard sheet did not fit its own panel, so it scrolled and cut its
+//     footnote in half — see the group at the bottom of this file.
 //
 // These are pumped at real window sizes rather than the test default, because
 // the test default is 800x600 and neither defect appears there.
@@ -29,14 +31,17 @@
 import 'dart:io';
 
 import 'package:bel/src/app/bel_app.dart';
+import 'package:bel/src/app/shortcuts.dart';
 import 'package:bel/src/canvas/module_host.dart';
 import 'package:bel/src/clock/meter_clock.dart';
 import 'package:bel/src/data/providers.dart';
+import 'package:bel/src/panels/shortcuts_sheet.dart';
 import 'package:bel/src/storage/config_store.dart';
 import 'package:bel/src/storage/startup_config.dart';
 import 'package:bel_core/bel_core.dart';
 import 'package:bel_engine/bel_engine.dart';
 import 'package:bel_ui/bel_ui.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -46,7 +51,7 @@ import 'package:flutter_test/flutter_test.dart';
 /// question about Bel and not about the test binding.
 ///
 /// Without this every glyph is the placeholder font's square em box, which is
-/// far wider than Inter or JetBrains Mono — the status bar then overflows by
+/// far wider than Inter or Google Sans Code — the status bar then overflows by
 /// 299 px at a width where the real one has room to spare, and the test is
 /// measuring a typeface nobody ships. Read with `readAsBytesSync`: an awaited
 /// real read inside a `testWidgets` body never completes.
@@ -68,9 +73,9 @@ Future<void> _loadFonts() async {
     'assets/fonts/Inter-Medium.ttf',
     'assets/fonts/Inter-SemiBold.ttf',
   ]);
-  await load('JetBrains Mono', [
-    'assets/fonts/JetBrainsMono-Regular.ttf',
-    'assets/fonts/JetBrainsMono-Medium.ttf',
+  await load('Google Sans Code', [
+    'assets/fonts/GoogleSansCode-Regular.ttf',
+    'assets/fonts/GoogleSansCode-Medium.ttf',
   ]);
 }
 
@@ -357,4 +362,122 @@ void main() {
       expect(kind.minBodyHeight, greaterThan(0), reason: kind.name);
     }
   });
+
+  // **The keyboard sheet is the one panel asserted to fit.** Every other panel
+  // is a list that may legitimately be longer than the window; this one is a
+  // reference table, and a reference table that has to be scrolled to be read
+  // is one the reader gives up on. It scrolled for a whole phase, and what the
+  // fold cut in half was the footnote — the only line on the sheet that is not
+  // derivable from the rows above it.
+  //
+  // Two windows because the sheet's width is fixed at 880: the minimum window
+  // is the one that can be narrower than the panel wants, and the default is
+  // the one everybody actually opens it in. Both platforms because the two
+  // spellings of a chord are different lengths — `Ctrl+Shift+Tab` is the widest
+  // string on the sheet and `⌃⇧⇥` is one of the narrowest, and it is the wide
+  // one that decides whether the columns fit.
+  group('the keyboard sheet fits without scrolling', () {
+    for (final window in [kMinimumWindow, const Size(1280, 800)]) {
+      for (final platform in [TargetPlatform.linux, TargetPlatform.macOS]) {
+        testWidgets('at ${window.width.toInt()} px on ${platform.name}', (
+          tester,
+        ) async {
+          debugDefaultTargetPlatformOverride = platform;
+          try {
+            await _pumpSheet(tester, window);
+
+            // A `RenderFlex` overflow inside the rows is reported through the
+            // error reporter and fails the test on its own; this is the other
+            // half, and it is the half no exception announces.
+            final position = tester
+                .state<ScrollableState>(
+                  find.descendant(
+                    of: find.byType(PanelScaffold),
+                    matching: find.byType(Scrollable),
+                  ),
+                )
+                .position;
+
+            expect(
+              position.maxScrollExtent,
+              0,
+              reason:
+                  'The keyboard sheet is ${position.maxScrollExtent} px taller '
+                  'than the panel it is drawn in, so it scrolls and its '
+                  'footnote is below the fold. Either a column has to give up '
+                  'a group or the rows have to give up their air.',
+            );
+
+            // **And every description is still one line.** Height alone does
+            // not catch a column that is too narrow: the descriptions wrap,
+            // which costs height the panel happens to have, and the sheet
+            // passes a scroll check while reading like a squeezed table. Two
+            // lines of description beside one keycap is also the shape that
+            // makes a row hard to attribute to its own chord.
+            const line = 13 * 1.45; // BelType.body, one line.
+            for (final shortcut in belShortcuts) {
+              expect(
+                tester.getSize(find.text(shortcut.description)).height,
+                lessThan(line * 1.5),
+                reason:
+                    '"${shortcut.description}" wraps onto a second line, so '
+                    'its column is narrower than the table needs.',
+              );
+            }
+          } finally {
+            debugDefaultTargetPlatformOverride = null;
+          }
+        });
+      }
+    }
+
+    // Below the supported minimum the sheet stacks into one column and scrolls
+    // again, which is allowed — what is not allowed is two columns too narrow
+    // to hold their own keycaps, because a keycap does not shrink and a `Row`
+    // that cannot fit one clips it in release with nothing said. Pumping it is
+    // most of the assertion: an overflow fails the test on its own.
+    testWidgets('and stacks rather than clipping below it', (tester) async {
+      await _pumpSheet(tester, const Size(800, 600));
+
+      const line = 13 * 1.45;
+      for (final shortcut in belShortcuts) {
+        expect(
+          tester.getSize(find.text(shortcut.description)).height,
+          lessThan(line * 1.5),
+          reason: '"${shortcut.description}" wraps in the stacked layout.',
+        );
+      }
+    });
+  });
+}
+
+/// The keyboard sheet, open, over nothing else.
+///
+/// The application is not pumped: the sheet reads no measurement and owns no
+/// engine, and pumping `BelApp` to reach it would make this test depend on a
+/// capture device opening.
+Future<void> _pumpSheet(WidgetTester tester, Size window) async {
+  tester.view.physicalSize = window * 3;
+  tester.view.devicePixelRatio = 3;
+  addTearDown(tester.view.reset);
+
+  await tester.pumpWidget(
+    MaterialApp(
+      debugShowCheckedModeBanner: false,
+      theme: belThemeData(BelColors.precisionInstrument),
+      // Above the `Navigator`, where the application puts it and where
+      // `showBelPanel` looks for it.
+      builder: (context, child) =>
+          BelTheme(colors: BelColors.precisionInstrument, child: child!),
+      home: Builder(
+        builder: (context) => TextButton(
+          onPressed: () => showShortcutsSheet(context),
+          child: const Text('open'),
+        ),
+      ),
+    ),
+  );
+
+  await tester.tap(find.text('open'));
+  await tester.pumpAndSettle();
 }

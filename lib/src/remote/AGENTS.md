@@ -101,6 +101,32 @@ halves live here.
   flushed. Overwriting a pending buffer splices half of one measurement onto
   half of another, and the frame still parses.
 
+- **A socket with a `flush` outstanding is a *bound* sink, and a bound sink
+  refuses `add`, `flush` and `close` alike.** `IOSink.flush` raises the same
+  flag `addStream` does and lowers it when the flush completes, so every write
+  in `DisplayHost` has to know whether the last frame has landed. Both ways of
+  not knowing shipped. `sendOnce` wrote a layout, a skin or a delivery target
+  between a snapshot frame and its flush, was given
+  `StateError("StreamSink is bound to a stream")` by `add`, and did the only
+  thing it could with a throw there — closed the connection. Changing the skin
+  at the desk dropped the tablet, the more reliably the slower the tablet was,
+  because a display that is slow to read is a socket that spends longer
+  flushing. And `close` threw the same error *synchronously*, before the future
+  its `catchError` was attached to existed, from inside the socket's own
+  `onDone` — which is precisely when a flush is most likely to be in flight, a
+  display leaving mid-frame. That one reached the root zone as an unhandled
+  exception in the host, and the `destroy` beneath it never ran. One-off frames
+  now wait for the flush; teardown destroys and never closes.
+
+- **A state a widget builds from is published before the first `await`, not
+  after it.** `DisplayClient.connect` is called from
+  `RemoteDisplayScreen.initState`, and that screen draws `HostPickerPanel` for
+  as long as the link is idle — so `connecting`, set after a suspension, was
+  set after the screen's first build. A display handed a host built a picker
+  nobody asked for, and a picker starts a search in its own `initState`: a
+  panel flashing on the way in, and a second browse opened and torn down a
+  frame later. The same shape as the `dispose` rule below, from the other side.
+
 - **Everything about discovery is best-effort and nothing about it throws.**
   Multicast is the first thing a guest network blocks and the first thing a
   corporate image disables. Every failure path ends in "discovery does not work
@@ -144,6 +170,27 @@ halves live here.
   list to one that attaches mid-browse, and cancels when the last lets go. The
   engine's rule is `SetStreamHandlerMessageHandlerOnChannel` in
   `FlutterChannels.mm`; a second channel added here inherits the same rule.
+
+- **An instance name is one label, and the writer splits on dots.** Those two
+  facts together are a trap that cost a phase. `Platform.localHostname` is
+  `studio-mac.local` on a plain network and `studio-mac.fritz.box` on any
+  network whose DHCP server hands out a domain — which is most routers — and
+  advertising that produced `studio-mac` `fritz` `box` `_bel` `_tcp` `local`:
+  six labels where DNS-SD defines four. **Bel's own reader accepted it**, since
+  `_instanceOf` takes everything before `_bel._tcp.local`, so desktop found
+  desktop and the feature looked healthy; the system responder drops the record,
+  so `dns-sd -B` and every iPad saw nothing while the host sat there answering
+  every query on the wire. `MdnsResponder.instanceLabel` is the single place
+  that guarantees the label, and the friendly name — free-form, dots and all —
+  travels in the TXT record's `name`, which is what a picker shows.
+
+  The corollary is the SRV target. Sanitising the instance into a host name
+  yields the machine's own `.local` name, which the system responder owns and
+  **defends**: an address record it did not announce, for a name it owns, is a
+  conflict, and RFC 6762 says the loser renames itself. Bel announces every
+  interface's address on every interface, so its set differs from the system's
+  as soon as a machine has two, and the machine that would get renamed is the
+  user's. The target is `<name>-bel.local`, which nothing else claims.
 
 - **The DNS reader must survive anything.** Port 5353 carries every device on
   the network announcing services Bel has never heard of, some of it malformed

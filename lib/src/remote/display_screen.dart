@@ -216,10 +216,22 @@ class _LinkBar extends StatelessWidget {
         ),
       ),
       child: Padding(
+        // **`Space.sm` above and below a `BelControl.height` control, not
+        // `Space.xs`.** This bar is not the desktop's 40 px status bar and does
+        // not have its problem: there is no source, no clock, no calibration and
+        // no frame rate to fit, just a name, the tabs and the way out. At 4 px
+        // the segmented control and the button stood a hair off the hairline
+        // under them and the whole strip read as clamped shut. 8 px gives the
+        // controls room on a bar that has it to give.
         padding: const EdgeInsets.symmetric(
           horizontal: Space.md,
-          vertical: Space.xs,
+          vertical: Space.sm,
         ),
+        // **Reading order, left to right: who, what, and the way out.** The tabs
+        // belong beside the name they belong to — a tablet is held, and its far
+        // corner is the most awkward place on the screen to put the control the
+        // viewer touches most. What stays on the right is the one control nobody
+        // wants to hit by accident.
         child: Row(
           children: [
             _StateDot(state: state),
@@ -231,12 +243,9 @@ class _LinkBar extends StatelessWidget {
                 style: BelType.body.copyWith(color: colors.textPrimary),
               ),
             ),
-            const SizedBox(width: Space.md),
-            Expanded(
-              child: _StateMessage(client: client, state: state),
-            ),
 
             if (tabs.length > 1) ...[
+              const SizedBox(width: Space.md),
               SegmentedControl<int>(
                 value: tab.clamp(0, tabs.length - 1),
                 segments: [
@@ -245,8 +254,17 @@ class _LinkBar extends StatelessWidget {
                 ],
                 onChanged: onTab,
               ),
-              const SizedBox(width: Space.sm),
             ],
+
+            // The message is what gives way when the bar is short of room: it is
+            // empty whenever the link is healthy, and when it is not, an
+            // ellipsis on a warning still leaves the dot beside the name saying
+            // the same thing in colour.
+            const SizedBox(width: Space.md),
+            Expanded(
+              child: _StateMessage(client: client, state: state),
+            ),
+            const SizedBox(width: Space.sm),
 
             BelButton(label: 'Disconnect', onPressed: onDisconnect),
           ],

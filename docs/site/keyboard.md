@@ -27,6 +27,13 @@ halfway through.
 | Undo | ⌘Z | Ctrl+Z |
 | Redo | ⇧⌘Z | Ctrl+Shift+Z |
 
+## Measurement
+
+| Action | macOS | Windows and Linux |
+| --- | --- | --- |
+| Reset the measurement | ⌘R | Ctrl+R |
+| Analyse a file | ⌘O | Ctrl+O |
+
 ## Tabs
 
 | Action | macOS | Windows and Linux |
@@ -35,13 +42,6 @@ halfway through.
 | Next tab | ⌃⇥ or ⌘] | Ctrl+Tab or Ctrl+] |
 | Previous tab | ⌃⇧⇥ or ⌘[ | Ctrl+Shift+Tab or Ctrl+[ |
 | New tab | ⌘T | Ctrl+T |
-
-## Measurement
-
-| Action | macOS | Windows and Linux |
-| --- | --- | --- |
-| Reset the measurement | ⌘R | Ctrl+R |
-| Analyse a file | ⌘O | Ctrl+O |
 
 ## Configuration
 

@@ -198,15 +198,19 @@ class RemoteDisplayService {
   void _onClients() => clients.value = _host?.clientCount.value ?? 0;
 
   /// This machine's name, for when the user has not chosen one.
+  ///
+  /// The **first label** of it, not the whole thing. macOS hands back
+  /// `studio-mac.local` on a plain network and `studio-mac.fritz.box` on any
+  /// network whose DHCP server hands out a domain, and a router that does
+  /// that is the normal case rather than the exotic one. Stripping `.local`
+  /// alone left the second kind intact, which put a name with dots in it where
+  /// DNS-SD allows exactly one label — see `MdnsResponder.instanceLabel` for
+  /// what that did to discovery. The domain is also noise in a list where
+  /// everything is on the local network by definition.
   static String defaultHostName() {
     try {
-      final name = Platform.localHostname.trim();
-      // macOS hands back `studio-mac.local`; the suffix is noise in a list
-      // where everything is on the local network by definition.
-      final trimmed = name.endsWith('.local')
-          ? name.substring(0, name.length - '.local'.length)
-          : name;
-      return trimmed.isEmpty ? 'Bel' : trimmed;
+      final name = Platform.localHostname.trim().split('.').first;
+      return name.isEmpty ? 'Bel' : name;
     } on Object {
       return 'Bel';
     }

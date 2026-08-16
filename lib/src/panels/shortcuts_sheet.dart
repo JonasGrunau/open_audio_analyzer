@@ -20,6 +20,29 @@ Future<void> showShortcutsSheet(BuildContext context) => showBelPanel<void>(
   builder: (context) => const _ShortcutsSheet(),
 );
 
+/// **Wider than any other panel, and two columns rather than one.**
+///
+/// Seventeen rows and four headings in a single 600 px column came to more than
+/// the panel's 760 px of height, so the sheet scrolled — and what it cut off was
+/// the footnote explaining that Ctrl and Cmd are interchangeable, mid-sentence,
+/// which is the one line on the sheet that is not derivable from the rows above
+/// it. Everything else about it was cramped for the same reason: rows two pixels
+/// apart to buy height that was never going to be enough, and a keycap column
+/// pinned three hundred pixels away from the description it belonged to.
+///
+/// Two columns spend width, which this panel has and the others do not. A
+/// reference table is read by scanning, and a scan that has to be interrupted to
+/// find the scrollbar is a scan that starts again. The whole sheet is now on
+/// screen at once at the smallest window the application allows — 960 px wide,
+/// which leaves 896 for a panel — with room for the rows to breathe.
+const double _sheetWidth = 880;
+
+/// Widest column first: the long descriptions and the long chords are in
+/// different halves of the table, and 3:2 is the ratio that fits both without
+/// wrapping either.
+const int _leftFlex = 3;
+const int _rightFlex = 2;
+
 class _ShortcutsSheet extends StatelessWidget {
   const _ShortcutsSheet();
 
@@ -28,43 +51,122 @@ class _ShortcutsSheet extends StatelessWidget {
     // The keyboard in front of the user, not the operating system underneath
     // them — both are bound either way; only the printing differs.
     final apple = useAppleKeyNames;
+    final (left, right) = _columns();
 
-    // **600, and no footer.** Seventeen rows and four headings come to more
-    // than the panel's 760 px, and a sheet whose last row is cut in half reads
-    // as unfinished even though it scrolls. The width stops the two longest
-    // descriptions wrapping onto a second line, and the title bar's × — plus
-    // Esc, plus clicking the barrier — is three ways out already. A footer
-    // whose only button repeats one of them is a row of chrome that pushed a
-    // real row off the bottom.
+    // **No footer.** The title bar's × — plus Esc, plus clicking the barrier —
+    // is three ways out already, and a footer whose only button repeats one of
+    // them is a row of chrome that earns nothing.
     return PanelScaffold(
       title: 'Keyboard shortcuts',
-      width: 600,
+      width: _sheetWidth,
       onClose: Navigator.of(context).pop,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          for (final (index, group)
-              in ShortcutGroup.values
-                  .where((g) => belShortcuts.any((s) => s.group == g))
-                  .indexed)
-            PanelSection(
-              title: group.title,
-              ruled: index > 0,
-              children: [
-                for (final shortcut in belShortcuts)
-                  if (shortcut.group == group)
-                    _Row(shortcut: shortcut, apple: apple),
-              ],
-            ),
-          _Footnote(apple: apple),
-        ],
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          // **Two columns only when the panel got the width it asked for.**
+          // `width:` is a maximum, not a promise: a window narrower than
+          // 944 px — under the supported minimum, which a tablet is — squeezes
+          // the panel, and a squeezed pair of columns is not a narrower table
+          // but a broken one, because the keycaps do not shrink. They would run
+          // past the right edge of their own column, which a `Row` reports as
+          // an overflow in debug and silently clips in release. Stacked, the
+          // sheet is what it used to be: one column that scrolls. The
+          // comparison is against the width the scaffold's own padding leaves.
+          final stacked =
+              right.isEmpty ||
+              constraints.maxWidth < _sheetWidth - Space.lg * 2;
+
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (stacked)
+                _GroupColumn(groups: [...left, ...right], apple: apple)
+              else
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      flex: _leftFlex,
+                      child: _GroupColumn(groups: left, apple: apple),
+                    ),
+                    const SizedBox(width: Space.xl),
+                    Expanded(
+                      flex: _rightFlex,
+                      child: _GroupColumn(groups: right, apple: apple),
+                    ),
+                  ],
+                ),
+              const SizedBox(height: Space.lg),
+              _Footnote(apple: apple),
+            ],
+          );
+        },
       ),
     );
   }
 }
 
-/// Width of the keycap column. See the comment where it is used.
-const double _keyColumn = 190;
+/// The groups that have rows, split into two columns of nearly equal height.
+///
+/// Counted in row-equivalents rather than in sections, because a heading costs
+/// about a row and a section that is not first in its column costs its rule as
+/// well. Derived rather than written down: naming which group goes where would
+/// be a second place a shortcut has to be registered, and the point of
+/// `belShortcuts` is that there is one.
+(List<ShortcutGroup>, List<ShortcutGroup>) _columns() {
+  final groups = [
+    for (final group in ShortcutGroup.values)
+      if (belShortcuts.any((s) => s.group == group)) group,
+  ];
+
+  int height(Iterable<ShortcutGroup> column) {
+    var total = 0;
+    for (final (index, group) in column.indexed) {
+      // The rows, the heading, and the rule above every section but the first.
+      total += belShortcuts.where((s) => s.group == group).length + 1;
+      if (index > 0) total++;
+    }
+    return total;
+  }
+
+  var best = groups.length;
+  int? closest;
+  for (var split = 1; split < groups.length; split++) {
+    final gap = (height(groups.take(split)) - height(groups.skip(split))).abs();
+    if (closest == null || gap < closest) {
+      closest = gap;
+      best = split;
+    }
+  }
+
+  return (groups.take(best).toList(), groups.skip(best).toList());
+}
+
+class _GroupColumn extends StatelessWidget {
+  const _GroupColumn({required this.groups, required this.apple});
+
+  final List<ShortcutGroup> groups;
+  final bool apple;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      for (final (index, group) in groups.indexed)
+        PanelSection(
+          title: group.title,
+          // Every column starts a fresh one: a rule at the top of the right
+          // column would be a line hanging under the title bar with nothing
+          // above it to rule off.
+          ruled: index > 0,
+          children: [
+            for (final shortcut in belShortcuts)
+              if (shortcut.group == group)
+                _Row(shortcut: shortcut, apple: apple),
+          ],
+        ),
+    ],
+  );
+}
 
 class _Row extends StatelessWidget {
   const _Row({required this.shortcut, required this.apple});
@@ -77,12 +179,16 @@ class _Row extends StatelessWidget {
     final colors = BelTheme.of(context);
 
     return Padding(
-      // Tighter than a PanelRow. This is a reference table read by scanning
-      // down it, not a list of controls to be aimed at, and seventeen rows at
-      // settings-panel spacing do not fit on a laptop.
-      padding: const EdgeInsets.symmetric(vertical: Space.xxs),
+      // Tighter than a `PanelRow`, and no longer as tight as it can be made.
+      // This is a reference table read by scanning down it rather than a list
+      // of controls to be aimed at — but a scan needs the rows to be separable,
+      // and at `Space.xxs` seventeen of them were a single grey block.
+      padding: const EdgeInsets.symmetric(vertical: Space.xs),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        // A keycap is a couple of pixels taller than the line of text beside
+        // it, so aligning their tops leaves the two strings visibly off each
+        // other.
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Expanded(
             child: Text(
@@ -91,28 +197,20 @@ class _Row extends StatelessWidget {
             ),
           ),
           const SizedBox(width: Space.md),
-          // **A fixed column, not a second flex child.** An `Expanded` beside a
-          // `Flexible` splits the row in half whatever the two of them actually
-          // need, so the descriptions were wrapping at half width while the
-          // keycaps sat in three hundred pixels of nothing. Same shape as the
-          // bug in the tab strip. 190 holds the widest pair there is —
-          // `Ctrl+Shift+Tab` and `Ctrl+[` — and leaves the longest description
-          // on one line.
-          //
-          // A `Wrap` rather than a `Row` because two caps is normal here, and
-          // on a second line is better than an overflow.
-          SizedBox(
-            width: _keyColumn,
-            child: Wrap(
-              alignment: WrapAlignment.end,
-              spacing: Space.xs,
-              runSpacing: Space.xs,
-              children: [
-                for (final cap in shortcut.keycaps(apple: apple))
-                  _Keycap(label: cap),
-              ],
-            ),
-          ),
+          // **The keycaps take their natural width; the description takes what
+          // is left.** A `Row` lays its inflexible children out first, so this
+          // needs no column width of its own — which matters here because the
+          // two columns hold chords of quite different lengths and one number
+          // could not have suited both. What it must *not* be is a second flex
+          // child: an `Expanded` beside a `Flexible` splits the row in half
+          // whatever the two of them need, which is how the descriptions came
+          // to wrap at half width while the keycaps sat in three hundred pixels
+          // of nothing. Same shape as the bug in the tab strip.
+          for (final (index, cap)
+              in shortcut.keycaps(apple: apple).indexed) ...[
+            if (index > 0) const SizedBox(width: Space.xs),
+            _Keycap(label: cap),
+          ],
         ],
       ),
     );
@@ -139,9 +237,10 @@ class _Keycap extends StatelessWidget {
         borderRadius: BelRadius.allXs,
         border: Border.all(color: colors.hairline, width: BelStroke.hairline),
       ),
-      // Monospaced with tabular figures like every other glyph in Bel that
-      // stands for something exact. `⌘` and `Ctrl` sitting at different weights
-      // in the same column reads as two different kinds of thing.
+      // One style for every cap, whatever is printed on it. `⌘` and `Ctrl`
+      // sitting at different sizes or weights in the same column reads as two
+      // different kinds of thing, and they are not — they are both the key
+      // under your finger.
       child: Text(
         label,
         style: BelType.caption.copyWith(color: colors.textMuted),

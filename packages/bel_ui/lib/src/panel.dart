@@ -16,6 +16,7 @@ library;
 import 'package:flutter/material.dart';
 
 import 'focusable.dart';
+import 'glyph.dart';
 import 'theme.dart';
 import 'tokens.dart';
 
@@ -344,6 +345,14 @@ class PanelSection extends StatelessWidget {
 /// "all normalise to" and the row it belonged to could not be told from the one
 /// below. Underneath, every note in the panel measures the same and the labels
 /// and controls line up on one baseline grid.
+///
+/// **The gap above the note clears the control, not the label.** A row is as
+/// tall as whatever sits on its right, so a caption set to hug the label ends
+/// up hugging a bordered control instead — the delivery target's note ran two
+/// pixels under the dropdown and its tail passed beneath it, which reads as a
+/// line belonging to the menu rather than to the row. [Space.sm] leaves the
+/// note half as far from its own row as from the next one, so proximity still
+/// says which row it explains.
 class PanelRow extends StatelessWidget {
   const PanelRow({
     required this.label,
@@ -379,7 +388,7 @@ class PanelRow extends StatelessWidget {
             ],
           ),
           if (note != null) ...[
-            const SizedBox(height: Space.xxs),
+            const SizedBox(height: Space.sm),
             Text(
               note!,
               style: BelType.caption.copyWith(color: colors.textFaint),
@@ -397,23 +406,47 @@ class PanelRow extends StatelessWidget {
 /// so that the seven places a panel needs a paragraph cannot each arrive at
 /// their own idea of how far it sits from what it follows.
 class PanelNote extends StatelessWidget {
-  const PanelNote(this.text, {this.tone, super.key});
+  const PanelNote(this.text, {this.tone, this.mark, super.key});
 
   final String text;
 
-  /// Overrides the colour, for the two notes that are warnings.
+  /// Overrides the colour, for the notes that are warnings.
   final Color? tone;
+
+  /// A [BelMark] in the margin, in the note's own tone.
+  ///
+  /// **For the notes that are problems, not for the ones that explain.** A
+  /// panel is mostly caption-sized prose in one grey, and a toned note is one
+  /// step of colour away from the paragraph above it — which is enough to see
+  /// once you are looking at it and not enough to stop you scrolling past. The
+  /// mark hangs in its own gutter so the sentence still starts on the same left
+  /// edge as everything else in the section.
+  final BelMark? mark;
 
   @override
   Widget build(BuildContext context) {
     final colors = BelTheme.of(context);
+    final color = tone ?? colors.textFaint;
+    final label = Text(text, style: BelType.caption.copyWith(color: color));
 
     return Padding(
       padding: const EdgeInsets.only(top: Space.smd),
-      child: Text(
-        text,
-        style: BelType.caption.copyWith(color: tone ?? colors.textFaint),
-      ),
+      child: mark == null
+          ? label
+          : Row(
+              // Centred on the block rather than hung at the top of it. Every
+              // note that carries a mark is a short paragraph that wraps — two
+              // lines in a panel, three on a phone-shaped display — and a mark
+              // pinned to the first line of a wrapped sentence looks like it
+              // belongs to that line instead of to the sentence. The mark
+              // annotates the whole note, so it sits at the note's middle.
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                BelGlyph(mark!, color: color),
+                const SizedBox(width: Space.sm),
+                Expanded(child: label),
+              ],
+            ),
     );
   }
 }
@@ -446,6 +479,8 @@ class PanelListRow extends StatelessWidget {
     this.selected = false,
     this.onTap,
     this.trailing,
+    this.mark,
+    this.opens = false,
     super.key,
   });
 
@@ -454,6 +489,22 @@ class PanelListRow extends StatelessWidget {
   final bool selected;
   final VoidCallback? onTap;
   final Widget? trailing;
+
+  /// A [BelMark] down the left of the row, in the title's own colour.
+  ///
+  /// A `BelMark` rather than a widget slot: a row that could be handed any
+  /// widget is a row that will eventually hold four different sizes of four
+  /// different things. The mark is for a list whose rows are *kinds* rather
+  /// than peers — send against receive, where the words are the only difference
+  /// between two rows of identical shape.
+  final BelMark? mark;
+
+  /// Whether tapping this row opens something else, marked with a chevron.
+  ///
+  /// A list row normally selects in place, so the two in the remote panel that
+  /// push a whole panel are doing something the rest of the list does not. The
+  /// chevron says so before the row is pressed rather than after.
+  final bool opens;
 
   @override
   Widget build(BuildContext context) {
@@ -493,6 +544,15 @@ class PanelListRow extends StatelessWidget {
         ),
         child: Row(
           children: [
+            if (mark != null) ...[
+              BelGlyph(
+                mark!,
+                color: selected || hovered || focused
+                    ? colors.textPrimary
+                    : colors.textMuted,
+              ),
+              const SizedBox(width: Space.smd),
+            ],
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -503,7 +563,13 @@ class PanelListRow extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: BelType.body.copyWith(
-                      color: selected ? colors.textPrimary : colors.textMuted,
+                      // Pointed at or arrowed to, a row brightens the way a
+                      // segment does. Without it a list nothing is selected in
+                      // — every host a search found — is a column of muted text
+                      // that reads as disabled.
+                      color: selected || hovered || focused
+                          ? colors.textPrimary
+                          : colors.textMuted,
                     ),
                   ),
                   if (note != null)
@@ -519,6 +585,13 @@ class PanelListRow extends StatelessWidget {
             if (trailing != null) ...[
               const SizedBox(width: Space.sm),
               trailing!,
+            ],
+            if (opens) ...[
+              const SizedBox(width: Space.sm),
+              BelGlyph(
+                BelMark.chevron,
+                color: hovered || focused ? colors.textMuted : colors.textFaint,
+              ),
             ],
           ],
         ),
@@ -585,9 +658,15 @@ class SegmentedControl<T> extends StatelessWidget {
                       width: BelStroke.hairline,
                     ),
                   ),
+                  // Uppercase in [BelType.label], like [BelButton] and the
+                  // tabs. A segment is a control's own word, not prose about
+                  // one, and set in sentence case at caption weight it was the
+                  // only text in a panel row that looked like something being
+                  // said rather than something to press — a `Test tone` beside
+                  // a `RESCAN` two rows down.
                   child: Text(
-                    segment.label,
-                    style: BelType.caption.copyWith(
+                    segment.label.toUpperCase(),
+                    style: BelType.label.copyWith(
                       color: segment.value == value || hovered
                           ? colors.textPrimary
                           : colors.textMuted,
