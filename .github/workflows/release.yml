@@ -202,11 +202,28 @@ jobs:
         with:
           path: artifacts
 
+      # The notes are this tag's own changelog section, found by version rather
+      # than by position. Taking the first section instead would take
+      # `## [Unreleased]`, which is empty on a release commit by construction —
+      # so the release would have published no notes at all and nothing would
+      # have failed. An empty extraction is an error here for the same reason.
+      - name: Notes
+        run: |
+          awk -v v="${GITHUB_REF_NAME#v}" '
+            $0 == "## [" v "]" || index($0, "## [" v "] ") == 1 { inside = 1; next }
+            inside && /^## \[/ { exit }
+            inside { print }
+          ' CHANGELOG.md > notes.md
+          if ! grep -q '[^[:space:]]' notes.md; then
+            echo "CHANGELOG.md has no section for ${GITHUB_REF_NAME#v}" >&2
+            exit 1
+          fi
+
       - name: Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "${GITHUB_REF_NAME}" \
             --title "Open Audio Analyzer ${GITHUB_REF_NAME}" \
-            --notes-file <(sed -n '/^## \[/,/^## \[/p' CHANGELOG.md | sed '$d') \
+            --notes-file notes.md \
             $(find artifacts -type f | sort)

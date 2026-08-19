@@ -81,9 +81,6 @@ approximating.
 
 ## ✅ Status
 
-> [!NOTE]
-> **Phase 8 complete. Every phase in [docs/PLAN.md](docs/PLAN.md) has shipped.**
-
 | | What ships today |
 |:-:|---|
 | 🎚️ | **All thirteen modules exist and measure something.** Open Audio Analyzer opens on a working meter bridge — loudness, super, digital, VU, validator, histogram, alert — with the analyser, spectrogram, phase scope and stereo cloud on a second tab. |

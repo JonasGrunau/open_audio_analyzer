@@ -53,6 +53,13 @@ The `ci.yml` jobs are split by what they need, and the split is deliberate:
   Requirements and `README.md`'s Tests list are the two places that must agree
   with this file. `dart test packages/oaa_wire` and `sources_match.sh` were both
   documented as gates for a phase before either was actually wired in.
+- **A release's notes are its own changelog section, found by version.** The
+  publish step reads `## [<tag without the v>]` out of `CHANGELOG.md` and fails
+  when that section is missing or blank. It used to take the *first* section
+  instead, which on a release commit is `## [Unreleased]` — empty by
+  construction — so the release would have carried no notes and no step would
+  have gone red. Cutting a tag therefore means moving `[Unreleased]`'s contents
+  under a numbered heading in the same commit.
 - **An installer that cannot be installed is published, and labelled.** Signing
   needs secrets a fork does not have, so every packaging script produces an
   unsigned artefact and says so rather than failing. A release job that quietly

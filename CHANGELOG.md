@@ -9,6 +9,8 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-08-19
+
 ### 📐 Measurement
 
 - **The VU meter reads differently, and lower on most material.** It was a
@@ -1211,5 +1213,6 @@ meters do not exist yet. See the [roadmap](README.md#roadmap).
 - Licensing is split: MIT for `engine/`, `oaa_engine` and `oaa_core`;
   GPL-3.0-or-later for the application, UI, CLI and plugin.
 
-[unreleased]: https://github.com/JonasGrunau/open_audio_analyzer/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/JonasGrunau/open_audio_analyzer/releases/tag/v0.1.0
+[unreleased]: https://github.com/JonasGrunau/open_audio_analyzer/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/JonasGrunau/open_audio_analyzer/compare/5f8ef44...v0.2.0
+[0.1.0]: https://github.com/JonasGrunau/open_audio_analyzer/commit/5f8ef44
