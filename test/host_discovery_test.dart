@@ -153,24 +153,27 @@ void main() {
       expect(browser.hosts.value, isEmpty);
     });
 
-    test('nothing about another device on port 5353 is an Open Audio Analyzer host', () {
-      final browser = MdnsBrowser()
-        ..handleDatagram(
-          encodeResponse(
-            answers: [
-              DnsRecord(
-                name: '_airplay._tcp.local',
-                type: DnsType.ptr,
-                ttl: 120,
-                target: 'Living Room._airplay._tcp.local',
-              ),
-            ],
-          ),
-        )
-        ..handleDatagram(Uint8List.fromList(const [1, 2, 3]));
+    test(
+      'nothing about another device on port 5353 is an Open Audio Analyzer host',
+      () {
+        final browser = MdnsBrowser()
+          ..handleDatagram(
+            encodeResponse(
+              answers: [
+                DnsRecord(
+                  name: '_airplay._tcp.local',
+                  type: DnsType.ptr,
+                  ttl: 120,
+                  target: 'Living Room._airplay._tcp.local',
+                ),
+              ],
+            ),
+          )
+          ..handleDatagram(Uint8List.fromList(const [1, 2, 3]));
 
-      expect(browser.hosts.value, isEmpty);
-    });
+        expect(browser.hosts.value, isEmpty);
+      },
+    );
 
     test('tearing the browser down is not a publish', () {
       final browser = MdnsBrowser()..handleDatagram(announcement());
@@ -304,7 +307,8 @@ void main() {
         MockStreamHandler.inline(
           onListen: (arguments, sink) => sink.error(
             code: 'browse-failed',
-            message: 'iPadOS is not letting Open Audio Analyzer search the local network.',
+            message:
+                'iPadOS is not letting Open Audio Analyzer search the local network.',
           ),
         ),
       );

@@ -102,7 +102,8 @@ class _SettingsPanelState extends ConsumerState<SettingsPanel> {
 
     return PanelSection(
       title: 'Signal',
-      note: 'What Open Audio Analyzer is listening to. Changing it restarts the measurement.',
+      note:
+          'What Open Audio Analyzer is listening to. Changing it restarts the measurement.',
       ruled: false,
       children: [
         PanelRow(

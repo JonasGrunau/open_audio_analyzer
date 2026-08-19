@@ -41,18 +41,27 @@ class GridGeometry {
   double get columnStride => (size.width + gap) / kGridColumns;
   double get rowStride => (size.height + gap) / kGridRows;
 
-  Rect rectFor(GridRect rect) => Rect.fromLTWH(rect.column * columnStride, rect.row * rowStride, rect.columns * columnStride - gap, rect.rows * rowStride - gap);
+  Rect rectFor(GridRect rect) => Rect.fromLTWH(
+    rect.column * columnStride,
+    rect.row * rowStride,
+    rect.columns * columnStride - gap,
+    rect.rows * rowStride - gap,
+  );
 
   /// The cell containing [point], clamped to the canvas.
   ///
   /// Clamped rather than nullable: a click two pixels outside the last column
   /// means the last column, not "nowhere".
-  (int column, int row) cellAt(Offset point) => ((point.dx / columnStride).floor().clamp(0, kGridColumns - 1), (point.dy / rowStride).floor().clamp(0, kGridRows - 1));
+  (int column, int row) cellAt(Offset point) => (
+    (point.dx / columnStride).floor().clamp(0, kGridColumns - 1),
+    (point.dy / rowStride).floor().clamp(0, kGridRows - 1),
+  );
 
   /// A pointer movement expressed in whole cells.
   ///
   /// Rounded, not truncated, so a module snaps to the cell the pointer is
   /// nearest rather than the one it has fully crossed into. Truncating here is
   /// what makes a snapping grid feel like it is lagging behind the mouse.
-  (int columns, int rows) deltaInCells(Offset delta) => ((delta.dx / columnStride).round(), (delta.dy / rowStride).round());
+  (int columns, int rows) deltaInCells(Offset delta) =>
+      ((delta.dx / columnStride).round(), (delta.dy / rowStride).round());
 }

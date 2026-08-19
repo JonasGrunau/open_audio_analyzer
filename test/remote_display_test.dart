@@ -278,29 +278,32 @@ void main() {
     await expectLater(host.stop(), completes);
   });
 
-  test('a layout published mid-frame arrives rather than dropping the display', () async {
-    await connect();
-    source.generation = 1;
+  test(
+    'a layout published mid-frame arrives rather than dropping the display',
+    () async {
+      await connect();
+      source.generation = 1;
 
-    // The same bound sink, through the other door: `add` refuses too, and the
-    // only thing this path could do with the throw was close the connection.
-    // So changing the skin or the delivery target at the desk dropped the
-    // tablet — more often the slower the tablet was, because a display that
-    // takes longer to read is a socket that spends longer flushing.
-    host
-      ..publishNow()
-      ..publishLayout(
-        PresetSpec(
-          name: 'Mid-frame',
-          tabs: const [TabSpec(name: 'Main', modules: [])],
-        ),
-      );
-    await _settle(milliseconds: 200);
+      // The same bound sink, through the other door: `add` refuses too, and the
+      // only thing this path could do with the throw was close the connection.
+      // So changing the skin or the delivery target at the desk dropped the
+      // tablet — more often the slower the tablet was, because a display that
+      // takes longer to read is a socket that spends longer flushing.
+      host
+        ..publishNow()
+        ..publishLayout(
+          PresetSpec(
+            name: 'Mid-frame',
+            tabs: const [TabSpec(name: 'Main', modules: [])],
+          ),
+        );
+      await _settle(milliseconds: 200);
 
-    expect(client.layout.value?.name, 'Mid-frame');
-    expect(host.clientCount.value, 1);
-    expect(client.state.value, isNot(RemoteLinkState.failed));
-  });
+      expect(client.layout.value?.name, 'Mid-frame');
+      expect(host.clientCount.value, 1);
+      expect(client.state.value, isNot(RemoteLinkState.failed));
+    },
+  );
 
   test('the host notices a display leaving', () async {
     await connect();

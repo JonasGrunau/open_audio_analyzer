@@ -353,10 +353,14 @@ void main() {
       expect((WireSnapshot()..decode(reader.payload)).generation, 11);
     });
 
-    test('a stream that is not an Open Audio Analyzer stream fails on the first frame', () {
-      final reader = FrameReader()..add(Uint8List.fromList(List.filled(64, 7)));
-      expect(reader.moveNext, throwsA(isA<WireFormatException>()));
-    });
+    test(
+      'a stream that is not an Open Audio Analyzer stream fails on the first frame',
+      () {
+        final reader = FrameReader()
+          ..add(Uint8List.fromList(List.filled(64, 7)));
+        expect(reader.moveNext, throwsA(isA<WireFormatException>()));
+      },
+    );
 
     test('an absurd length is refused rather than allocated', () {
       final bytes = Uint8List(WireFrame.headerBytes);

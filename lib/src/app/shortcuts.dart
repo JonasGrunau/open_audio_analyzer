@@ -616,7 +616,9 @@ String shortcutsMarkdown() {
     ..writeln()
     ..writeln('Press `?` or `F1` in the application for the same list.')
     ..writeln()
-    ..writeln('`Ctrl` and `Cmd` are both accepted on every platform. Open Audio Analyzer does')
+    ..writeln(
+      '`Ctrl` and `Cmd` are both accepted on every platform. Open Audio Analyzer does',
+    )
     ..writeln('not ask the operating system which one you meant — a Mac with a')
     ..writeln('PC keyboard plugged into it takes either.')
     ..writeln()

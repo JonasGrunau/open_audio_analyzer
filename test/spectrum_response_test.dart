@@ -142,7 +142,8 @@ class _Harness extends StatefulWidget {
   State<_Harness> createState() => _HarnessState();
 }
 
-class _HarnessState extends State<_Harness> with SingleTickerProviderStateMixin {
+class _HarnessState extends State<_Harness>
+    with SingleTickerProviderStateMixin {
   late final MeterClock clock = MeterClock(engine: widget.source, vsync: this);
 
   @override
@@ -255,7 +256,8 @@ void main() {
     expect(
       stepped,
       greaterThan(quiet - (quiet - loud) ~/ 2),
-      reason: 'Normal jumped most of the way in one frame — it is not averaging',
+      reason:
+          'Normal jumped most of the way in one frame — it is not averaging',
     );
     expect(
       stepped,

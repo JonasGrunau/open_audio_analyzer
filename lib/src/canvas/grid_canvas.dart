@@ -95,7 +95,8 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
   ///
   /// The canvas is one of two things that can refuse; the keyboard is the
   /// other, and it lives above this widget. See [canvasNoticeProvider].
-  void _report(String message) => ref.read(canvasNoticeProvider.notifier).say(message);
+  void _report(String message) =>
+      ref.read(canvasNoticeProvider.notifier).say(message);
 
   // --- Dragging -----------------------------------------------------------
 
@@ -112,7 +113,11 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
       // to work out mid-gesture.
       duplicate: !resize && HardwareKeyboard.instance.isAltPressed,
     );
-    _preview.value = _Preview(rect: module.rect, source: module.rect, valid: true);
+    _preview.value = _Preview(
+      rect: module.rect,
+      source: module.rect,
+      valid: true,
+    );
     _controller.select(module.id);
   }
 
@@ -130,11 +135,23 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
       // which would slide the module left to make an oversized width fit. A
       // resize must never move the corner the user is not holding.
       target = origin.copyWith(
-        columns: (origin.columns + columns).clamp(session.kind.minColumns, kGridColumns - origin.column),
-        rows: (origin.rows + rows).clamp(session.kind.minRows, kGridRows - origin.row),
+        columns: (origin.columns + columns).clamp(
+          session.kind.minColumns,
+          kGridColumns - origin.column,
+        ),
+        rows: (origin.rows + rows).clamp(
+          session.kind.minRows,
+          kGridRows - origin.row,
+        ),
       );
     } else {
-      target = fitToGrid(origin.copyWith(column: origin.column + columns, row: origin.row + rows), session.kind);
+      target = fitToGrid(
+        origin.copyWith(
+          column: origin.column + columns,
+          row: origin.row + rows,
+        ),
+        session.kind,
+      );
     }
 
     _preview.value = _Preview(
@@ -142,7 +159,10 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
       source: origin,
       // A copy has to clear the module it was copied from; a move does not
       // have to clear the space it is vacating.
-      valid: ref.read(workspaceProvider).tab.accepts(target, ignoring: session.duplicate ? null : session.id),
+      valid: ref
+          .read(workspaceProvider)
+          .tab
+          .accepts(target, ignoring: session.duplicate ? null : session.id),
     );
   }
 
@@ -189,14 +209,31 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
       color: colors.panelRaised,
       position: menuPositionAt(context, globalPosition),
       items: [
-        if (module.kind == ModuleKind.numberBox) oaaMenuItem(context, _ModuleAction.metric, 'Metric — ${module.metric.label}', color: colors.textMuted),
+        if (module.kind == ModuleKind.numberBox)
+          oaaMenuItem(
+            context,
+            _ModuleAction.metric,
+            'Metric — ${module.metric.label}',
+            color: colors.textMuted,
+          ),
         // Named "Response" rather than a refresh rate, because that is what it
         // is: the analyser draws every frame the engine publishes at every
         // setting, and what changes is how long the drawn level takes to follow
         // one. See `SpectrumResponse`.
-        if (module.kind == ModuleKind.spectrumAnalyzer) oaaMenuItem(context, _ModuleAction.response, 'Response — ${module.spectrumResponse.label}', color: colors.textMuted),
+        if (module.kind == ModuleKind.spectrumAnalyzer)
+          oaaMenuItem(
+            context,
+            _ModuleAction.response,
+            'Response — ${module.spectrumResponse.label}',
+            color: colors.textMuted,
+          ),
         oaaMenuItem(context, _ModuleAction.duplicate, 'Duplicate'),
-        oaaMenuItem(context, _ModuleAction.delete, 'Delete', color: colors.over),
+        oaaMenuItem(
+          context,
+          _ModuleAction.delete,
+          'Delete',
+          color: colors.over,
+        ),
       ],
     );
 
@@ -222,21 +259,42 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
       context: context,
       color: colors.panelRaised,
       position: menuPositionAt(context, globalPosition),
-      items: [for (final metric in Metric.values) oaaMenuItem(context, metric, metric.label, color: metric == module.metric ? colors.textPrimary : colors.textMuted)],
+      items: [
+        for (final metric in Metric.values)
+          oaaMenuItem(
+            context,
+            metric,
+            metric.label,
+            color: metric == module.metric
+                ? colors.textPrimary
+                : colors.textMuted,
+          ),
+      ],
     );
 
     if (metric == null || !mounted) return;
     _controller.setModuleOption(module.id, 'metric', metric.id);
   }
 
-  Future<void> _showResponseMenu(Offset globalPosition, ModuleSpec module) async {
+  Future<void> _showResponseMenu(
+    Offset globalPosition,
+    ModuleSpec module,
+  ) async {
     final colors = OaaTheme.of(context);
     final current = module.spectrumResponse;
     final response = await showMenu<SpectrumResponse>(
       context: context,
       color: colors.panelRaised,
       position: menuPositionAt(context, globalPosition),
-      items: [for (final response in SpectrumResponse.values) oaaMenuItem(context, response, response.label, color: response == current ? colors.textPrimary : colors.textMuted)],
+      items: [
+        for (final response in SpectrumResponse.values)
+          oaaMenuItem(
+            context,
+            response,
+            response.label,
+            color: response == current ? colors.textPrimary : colors.textMuted,
+          ),
+      ],
     );
 
     if (response == null || !mounted) return;
@@ -282,12 +340,19 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
                   child: GestureDetector(
                     behavior: HitTestBehavior.opaque,
                     onTap: () => _controller.select(null),
-                    onLongPressStart: (details) => _showAddMenu(details.globalPosition, at: _rectAt(geometry, details.localPosition)),
-                    onSecondaryTapUp: (details) => _showAddMenu(details.globalPosition, at: _rectAt(geometry, details.localPosition)),
+                    onLongPressStart: (details) => _showAddMenu(
+                      details.globalPosition,
+                      at: _rectAt(geometry, details.localPosition),
+                    ),
+                    onSecondaryTapUp: (details) => _showAddMenu(
+                      details.globalPosition,
+                      at: _rectAt(geometry, details.localPosition),
+                    ),
                   ),
                 ),
 
-                if (tab.modules.isEmpty) const Positioned.fill(child: IgnorePointer(child: _Empty())),
+                if (tab.modules.isEmpty)
+                  const Positioned.fill(child: IgnorePointer(child: _Empty())),
 
                 for (final module in tab.modules)
                   Positioned.fromRect(
@@ -307,7 +372,8 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
                       gripSize: _gripSize,
                       onSelect: () => _controller.select(module.id),
                       onMenu: (position) => _showModuleMenu(position, module),
-                      onDragStart: (resize) => _beginDrag(module, resize: resize),
+                      onDragStart: (resize) =>
+                          _beginDrag(module, resize: resize),
                       onDragUpdate: (details) => _updateDrag(details, geometry),
                       onDragEnd: _endDrag,
                     ),
@@ -319,7 +385,11 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
                 Positioned.fill(
                   child: IgnorePointer(
                     child: CustomPaint(
-                      painter: _PreviewPainter(preview: _preview, geometry: geometry, colors: colors),
+                      painter: _PreviewPainter(
+                        preview: _preview,
+                        geometry: geometry,
+                        colors: colors,
+                      ),
                     ),
                   ),
                 ),
@@ -336,7 +406,9 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
                     child: Consumer(
                       builder: (context, ref, _) {
                         final message = ref.watch(canvasNoticeProvider);
-                        return message == null ? const SizedBox.shrink() : _Toast(message: message);
+                        return message == null
+                            ? const SizedBox.shrink()
+                            : _Toast(message: message);
                       },
                     ),
                   ),
@@ -393,7 +465,11 @@ class _ModuleSlot extends StatelessWidget {
       fit: StackFit.expand,
       children: [
         // Beneath everything: select and context-menu anywhere on the module.
-        GestureDetector(behavior: HitTestBehavior.opaque, onTap: onSelect, onSecondaryTapUp: (details) => onMenu(details.globalPosition)),
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onSelect,
+          onSecondaryTapUp: (details) => onMenu(details.globalPosition),
+        ),
 
         // The title bar is the drag handle. Dragging by the body is tempting
         // and wrong: a histogram that can be scrubbed and a spectrum with a
@@ -430,7 +506,14 @@ class _ModuleSlot extends StatelessWidget {
           ),
         ),
 
-        ModuleHost(spec: module, engine: engine, clock: clock, calibration: calibration, selected: selected, onMenu: () => onMenu(_centreOf(context))),
+        ModuleHost(
+          spec: module,
+          engine: engine,
+          clock: clock,
+          calibration: calibration,
+          selected: selected,
+          onMenu: () => onMenu(_centreOf(context)),
+        ),
 
         Positioned(
           right: 0,
@@ -449,7 +532,11 @@ class _ModuleSlot extends StatelessWidget {
               onPanUpdate: onDragUpdate,
               onPanEnd: (_) => onDragEnd(),
               onPanCancel: onDragEnd,
-              child: CustomPaint(painter: _GripPainter(selected ? colors.textPrimary : colors.textFaint)),
+              child: CustomPaint(
+                painter: _GripPainter(
+                  selected ? colors.textPrimary : colors.textFaint,
+                ),
+              ),
             ),
           ),
         ),
@@ -496,7 +583,11 @@ class _GripPainter extends MeterPainter {
 
     for (var i = 1; i <= 2; i++) {
       final inset = i * (side / 3);
-      canvas.drawLine(Offset(right - inset, bottom), Offset(right, bottom - inset), _stroke);
+      canvas.drawLine(
+        Offset(right - inset, bottom),
+        Offset(right, bottom - inset),
+        _stroke,
+      );
     }
   }
 
@@ -507,7 +598,11 @@ class _GripPainter extends MeterPainter {
 /// Where a dragged module would land.
 @immutable
 class _Preview {
-  const _Preview({required this.rect, required this.source, required this.valid});
+  const _Preview({
+    required this.rect,
+    required this.source,
+    required this.valid,
+  });
 
   final GridRect rect;
 
@@ -525,14 +620,24 @@ class _Preview {
   final bool valid;
 
   @override
-  bool operator ==(Object other) => other is _Preview && other.rect == rect && other.source == source && other.valid == valid;
+  bool operator ==(Object other) =>
+      other is _Preview &&
+      other.rect == rect &&
+      other.source == source &&
+      other.valid == valid;
 
   @override
   int get hashCode => Object.hash(rect, source, valid);
 }
 
 class _DragSession {
-  _DragSession({required this.id, required this.kind, required this.origin, required this.resize, required this.duplicate});
+  _DragSession({
+    required this.id,
+    required this.kind,
+    required this.origin,
+    required this.resize,
+    required this.duplicate,
+  });
 
   final String id;
   final ModuleKind kind;
@@ -550,7 +655,11 @@ class _DragSession {
 }
 
 class _PreviewPainter extends MeterPainter {
-  _PreviewPainter({required this.preview, required this.geometry, required this.colors}) : super(repaint: preview) {
+  _PreviewPainter({
+    required this.preview,
+    required this.geometry,
+    required this.colors,
+  }) : super(repaint: preview) {
     _guide = Paint()
       ..color = colors.hairline
       ..strokeWidth = OaaStroke.hairline
@@ -612,7 +721,9 @@ class _PreviewPainter extends MeterPainter {
     final sheet = Path()
       ..fillType = PathFillType.evenOdd
       ..addRRect(border)
-      ..addRRect(RRect.fromRectAndRadius(geometry.rectFor(target.source), OaaRadius.sm));
+      ..addRRect(
+        RRect.fromRectAndRadius(geometry.rectFor(target.source), OaaRadius.sm),
+      );
 
     canvas.drawPath(sheet, _scrim);
 
@@ -647,7 +758,10 @@ class _PreviewPainter extends MeterPainter {
     // spec" across readings that are still live underneath. Refusal keeps
     // `over` — see its note in tokens.dart.
     final colour = target.valid ? colors.textPrimary : colors.over;
-    final box = RRect.fromRectAndRadius(geometry.rectFor(target.rect), OaaRadius.sm);
+    final box = RRect.fromRectAndRadius(
+      geometry.rectFor(target.rect),
+      OaaRadius.sm,
+    );
 
     canvas.drawRRect(box, Paint()..color = colour.withValues(alpha: 0.10));
     canvas.drawRRect(
@@ -660,7 +774,9 @@ class _PreviewPainter extends MeterPainter {
   }
 
   @override
-  bool shouldRepaint(_PreviewPainter oldDelegate) => oldDelegate.geometry.size != geometry.size || oldDelegate.colors != colors;
+  bool shouldRepaint(_PreviewPainter oldDelegate) =>
+      oldDelegate.geometry.size != geometry.size ||
+      oldDelegate.colors != colors;
 }
 
 class _Empty extends StatelessWidget {
@@ -673,9 +789,15 @@ class _Empty extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text('EMPTY TAB', style: OaaType.label.copyWith(color: colors.textFaint)),
+          Text(
+            'EMPTY TAB',
+            style: OaaType.label.copyWith(color: colors.textFaint),
+          ),
           const SizedBox(height: Space.sm),
-          Text('Right-click anywhere to add a module.', style: OaaType.caption.copyWith(color: colors.textFaint)),
+          Text(
+            'Right-click anywhere to add a module.',
+            style: OaaType.caption.copyWith(color: colors.textFaint),
+          ),
         ],
       ),
     );
@@ -699,13 +821,19 @@ class _Toast extends StatelessWidget {
       alignment: Alignment.bottomCenter,
       child: Container(
         margin: const EdgeInsets.only(bottom: Space.md),
-        padding: const EdgeInsets.symmetric(horizontal: Space.md, vertical: Space.sm),
+        padding: const EdgeInsets.symmetric(
+          horizontal: Space.md,
+          vertical: Space.sm,
+        ),
         decoration: BoxDecoration(
           color: colors.panelRaised,
           borderRadius: OaaRadius.allSm,
           border: Border.all(color: colors.warn, width: OaaStroke.hairline),
         ),
-        child: Text(message, style: OaaType.caption.copyWith(color: colors.textPrimary)),
+        child: Text(
+          message,
+          style: OaaType.caption.copyWith(color: colors.textPrimary),
+        ),
       ),
     );
   }

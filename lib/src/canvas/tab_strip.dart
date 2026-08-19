@@ -38,7 +38,10 @@ class _TabStripState extends ConsumerState<TabStrip> {
     setState(() {
       _editing = index;
       _rename.text = current;
-      _rename.selection = TextSelection(baseOffset: 0, extentOffset: current.length);
+      _rename.selection = TextSelection(
+        baseOffset: 0,
+        extentOffset: current.length,
+      );
     });
 
     // **Asked for again on the next frame, and the field's own `autofocus` is
@@ -69,7 +72,9 @@ class _TabStripState extends ConsumerState<TabStrip> {
     // up from, so every shortcut in the application is dead until the user
     // clicks. `previouslyFocusedChild` gives it back to whatever held it before
     // the rename began, which is the canvas.
-    _renameFocus.unfocus(disposition: UnfocusDisposition.previouslyFocusedChild);
+    _renameFocus.unfocus(
+      disposition: UnfocusDisposition.previouslyFocusedChild,
+    );
 
     ref.read(workspaceProvider.notifier).renameTab(index, _rename.text);
   }
@@ -111,7 +116,9 @@ class _TabStripState extends ConsumerState<TabStrip> {
 
   Future<void> _addModule() async {
     final box = context.findRenderObject() as RenderBox?;
-    final anchor = box == null ? Offset.zero : box.localToGlobal(Offset(box.size.width, box.size.height));
+    final anchor = box == null
+        ? Offset.zero
+        : box.localToGlobal(Offset(box.size.width, box.size.height));
 
     final kind = await showModuleKindMenu(context, anchor);
     if (kind == null || !mounted) return;
@@ -131,7 +138,10 @@ class _TabStripState extends ConsumerState<TabStrip> {
         decoration: BoxDecoration(
           color: colors.background,
           border: Border(
-            bottom: BorderSide(color: colors.hairline, width: OaaStroke.hairline),
+            bottom: BorderSide(
+              color: colors.hairline,
+              width: OaaStroke.hairline,
+            ),
           ),
         ),
         child: Padding(
@@ -152,9 +162,18 @@ class _TabStripState extends ConsumerState<TabStrip> {
                     children: [
                       for (var i = 0; i < tabs.length; i++)
                         if (_editing == i)
-                          _RenameField(controller: _rename, focusNode: _renameFocus, onCommit: _commitRename)
+                          _RenameField(
+                            controller: _rename,
+                            focusNode: _renameFocus,
+                            onCommit: _commitRename,
+                          )
                         else
-                          _Tab(label: tabs[i].name, active: i == workspace.activeTab, onTap: () => controller.selectTab(i), onMenu: (position) => _tabMenu(i, position)),
+                          _Tab(
+                            label: tabs[i].name,
+                            active: i == workspace.activeTab,
+                            onTap: () => controller.selectTab(i),
+                            onMenu: (position) => _tabMenu(i, position),
+                          ),
                       // Inside the scroller, so that "add a tab" stays beside
                       // the last tab instead of being carried to the far end of
                       // the strip and sitting against the history arrows.
@@ -184,7 +203,8 @@ class _TabStripState extends ConsumerState<TabStrip> {
                 tooltip: 'Redo',
                 enabled: controller.canRedo,
                 onPressed: controller.redo,
-                builder: (color) => _HistoryAction(label: 'REDO', color: color, forward: true),
+                builder: (color) =>
+                    _HistoryAction(label: 'REDO', color: color, forward: true),
               ),
               // The strip holds two kinds of action, and until this rule was
               // here they ran together as one row of four: `UNDO` and `REDO`
@@ -221,7 +241,12 @@ class _TabStripState extends ConsumerState<TabStrip> {
 enum _TabAction { rename, duplicate, delete }
 
 class _Tab extends StatelessWidget {
-  const _Tab({required this.label, required this.active, required this.onTap, required this.onMenu});
+  const _Tab({
+    required this.label,
+    required this.active,
+    required this.onTap,
+    required this.onMenu,
+  });
 
   final String label;
   final bool active;
@@ -265,10 +290,18 @@ class _Tab extends StatelessWidget {
           // textFaint when not — so the rule is confirming, not carrying.
           decoration: BoxDecoration(
             border: Border(
-              bottom: BorderSide(color: active ? colors.textPrimary : Colors.transparent, width: OaaStroke.emphasis),
+              bottom: BorderSide(
+                color: active ? colors.textPrimary : Colors.transparent,
+                width: OaaStroke.emphasis,
+              ),
             ),
           ),
-          child: Text(label.toUpperCase(), style: OaaType.label.copyWith(color: active ? colors.textPrimary : colors.textFaint)),
+          child: Text(
+            label.toUpperCase(),
+            style: OaaType.label.copyWith(
+              color: active ? colors.textPrimary : colors.textFaint,
+            ),
+          ),
         ),
       ),
     );
@@ -276,7 +309,11 @@ class _Tab extends StatelessWidget {
 }
 
 class _RenameField extends StatelessWidget {
-  const _RenameField({required this.controller, required this.focusNode, required this.onCommit});
+  const _RenameField({
+    required this.controller,
+    required this.focusNode,
+    required this.onCommit,
+  });
 
   final TextEditingController controller;
   final FocusNode focusNode;
@@ -297,7 +334,11 @@ class _RenameField extends StatelessWidget {
             style: OaaType.label.copyWith(color: colors.textPrimary),
             cursorColor: colors.textPrimary,
             cursorWidth: OaaStroke.hairline,
-            decoration: const InputDecoration(isDense: true, border: InputBorder.none, contentPadding: EdgeInsets.zero),
+            decoration: const InputDecoration(
+              isDense: true,
+              border: InputBorder.none,
+              contentPadding: EdgeInsets.zero,
+            ),
             textCapitalization: TextCapitalization.words,
             onSubmitted: (_) => onCommit(),
             // Committing on tap-outside as well as on Enter. A field that can
@@ -336,10 +377,18 @@ class _StripRule extends StatelessWidget {
     return SizedBox(
       height: TabStrip.height,
       child: Padding(
-        padding: const EdgeInsets.only(left: Space.xs, right: Space.xs, top: _inset, bottom: _inset + OaaStroke.emphasis),
+        padding: const EdgeInsets.only(
+          left: Space.xs,
+          right: Space.xs,
+          top: _inset,
+          bottom: _inset + OaaStroke.emphasis,
+        ),
         child: ColoredBox(
           color: colors.hairline,
-          child: const SizedBox(width: OaaStroke.hairline, height: double.infinity),
+          child: const SizedBox(
+            width: OaaStroke.hairline,
+            height: double.infinity,
+          ),
         ),
       ),
     );
@@ -349,7 +398,12 @@ class _StripRule extends StatelessWidget {
 /// The shell every action in this row is built from: one height, one padding,
 /// one hit target, one place where "disabled" is decided.
 class _StripAction extends StatelessWidget {
-  const _StripAction({required this.builder, required this.onPressed, required this.tooltip, this.enabled = true});
+  const _StripAction({
+    required this.builder,
+    required this.onPressed,
+    required this.tooltip,
+    this.enabled = true,
+  });
 
   /// Handed the colour the contents should take.
   ///
@@ -388,7 +442,9 @@ class _StripAction extends StatelessWidget {
           onTap: enabled ? onPressed : null,
           behavior: HitTestBehavior.opaque,
           child: MouseRegion(
-            cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
+            cursor: enabled
+                ? SystemMouseCursors.click
+                : SystemMouseCursors.basic,
             child: Container(
               height: TabStrip.height,
               // **The active tab's rule is reserved here as well.** A `_Tab`
@@ -399,7 +455,11 @@ class _StripAction extends StatelessWidget {
               // this row sat a pixel below the tab labels because of that, and
               // the `+` sits directly beside the last tab where a pixel is
               // impossible to miss.
-              padding: const EdgeInsets.only(left: Space.sm, right: Space.sm, bottom: OaaStroke.emphasis),
+              padding: const EdgeInsets.only(
+                left: Space.sm,
+                right: Space.sm,
+                bottom: OaaStroke.emphasis,
+              ),
               alignment: Alignment.center,
               child: builder(enabled ? colors.textMuted : colors.textFaint),
             ),
@@ -488,7 +548,11 @@ class _Plus extends StatelessWidget {
 /// optical weight of the hairlines the rest of the interface is made from — and
 /// a second way of drawing marks is worse than either.
 class _HistoryAction extends StatelessWidget {
-  const _HistoryAction({required this.label, required this.color, this.forward = false});
+  const _HistoryAction({
+    required this.label,
+    required this.color,
+    this.forward = false,
+  });
 
   final String label;
   final Color color;
@@ -521,7 +585,11 @@ class _HistoryAction extends StatelessWidget {
     children: [
       Transform.translate(
         offset: const Offset(0, _drop),
-        child: OaaGlyph(forward ? OaaMark.redo : OaaMark.undo, color: color, size: _size),
+        child: OaaGlyph(
+          forward ? OaaMark.redo : OaaMark.undo,
+          color: color,
+          size: _size,
+        ),
       ),
       const SizedBox(width: Space.xs),
       Text(label, style: OaaType.label.copyWith(color: color)),

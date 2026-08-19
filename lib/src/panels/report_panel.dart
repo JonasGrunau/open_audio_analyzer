@@ -248,7 +248,8 @@ class _ReportPanelState extends ConsumerState<ReportPanel> {
     if (bytes == null) return;
 
     final location = await getSaveLocation(
-      suggestedName: '${_stem(report.fileName)} — Open Audio Analyzer report.png',
+      suggestedName:
+          '${_stem(report.fileName)} — Open Audio Analyzer report.png',
       acceptedTypeGroups: const [
         XTypeGroup(label: 'PNG', extensions: ['png']),
       ],
