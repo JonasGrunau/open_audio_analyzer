@@ -1150,6 +1150,10 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The canvas's refusal toast is a provider rather than private widget state, so
   the shortcut layer above the canvas reports "no room for that" through the
   same channel a refused drop does instead of growing a second one.
+- The README leads with the application icon, a badge row, a table of contents
+  and the documentation site, and it now enumerates the thirteen modules and
+  what each one shows — a count it stated and never listed. Presentation only:
+  nothing it says about what Open Audio Analyzer measures changed.
 
 ## [0.1.0] — 2026-08-15
 
