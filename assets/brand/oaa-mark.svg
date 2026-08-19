@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  SPDX-License-Identifier: GPL-3.0-or-later
+
+  Open Audio Analyzer's mark on its own, for the places that are too small or
+  too square for the name: an avatar, a favicon source, a tab.
+
+  The same four bars as the application icon (`_Mark` in
+  `packaging/icon/make_icons.dart`) with the tile taken away, and the same
+  geometry as `oaa-logo.svg`. That file's header is where the numbers come
+  from and what may not be changed here alone; read it before touching this.
+  In particular the tallest bar is the second one on purpose, because four
+  bars that climb in order are the cellular signal glyph.
+
+  It carries no background of its own, so on a pale page the bars are the only
+  thing drawn. That is the intent: the icon is the artwork that has a tile.
+
+  Keep runs of hyphens out of this comment. Two in a row end an XML comment and
+  every renderer that loads the file through an img element then shows a broken
+  image with no error anywhere.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100" role="img" aria-labelledby="oaa-mark-title">
+  <title id="oaa-mark-title">Open Audio Analyzer</title>
+
+  <!-- Four bars: up, peak, valley, up. -->
+  <g fill="#35E0C4">
+    <path d="M0,41.6364a3.6364,3.6364 0 0 1 3.6364,-3.6364h10.9091a3.6364,3.6364 0 0 1 3.6364,3.6364v54.7273a3.6364,3.6364 0 0 1 -3.6364,3.6364h-10.9091a3.6364,3.6364 0 0 1 -3.6364,-3.6364z"/>
+    <path d="M27.2727,3.6364a3.6364,3.6364 0 0 1 3.6364,-3.6364h10.9091a3.6364,3.6364 0 0 1 3.6364,3.6364v92.7273a3.6364,3.6364 0 0 1 -3.6364,3.6364h-10.9091a3.6364,3.6364 0 0 1 -3.6364,-3.6364z"/>
+    <path d="M54.5455,59.6364a3.6364,3.6364 0 0 1 3.6364,-3.6364h10.9091a3.6364,3.6364 0 0 1 3.6364,3.6364v36.7273a3.6364,3.6364 0 0 1 -3.6364,3.6364h-10.9091a3.6364,3.6364 0 0 1 -3.6364,-3.6364z"/>
+    <path d="M81.8182,23.6364a3.6364,3.6364 0 0 1 3.6364,-3.6364h10.9091a3.6364,3.6364 0 0 1 3.6364,3.6364v72.7273a3.6364,3.6364 0 0 1 -3.6364,3.6364h-10.9091a3.6364,3.6364 0 0 1 -3.6364,-3.6364z"/>
+  </g>
+
+  <!-- and the tallest one is over. -->
+    <path d="M27.2727,3.6364a3.6364,3.6364 0 0 1 3.6364,-3.6364h10.9091a3.6364,3.6364 0 0 1 3.6364,3.6364v18.3636h-18.1818z" fill="#FF4D4D"/>
+</svg>

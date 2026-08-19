@@ -2,40 +2,70 @@
 <!--
   SPDX-License-Identifier: GPL-3.0-or-later
 
-  Open Audio Analyzer's mark, as a vector. The same geometry as `_Mark` in make_icons.dart, and
-  the only place in this repository where the same shape is described twice.
-  It is not generated from that file because the one consumer — Linux's
-  `scalable` hicolor directory — wants a vector, and writing an SVG emitter to
-  avoid twenty lines of hand-written path data would be the more expensive
-  duplicate.
+  Open Audio Analyzer's mark, as a vector, for the one consumer that wants
+  one: Linux's `scalable` hicolor directory. The same geometry as `_Mark` in
+  make_icons.dart, and the only place in this repository where the same shape
+  is described twice.
+
+  It was not generated because there was no SVG emitter and writing one to
+  save twenty lines of path data would have been the more expensive duplicate.
+  There is one now — `_iconLayer` writes Apple's layers — so that reason has
+  expired, and what is left is only that nobody has moved this file across.
+  The bars here and the bars it emits are the same four paths at the same
+  numbers; this file adds the rounded tile and the gradient, which is the part
+  that would have to be written.
+
+  Being the one file `make_icons.dart` does not write, it is also the one file
+  `dart run packaging/icon/make_icons.dart` cannot correct, and no program
+  reads it — so when it disagrees with `_Mark`, everything still builds, every
+  test still passes, and the only symptom is that Linux ships a different icon
+  from the other five platforms. Change the mark and this is the file to check
+  by hand.
 
   Every number below is derived from the unit values in make_icons.dart on a
   1024 canvas:
 
-      inset 0.2      ->  204.8 on each side, drawable 204.8 .. 819.2
-      corner 0.2     ->  radius 204.8
-      edge 0.012     ->  stroke 12.288, drawn inside the rounded square
-      bars, 4, 2:1   ->  unit 55.8545, bar 111.709, pitch 167.5636
-      heights        ->  0.34 0.55 0.74 1.00 of 614.4
+      inset 0.2       ->  204.8 on each side, drawable 204.8 .. 819.2
+      corner 0.2      ->  radius 204.8
+      bars, 4, 2:1    ->  unit 55.8545, bar 111.7091, pitch 167.5636
+      barRadius 0.2   ->  22.3418 on each corner of a bar
+      heights         ->  0.62 1.00 0.44 0.80 of 614.4
       cap 0.22       ->  135.168 of the tallest bar, from its top
+
+  The tallest bar is the SECOND one, not the last. Four bars that climb in
+  order are the cellular signal glyph, which is drawn exactly that way in the
+  status bar of every phone this icon appears on; the valley at the third bar
+  is what makes it a meter instead. `_Mark.tallest` finds the peak rather than
+  assuming it, so moving it is a change to the heights and nothing else.
+
+  The ground is a diagonal ramp from `OaaColors.hairline` to
+  `OaaColors.background`. There is no border: a hairline is a one-pixel
+  detail that iOS masks off, Android crops, and 16 px cannot draw.
 
   If the mark changes, change it there first and bring these across.
 -->
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
-  <title>Open Audio Analyzer</title>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024"
+     width="1024" height="1024" role="img" aria-labelledby="oaa-icon-title">
+  <title id="oaa-icon-title">Open Audio Analyzer</title>
 
-  <!-- The tile: graphite, with a hairline so it has an edge on a pale desktop. -->
-  <rect x="6.144" y="6.144" width="1011.712" height="1011.712" rx="198.656"
-        fill="#0B0C0E" stroke="#2E343C" stroke-width="12.288"/>
+  <defs>
+    <linearGradient id="ground" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1F2328"/>
+      <stop offset="1" stop-color="#0B0C0E"/>
+    </linearGradient>
+  </defs>
 
-  <!-- Four bars, rising. -->
+  <!-- The tile. -->
+  <rect x="0" y="0" width="1024" height="1024" rx="204.8" fill="url(#ground)"/>
+
+  <!-- Four bars: up, peak, valley, up. -->
   <g fill="#35E0C4">
-    <rect x="204.800" y="610.304" width="111.709" height="208.896"/>
-    <rect x="372.364" y="481.280" width="111.709" height="337.920"/>
-    <rect x="539.927" y="364.544" width="111.709" height="454.656"/>
-    <rect x="707.491" y="204.800" width="111.709" height="614.400"/>
+    <path d="M204.8,460.6138a22.3418,22.3418 0 0 1 22.3418,-22.3418h67.0255a22.3418,22.3418 0 0 1 22.3418,22.3418v336.2444a22.3418,22.3418 0 0 1 -22.3418,22.3418h-67.0255a22.3418,22.3418 0 0 1 -22.3418,-22.3418z"/>
+    <path d="M372.3636,227.1418a22.3418,22.3418 0 0 1 22.3418,-22.3418h67.0255a22.3418,22.3418 0 0 1 22.3418,22.3418v569.7164a22.3418,22.3418 0 0 1 -22.3418,22.3418h-67.0255a22.3418,22.3418 0 0 1 -22.3418,-22.3418z"/>
+    <path d="M539.9273,571.2058a22.3418,22.3418 0 0 1 22.3418,-22.3418h67.0255a22.3418,22.3418 0 0 1 22.3418,22.3418v225.6524a22.3418,22.3418 0 0 1 -22.3418,22.3418h-67.0255a22.3418,22.3418 0 0 1 -22.3418,-22.3418z"/>
+    <path d="M707.4909,350.0218a22.3418,22.3418 0 0 1 22.3418,-22.3418h67.0255a22.3418,22.3418 0 0 1 22.3418,22.3418v446.8364a22.3418,22.3418 0 0 1 -22.3418,22.3418h-67.0255a22.3418,22.3418 0 0 1 -22.3418,-22.3418z"/>
   </g>
 
   <!-- and the tallest one is over. -->
-  <rect x="707.491" y="204.800" width="111.709" height="135.168" fill="#FF4D4D"/>
+  <path d="M372.3636,227.1418a22.3418,22.3418 0 0 1 22.3418,-22.3418h67.0255a22.3418,22.3418 0 0 1 22.3418,22.3418v112.8262h-111.7091z" fill="#FF4D4D"/>
 </svg>

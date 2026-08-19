@@ -138,10 +138,12 @@ Two things that will otherwise cost you an afternoon:
 dart run packaging/icon/make_icons.dart
 ```
 
-Regenerates every size the four installers ask for, into the platform
-directories and `packaging/`. The mark is described once, as geometry, in that
-file; `packaging/icon/oaa.svg` is its vector twin and carries the same numbers.
-The outputs are committed, so a release runner never runs this.
+Regenerates every size and shape the six platforms ask for — the four desktop
+installers, Android's adaptive icon, and the layered `AppIcon.icon` that macOS
+and iOS render for themselves — into the platform directories and `packaging/`. The mark is described once, as geometry,
+in that file; `packaging/icon/oaa.svg` is its vector twin and carries the same
+numbers, and `assets/brand/` is the same mark without its tile. The outputs are
+committed, so a release runner never runs this.
 
 ## The documentation site
 

@@ -285,12 +285,19 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **The icon now covers iOS and Android too.** Both platforms were still
   shipping Flutter's default logo — the blue chevron on white — so the app
   installed on a phone or tablet under somebody else's mark. iOS gets the full
-  asset catalogue, drawn square and alpha-free because it applies its own
-  rounding and rejects a transparent icon; Android gets an adaptive icon, so
-  the launcher masks it to whatever shape it uses and Android 13's themed home
-  screen has a monochrome layer to tint instead of shrinking the icon inside a
-  grey circle. There is a Play Store icon in `packaging/android/` for the
-  console to be given by hand.
+  layered icon described below; Android gets an adaptive icon, so the launcher
+  masks it to whatever shape it uses and Android 13's themed home screen has a
+  monochrome layer to tint instead of shrinking the icon inside a grey circle.
+  There is a Play Store icon in `packaging/android/` for the console to be
+  given by hand.
+- **The macOS and iOS icon is layered, so the system lights it.** Both
+  platforms now get an `AppIcon.icon` document — the graphite ground and the
+  bars as separate layers — instead of a folder of pre-composited PNGs. macOS
+  26 and iOS 26 render it with their own specular highlight and shadow, and
+  derive the dark and tinted appearances from it; on a themed or dark home
+  screen the icon now follows instead of staying light. Older systems are
+  unaffected: the same document still produces a classic `.icns` back to macOS
+  10.15 and flat icons back to iOS 13.
 
 ### ⚡ Changed
 
