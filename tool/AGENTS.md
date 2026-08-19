@@ -4,7 +4,7 @@ Repository scripts. Nothing here ships. GPL-3.0-or-later.
 
 | File | Purpose |
 |------|---------|
-| `docs.dart` | Builds the documentation site from the Markdown in this repository. `dart run tool/docs.dart --out build/docs`. |
+| `docs.dart` | Builds the documentation site from the Markdown in this repository, and the mark from `assets/brand/oaa-mark.svg`. `dart run tool/docs.dart --out build/docs`. |
 | `bench_spectrogram.dart` | The measurement behind the recording figures in `lib/src/modules/spectrogram.dart`. `flutter test tool/bench_spectrogram.dart`. |
 
 ## Rules
@@ -28,6 +28,16 @@ Repository scripts. Nothing here ships. GPL-3.0-or-later.
   "205 µs" was quoted here for a phase after its benchmark was gone, and turned
   out to be a recording cost being read as a frame cost. Do not add it to
   `ci.yml`, and do not describe it anywhere as something CI checks.
+
+- **The mark is read from `assets/brand/oaa-mark.svg`, never held here.** It
+  was held here, as two hand-copied constants of the icon's geometry, and it
+  went stale the first time the mark was redrawn: every icon the project ships
+  followed, and the site kept publishing the previous identity in its sidebar
+  and in the browser tab of every page. Nothing caught it — the site has no
+  test, and the geometry was numbers inside a string literal 200 lines from
+  where it was used. A missing file now fails the run. The same applies to
+  anything else the site shows about itself: read it from the file that owns
+  it, because a copy in a generator is a copy no reviewer will diff.
 
 - **The page list is written out, not globbed.** A site whose contents are
   whatever happens to be in `docs/` publishes `PLAN.md` to users the day

@@ -15,7 +15,7 @@ publishes. GPL-3.0-or-later, except the two font families, which are SIL OFL
 | `fonts/GoogleSansCode-LICENSE.txt` | SIL OFL 1.1. Ships with any binary that bundles the family. |
 | `brand/oaa-logo.svg` | The logo: mark and name, for dark backgrounds. The primary artwork. |
 | `brand/oaa-logo-light.svg` | The same lockup with the name in `background`, for light backgrounds. |
-| `brand/oaa-mark.svg` | The mark alone, for anything too small or too square for the name. |
+| `brand/oaa-mark.svg` | The mark alone, for anything too small or too square for the name. Read at build time by `tool/docs.dart`, which inlines it as the site's header mark and favicon. |
 
 ## Rules
 
@@ -34,7 +34,10 @@ publishes. GPL-3.0-or-later, except the two font families, which are SIL OFL
   third and fourth copy of the same four bars, which is one more duplicate than
   this repository would like and is accepted for the same reason `oaa.svg` is:
   the consumers want a vector and writing an SVG emitter costs more than the
-  twenty lines it would save. The consequence is a rule — **the mark changes in
+  twenty lines it would save. There were a fifth and sixth copy — two constants
+  inside `tool/docs.dart` — and they are gone: the site reads `oaa-mark.svg`,
+  because that pair went stale the first time the mark was redrawn and
+  published the previous identity on every page until somebody looked. The consequence is a rule — **the mark changes in
   `make_icons.dart` first, and is brought across afterwards.** A logo and an
   icon that disagree about the shape are two identities, and the one people see
   first is whichever they happen to meet first.

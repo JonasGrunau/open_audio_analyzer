@@ -150,6 +150,19 @@ void main(List<String> arguments) {
   stdout.writeln('Open Audio Analyzer documentation -> ${directory.path}');
 
   var failed = false;
+
+  // Before any page, because every page inlines it twice. A missing mark is a
+  // failure rather than a site with a hole in it: this ran for a phase with a
+  // stale copy of the mark compiled in and nothing said so, which is the
+  // failure this read exists to make impossible.
+  final markFile = File(_markSource);
+  if (!markFile.existsSync()) {
+    stderr.writeln('  MISSING  $_markSource');
+    exitCode = 1;
+    return;
+  }
+  _mark = _readMark(markFile);
+  stdout.writeln('  mark'.padRight(28) + _markSource);
   for (final page in pages) {
     final source = File(page.source);
     if (!source.existsSync()) {
@@ -420,10 +433,13 @@ String _inline(String text) {
   // matches inside any sentence containing a bare number — "the version at
   // offset 0 is repeated" would come back carrying a code span nobody wrote —
   // and docs/WIRE.md is almost entirely sentences containing bare numbers. NUL
-  // cannot occur in the source and passes through _escape untouched.
+  // cannot occur in the source and passes through _escape untouched. Written
+  // as `\u0000` rather than as the byte: a literal NUL makes this file `data`
+  // to `file`, and binary to `grep`, which is how a stale copy of the mark
+  // 200 lines below survived every search anybody ran for it.
   var work = text.replaceAllMapped(RegExp(r'`([^`]+)`'), (match) {
     code.add(match.group(1)!);
-    return ' ${code.length - 1} ';
+    return '\u0000${code.length - 1}\u0000';
   });
 
   work = _escape(work);
@@ -446,7 +462,10 @@ String _inline(String text) {
   );
 
   for (var i = 0; i < code.length; i++) {
-    work = work.replaceAll(' $i ', '<code>${_escape(code[i])}</code>');
+    work = work.replaceAll(
+      '\u0000$i\u0000',
+      '<code>${_escape(code[i])}</code>',
+    );
   }
   return work;
 }
@@ -598,29 +617,58 @@ String _shell(Page page, _Rendered rendered) {
 ''';
 }
 
-/// The mark from `packaging/icon/oaa.svg`, small enough to inline twice.
-const String _brandMark =
-    '<svg viewBox="0 0 1024 1024" width="24" height="24" aria-hidden="true">'
-    '<rect x="6" y="6" width="1012" height="1012" rx="199" fill="#0B0C0E" '
-    'stroke="#2E343C" stroke-width="12"/>'
-    '<g fill="#35E0C4">'
-    '<rect x="204.8" y="610.3" width="111.7" height="208.9"/>'
-    '<rect x="372.4" y="481.3" width="111.7" height="337.9"/>'
-    '<rect x="539.9" y="364.5" width="111.7" height="454.7"/>'
-    '<rect x="707.5" y="204.8" width="111.7" height="614.4"/></g>'
-    '<rect x="707.5" y="204.8" width="111.7" height="135.2" fill="#FF4D4D"/>'
-    '</svg>';
+/// The one file the site's mark comes from.
+///
+/// **It used to be two constants here, and they went stale without a word.**
+/// They were hand-copied rectangles of the icon's geometry, and when the mark
+/// was redrawn — four bars reading up, peak, valley, up, with the tallest
+/// capped in `over`, rather than four climbing in order — every icon the
+/// project ships followed and the site did not. It kept publishing the
+/// previous identity, on every page, in the sidebar and in the browser tab.
+///
+/// Nothing could have caught it. The site has no test, the geometry was
+/// numbers in a string, and the constants sat 200 lines below the only place
+/// they were used. Reading the file instead means the site cannot hold a
+/// version of the mark at all: `assets/brand/oaa-mark.svg` follows
+/// `packaging/icon/make_icons.dart`, and this follows that.
+const String _markSource = 'assets/brand/oaa-mark.svg';
 
-const String _favicon =
-    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">'
-    '<rect width="1024" height="1024" rx="205" fill="#0B0C0E"/>'
-    '<g fill="#35E0C4">'
-    '<rect x="204.8" y="610.3" width="111.7" height="208.9"/>'
-    '<rect x="372.4" y="481.3" width="111.7" height="337.9"/>'
-    '<rect x="539.9" y="364.5" width="111.7" height="454.7"/>'
-    '<rect x="707.5" y="204.8" width="111.7" height="614.4"/></g>'
-    '<rect x="707.5" y="204.8" width="111.7" height="135.2" fill="#FF4D4D"/>'
-    '</svg>';
+/// [_markSource] with its XML prolog and comments taken off, ready to inline.
+///
+/// Assigned by [main] before any page is rendered, because the alternative is
+/// reading and cleaning the same eight lines once per page.
+late final String _mark;
+
+/// The mark as the header inlines it: hidden from assistive technology.
+///
+/// The file names itself with a `<title>`, which is right for an `<img>` and
+/// wrong here — the link it sits inside is already labelled by the word beside
+/// it, and a screen reader announcing "Open Audio Analyzer Open Audio
+/// Analyzer" is the mark being read as content. The size is CSS rather than
+/// the attributes it carries, so the file may be any square it likes.
+String get _brandMark => _mark
+    .replaceAll(RegExp(r'<title\b.*?</title>', dotAll: true), '')
+    .replaceFirst(RegExp(r'\srole="img"'), '')
+    .replaceFirst(RegExp(r'\saria-labelledby="[^"]*"'), '')
+    .replaceFirst('<svg', '<svg aria-hidden="true"');
+
+/// The favicon, which is the same mark and carries no tile.
+///
+/// It had a graphite one, because it was a copy of the application icon. The
+/// icon has a tile because a launcher gives it a square to fill; a tab does
+/// not, and the bars on their own sit on whatever the browser's chrome is.
+String get _favicon => _mark;
+
+/// Whitespace is collapsed as well as the comments removed, because this is
+/// inlined into every page twice — once as markup and once percent-encoded into
+/// the favicon's data URI, where a newline costs three characters.
+String _readMark(File file) => file
+    .readAsStringSync()
+    .replaceAll(RegExp(r'<\?xml.*?\?>', dotAll: true), '')
+    .replaceAll(RegExp(r'<!--.*?-->', dotAll: true), '')
+    .replaceAll(RegExp(r'\s+'), ' ')
+    .replaceAll(RegExp(r'>\s+<'), '><')
+    .trim();
 
 /// The site's stylesheet.
 ///
@@ -707,6 +755,10 @@ body {
   text-transform: uppercase;
   font-size: 14px;
 }
+
+/* The mark is sized here rather than by the attributes on the file it is read
+   from, so that `assets/brand/oaa-mark.svg` can be any square it likes. */
+.brand svg { width: 24px; height: 24px; flex: none; }
 
 .side nav { flex: 1; overflow-y: auto; }
 

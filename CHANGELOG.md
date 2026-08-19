@@ -994,6 +994,11 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   its note ended directly beneath the target menu and looked like part of it. It
   now clears the control, and still sits half as far from its own row as from
   the next one.
+- The documentation site shows the current mark. Its header logo and favicon
+  were a hand-copied version of the icon compiled into the site generator, so
+  when the mark was redrawn they kept publishing the previous one on every
+  page. The generator now reads `assets/brand/oaa-mark.svg` and fails when it
+  is missing, so the site cannot hold a mark of its own again.
 
 ### 🚧 Internal
 

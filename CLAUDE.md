@@ -56,7 +56,7 @@ is still not built, and `docs/PLAN.md` for what was planned.
 | `cli/bin/oaa.dart` | The `oaa` analyser. Its exit code is the product — see `cli/AGENTS.md`. |
 | `lib/src/app/shortcuts.dart` | Every keyboard shortcut, as one table. The bindings, the `?` sheet and `docs/site/keyboard.md` are all derived from it; `test/shortcuts_test.dart` fails when the page has drifted. |
 | `lib/src/app/launch_options.dart` | `--config-dir` and `--open-panel`. Both exist to make something else testable — see the file. |
-| `tool/docs.dart` | The documentation site. No dependencies, so `docs.yml` needs a Dart SDK and nothing else. The page list is written out, never globbed. |
+| `tool/docs.dart` | The documentation site. No dependencies, so `docs.yml` needs a Dart SDK and nothing else. The page list is written out, never globbed, and the mark is read from `assets/brand/oaa-mark.svg` rather than held — it was held once and went stale. |
 | `packaging/icon/make_icons.dart` | The app mark as geometry, rendered into every container the six platforms want — a rounded tile for the desktops, two layers on a 108dp canvas for Android, and a layered `AppIcon.icon` for macOS and iOS that the system lights itself. `oaa.svg` and `assets/brand/` are its vector twins and follow it, never the reverse. |
 | `.tool-versions` | Pins Flutter `3.44.5-stable`. CI pins the same; keep them in step. |
 
