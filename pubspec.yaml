@@ -1,5 +1,5 @@
-name: bel
-description: "Bel — a free and open-source loudness and spectrum analyzer."
+name: oaa
+description: "Open Audio Analyzer — a free and open-source loudness and spectrum analyzer."
 publish_to: 'none'
 version: 0.1.0+1
 
@@ -11,22 +11,22 @@ dependencies:
     sdk: flutter
 
   # The domain model. Pure Dart, MIT, and deliberately unaware that an engine
-  # exists — see packages/bel_core/lib/bel_core.dart.
-  bel_core:
-    path: packages/bel_core
+  # exists — see packages/oaa_core/lib/oaa_core.dart.
+  oaa_core:
+    path: packages/oaa_core
 
   # The measurement engine and its build hook. MIT.
-  bel_engine:
-    path: packages/bel_engine
+  oaa_engine:
+    path: packages/oaa_engine
 
   # Tokens and the primitives every module is built from. GPL, like the app.
-  bel_ui:
-    path: packages/bel_ui
+  oaa_ui:
+    path: packages/oaa_ui
 
   # The remote display's protocol. MIT, pure Dart, and used by both ends of the
   # link — this binary is the host on a desktop and the display on a tablet.
-  bel_wire:
-    path: packages/bel_wire
+  oaa_wire:
+    path: packages/oaa_wire
 
   # Configuration and UI state only. Measurements never pass through it: they
   # go from native memory to a CustomPainter without touching the widget tree,
@@ -44,15 +44,15 @@ dev_dependencies:
 flutter:
   uses-material-design: true
 
-  # Declared here rather than in bel_ui, which is where the type styles that use
+  # Declared here rather than in oaa_ui, which is where the type styles that use
   # them live. A package's fonts have to be referenced as
-  # `TextStyle(fontFamily: 'Inter', package: 'bel_ui')`, and that constructor
+  # `TextStyle(fontFamily: 'Inter', package: 'oaa_ui')`, and that constructor
   # argument rewrites `fontFamilyFallback` as well — turning the system
-  # fallbacks in BelType into 'packages/bel_ui/Menlo' and similar paths that do
+  # fallbacks in OaaType into 'packages/oaa_ui/Menlo' and similar paths that do
   # not exist. Bundling from the application keeps both lists honest.
   #
   # Both families are SIL OFL 1.1; their licence files sit beside them and must
-  # ship with any binary. Only the weights BelType actually names are included.
+  # ship with any binary. Only the weights OaaType actually names are included.
   fonts:
     - family: Inter
       fonts:

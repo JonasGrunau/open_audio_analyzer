@@ -22,10 +22,10 @@
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
-import 'package:bel/src/clock/meter_clock.dart';
-import 'package:bel/src/modules/spectrum_analyzer.dart';
-import 'package:bel_core/bel_core.dart';
-import 'package:bel_ui/bel_ui.dart';
+import 'package:oaa/src/clock/meter_clock.dart';
+import 'package:oaa/src/modules/spectrum_analyzer.dart';
+import 'package:oaa_core/oaa_core.dart';
+import 'package:oaa_ui/oaa_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -72,7 +72,7 @@ class _Fake implements MeterSource {
   dynamic noSuchMethod(Invocation invocation) => throw UnimplementedError();
 }
 
-const _colors = BelColors.precisionInstrument;
+const _colors = OaaColors.precisionInstrument;
 const _size = Size(480, 220);
 
 /// A published frame, and the frame that draws it.
@@ -100,7 +100,7 @@ Future<Uint8List> _shoot(WidgetTester tester, GlobalKey key) async {
 /// few counts of each other.
 ///
 /// [ink] is how much of the accent has to be there. The curve is a
-/// `BelStroke.mark` stroke at full alpha and reads about 150; the peak-hold
+/// `OaaStroke.mark` stroke at full alpha and reads about 150; the peak-hold
 /// line is a *hairline* at 0.45 alpha and reads 57 where it covers a whole
 /// pixel row and less where it straddles two, so a test looking for the hold
 /// has to ask for less than one looking for the curve. Grey is under 5 either
@@ -153,7 +153,7 @@ class _HarnessState extends State<_Harness> with SingleTickerProviderStateMixin 
 
   @override
   Widget build(BuildContext context) => MaterialApp(
-    home: BelTheme(
+    home: OaaTheme(
       colors: _colors,
       child: Material(
         color: _colors.background,

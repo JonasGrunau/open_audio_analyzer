@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// What Bel remembers, tested through the providers rather than the widgets.
+// What Open Audio Analyzer remembers, tested through the providers rather than
+// the widgets.
 //
 // The layer under test is the one that decides whether a user's work survives
 // quitting the application, so the assertions are about the file on disk and
@@ -11,18 +12,18 @@
 import 'dart:io';
 import 'dart:ui' show Color;
 
-import 'package:bel/src/canvas/workspace.dart';
-import 'package:bel/src/data/providers.dart';
-import 'package:bel/src/storage/config_paths.dart';
-import 'package:bel/src/storage/config_store.dart';
-import 'package:bel/src/storage/startup_config.dart';
-import 'package:bel_core/bel_core.dart';
-import 'package:bel_ui/bel_ui.dart';
+import 'package:oaa/src/canvas/workspace.dart';
+import 'package:oaa/src/data/providers.dart';
+import 'package:oaa/src/storage/config_paths.dart';
+import 'package:oaa/src/storage/config_store.dart';
+import 'package:oaa/src/storage/startup_config.dart';
+import 'package:oaa_core/oaa_core.dart';
+import 'package:oaa_ui/oaa_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 Directory _tempDir() {
-  final directory = Directory.systemTemp.createTempSync('bel_persist_');
+  final directory = Directory.systemTemp.createTempSync('oaa_persist_');
   addTearDown(() {
     if (directory.existsSync()) directory.deleteSync(recursive: true);
   });
@@ -238,7 +239,7 @@ void main() {
     test('the palette follows the selected skin', () async {
       final container = _container(await _store());
 
-      expect(container.read(paletteProvider), BelColors.precisionInstrument);
+      expect(container.read(paletteProvider), OaaColors.precisionInstrument);
 
       container.read(settingsProvider.notifier).setSkinId('daylight');
       expect(container.read(paletteProvider).isLight, isTrue);
@@ -284,7 +285,7 @@ void main() {
 
       final palette = container.read(paletteProvider);
       expect(palette.accent, const Color(0xFFFF00FF));
-      expect(palette.background, BelColors.precisionInstrument.background);
+      expect(palette.background, OaaColors.precisionInstrument.background);
     });
 
     test('reload picks up a skin written since launch', () async {
@@ -307,24 +308,24 @@ void main() {
     test(
       'the built-in palette and the built-in skin have not drifted apart',
       () {
-        // The two live in different packages because bel_core may not import
+        // The two live in different packages because oaa_core may not import
         // Flutter. This is the check that keeps that from being a slow leak.
         expect(
-          belColorsFromSkin(BuiltInSkins.precisionInstrument),
-          BelColors.precisionInstrument,
+          oaaColorsFromSkin(BuiltInSkins.precisionInstrument),
+          OaaColors.precisionInstrument,
         );
       },
     );
 
     test('a palette round-trips through a skin document', () {
       final skin = skinFromColors(
-        BelColors.precisionInstrument,
+        OaaColors.precisionInstrument,
         id: 'copy',
         name: 'Copy',
       );
 
       expect(skin.colors.length, SkinColor.values.length);
-      expect(belColorsFromSkin(skin), BelColors.precisionInstrument);
+      expect(oaaColorsFromSkin(skin), OaaColors.precisionInstrument);
     });
   });
 

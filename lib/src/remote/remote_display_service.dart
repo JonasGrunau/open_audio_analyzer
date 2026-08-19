@@ -3,7 +3,7 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:bel_core/bel_core.dart';
+import 'package:oaa_core/oaa_core.dart';
 import 'package:flutter/foundation.dart';
 
 import 'display_host.dart';
@@ -29,7 +29,7 @@ class RemoteDisplayService {
   /// back through this.
   final MeterSource source;
 
-  /// `BEL_ABI_VERSION` of the engine, carried in the handshake for bug reports.
+  /// `OAA_ABI_VERSION` of the engine, carried in the handshake for bug reports.
   final int abiVersion;
 
   /// The name tablets see in their list.
@@ -37,7 +37,7 @@ class RemoteDisplayService {
   /// `AppSettings.remoteDisplayName` is null until somebody chooses one, and
   /// null is an instruction rather than a missing value: use this machine's
   /// name. It is resolved here because resolving it needs `dart:io`, which
-  /// `bel_core` does not have and must not acquire.
+  /// `oaa_core` does not have and must not acquire.
   String get hostName => _name ?? defaultHostName();
   String? _name;
 
@@ -210,9 +210,9 @@ class RemoteDisplayService {
   static String defaultHostName() {
     try {
       final name = Platform.localHostname.trim().split('.').first;
-      return name.isEmpty ? 'Bel' : name;
+      return name.isEmpty ? 'Open Audio Analyzer' : name;
     } on Object {
-      return 'Bel';
+      return 'Open Audio Analyzer';
     }
   }
 

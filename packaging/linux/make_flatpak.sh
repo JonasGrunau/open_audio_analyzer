@@ -1,11 +1,12 @@
 #!/bin/sh
 #
-# make_flatpak.sh — build Bel for Linux and wrap it in a flatpak bundle.
+# make_flatpak.sh — build Open Audio Analyzer for Linux and wrap it in a flatpak
+# bundle.
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
 # Usage:  sh packaging/linux/make_flatpak.sh [--skip-build]
-# Output: build/packaging/Bel-<version>-<arch>.flatpak
+# Output: build/packaging/Open Audio Analyzer-<version>-<arch>.flatpak
 #
 # Needs `flatpak` and `flatpak-builder`, plus the Freedesktop 24.08 runtime and
 # SDK. On a machine that has neither:
@@ -31,7 +32,7 @@ bundle="build/linux/$( [ "$arch" = "aarch64" ] && echo arm64 || echo x64 )/relea
 manifest_dir="packaging/linux/flatpak"
 staging="$manifest_dir/staging"
 out="build/packaging"
-result="$out/Bel-$version-$arch.flatpak"
+result="$out/Open Audio Analyzer-$version-$arch.flatpak"
 
 if [ "${1:-}" != "--skip-build" ]; then
   echo "==> flutter build linux --release"
@@ -55,9 +56,9 @@ rm -rf "$staging"
 mkdir -p "$staging"
 
 cp -r "$bundle" "$staging/bundle"
-cp packaging/linux/bel.desktop "$staging/"
-cp packaging/linux/dev.belmeter.bel.metainfo.xml "$staging/"
-cp packaging/icon/bel.svg "$staging/"
+cp packaging/linux/oaa.desktop "$staging/"
+cp packaging/linux/dev.openaudioanalyzer.oaa.metainfo.xml "$staging/"
+cp packaging/icon/oaa.svg "$staging/"
 cp -r packaging/linux/icons "$staging/icons"
 cp LICENSE "$staging/"
 mkdir -p "$staging/fonts"
@@ -75,12 +76,12 @@ flatpak-builder \
   --repo="$out/flatpak-repo" \
   --force-clean \
   "$out/flatpak-build" \
-  "$manifest_dir/dev.belmeter.bel.yml"
+  "$manifest_dir/dev.openaudioanalyzer.oaa.yml"
 
 flatpak build-bundle \
   "$out/flatpak-repo" \
   "$result" \
-  dev.belmeter.bel
+  dev.openaudioanalyzer.oaa
 
 rm -rf "$staging"
 

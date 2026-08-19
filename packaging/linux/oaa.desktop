@@ -1,0 +1,23 @@
+[Desktop Entry]
+Type=Application
+Name=Open Audio Analyzer
+GenericName=Loudness Analyzer
+Comment=Loudness and spectrum metering for mixing, mastering and delivery
+Exec=oaa %f
+TryExec=oaa
+Icon=dev.openaudioanalyzer.oaa
+Terminal=false
+Categories=AudioVideo;Audio;AudioVideoEditing;
+Keywords=loudness;LUFS;EBU;R128;meter;spectrum;mastering;analyzer;analyser;
+
+# Open Audio Analyzer analyses files as well as devices, so a desktop that offers "Open with"
+# should offer it. The list is exactly what engine/src/oaa_decode.c can decode
+# through dr_libs — claiming a type the engine cannot read would put Open Audio Analyzer in a
+# menu where choosing it does nothing.
+MimeType=audio/wav;audio/x-wav;audio/flac;audio/x-flac;audio/mpeg;audio/mp3;
+
+# The application draws its own chrome and starts on a canvas, not a document,
+# so a second window would be a second engine measuring the same input twice.
+SingleMainWindow=true
+StartupWMClass=oaa
+StartupNotify=true

@@ -7,8 +7,8 @@
 // typed-address route is present, which is the one that has to work when
 // discovery does not.
 
-import 'package:bel/src/remote/display_screen.dart';
-import 'package:bel_ui/bel_ui.dart';
+import 'package:oaa/src/remote/display_screen.dart';
+import 'package:oaa_ui/oaa_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -17,8 +17,8 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(
-      BelTheme(
-        colors: BelColors.precisionInstrument,
+      OaaTheme(
+        colors: OaaColors.precisionInstrument,
         child: const MaterialApp(home: RemoteDisplayScreen()),
       ),
     );

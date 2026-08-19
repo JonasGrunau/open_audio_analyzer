@@ -2,10 +2,10 @@
 
 ## REFINE
 
-**Bel scores 27/30 with every measurement-surface principle at full marks, and
-the three points still missing are both known, both stated, and both a matter of
-one control's label and two elements that could be deleted — not of anything the
-instrument does wrong.**
+**Open Audio Analyzer scores 27/30 with every measurement-surface principle at
+full marks, and the three points still missing are both known, both stated, and
+both a matter of one control's label and two elements that could be deleted —
+not of anything the instrument does wrong.**
 
 ### Why this verdict follows mechanically
 
@@ -67,8 +67,8 @@ against the module's content box:
 Both are small, and neither is urgent.
 
 **1. #4 Understandable — `RESET` still needs its tooltip.**
-Evidence: `bel_app.dart`, wording tracked to `bel_engine_reset()` in
-`bel.h:390-393`. One word cannot carry "restarts the integration but not the
+Evidence: `oaa_app.dart`, wording tracked to `oaa_engine_reset()` in
+`oaa.h:390-393`. One word cannot carry "restarts the integration but not the
 layout, the target or the momentary readings". Either the label grows — `RESET
 MEASUREMENT` — or this principle stays at 2 by choice, which is a defensible
 place to leave it.
@@ -81,9 +81,10 @@ also defensible — discoverability is a real argument for the first — but the
 rule now written into `_StatusBar` should be applied to them and the answer
 recorded, rather than left open a third time.
 
-**3. #1 Innovative — capped by a deliberate decision, and correctly so.**
-Not worth chasing. Bel is an acknowledged reimplementation lifted by two real
-structural advances; a third would have to be a genuine idea, not a feature.
+**3. #1 Innovative — capped by a deliberate decision, and correctly so.** Not
+worth chasing. Open Audio Analyzer is an acknowledged reimplementation lifted by
+two real structural advances; a third would have to be a genuine idea, not a
+feature.
 
 ### Not worth doing
 

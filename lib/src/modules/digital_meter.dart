@@ -2,9 +2,9 @@
 
 import 'dart:ui' as ui;
 
-import 'package:bel_core/bel_core.dart';
-import 'package:bel_engine/bel_engine.dart';
-import 'package:bel_ui/bel_ui.dart';
+import 'package:oaa_core/oaa_core.dart';
+import 'package:oaa_engine/oaa_engine.dart';
+import 'package:oaa_ui/oaa_ui.dart';
 import 'package:flutter/widgets.dart';
 
 import '../clock/meter_clock.dart';
@@ -52,8 +52,8 @@ class _DigitalMeterModuleState extends State<DigitalMeterModule> {
 
   @override
   Widget build(BuildContext context) {
-    final colors = BelTheme.of(context);
-    final channels = widget.engine.channels.clamp(1, kBelMaxChannels);
+    final colors = OaaTheme.of(context);
+    final channels = widget.engine.channels.clamp(1, kOaaMaxChannels);
 
     if (_graticule == null ||
         !_graticule!.matches(_scale, ScaleSide.left, colors.textFaint) ||
@@ -66,7 +66,7 @@ class _DigitalMeterModuleState extends State<DigitalMeterModule> {
         labelColor: colors.textFaint,
       );
 
-      final style = BelType.label.copyWith(color: colors.textFaint);
+      final style = OaaType.label.copyWith(color: colors.textFaint);
       _channelLabels = [
         for (var c = 0; c < channels; c++)
           layoutParagraph(_channelName(c, channels), style),
@@ -114,7 +114,7 @@ class _DigitalMeterPainter extends MeterPainter {
        super(repaint: repaint);
 
   final MeterSource engine;
-  final BelColors colors;
+  final OaaColors colors;
   final ScaleGraticule graticule;
   final List<ui.Paragraph> labels;
 
@@ -138,7 +138,7 @@ class _DigitalMeterPainter extends MeterPainter {
     final channels = labels.length;
     if (channels == 0) return;
 
-    final labelHeight = BelType.label.fontSize! + Space.xs;
+    final labelHeight = OaaType.label.fontSize! + Space.xs;
     final track = Rect.fromLTRB(
       graticule.gutter,
       _clipHeight + Space.xxs,

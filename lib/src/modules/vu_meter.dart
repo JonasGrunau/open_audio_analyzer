@@ -3,9 +3,9 @@
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
-import 'package:bel_core/bel_core.dart';
-import 'package:bel_engine/bel_engine.dart';
-import 'package:bel_ui/bel_ui.dart';
+import 'package:oaa_core/oaa_core.dart';
+import 'package:oaa_engine/oaa_engine.dart';
+import 'package:oaa_ui/oaa_ui.dart';
 import 'package:flutter/widgets.dart';
 
 import '../clock/meter_clock.dart';
@@ -16,7 +16,7 @@ import '../clock/meter_clock.dart';
 /// meter here is peak- or RMS-responding, and its 300 ms movement with a little
 /// overshoot is a low-pass filter with a shape that happens to track perceived
 /// level well — which is why people still mix to one. Both properties live in
-/// `bel_analysis.c`; this module draws the result and nothing else.
+/// `oaa_analysis.c`; this module draws the result and nothing else.
 ///
 /// **0 VU is the calibration's reference level, not 0 dBFS.** That is the whole
 /// point of the module: −18 dBFS reads 0 VU for EBU work and −20 dBFS for US
@@ -76,7 +76,7 @@ class _VuMeterModuleState extends State<VuMeterModule> {
 
   @override
   Widget build(BuildContext context) {
-    final colors = BelTheme.of(context);
+    final colors = OaaTheme.of(context);
 
     if (_builtColor != colors.textFaint) {
       _builtColor = colors.textFaint;
@@ -87,16 +87,16 @@ class _VuMeterModuleState extends State<VuMeterModule> {
               mark == 0
                   ? '0'
                   : (mark > 0 ? '+${mark.toInt()}' : '${mark.toInt()}'),
-              BelType.tick.copyWith(
+              OaaType.tick.copyWith(
                 color: mark >= 0 ? colors.over : colors.textFaint,
               ),
             )
           else
-            layoutParagraph('', BelType.tick),
+            layoutParagraph('', OaaType.tick),
       ];
       _unit = layoutParagraph(
         'VU',
-        BelType.label.copyWith(color: colors.textFaint),
+        OaaType.label.copyWith(color: colors.textFaint),
       );
 
       var widest = 0.0;
@@ -134,27 +134,27 @@ class _VuPainter extends MeterPainter {
   }) : _arc = (Paint()
          ..color = colors.textFaint
          ..style = PaintingStyle.stroke
-         ..strokeWidth = BelStroke.hairline),
+         ..strokeWidth = OaaStroke.hairline),
        _arcOver = (Paint()
          ..color = colors.over
          ..style = PaintingStyle.stroke
-         ..strokeWidth = BelStroke.mark),
+         ..strokeWidth = OaaStroke.mark),
        _mark = (Paint()
          ..color = colors.textFaint
-         ..strokeWidth = BelStroke.hairline),
+         ..strokeWidth = OaaStroke.hairline),
        _markOver = (Paint()
          ..color = colors.over
-         ..strokeWidth = BelStroke.mark),
+         ..strokeWidth = OaaStroke.mark),
        _needle = (Paint()
          ..color = colors.textPrimary
-         ..strokeWidth = BelStroke.mark
+         ..strokeWidth = OaaStroke.mark
          ..strokeCap = StrokeCap.round),
        _pivot = (Paint()..color = colors.textMuted),
        super(repaint: repaint);
 
   final MeterSource engine;
   final Calibration calibration;
-  final BelColors colors;
+  final OaaColors colors;
   final _VuMeterModuleState state;
 
   final Paint _arc;
@@ -284,8 +284,8 @@ class _VuPainter extends MeterPainter {
     // --- The needle ---------------------------------------------------------
     // The loudest channel. A stereo pair on one movement is what a mono VU
     // does, and showing the quieter of the two would understate the programme.
-    var loudest = kBelDbFloor;
-    final channels = engine.channels.clamp(1, kBelMaxChannels);
+    var loudest = kOaaDbFloor;
+    final channels = engine.channels.clamp(1, kOaaMaxChannels);
     for (var c = 0; c < channels; c++) {
       if (engine.vu[c] > loudest) loudest = engine.vu[c];
     }
@@ -301,7 +301,7 @@ class _VuPainter extends MeterPainter {
     // of the pivot pointing the opposite way.
     canvas.drawLine(
       pivot,
-      pivot + direction * (face - BelStroke.mark),
+      pivot + direction * (face - OaaStroke.mark),
       _needle,
     );
     canvas.drawCircle(pivot, cap, _pivot);

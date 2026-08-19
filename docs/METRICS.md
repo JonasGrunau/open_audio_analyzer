@@ -1,11 +1,11 @@
 # Metrics
 
-Every quantity Bel displays, with its definition and where that definition comes
-from. A metric that appears in the UI without an entry here is a number nobody
-can verify, which is the same as a number nobody should trust.
+Every quantity Open Audio Analyzer displays, with its definition and where that
+definition comes from. A metric that appears in the UI without an entry here is
+a number nobody can verify, which is the same as a number nobody should trust.
 
 **Availability** says whether the current build measures it. Anything not
-measured is `NaN` in the snapshot, carries a `BEL_FLAG_*_UNAVAILABLE` flag, and
+measured is `NaN` in the snapshot, carries a `OAA_FLAG_*_UNAVAILABLE` flag, and
 renders as an em dash — never as a zero.
 
 ---
@@ -47,7 +47,7 @@ Channel weights are BS.1770-4: L, R, C at 1.0, and the surround channels at
 1.41. The LFE channel is excluded from loudness, as the standard requires.
 
 An interleaved buffer does not say which channel is which, so the layout is
-inferred from the channel count — see `bel_channel_weight` for the table. The
+inferred from the channel count — see `oaa_channel_weight` for the table. The
 four-channel case is read as quad (L R Ls Rs) rather than L R C LFE, because
 mistaking a surround channel for LFE would silently drop real content from the
 measurement. When a device or file source supplies a real channel layout, that
@@ -74,9 +74,9 @@ accurate — only more work, and not enough of it to notice.
 ## Dynamics
 
 Decibel reports a figure called *TrueDyn*. It is proprietary and undocumented,
-so any claim to reproduce it would be a guess presented as a measurement. Bel
-does not implement it and does not approximate it. These are defined here
-instead, and anyone can check them.
+so any claim to reproduce it would be a guess presented as a measurement. Open
+Audio Analyzer does not implement it and does not approximate it. These are
+defined here instead, and anyone can check them.
 
 | Metric | Unit | Definition | Availability |
 |---|---|---|---|
@@ -87,8 +87,8 @@ instead, and anyone can check them.
 | `PSR` | LU | Peak to short-term ratio: `TruePeak − LUFS-S` over the same 3 s window. | **now** |
 
 None of these is the "DR" of the offline TT Dynamic Range meter, which is a
-different measurement with a different algorithm. Bel does not report that
-number under any name.
+different measurement with a different algorithm. Open Audio Analyzer does not
+report that number under any name.
 
 ## Stereo field
 
@@ -169,7 +169,7 @@ modules cannot disagree about where a peak is.
 CI runs the **EBU Tech 3341 and 3342** cases on every push, on Linux, macOS and
 Windows, and fails the build if any result differs from the standard's value by
 more than its stated tolerance. See
-`packages/bel_engine/test/conformance_test.dart`.
+`packages/oaa_engine/test/conformance_test.dart`.
 
 The signals are **generated rather than downloaded**. Every case is a sine at a
 stated level or a sequence of them, so each is constructed exactly in a few
@@ -190,13 +190,13 @@ directly but which no correct implementation can violate:
   and the same signal written to a WAV, decoded and analysed again produce
   identical numbers, to the bit. That is the property offline analysis rests on,
   and it is asserted rather than assumed — see
-  `packages/bel_engine/test/decode_test.dart`.
+  `packages/oaa_engine/test/decode_test.dart`.
 
 The official BS.2217 WAV vectors are **still not used.** There is now a decoder
 that could read them, so the remaining obstacle is not technical: the EBU and
 ITU test material is not licensed for redistribution in this repository, and
 fetching it in CI would put a network dependency in front of the one suite that
-must never be flaky. Running them locally against `bel` is worthwhile and the
+must never be flaky. Running them locally against `oaa` is worthwhile and the
 CLI makes it a one-liner; they are not a gate.
 
 ---

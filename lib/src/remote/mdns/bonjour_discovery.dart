@@ -7,7 +7,7 @@
 /// channel in the application, that it carries no measurement, and that it is
 /// a browser and nothing else — the tablet is a display and never advertises.
 ///
-/// The native half is `ios/Runner/BelBonjour.swift`. It emits the whole list on
+/// The native half is `ios/Runner/OaaBonjour.swift`. It emits the whole list on
 /// every change rather than add and remove events, because the list is what the
 /// panel draws and a channel that could drop one event of a pair is a list that
 /// slowly stops matching the network.
@@ -20,10 +20,10 @@ import 'package:flutter/services.dart';
 
 import 'host_discovery.dart';
 
-/// The channel `BelBonjour` publishes on. Listening starts the browse;
+/// The channel `OaaBonjour` publishes on. Listening starts the browse;
 /// cancelling stops it, so the native side owns no state the Dart side has to
 /// remember to tear down.
-const EventChannel bonjourChannel = EventChannel('dev.belmeter.bel/bonjour');
+const EventChannel bonjourChannel = EventChannel('dev.openaudioanalyzer.oaa/bonjour');
 
 /// The one subscription this channel is allowed to have, shared by everything
 /// that reads it.
@@ -34,9 +34,9 @@ const EventChannel bonjourChannel = EventChannel('dev.belmeter.bel/bonjour');
 /// tearing down the browse the first reader is still waiting on — and a
 /// `cancel` that arrives when no sink is set is answered with
 /// `PlatformException(error, No active stream to cancel)`. That one is raised
-/// inside the framework's own `onCancel` closure, where no `catch` in Bel can
-/// reach it: it is reported to the console and the search is dead.
-/// See `SetStreamHandlerMessageHandlerOnChannel` in the engine's
+/// inside the framework's own `onCancel` closure, where no `catch` in Open
+/// Audio Analyzer can reach it: it is reported to the console and the search is
+/// dead. See `SetStreamHandlerMessageHandlerOnChannel` in the engine's
 /// `FlutterChannels.mm`.
 ///
 /// Two pickers overlap every time one replaces another, because a route's

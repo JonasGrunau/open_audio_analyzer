@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import 'package:bel_core/bel_core.dart';
-import 'package:bel_ui/bel_ui.dart';
+import 'package:oaa_core/oaa_core.dart';
+import 'package:oaa_ui/oaa_ui.dart';
 import 'package:flutter/widgets.dart';
 
 import '../clock/meter_clock.dart';

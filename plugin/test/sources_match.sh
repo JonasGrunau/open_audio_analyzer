@@ -8,7 +8,7 @@
 # ---------------------------------------------------------------------------
 # What this is defending against
 #
-# `packages/bel_engine/hook/build.dart` compiles the engine for the Flutter app.
+# `packages/oaa_engine/hook/build.dart` compiles the engine for the Flutter app.
 # `engine/CMakeLists.txt` compiles it for the plugin. They exist separately
 # because a plugin CI runner has no Flutter SDK and a build hook cannot be
 # handed to JUCE — but they describe the same compile, and somebody adding a
@@ -31,7 +31,7 @@ set -eu
 
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 cmake_file="$root/engine/CMakeLists.txt"
-hook_file="$root/packages/bel_engine/hook/build.dart"
+hook_file="$root/packages/oaa_engine/hook/build.dart"
 
 for f in "$cmake_file" "$hook_file"; do
   if [ ! -f "$f" ]; then
@@ -45,7 +45,7 @@ done
 cmake_sources=$(
   sed -n 's|^[[:space:]]*\(src/[A-Za-z0-9_/]*\.c\)[[:space:]]*$|\1|p;
           s|^[[:space:]]*\(third_party/[A-Za-z0-9_/]*\.c\)[[:space:]]*$|\1|p;
-          s|^.*list(APPEND BEL_SOURCES \(src/[A-Za-z0-9_/]*\.c\)).*$|\1|p' \
+          s|^.*list(APPEND OAA_SOURCES \(src/[A-Za-z0-9_/]*\.c\)).*$|\1|p' \
     "$cmake_file" | sort -u
 )
 
@@ -63,7 +63,7 @@ fi
 echo "sources_match: FAILED — the two engine build descriptions disagree." >&2
 echo >&2
 echo "  engine/CMakeLists.txt              (the plugin's build)" >&2
-echo "  packages/bel_engine/hook/build.dart (the app's build)" >&2
+echo "  packages/oaa_engine/hook/build.dart (the app's build)" >&2
 echo >&2
 echo "'<' is in CMakeLists only, '>' is in build.dart only:" >&2
 echo >&2

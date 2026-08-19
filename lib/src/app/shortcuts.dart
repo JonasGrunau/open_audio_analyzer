@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-/// Every keyboard shortcut Bel has, written down once.
+/// Every keyboard shortcut Open Audio Analyzer has, written down once.
 ///
-/// [belShortcuts] is the only list. Three things are derived from it and none
+/// [oaaShortcuts] is the only list. Three things are derived from it and none
 /// of them is maintained by hand: the bindings the application installs, the
 /// sheet that `?` opens, and `docs/site/keyboard.md` on the documentation site.
 /// A shortcut that works and is documented nowhere is a shortcut nobody finds;
@@ -25,7 +25,8 @@
 /// ---------------------------------------------------------------------------
 /// Modifiers, and the one thing that is platform-specific
 ///
-/// [Chord.primary] means Cmd on a Mac and Ctrl everywhere else, and Bel binds
+/// [Chord.primary] means Cmd on a Mac and Ctrl everywhere else, and Open Audio
+/// Analyzer binds
 /// **both, on every platform**. Choosing which to accept by asking the platform
 /// is how a Mac driving an external PC keyboard ends up with no undo, and there
 /// is nothing else these chords could mean. Only the *printed* label differs,
@@ -46,7 +47,7 @@ library;
 
 import 'dart:async';
 
-import 'package:bel_core/bel_core.dart';
+import 'package:oaa_core/oaa_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -144,8 +145,8 @@ class Chord {
 
 /// A single row of the sheet: what it does, what you press, and what happens.
 @immutable
-class BelShortcut {
-  const BelShortcut({
+class OaaShortcut {
+  const OaaShortcut({
     required this.group,
     required this.description,
     required this.chords,
@@ -222,21 +223,21 @@ class ShortcutScope {
 // ---------------------------------------------------------------------------
 // The table
 
-const List<BelShortcut> belShortcuts = [
+const List<OaaShortcut> oaaShortcuts = [
   // --- Canvas --------------------------------------------------------------
-  BelShortcut(
+  OaaShortcut(
     group: ShortcutGroup.canvas,
     description: 'Add a module',
     chords: [Chord(LogicalKeyboardKey.keyN, primary: true)],
     action: _addModule,
   ),
-  BelShortcut(
+  OaaShortcut(
     group: ShortcutGroup.canvas,
     description: 'Duplicate the selected module',
     chords: [Chord(LogicalKeyboardKey.keyD, primary: true)],
     action: _duplicate,
   ),
-  BelShortcut(
+  OaaShortcut(
     group: ShortcutGroup.canvas,
     description: 'Delete the selected module',
     chords: [
@@ -245,7 +246,7 @@ const List<BelShortcut> belShortcuts = [
     ],
     action: _delete,
   ),
-  BelShortcut(
+  OaaShortcut(
     group: ShortcutGroup.canvas,
     description: 'Move the selected module one cell',
     chords: _arrows,
@@ -253,7 +254,7 @@ const List<BelShortcut> belShortcuts = [
     otherKeys: 'arrow keys',
     action: _move,
   ),
-  BelShortcut(
+  OaaShortcut(
     group: ShortcutGroup.canvas,
     description: 'Grow or shrink the selected module one cell',
     chords: _shiftArrows,
@@ -261,19 +262,19 @@ const List<BelShortcut> belShortcuts = [
     otherKeys: 'Shift + arrow keys',
     action: _resize,
   ),
-  BelShortcut(
+  OaaShortcut(
     group: ShortcutGroup.canvas,
     description: 'Clear the selection',
     chords: [Chord(LogicalKeyboardKey.escape)],
     action: _deselect,
   ),
-  BelShortcut(
+  OaaShortcut(
     group: ShortcutGroup.canvas,
     description: 'Undo',
     chords: [Chord(LogicalKeyboardKey.keyZ, primary: true)],
     action: _undo,
   ),
-  BelShortcut(
+  OaaShortcut(
     group: ShortcutGroup.canvas,
     description: 'Redo',
     chords: [Chord(LogicalKeyboardKey.keyZ, primary: true, shift: true)],
@@ -281,13 +282,13 @@ const List<BelShortcut> belShortcuts = [
   ),
 
   // --- Measurement ---------------------------------------------------------
-  BelShortcut(
+  OaaShortcut(
     group: ShortcutGroup.measurement,
     description: 'Reset the measurement',
     chords: [Chord(LogicalKeyboardKey.keyR, primary: true)],
     action: _reset,
   ),
-  BelShortcut(
+  OaaShortcut(
     group: ShortcutGroup.measurement,
     description: 'Analyse a file',
     chords: [Chord(LogicalKeyboardKey.keyO, primary: true)],
@@ -295,7 +296,7 @@ const List<BelShortcut> belShortcuts = [
   ),
 
   // --- Tabs ----------------------------------------------------------------
-  BelShortcut(
+  OaaShortcut(
     group: ShortcutGroup.tabs,
     description: 'Go to a tab by number',
     chords: _digits,
@@ -303,7 +304,7 @@ const List<BelShortcut> belShortcuts = [
     otherKeys: '1 – 9',
     action: _goToTab,
   ),
-  BelShortcut(
+  OaaShortcut(
     group: ShortcutGroup.tabs,
     description: 'Next tab',
     chords: [
@@ -312,7 +313,7 @@ const List<BelShortcut> belShortcuts = [
     ],
     action: _nextTab,
   ),
-  BelShortcut(
+  OaaShortcut(
     group: ShortcutGroup.tabs,
     description: 'Previous tab',
     chords: [
@@ -321,7 +322,7 @@ const List<BelShortcut> belShortcuts = [
     ],
     action: _previousTab,
   ),
-  BelShortcut(
+  OaaShortcut(
     group: ShortcutGroup.tabs,
     description: 'New tab',
     chords: [Chord(LogicalKeyboardKey.keyT, primary: true)],
@@ -329,19 +330,19 @@ const List<BelShortcut> belShortcuts = [
   ),
 
   // --- Configuration -------------------------------------------------------
-  BelShortcut(
+  OaaShortcut(
     group: ShortcutGroup.configuration,
     description: 'Settings',
     chords: [Chord(LogicalKeyboardKey.comma, primary: true)],
     action: _settings,
   ),
-  BelShortcut(
+  OaaShortcut(
     group: ShortcutGroup.configuration,
     description: 'Presets',
     chords: [Chord(LogicalKeyboardKey.keyP, primary: true)],
     action: _presets,
   ),
-  BelShortcut(
+  OaaShortcut(
     group: ShortcutGroup.configuration,
     description: 'This list',
     // F1 as well as `?`, because `?` is Shift+/ on a US layout and something
@@ -498,16 +499,16 @@ void _help(ShortcutScope scope, int _) =>
 // ---------------------------------------------------------------------------
 // Installing them
 
-/// Wraps the workspace in every binding in [belShortcuts].
-class BelShortcuts extends ConsumerWidget {
-  const BelShortcuts({required this.onReset, required this.child, super.key});
+/// Wraps the workspace in every binding in [oaaShortcuts].
+class OaaShortcuts extends ConsumerWidget {
+  const OaaShortcuts({required this.onReset, required this.child, super.key});
 
   final VoidCallback onReset;
   final Widget child;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) => CallbackShortcuts(
-    bindings: belShortcutBindings(
+    bindings: oaaShortcutBindings(
       ShortcutScope(context: context, ref: ref, onReset: onReset),
     ),
     // **The `FocusScope` is not decoration and removing it kills every
@@ -529,10 +530,10 @@ class BelShortcuts extends ConsumerWidget {
 /// Every chord of every shortcut becomes one or two activators — see
 /// [Chord.activators] — and each maps to a closure that remembers which chord
 /// it was.
-Map<ShortcutActivator, VoidCallback> belShortcutBindings(ShortcutScope scope) {
+Map<ShortcutActivator, VoidCallback> oaaShortcutBindings(ShortcutScope scope) {
   final bindings = <ShortcutActivator, VoidCallback>{};
 
-  for (final shortcut in belShortcuts) {
+  for (final shortcut in oaaShortcuts) {
     for (var index = 0; index < shortcut.chords.length; index++) {
       final chord = shortcut.chords[index];
       final position = index;
@@ -599,13 +600,14 @@ bool get useAppleKeyNames =>
 /// the page is reviewable in a diff, and asserted by `test/shortcuts_test.dart`
 /// so that it cannot be checked in stale. Both columns are printed because the
 /// documentation site is read on the machine somebody is deciding to install
-/// Bel *on*, which is not necessarily the one they will run it on.
+/// Open Audio Analyzer *on*, which is not necessarily the one they will run it
+/// on.
 String shortcutsMarkdown() {
   final buffer = StringBuffer()
     ..writeln('# Keyboard')
     ..writeln()
     ..writeln(
-      'Bel is a meter you leave open, so the shortcuts are the ones you reach',
+      'Open Audio Analyzer is a meter you leave open, so the shortcuts are the ones you reach',
     )
     ..writeln(
       'for while a mix is playing: rearrange the canvas, jump between tabs,',
@@ -614,7 +616,7 @@ String shortcutsMarkdown() {
     ..writeln()
     ..writeln('Press `?` or `F1` in the application for the same list.')
     ..writeln()
-    ..writeln('`Ctrl` and `Cmd` are both accepted on every platform. Bel does')
+    ..writeln('`Ctrl` and `Cmd` are both accepted on every platform. Open Audio Analyzer does')
     ..writeln('not ask the operating system which one you meant — a Mac with a')
     ..writeln('PC keyboard plugged into it takes either.')
     ..writeln()
@@ -627,7 +629,7 @@ String shortcutsMarkdown() {
     ..writeln('halfway through.');
 
   for (final group in ShortcutGroup.values) {
-    final rows = belShortcuts.where((s) => s.group == group);
+    final rows = oaaShortcuts.where((s) => s.group == group);
     if (rows.isEmpty) continue;
 
     buffer

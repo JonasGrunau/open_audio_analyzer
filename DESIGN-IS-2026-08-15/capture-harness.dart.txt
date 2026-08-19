@@ -6,16 +6,16 @@
 import 'dart:io';
 import 'dart:ui' as ui;
 
-import 'package:bel/src/app/bel_app.dart';
-import 'package:bel/src/canvas/module_host.dart';
-import 'package:bel/src/clock/meter_clock.dart';
-import 'package:bel/src/data/providers.dart';
-import 'package:bel/src/panels/settings_panel.dart';
-import 'package:bel/src/storage/config_store.dart';
-import 'package:bel/src/storage/startup_config.dart';
-import 'package:bel_core/bel_core.dart';
-import 'package:bel_engine/bel_engine.dart';
-import 'package:bel_ui/bel_ui.dart';
+import 'package:oaa/src/app/oaa_app.dart';
+import 'package:oaa/src/canvas/module_host.dart';
+import 'package:oaa/src/clock/meter_clock.dart';
+import 'package:oaa/src/data/providers.dart';
+import 'package:oaa/src/panels/settings_panel.dart';
+import 'package:oaa/src/storage/config_store.dart';
+import 'package:oaa/src/storage/startup_config.dart';
+import 'package:oaa_core/oaa_core.dart';
+import 'package:oaa_engine/oaa_engine.dart';
+import 'package:oaa_ui/oaa_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -23,7 +23,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 const String _out =
-    '/private/tmp/claude-501/-Users-jonasgrunau-Projects-open-music-analyzer'
+    '/private/tmp/claude-501/-Users-jonasgrunau-Projects-open-audio-analyzer'
     '/96d62785-4014-4fa3-b7d7-3d6015c6a1bc/scratchpad/shots2';
 
 /// Set to `before` or `after` with `--dart-define=STAGE=...`.
@@ -77,8 +77,8 @@ class _Rack extends StatefulWidget {
     this.cell = const Size(100, 70),
   });
 
-  final BelColors colors;
-  final BelSource source;
+  final OaaColors colors;
+  final OaaSource source;
 
   /// `(kind, columns, rows)` — the grid cell is 100×70 here, close to a
   /// 1600×940 canvas divided the way the default preset divides it.
@@ -96,7 +96,7 @@ class _Rack extends StatefulWidget {
 }
 
 class _RackState extends State<_Rack> with SingleTickerProviderStateMixin {
-  late final BelEngine engine = BelEngine.start(source: widget.source);
+  late final OaaEngine engine = OaaEngine.start(source: widget.source);
   late final MeterClock clock = MeterClock(engine: engine, vsync: this);
 
   @override
@@ -107,7 +107,7 @@ class _RackState extends State<_Rack> with SingleTickerProviderStateMixin {
   }
 
   @override
-  Widget build(BuildContext context) => BelTheme(
+  Widget build(BuildContext context) => OaaTheme(
     colors: widget.colors,
     child: Material(
       color: widget.colors.background,
@@ -149,9 +149,9 @@ class _RackState extends State<_Rack> with SingleTickerProviderStateMixin {
 
 Future<void> _pumpRack(
   WidgetTester tester, {
-  required BelColors colors,
+  required OaaColors colors,
   required List<(ModuleKind, int, int)> tiles,
-  BelSource source = BelSource.testTone,
+  OaaSource source = OaaSource.testTone,
   double pad = Space.md,
   Size cell = const Size(100, 70),
   required Size size,
@@ -194,7 +194,7 @@ class _Opener extends StatelessWidget {
   Widget build(BuildContext context) => Material(
     child: Center(
       child: GestureDetector(
-        onTap: () => showBelPanel<void>(
+        onTap: () => showOaaPanel<void>(
           context: context,
           builder: (context) => const SettingsPanel(),
         ),
@@ -204,7 +204,7 @@ class _Opener extends StatelessWidget {
   );
 }
 
-Future<void> _pumpSettings(WidgetTester tester, BelColors colors) async {
+Future<void> _pumpSettings(WidgetTester tester, OaaColors colors) async {
   tester.view.physicalSize = const Size(1200, 900) * 2;
   tester.view.devicePixelRatio = 2;
   addTearDown(tester.view.reset);
@@ -226,8 +226,8 @@ Future<void> _pumpSettings(WidgetTester tester, BelColors colors) async {
         key: _root,
         child: MaterialApp(
           debugShowCheckedModeBanner: false,
-          theme: belThemeData(colors),
-          home: BelTheme(colors: colors, child: const _Opener()),
+          theme: oaaThemeData(colors),
+          home: OaaTheme(colors: colors, child: const _Opener()),
         ),
       ),
     ),
@@ -256,7 +256,7 @@ Future<void> _pumpApp(WidgetTester tester) async {
   await tester.pumpWidget(
     UncontrolledProviderScope(
       container: container,
-      child: RepaintBoundary(key: _root, child: const BelApp()),
+      child: RepaintBoundary(key: _root, child: const OaaApp()),
     ),
   );
   await tester.pump();
@@ -266,14 +266,14 @@ Future<void> _pumpApp(WidgetTester tester) async {
 void main() {
   setUpAll(_loadFonts);
 
-  final dark = BelColors.precisionInstrument;
-  final light = belColorsFromSkin(BuiltInSkins.daylight);
+  final dark = OaaColors.precisionInstrument;
+  final light = oaaColorsFromSkin(BuiltInSkins.daylight);
 
   testWidgets('vu — dark, silence (needle at rest)', (tester) async {
     await _pumpRack(
       tester,
       colors: dark,
-      source: BelSource.silence,
+      source: OaaSource.silence,
       tiles: const [(ModuleKind.vuMeter, 6, 5)],
       size: const Size(640, 380),
     );

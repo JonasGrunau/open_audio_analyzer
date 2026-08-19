@@ -5,18 +5,18 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "open_music_analyzer",
+      "name": "open_audio_analyzer",
       "request": "launch",
       "type": "dart"
     },
     {
-      "name": "open_music_analyzer (profile mode)",
+      "name": "open_audio_analyzer (profile mode)",
       "request": "launch",
       "type": "dart",
       "flutterMode": "profile"
     },
     {
-      "name": "open_music_analyzer (release mode)",
+      "name": "open_audio_analyzer (release mode)",
       "request": "launch",
       "type": "dart",
       "flutterMode": "release"
@@ -28,40 +28,40 @@
       "type": "dart"
     },
     {
-      "name": "bel_core",
-      "cwd": "packages/bel_core",
+      "name": "oaa_core",
+      "cwd": "packages/oaa_core",
       "request": "launch",
       "type": "dart"
     },
     {
-      "name": "bel_engine",
-      "cwd": "packages/bel_engine",
+      "name": "oaa_engine",
+      "cwd": "packages/oaa_engine",
       "request": "launch",
       "type": "dart"
     },
     {
-      "name": "bel_ui",
-      "cwd": "packages/bel_ui",
+      "name": "oaa_ui",
+      "cwd": "packages/oaa_ui",
       "request": "launch",
       "type": "dart"
     },
     {
-      "name": "bel_ui (profile mode)",
-      "cwd": "packages/bel_ui",
+      "name": "oaa_ui (profile mode)",
+      "cwd": "packages/oaa_ui",
       "request": "launch",
       "type": "dart",
       "flutterMode": "profile"
     },
     {
-      "name": "bel_ui (release mode)",
-      "cwd": "packages/bel_ui",
+      "name": "oaa_ui (release mode)",
+      "cwd": "packages/oaa_ui",
       "request": "launch",
       "type": "dart",
       "flutterMode": "release"
     },
     {
-      "name": "bel_wire",
-      "cwd": "packages/bel_wire",
+      "name": "oaa_wire",
+      "cwd": "packages/oaa_wire",
       "request": "launch",
       "type": "dart"
     }

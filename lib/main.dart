@@ -3,7 +3,7 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'src/app/bel_app.dart';
+import 'src/app/oaa_app.dart';
 import 'src/app/launch_options.dart';
 import 'src/data/providers.dart';
 import 'src/storage/config_store.dart';
@@ -40,7 +40,7 @@ Future<void> main(List<String> arguments) async {
         startupConfigProvider.overrideWithValue(config),
         launchOptionsProvider.overrideWithValue(options),
       ],
-      child: const BelApp(),
+      child: const OaaApp(),
     ),
   );
 }

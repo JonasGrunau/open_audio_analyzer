@@ -8,17 +8,17 @@ The panels that sit over the canvas. GPL-3.0-or-later.
 | `preset_browser.dart` | Save the current arrangement; open or delete a saved one. |
 | `calibration_editor.dart` | The six numbers a delivery target is. |
 | `report_panel.dart` | Offline analysis: drop a file, watch it run, cancel it, export the result. |
-| `report_card.dart` | The report as a **PNG** — a fixed layout drawn deliberately, not a screenshot of the panel, so two people exporting the same report get the same picture. It lives here rather than beside the other exports in `bel_core` because rendering needs `dart:ui`. |
-| `shortcuts_sheet.dart` | The keyboard shortcuts, drawn from the table in `lib/src/app/shortcuts.dart`. Holds no list of its own. The one panel that is wider than 620 and laid out in two columns, because it is a reference table rather than a column of controls — see `packages/bel_ui/AGENTS.md` § Panels, and `test/scaling_test.dart`, which fails if it ever needs to scroll again. |
+| `report_card.dart` | The report as a **PNG** — a fixed layout drawn deliberately, not a screenshot of the panel, so two people exporting the same report get the same picture. It lives here rather than beside the other exports in `oaa_core` because rendering needs `dart:ui`. |
+| `shortcuts_sheet.dart` | The keyboard shortcuts, drawn from the table in `lib/src/app/shortcuts.dart`. Holds no list of its own. The one panel that is wider than 620 and laid out in two columns, because it is a reference table rather than a column of controls — see `packages/oaa_ui/AGENTS.md` § Panels, and `test/scaling_test.dart`, which fails if it ever needs to scroll again. |
 
 The primitives they are assembled from — `PanelScaffold`, `PanelSection`,
 `PanelRow`, `PanelListRow`, `PanelNote`, `PanelActions`, `PanelMenu`,
-`SegmentedControl`, `BelButton`, `BelToggle`, `BelTextField`, `showBelPanel` —
-live in `bel_ui/src/panel.dart`. A panel that rolls its own bordered box will
+`SegmentedControl`, `OaaButton`, `OaaToggle`, `OaaTextField`, `showOaaPanel` —
+live in `oaa_ui/src/panel.dart`. A panel that rolls its own bordered box will
 drift from the others within a month.
 
 **How a panel is composed is specified once, in
-`packages/bel_ui/AGENTS.md` § Panels**, and it is not optional or local to this
+`packages/oaa_ui/AGENTS.md` § Panels**, and it is not optional or local to this
 directory: the shell, the footer convention, which primitive expresses which
 kind of row, `ruled: false` on the first section only, and push-a-second-panel
 rather than swap-your-own-body for anything with a second step. Read it before
@@ -29,13 +29,13 @@ differs from the six here.
 
 ## Rules
 
-- **Open with `showBelPanel`, and build on `PanelScaffold`.** A route is built by
+- **Open with `showOaaPanel`, and build on `PanelScaffold`.** A route is built by
   the `Navigator`, which sits *above* the application's `Material`; without
   `PanelScaffold`'s, every `PopupMenuButton` and `TextField` becomes an error box
   — whose intrinsic width is near 100 000 px, so what you actually see is a
-  `RenderFlex` overflow blaming an innocent `Row`. `showBelPanel` is also what
+  `RenderFlex` overflow blaming an innocent `Row`. `showOaaPanel` is also what
   keeps a panel on the current skin: it reads the palette from above the
-  navigator, where `BelApp` installs it, so a skin chosen in the settings panel
+  navigator, where `OaaApp` installs it, so a skin chosen in the settings panel
   reaches the settings panel.
 
 - **There is no OK button.** Every control writes through as it is touched. A
@@ -53,8 +53,8 @@ differs from the six here.
 
 - **Parse numbers leniently.** Accept the typographic minus (U+2212) and the
   comma decimal separator: the interface renders "−14 LUFS" itself, so anybody
-  who copies a target out of Bel and pastes it back in is pasting a character
-  `double.parse` rejects, and half of Europe types "−0,5".
+  who copies a target out of Open Audio Analyzer and pastes it back in is
+  pasting a character `double.parse` rejects, and half of Europe types "−0,5".
 
 - **Nothing here is on the frame path.** These are ordinary widgets that rebuild
   when a human does something; the no-allocation-in-`paint` rule that governs

@@ -1,4 +1,4 @@
-# engine/CMakeLists.txt — libbel for the consumers that are not Dart.
+# engine/CMakeLists.txt — liboaa for the consumers that are not Dart.
 #
 # SPDX-License-Identifier: MIT
 #
@@ -6,7 +6,7 @@
 # Why this file exists at all, when build.dart already builds the same sources
 #
 # It is a stated goal of this repository that there is one native build
-# description. `packages/bel_engine/hook/build.dart` is it, and for the Flutter
+# description. `packages/oaa_engine/hook/build.dart` is it, and for the Flutter
 # app it remains it — nothing here is on the app's build path.
 #
 # But a VST3 and an Audio Unit are C++ bundles produced by JUCE's CMake API, and
@@ -19,7 +19,7 @@
 # do is say so loudly rather than pretend otherwise:
 #
 #   **If you add a file to engine/src, add it in BOTH places.**
-#   Here, and in `_engineSources` in packages/bel_engine/hook/build.dart.
+#   Here, and in `_engineSources` in packages/oaa_engine/hook/build.dart.
 #
 # The two are checked against each other by `plugin/test/sources_match.sh`,
 # which is wired into CI. A source file that reaches only one of them produces
@@ -35,13 +35,13 @@
 
 cmake_minimum_required(VERSION 3.22)
 
-project(bel
+project(oaa
   VERSION 0.1.0
-  DESCRIPTION "The Bel measurement engine"
+  DESCRIPTION "The Open Audio Analyzer measurement engine"
   LANGUAGES C
 )
 
-option(BEL_BUILD_DECODE "Compile the file-decoding sources (dr_libs)." ON)
+option(OAA_BUILD_DECODE "Compile the file-decoding sources (dr_libs)." ON)
 
 # ---------------------------------------------------------------------------
 # Sources
@@ -51,55 +51,55 @@ option(BEL_BUILD_DECODE "Compile the file-decoding sources (dr_libs)." ON)
 # effect of creating it. A glob would also defeat the CI check above by keeping
 # the two lists trivially in step while hiding whether anyone meant it.
 
-set(BEL_SOURCES
-  src/bel_analysis.c
-  src/bel_device.c
-  src/bel_engine.c
-  src/bel_kweight.c
-  src/bel_loudness.c
-  src/bel_ring.c
-  src/bel_snapshot.c
-  src/bel_source.c
-  src/bel_spectrum.c
-  src/bel_truepeak.c
+set(OAA_SOURCES
+  src/oaa_analysis.c
+  src/oaa_device.c
+  src/oaa_engine.c
+  src/oaa_kweight.c
+  src/oaa_loudness.c
+  src/oaa_ring.c
+  src/oaa_snapshot.c
+  src/oaa_source.c
+  src/oaa_spectrum.c
+  src/oaa_truepeak.c
 
   # Vendored. One translation unit, no build system of its own.
   third_party/pffft/pffft.c
 )
 
-if(BEL_BUILD_DECODE)
-  list(APPEND BEL_SOURCES src/bel_decode.c)
+if(OAA_BUILD_DECODE)
+  list(APPEND OAA_SOURCES src/oaa_decode.c)
 endif()
 
-add_library(bel STATIC ${BEL_SOURCES})
-add_library(bel::bel ALIAS bel)
+add_library(oaa STATIC ${OAA_SOURCES})
+add_library(oaa::oaa ALIAS oaa)
 
 # ---------------------------------------------------------------------------
 # Include paths
 #
-# `include/` is PUBLIC because bel.h is the entire contract and every consumer
+# `include/` is PUBLIC because oaa.h is the entire contract and every consumer
 # needs it. The vendored directories are PRIVATE: miniaudio and pffft are
 # implementation, and a plugin that could `#include "miniaudio.h"` because it
 # happened to link the engine is a plugin that will eventually do it.
 
-target_include_directories(bel
+target_include_directories(oaa
   PUBLIC  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/third_party/miniaudio
           ${CMAKE_CURRENT_SOURCE_DIR}/third_party/pffft
 )
 
-if(BEL_BUILD_DECODE)
-  target_include_directories(bel PRIVATE
+if(OAA_BUILD_DECODE)
+  target_include_directories(oaa PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/third_party/dr_libs)
 endif()
 
-target_compile_features(bel PUBLIC c_std_11)
+target_compile_features(oaa PUBLIC c_std_11)
 
 # `-std=c11` is strict ISO C, which hides everything POSIX behind
 # __STRICT_ANSI__. See the long comment on `_defines` in build.dart: this was
 # found the hard way, by a local SDK being lenient enough to compile without it
 # while both POSIX CI runners failed.
-set_target_properties(bel PROPERTIES
+set_target_properties(oaa PROPERTIES
   C_STANDARD 11
   C_STANDARD_REQUIRED ON
   C_EXTENSIONS OFF
@@ -117,16 +117,16 @@ set_target_properties(bel PROPERTIES
 )
 
 if(NOT MSVC)
-  target_compile_definitions(bel PRIVATE
+  target_compile_definitions(oaa PRIVATE
     _POSIX_C_SOURCE=200809L
     _DEFAULT_SOURCE
   )
   if(APPLE)
     # Asking for a specific _POSIX_C_SOURCE level on Darwin narrows the SDK to
     # exactly POSIX and hides the Apple half of the headers.
-    target_compile_definitions(bel PRIVATE _DARWIN_C_SOURCE)
+    target_compile_definitions(oaa PRIVATE _DARWIN_C_SOURCE)
   endif()
-  target_compile_options(bel PRIVATE -Wall -Wextra)
+  target_compile_options(oaa PRIVATE -Wall -Wextra)
 endif()
 
 # ---------------------------------------------------------------------------
@@ -138,12 +138,12 @@ endif()
 # link step. These are PUBLIC because the consumer does the final link.
 
 if(APPLE)
-  target_link_libraries(bel PUBLIC
+  target_link_libraries(oaa PUBLIC
     "-framework CoreFoundation"
     "-framework CoreAudio"
     "-framework AudioToolbox"
   )
 elseif(UNIX)
   find_package(Threads REQUIRED)
-  target_link_libraries(bel PUBLIC ${CMAKE_DL_LIBS} Threads::Threads m)
+  target_link_libraries(oaa PUBLIC ${CMAKE_DL_LIBS} Threads::Threads m)
 endif()

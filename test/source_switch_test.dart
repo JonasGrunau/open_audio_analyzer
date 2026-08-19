@@ -7,7 +7,7 @@
 // which allows one `createTicker` per State for the life of the State —
 // disposing the ticker does not buy another. So the source chosen at launch
 // worked and every change after it threw a `FlutterError` out of the `setState`
-// callback in `_openFor`, which catches `BelEngineException` and nothing else.
+// callback in `_openFor`, which catches `OaaEngineException` and nothing else.
 //
 // Nothing visible happened. The engine had already been created and started, so
 // a capture device was opened and held with nothing reading it, while the
@@ -17,11 +17,11 @@
 // `flutter analyze` cannot see it and no test that stops at one source can
 // either. The assertion that matters is the *second* one.
 
-import 'package:bel/src/app/bel_app.dart';
-import 'package:bel/src/data/providers.dart';
-import 'package:bel/src/storage/config_store.dart';
-import 'package:bel/src/storage/startup_config.dart';
-import 'package:bel_core/bel_core.dart';
+import 'package:oaa/src/app/oaa_app.dart';
+import 'package:oaa/src/data/providers.dart';
+import 'package:oaa/src/storage/config_store.dart';
+import 'package:oaa/src/storage/startup_config.dart';
+import 'package:oaa_core/oaa_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -50,7 +50,7 @@ void main() {
     addTearDown(container.dispose);
 
     await tester.pumpWidget(
-      UncontrolledProviderScope(container: container, child: const BelApp()),
+      UncontrolledProviderScope(container: container, child: const OaaApp()),
     );
     await tester.pump();
 

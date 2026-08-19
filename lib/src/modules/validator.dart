@@ -2,8 +2,8 @@
 
 import 'dart:ui' as ui;
 
-import 'package:bel_core/bel_core.dart';
-import 'package:bel_ui/bel_ui.dart';
+import 'package:oaa_core/oaa_core.dart';
+import 'package:oaa_ui/oaa_ui.dart';
 import 'package:flutter/widgets.dart';
 
 import '../clock/meter_clock.dart';
@@ -81,14 +81,14 @@ class _ValidatorModuleState extends State<ValidatorModule> {
 
   @override
   Widget build(BuildContext context) {
-    final colors = BelTheme.of(context);
+    final colors = OaaTheme.of(context);
 
     if (_builtFor != widget.calibration || _builtColor != colors.textFaint) {
       _builtFor = widget.calibration;
       _builtColor = colors.textFaint;
 
-      final label = BelType.label.copyWith(color: colors.textFaint);
-      final tick = BelType.tick.copyWith(color: colors.textFaint);
+      final label = OaaType.label.copyWith(color: colors.textFaint);
+      final tick = OaaType.tick.copyWith(color: colors.textFaint);
 
       _names = [
         for (final check in _checks)
@@ -99,12 +99,12 @@ class _ValidatorModuleState extends State<ValidatorModule> {
           layoutParagraph(check.limit(widget.calibration), tick),
       ];
       _passLabels = [
-        layoutParagraph('PASS', BelType.label.copyWith(color: colors.accent)),
-        layoutParagraph('FAIL', BelType.label.copyWith(color: colors.over)),
+        layoutParagraph('PASS', OaaType.label.copyWith(color: colors.accent)),
+        layoutParagraph('FAIL', OaaType.label.copyWith(color: colors.over)),
         // Muted, not faint: this dash sits in the same column as PASS and FAIL
         // and carries the same weight of statement — the check could not be
         // made. See `colorForState` for the full reasoning.
-        layoutParagraph('—', BelType.label.copyWith(color: colors.textMuted)),
+        layoutParagraph('—', OaaType.label.copyWith(color: colors.textMuted)),
       ];
     }
 
@@ -132,13 +132,13 @@ class _ValidatorPainter extends MeterPainter {
     required Listenable repaint,
   }) : _rule = (Paint()
          ..color = colors.hairline
-         ..strokeWidth = BelStroke.hairline
+         ..strokeWidth = OaaStroke.hairline
          ..isAntiAlias = false),
        super(repaint: repaint);
 
   final MeterSource engine;
   final Calibration calibration;
-  final BelColors colors;
+  final OaaColors colors;
   final _ValidatorModuleState state;
 
   final Paint _rule;
@@ -190,7 +190,7 @@ class _ValidatorPainter extends MeterPainter {
       // top of the limit beside it.
       final reading = state._values[i].of(
         check.metric.format(value),
-        BelType.reading(readingSize).copyWith(
+        OaaType.reading(readingSize).copyWith(
           color: outcome == _Outcome.fail ? colors.over : colors.textPrimary,
         ),
       );
@@ -234,7 +234,7 @@ class _ValidatorPainter extends MeterPainter {
       _Outcome.undecided => ('MEASURING', colors.textFaint),
     };
     canvas.drawParagraph(
-      state._verdict.of(text, BelType.label.copyWith(color: color)),
+      state._verdict.of(text, OaaType.label.copyWith(color: color)),
       const Offset(0, Space.xs),
     );
     canvas.drawLine(

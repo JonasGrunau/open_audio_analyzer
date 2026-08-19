@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 // Drop a file on this panel and it is measured by the same engine the live
-// meters run on, through the same decoder the `bel` CLI uses. That is not an
+// meters run on, through the same decoder the `oaa` CLI uses. That is not an
 // implementation detail worth being quiet about — it is the reason the number
 // here can be trusted, and it is why this panel has no DSP of its own at all.
 // Everything below the analysis call is presentation.
@@ -22,23 +22,23 @@
 // Dropped files arrive through the same mechanism.
 //
 // The macOS build is **not** sandboxed today — see the reasoning at the top of
-// `Release.entitlements`, which turns on where Bel keeps its configuration —
-// so that entitlement is currently a correct declaration of what this panel
-// does rather than something it depends on. If the sandbox is ever switched
-// back on, it becomes load-bearing, and the failure it prevents is unusually
-// misleading: powerbox draws the open and save panels out of process, so they
-// still *appear*, the user picks a file, and only then does the read or write
-// fail — surfacing as a decode or write error rather than as a permission
-// problem. If either ever fails on macOS and nowhere else, check the
-// entitlements before reading a line of this file.
+// `Release.entitlements`, which turns on where Open Audio Analyzer keeps its
+// configuration — so that entitlement is currently a correct declaration of
+// what this panel does rather than something it depends on. If the sandbox is
+// ever switched back on, it becomes load-bearing, and the failure it prevents
+// is unusually misleading: powerbox draws the open and save panels out of
+// process, so they still *appear*, the user picks a file, and only then does
+// the read or write fail — surfacing as a decode or write error rather than as
+// a permission problem. If either ever fails on macOS and nowhere else, check
+// the entitlements before reading a line of this file.
 
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:bel_core/bel_core.dart';
-import 'package:bel_engine/bel_engine.dart';
-import 'package:bel_ui/bel_ui.dart';
+import 'package:oaa_core/oaa_core.dart';
+import 'package:oaa_engine/oaa_engine.dart';
+import 'package:oaa_ui/oaa_ui.dart';
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
@@ -49,7 +49,7 @@ import '../data/providers.dart';
 import 'report_card.dart';
 
 /// Opens the analysis panel.
-Future<void> showReportPanel(BuildContext context) => showBelPanel<void>(
+Future<void> showReportPanel(BuildContext context) => showOaaPanel<void>(
   context: context,
   builder: (context) => const ReportPanel(),
 );
@@ -209,7 +209,7 @@ class _ReportPanelState extends ConsumerState<ReportPanel> {
             truePeak: point.truePeak,
           ),
       ],
-      toolVersion: 'Bel',
+      toolVersion: 'Open Audio Analyzer',
     );
   }
 
@@ -236,19 +236,19 @@ class _ReportPanelState extends ConsumerState<ReportPanel> {
   /// The report as a PNG, for pasting into a message rather than parsing.
   ///
   /// Separate from [ReportFormat] on purpose: the other three are rendered in
-  /// `bel_core`, which is pure Dart and cannot reach `dart:ui`. Drawing a
+  /// `oaa_core`, which is pure Dart and cannot reach `dart:ui`. Drawing a
   /// picture needs a `Canvas`, so the card lives in the app — see
   /// `report_card.dart`.
   Future<void> _exportCard() async {
     final report = _report;
     if (report == null) return;
 
-    final colors = BelTheme.of(context);
+    final colors = OaaTheme.of(context);
     final bytes = await renderReportCard(report, colors);
     if (bytes == null) return;
 
     final location = await getSaveLocation(
-      suggestedName: '${_stem(report.fileName)} — Bel report.png',
+      suggestedName: '${_stem(report.fileName)} — Open Audio Analyzer report.png',
       acceptedTypeGroups: const [
         XTypeGroup(label: 'PNG', extensions: ['png']),
       ],
@@ -264,7 +264,7 @@ class _ReportPanelState extends ConsumerState<ReportPanel> {
 
   @override
   Widget build(BuildContext context) {
-    final colors = BelTheme.of(context);
+    final colors = OaaTheme.of(context);
 
     return PanelScaffold(
       title: 'File analysis',
@@ -283,7 +283,7 @@ class _ReportPanelState extends ConsumerState<ReportPanel> {
     );
   }
 
-  Widget _body(BelColors colors) {
+  Widget _body(OaaColors colors) {
     if (_error != null) return _Message(text: _error!, tone: colors.over);
     if (_isRunning) return _progressView(colors);
 
@@ -293,7 +293,7 @@ class _ReportPanelState extends ConsumerState<ReportPanel> {
     return _ReportView(report: report);
   }
 
-  Widget _progressView(BelColors colors) {
+  Widget _progressView(OaaColors colors) {
     final name = (_path ?? '').split(RegExp(r'[/\\]')).last;
 
     return Padding(
@@ -303,7 +303,7 @@ class _ReportPanelState extends ConsumerState<ReportPanel> {
         children: [
           Text(
             'Analysing $name',
-            style: BelType.body.copyWith(color: colors.textPrimary),
+            style: OaaType.body.copyWith(color: colors.textPrimary),
           ),
           const SizedBox(height: Space.md),
           SizedBox(
@@ -316,32 +316,32 @@ class _ReportPanelState extends ConsumerState<ReportPanel> {
             ),
           ),
           const SizedBox(height: Space.md),
-          BelButton(label: 'Cancel', onPressed: () => unawaited(_stop())),
+          OaaButton(label: 'Cancel', onPressed: () => unawaited(_stop())),
         ],
       ),
     );
   }
 
-  Widget? _footer(BelColors colors) {
+  Widget? _footer(OaaColors colors) {
     final report = _report;
     if (report == null) return null;
 
     return Row(
       mainAxisAlignment: MainAxisAlignment.end,
       children: [
-        BelButton(
+        OaaButton(
           label: 'Analyse another…',
           onPressed: () => unawaited(_pick()),
         ),
         const SizedBox(width: Space.sm),
         for (final format in ReportFormat.values) ...[
-          BelButton(
+          OaaButton(
             label: format.extension.toUpperCase(),
             onPressed: () => unawaited(_export(format)),
           ),
           const SizedBox(width: Space.sm),
         ],
-        BelButton(label: 'PNG', onPressed: () => unawaited(_exportCard())),
+        OaaButton(label: 'PNG', onPressed: () => unawaited(_exportCard())),
       ],
     );
   }
@@ -356,7 +356,7 @@ class _DropZone extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = BelTheme.of(context);
+    final colors = OaaTheme.of(context);
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: Space.xxl),
@@ -379,14 +379,14 @@ class _DropZone extends StatelessWidget {
                   children: [
                     Text(
                       'Drop an audio file here',
-                      style: BelType.body.copyWith(
+                      style: OaaType.body.copyWith(
                         color: active ? colors.accent : colors.textPrimary,
                       ),
                     ),
                     const SizedBox(height: Space.xs),
                     Text(
                       'WAV, AIFF, RF64, Wave64, FLAC, MP3',
-                      style: BelType.caption.copyWith(color: colors.textFaint),
+                      style: OaaType.caption.copyWith(color: colors.textFaint),
                     ),
                   ],
                 ),
@@ -394,7 +394,7 @@ class _DropZone extends StatelessWidget {
             ),
           ),
           const SizedBox(height: Space.md),
-          BelButton(label: 'Choose a file…', onPressed: onPick),
+          OaaButton(label: 'Choose a file…', onPressed: onPick),
         ],
       ),
     );
@@ -411,7 +411,7 @@ class _DropOutlinePainter extends MeterPainter {
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
       ..style = PaintingStyle.stroke
-      ..strokeWidth = BelStroke.hairline
+      ..strokeWidth = OaaStroke.hairline
       ..color = color;
 
     final rect = RRect.fromRectAndRadius(
@@ -447,7 +447,7 @@ class _Message extends StatelessWidget {
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.symmetric(vertical: Space.xxl),
     child: Center(
-      child: Text(text, style: BelType.body.copyWith(color: tone)),
+      child: Text(text, style: OaaType.body.copyWith(color: tone)),
     ),
   );
 }
@@ -460,7 +460,7 @@ class _ReportView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = BelTheme.of(context);
+    final colors = OaaTheme.of(context);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -530,7 +530,7 @@ class _Value extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Text(
     text,
-    style: BelType.body.copyWith(color: BelTheme.of(context).textPrimary),
+    style: OaaType.body.copyWith(color: OaaTheme.of(context).textPrimary),
     textAlign: TextAlign.end,
   );
 }
@@ -543,12 +543,12 @@ class _Reading extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = BelTheme.of(context);
+    final colors = OaaTheme.of(context);
     final unit = metric.unit.isEmpty ? '' : ' ${metric.unit}';
 
     return Text(
       '${metric.format(value)}$unit',
-      style: BelType.readingSmall.copyWith(
+      style: OaaType.readingSmall.copyWith(
         color: value.isNaN ? colors.textFaint : colors.textPrimary,
       ),
       textAlign: TextAlign.end,
@@ -560,7 +560,7 @@ class _Verdict extends StatelessWidget {
   const _Verdict({required this.check, required this.colors});
 
   final ComplianceCheck check;
-  final BelColors colors;
+  final OaaColors colors;
 
   @override
   Widget build(BuildContext context) {
@@ -578,10 +578,10 @@ class _Verdict extends StatelessWidget {
       children: [
         Text(
           '${check.metric.format(check.value)}$unit',
-          style: BelType.readingSmall.copyWith(color: colors.textPrimary),
+          style: OaaType.readingSmall.copyWith(color: colors.textPrimary),
         ),
         const SizedBox(width: Space.smd),
-        Text(check.verdictLabel, style: BelType.caption.copyWith(color: tone)),
+        Text(check.verdictLabel, style: OaaType.caption.copyWith(color: tone)),
       ],
     );
   }
@@ -600,7 +600,7 @@ class _TimelinePainter extends MeterPainter {
 
   final List<ReportTimelinePoint> timeline;
   final double integrated;
-  final BelColors colors;
+  final OaaColors colors;
 
   /// The window the graph spans. Fixed rather than fitted to the data: an axis
   /// that rescales per file is one you cannot compare two files on, which is
@@ -619,7 +619,7 @@ class _TimelinePainter extends MeterPainter {
 
     final grid = Paint()
       ..color = colors.hairline
-      ..strokeWidth = BelStroke.hairline;
+      ..strokeWidth = OaaStroke.hairline;
 
     for (var lufs = _top; lufs >= _bottom; lufs -= 10) {
       final y = _y(lufs, size.height);
@@ -652,7 +652,7 @@ class _TimelinePainter extends MeterPainter {
         path,
         Paint()
           ..style = PaintingStyle.stroke
-          ..strokeWidth = BelStroke.mark
+          ..strokeWidth = OaaStroke.mark
           ..color = colors.meterFill,
       );
     }
@@ -664,7 +664,7 @@ class _TimelinePainter extends MeterPainter {
         Offset(size.width, y),
         Paint()
           ..color = colors.accent
-          ..strokeWidth = BelStroke.hairline,
+          ..strokeWidth = OaaStroke.hairline,
       );
     }
   }

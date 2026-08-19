@@ -12,10 +12,10 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:bel/src/plugin/plugin_link.dart';
+import 'package:oaa/src/plugin/plugin_link.dart';
 
 Future<Uint8List> _goldenFrames() =>
-    File('plugin/test/golden/wire_v1.bin').readAsBytes();
+    File('plugin/test/golden/wire_v2.bin').readAsBytes();
 
 /// Waits for [condition], failing the test rather than hanging forever.
 ///
@@ -44,8 +44,8 @@ void main() {
 
   setUp(() async {
     // Port 0 asks the OS for a free one. Binding the real 47822 would make the
-    // suite fail whenever the developer happens to have Bel open, which is
-    // exactly when they are most likely to be running it.
+    // suite fail whenever the developer happens to have Open Audio Analyzer
+    // open, which is exactly when they are most likely to be running it.
     link = PluginLink(port: 0);
     await link.start();
   });
@@ -78,7 +78,7 @@ void main() {
     );
 
     final session = link.active!;
-    expect(session.producerName, 'Bel plugin — fixture');
+    expect(session.producerName, 'Open Audio Analyzer plugin — fixture');
     expect(session.abiVersion, isNotNull);
 
     // The measurements the app will draw.

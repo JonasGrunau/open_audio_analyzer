@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import 'package:bel_ui/bel_ui.dart';
+import 'package:oaa_ui/oaa_ui.dart';
 import 'package:flutter/material.dart';
 
 import 'display_host.dart';
@@ -13,11 +13,11 @@ import 'mdns/host_discovery.dart';
 /// neither may own a second copy of it — the receive half of the pairing panel
 /// on a machine deciding what it wants to be, and the display screen itself
 /// while it has no host. It is a [PanelScaffold] over `PanelSection`,
-/// `PanelListRow` and `PanelRow` like every other panel in Bel; what it
-/// replaced was a full screen of `InkWell` over a hand-rolled `Container`, a
-/// stock `TextField` with an `OutlineInputBorder` and a Material `TextButton`,
-/// which is precisely what `AGENTS.md` in this directory says may not happen
-/// here: the directory owns a socket, not a design system.
+/// `PanelListRow` and `PanelRow` like every other panel in Open Audio Analyzer;
+/// what it replaced was a full screen of `InkWell` over a hand-rolled
+/// `Container`, a stock `TextField` with an `OutlineInputBorder` and a Material
+/// `TextButton`, which is precisely what `AGENTS.md` in this directory says may
+/// not happen here: the directory owns a socket, not a design system.
 ///
 /// The typed address is not a fallback for completeness. Multicast is the first
 /// thing a guest network blocks and the first thing a corporate image turns
@@ -36,8 +36,8 @@ class HostPickerPanel extends StatefulWidget {
   /// the client it already has.
   final void Function(String host, int port) onConnect;
 
-  /// Null on a screen with nowhere to go back to — a tablet that opened Bel
-  /// with no capture device has no canvas behind this.
+  /// Null on a screen with nowhere to go back to — a tablet that opened Open
+  /// Audio Analyzer with no capture device has no canvas behind this.
   final VoidCallback? onClose;
 
   /// The search to show. Null means the one this platform is allowed to do,
@@ -99,7 +99,7 @@ class _HostPickerPanelState extends State<HostPickerPanel> {
 
   @override
   Widget build(BuildContext context) {
-    final colors = BelTheme.of(context);
+    final colors = OaaTheme.of(context);
 
     return PanelScaffold(
       title: 'Show another machine',
@@ -114,7 +114,7 @@ class _HostPickerPanelState extends State<HostPickerPanel> {
       footer: Row(
         children: [
           const Spacer(),
-          BelButton(
+          OaaButton(
             label: 'Connect',
             emphasis: ButtonEmphasis.primary,
             onPressed: _typed ? _submit : null,
@@ -165,7 +165,7 @@ class _HostPickerPanelState extends State<HostPickerPanel> {
                       // wears — one mark, one meaning, in both directions of
                       // the link. Nothing in this list is ever `selected`, so
                       // the row brightens under the pointer instead.
-                      mark: BelMark.broadcast,
+                      mark: OaaMark.broadcast,
                       opens: true,
                       onTap: () => widget.onConnect(host.address, host.port),
                     ),
@@ -173,17 +173,18 @@ class _HostPickerPanelState extends State<HostPickerPanel> {
                   // "nothing is running" and sends somebody to check the wrong
                   // machine — and stated in the words of whatever actually
                   // stopped it where those are known, because "cannot search"
-                  // and "macOS is not letting Bel search" send that person to
-                  // two different places. Android is the case with no sentence
-                  // to give: it needs a `WifiManager.MulticastLock` that Dart
-                  // cannot take, and the socket opens perfectly without one.
+                  // and "macOS is not letting Open Audio Analyzer search" send
+                  // that person to two different places. Android is the case
+                  // with no sentence to give: it needs a
+                  // `WifiManager.MulticastLock` that Dart cannot take, and the
+                  // socket opens perfectly without one.
                   if (hosts.isEmpty && !browsing)
                     PanelNote(
                       failure ??
                           'This device cannot search the network for hosts. '
                               'Enter an address below.',
                       tone: colors.warn,
-                      mark: BelMark.warning,
+                      mark: OaaMark.warning,
                     ),
                 ],
               );
@@ -199,7 +200,7 @@ class _HostPickerPanelState extends State<HostPickerPanel> {
             children: [
               PanelRow(
                 label: 'Host',
-                child: BelTextField(
+                child: OaaTextField(
                   controller: _address,
                   width: 220,
                   hintText: '192.168.1.20',

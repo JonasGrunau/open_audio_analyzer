@@ -1,4 +1,4 @@
-# `cli/` — the `bel` command-line analyser
+# `cli/` — the `oaa` command-line analyser
 
 GPL-3.0-or-later, like the app. The engine it calls is MIT and stays that way.
 
@@ -17,13 +17,13 @@ stderr: stdout has to stay clean enough to pipe into `jq`.
 
 | File | Description |
 |------|-------------|
-| `bin/bel.dart` | The whole tool. Argument parsing, the analysis loop's call site, and the three output formats. |
-| `test/bel_cli_test.dart` | Runs the real entry point as a subprocess and asserts on exit codes and streams. |
+| `bin/oaa.dart` | The whole tool. Argument parsing, the analysis loop's call site, and the three output formats. |
+| `test/oaa_cli_test.dart` | Runs the real entry point as a subprocess and asserts on exit codes and streams. |
 
 ## Rules
 
 - **The CLI implements no measurement and no formatting.** `analyseFile` in
-  `bel_engine` measures, `AnalysisReport` and `exportReport` in `bel_core`
+  `oaa_engine` measures, `AnalysisReport` and `exportReport` in `oaa_core`
   interpret and render. If you find yourself computing a number here, it
   belongs in one of those two and the app is about to disagree with you about
   it.
@@ -34,7 +34,7 @@ stderr: stdout has to stay clean enough to pipe into `jq`.
   noise around the one line that mattered.
 
 - **Exit codes are load-bearing, so they are tested through the real binary.**
-  `test/bel_cli_test.dart` runs `bin/bel.dart` as a subprocess rather than
+  `test/oaa_cli_test.dart` runs `bin/oaa.dart` as a subprocess rather than
   calling its functions, because a tool that prints `VERDICT: FAIL` while
   exiting 0 is a tool whose check silently never fires, and no unit test of its
   internals can see that.
@@ -45,8 +45,8 @@ stderr: stdout has to stay clean enough to pipe into `jq`.
   | `1` | Bad arguments, or a file that could not be read. |
   | `2` | Analysed, but missed the delivery target. |
 
-- **No Flutter binding, ever.** This package depends on `bel_core` and
-  `bel_engine` only. Both are pure Dart plus FFI, so `dart run` and
+- **No Flutter binding, ever.** This package depends on `oaa_core` and
+  `oaa_engine` only. Both are pure Dart plus FFI, so `dart run` and
   `dart compile exe` drive `hook/build.dart` themselves and there is no
   separate native build step. Reaching for anything from the app — a config
   path resolver, a provider, a widget — makes the CLI unrunnable outside a

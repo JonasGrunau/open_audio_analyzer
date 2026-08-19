@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Draws Bel's mark at every size the four installers ask for.
+// Draws Open Audio Analyzer's mark at every size the four installers ask for.
 //
 // ---------------------------------------------------------------------------
 // Why this is a program and not a folder of PNGs
@@ -12,7 +12,7 @@
 // in the Windows Start menu stays a year behind the one in the Dock. Generated,
 // there is one description of the mark and everything else is a consequence.
 //
-// `packaging/icon/bel.svg` is the same mark for the places that want a vector —
+// `packaging/icon/oaa.svg` is the same mark for the places that want a vector —
 // Linux's `scalable` hicolor directory — and carries the same numbers as
 // [_Mark] below. It is the one duplicate here and it is annotated as such.
 //
@@ -39,28 +39,28 @@ import 'dart:typed_data';
 // ---------------------------------------------------------------------------
 // The mark
 
-/// Bel's icon, as geometry on a unit square.
+/// Open Audio Analyzer's icon, as geometry on a unit square.
 ///
-/// A meter, because that is what Bel is: four bars rising left to right, the
-/// tallest one topped in the over colour. Not a letterform and not a waveform —
-/// a `b` says nothing about what the application does, and a waveform is what
-/// every audio editor on the machine already looks like.
+/// A meter, because that is what Open Audio Analyzer is: four bars rising left
+/// to right, the tallest one topped in the over colour. Not a letterform and
+/// not a waveform — a `b` says nothing about what the application does, and a
+/// waveform is what every audio editor on the machine already looks like.
 ///
 /// It survives 16 px, which is the size that decides an icon. At 16 px the
 /// bars are two pixels wide and the red cap is one, and that is still four
 /// bars, rising, with the top one in trouble.
 abstract final class _Mark {
-  /// The graphite the whole interface is drawn on — `BelColors.background`.
+  /// The graphite the whole interface is drawn on — `OaaColors.background`.
   static const _Rgb background = _Rgb(0x0B, 0x0C, 0x0E);
 
-  /// `BelColors.accent`, the one signal hue.
+  /// `OaaColors.accent`, the one signal hue.
   static const _Rgb accent = _Rgb(0x35, 0xE0, 0xC4);
 
-  /// `BelColors.over`. One bar is over, which is the only state a meter has
+  /// `OaaColors.over`. One bar is over, which is the only state a meter has
   /// that you can read across a room.
   static const _Rgb over = _Rgb(0xFF, 0x4D, 0x4D);
 
-  /// `BelColors.hairlineStrong`, so the tile has an edge on a white desktop.
+  /// `OaaColors.hairlineStrong`, so the tile has an edge on a white desktop.
   static const _Rgb edge = _Rgb(0x2E, 0x34, 0x3C);
 
   static const double corner = 0.2;
@@ -309,7 +309,7 @@ void _write(String path, List<int> bytes) {
 }
 
 void main() {
-  stdout.writeln('Bel icons');
+  stdout.writeln('Open Audio Analyzer icons');
 
   // macOS. The names are Xcode's, and Contents.json in the asset catalogue
   // already refers to them.
@@ -349,12 +349,12 @@ void main() {
   // root of its AppDir.
   for (final size in [16, 32, 48, 64, 128, 256, 512]) {
     _write(
-      'packaging/linux/icons/${size}x$size/dev.belmeter.bel.png',
+      'packaging/linux/icons/${size}x$size/dev.openaudioanalyzer.oaa.png',
       _pngOf(size),
     );
   }
 
   stdout.writeln(
-    'Done. bel.svg is the vector twin — keep its numbers in step.',
+    'Done. oaa.svg is the vector twin — keep its numbers in step.',
   );
 }

@@ -13,18 +13,18 @@
 
 import 'dart:io';
 
-import 'package:bel/src/app/bar_controls.dart';
-import 'package:bel/src/canvas/workspace.dart';
-import 'package:bel/src/data/providers.dart';
-import 'package:bel/src/panels/calibration_editor.dart';
-import 'package:bel/src/panels/preset_browser.dart';
-import 'package:bel/src/panels/settings_panel.dart';
-import 'package:bel/src/remote/remote_control.dart';
-import 'package:bel/src/storage/config_paths.dart';
-import 'package:bel/src/storage/config_store.dart';
-import 'package:bel/src/storage/startup_config.dart';
-import 'package:bel_core/bel_core.dart';
-import 'package:bel_ui/bel_ui.dart';
+import 'package:oaa/src/app/bar_controls.dart';
+import 'package:oaa/src/canvas/workspace.dart';
+import 'package:oaa/src/data/providers.dart';
+import 'package:oaa/src/panels/calibration_editor.dart';
+import 'package:oaa/src/panels/preset_browser.dart';
+import 'package:oaa/src/panels/settings_panel.dart';
+import 'package:oaa/src/remote/remote_control.dart';
+import 'package:oaa/src/storage/config_paths.dart';
+import 'package:oaa/src/storage/config_store.dart';
+import 'package:oaa/src/storage/startup_config.dart';
+import 'package:oaa_core/oaa_core.dart';
+import 'package:oaa_ui/oaa_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -45,7 +45,7 @@ Future<ProviderContainer> _container(
   WidgetTester tester, [
   StartupConfig? config,
 ]) async {
-  final directory = Directory.systemTemp.createTempSync('bel_panels_');
+  final directory = Directory.systemTemp.createTempSync('oaa_panels_');
   final store = (await tester.runAsync(
     () => ConfigStore.open(environment: {kConfigDirEnvVar: directory.path}),
   ))!;
@@ -125,9 +125,9 @@ ProviderContainer _wrap(ConfigStore store, StartupConfig? config) {
 }
 
 /// Pumps an application and opens [panel] the way the real one does — through
-/// `showBelPanel`, over a route, so the theme re-provisioning is exercised.
+/// `showOaaPanel`, over a route, so the theme re-provisioning is exercised.
 ///
-/// **The palette is installed exactly where `BelApp` installs it: through
+/// **The palette is installed exactly where `OaaApp` installs it: through
 /// `MaterialApp.builder`, above the `Navigator`.** Wrapping `home` instead is
 /// the arrangement that made a panel unable to follow a skin change, and a
 /// harness that keeps it cannot see that class of failure — the panel still
@@ -137,10 +137,10 @@ Future<void> _open(
   ProviderContainer container,
   Widget panel,
 ) async {
-  // A desktop window, not the 800×600 default. Bel is a desktop application and
-  // its panels are laid out for one; at the default surface the footer buttons
-  // and half the skin list are below the fold, and `tap` silently derives an
-  // offset outside the render tree.
+  // A desktop window, not the 800×600 default. Open Audio Analyzer is a desktop
+  // application and its panels are laid out for one; at the default surface the
+  // footer buttons and half the skin list are below the fold, and `tap`
+  // silently derives an offset outside the render tree.
   tester.view.physicalSize = const Size(1200, 1800);
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.reset);
@@ -153,9 +153,9 @@ Future<void> _open(
           final colors = ref.watch(paletteProvider);
 
           return MaterialApp(
-            theme: belThemeData(colors),
+            theme: oaaThemeData(colors),
             builder: (context, child) =>
-                BelTheme(colors: colors, child: child!),
+                OaaTheme(colors: colors, child: child!),
             home: const _Opener(),
           );
         },
@@ -173,8 +173,8 @@ Future<void> _open(
 /// Read from the panel's own element rather than from the provider, because the
 /// question is not what the application decided — it is what reached the widget
 /// the `Navigator` built.
-BelColors _panelPalette(WidgetTester tester) =>
-    BelTheme.read(tester.element(find.byType(PanelScaffold)));
+OaaColors _panelPalette(WidgetTester tester) =>
+    OaaTheme.read(tester.element(find.byType(PanelScaffold)));
 
 class _Opener extends StatelessWidget {
   const _Opener();
@@ -186,7 +186,7 @@ class _Opener extends StatelessWidget {
     child: Center(
       child: GestureDetector(
         onTap: () =>
-            showBelPanel<void>(context: context, builder: (context) => panel),
+            showOaaPanel<void>(context: context, builder: (context) => panel),
         child: const Text('open the panel'),
       ),
     ),
@@ -298,7 +298,7 @@ void main() {
       await _open(tester, container, const SettingsPanel());
 
       expect(container.read(settingsProvider).restoreSession, isTrue);
-      await _tap(tester, find.byType(BelToggle));
+      await _tap(tester, find.byType(OaaToggle));
 
       expect(container.read(settingsProvider).restoreSession, isFalse);
     });
@@ -409,9 +409,9 @@ void main() {
     testWidgets('accepts the typographic minus it renders itself', (
       tester,
     ) async {
-      // Bel prints "−14 LUFS" with U+2212. Anybody who copies a number out of
-      // the interface and pastes it back in is pasting a character
-      // double.parse rejects.
+      // Open Audio Analyzer prints "−14 LUFS" with U+2212. Anybody who copies a
+      // number out of the interface and pastes it back in is pasting a
+      // character double.parse rejects.
       final container = await _container(tester);
       await _open(tester, container, const CalibrationEditor());
 
@@ -475,12 +475,12 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
-          home: BelTheme(
-            colors: BelColors.precisionInstrument,
+          home: OaaTheme(
+            colors: OaaColors.precisionInstrument,
             child: Material(
               child: PanelListRow(
                 title: 'Send these meters',
-                mark: BelMark.broadcast,
+                mark: OaaMark.broadcast,
                 opens: true,
                 onTap: () => taps++,
               ),
@@ -493,11 +493,11 @@ void main() {
       // that correctly refuses hits is not itself in the hit-test path, and
       // `tap` warns about exactly that. What is being asked here is what a
       // finger asks — press this pixel, and see whether the row answers.
-      for (final glyph in [BelMark.broadcast, BelMark.chevron]) {
+      for (final glyph in [OaaMark.broadcast, OaaMark.chevron]) {
         await tester.tapAt(
           tester.getCenter(
             find.byWidgetPredicate(
-              (widget) => widget is BelGlyph && widget.mark == glyph,
+              (widget) => widget is OaaGlyph && widget.mark == glyph,
             ),
           ),
         );
@@ -518,8 +518,8 @@ void main() {
     ) async {
       await tester.pumpWidget(
         const MaterialApp(
-          home: BelTheme(
-            colors: BelColors.precisionInstrument,
+          home: OaaTheme(
+            colors: OaaColors.precisionInstrument,
             child: Material(
               child: Center(
                 child: SizedBox(
@@ -527,7 +527,7 @@ void main() {
                   child: PanelNote(
                     'There is no password on the connection. Anyone on this '
                     'network who can find it can watch these meters.',
-                    mark: BelMark.warning,
+                    mark: OaaMark.warning,
                   ),
                 ),
               ),
@@ -539,7 +539,7 @@ void main() {
       final note = tester.getRect(find.textContaining('no password'));
       final mark = tester.getRect(
         find.byWidgetPredicate(
-          (widget) => widget is BelGlyph && widget.mark == BelMark.warning,
+          (widget) => widget is OaaGlyph && widget.mark == OaaMark.warning,
         ),
       );
 
@@ -552,12 +552,12 @@ void main() {
   // The remote control is the one panel not opened through `_open`, because the
   // thing worth testing is the button: it is what pushes the route, and it
   // pushed it with `showDialog` for a whole phase. A route built that way is
-  // built by the `Navigator`, above the application's `BelTheme`, so the panel
-  // threw "No BelTheme in scope" the moment anybody pressed it — in release as
-  // well as debug, since `BelTheme.of` ends in a `!`.
+  // built by the `Navigator`, above the application's `OaaTheme`, so the panel
+  // threw "No OaaTheme in scope" the moment anybody pressed it — in release as
+  // well as debug, since `OaaTheme.of` ends in a `!`.
   group('remote display', () {
     Future<void> mount(WidgetTester tester, ProviderContainer container) async {
-      const colors = BelColors.precisionInstrument;
+      const colors = OaaColors.precisionInstrument;
       tester.view.physicalSize = const Size(1200, 1800);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
@@ -566,8 +566,8 @@ void main() {
         UncontrolledProviderScope(
           container: container,
           child: MaterialApp(
-            theme: belThemeData(colors),
-            home: const BelTheme(
+            theme: oaaThemeData(colors),
+            home: const OaaTheme(
               colors: colors,
               child: Material(
                 child: Center(

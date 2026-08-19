@@ -3,9 +3,9 @@
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
-import 'package:bel_core/bel_core.dart';
-import 'package:bel_engine/bel_engine.dart';
-import 'package:bel_ui/bel_ui.dart';
+import 'package:oaa_core/oaa_core.dart';
+import 'package:oaa_engine/oaa_engine.dart';
+import 'package:oaa_ui/oaa_ui.dart';
 import 'package:flutter/widgets.dart';
 
 import '../clock/meter_clock.dart';
@@ -158,7 +158,7 @@ class _StereoCloudModuleState extends State<StereoCloudModule> {
 
   @override
   Widget build(BuildContext context) {
-    final colors = BelTheme.of(context);
+    final colors = OaaTheme.of(context);
 
     if (_builtFor != colors.accent) {
       _builtFor = colors.accent;
@@ -176,12 +176,12 @@ class _StereoCloudModuleState extends State<StereoCloudModule> {
             ..strokeCap = StrokeCap.round,
       ];
 
-      final style = BelType.tick.copyWith(color: colors.textFaint);
+      final style = OaaType.tick.copyWith(color: colors.textFaint);
       _left = layoutParagraph('L', style);
       _right = layoutParagraph('R', style);
       _mono = layoutParagraph(
         'MONO SOURCE',
-        BelType.label.copyWith(color: colors.textMuted),
+        OaaType.label.copyWith(color: colors.textMuted),
       );
       _frequencyLabels = [
         for (final hz in _axisHz)
@@ -213,16 +213,16 @@ class _StereoCloudPainter extends MeterPainter {
     required Listenable repaint,
   }) : _guide = (Paint()
          ..color = colors.hairline
-         ..strokeWidth = BelStroke.hairline
+         ..strokeWidth = OaaStroke.hairline
          ..isAntiAlias = false),
        _centreGuide = (Paint()
          ..color = colors.hairlineStrong
-         ..strokeWidth = BelStroke.hairline
+         ..strokeWidth = OaaStroke.hairline
          ..isAntiAlias = false),
        super(repaint: repaint);
 
   final MeterSource engine;
-  final BelColors colors;
+  final OaaColors colors;
   final _StereoCloudModuleState state;
 
   final Paint _guide;
@@ -331,7 +331,7 @@ class _StereoCloudPainter extends MeterPainter {
 
   /// Splats this frame's bands into the grid.
   void _accumulate(Size plot) {
-    for (var band = 0; band < kBelSpectrumBands; band++) {
+    for (var band = 0; band < kOaaSpectrumBands; band++) {
       final db = engine.spectrum[band];
       if (db <= _floorDb) continue;
 
@@ -352,7 +352,7 @@ class _StereoCloudPainter extends MeterPainter {
 
   /// Low frequencies at the bottom, as on the analyser.
   double _y(Size plot, double band) =>
-      plot.height * (1 - band / kBelSpectrumBands);
+      plot.height * (1 - band / kOaaSpectrumBands);
 
   @override
   bool shouldRepaint(_StereoCloudPainter oldDelegate) =>

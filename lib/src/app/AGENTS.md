@@ -4,15 +4,15 @@ The shell everything else is mounted in. GPL-3.0-or-later.
 
 | File | Purpose |
 |------|---------|
-| `bel_app.dart` | `MaterialApp`, the widget that owns the engine and the clock, the status bar, and the notices. |
+| `oaa_app.dart` | `MaterialApp`, the widget that owns the engine and the clock, the status bar, and the notices. |
 | `bar_controls.dart` | `BarButton` and `BarChip` — the two shapes the status bar is built from. Public because the bar is not assembled in one file: `RemoteDisplayControl` owns a socket and lives in `lib/src/remote/`. |
-| `shortcuts.dart` | **Every keyboard shortcut Bel has, as one table**, plus the widget that installs it and the generator for `docs/site/keyboard.md`. |
+| `shortcuts.dart` | **Every keyboard shortcut Open Audio Analyzer has, as one table**, plus the widget that installs it and the generator for `docs/site/keyboard.md`. |
 | `launch_options.dart` | `--config-dir` and `--open-panel`, parsed by hand. |
 | `window_chrome.dart` | The window itself: the palette its buttons are drawn against, the room the status bar leaves them, and the drag and zoom a window with no title bar cannot get for free. macOS only. |
 
 ## Rules
 
-- **The `BelTheme` belongs in `MaterialApp.builder`, not around `home`.**
+- **The `OaaTheme` belongs in `MaterialApp.builder`, not around `home`.**
   `builder` wraps the `Navigator`; `home` is inside it. A panel is a route, so a
   palette under `home` is one no panel can see — and for eight phases every
   panel was handed a copy taken when it opened, which left the settings panel in
@@ -43,11 +43,11 @@ The shell everything else is mounted in. GPL-3.0-or-later.
   is stated in `_StatusBar` and is a design decision, not a fitting exercise.
 
 - **Everything in the status bar is a `BarButton` or a `BarChip`.** Not a
-  `TextButton`, and not `BelButton` either — `bel_ui`'s buttons are sized for a
+  `TextButton`, and not `OaaButton` either — `oaa_ui`'s buttons are sized for a
   panel, where a control has a row to itself, and these are sized for a 40 px
   bar that also holds the source, the clock, the calibration and the frame
   rate. Both take their height from `_barControlHeight` rather than adding one
-  up out of a text style and a padding — `BelControl.height`'s argument applied
+  up out of a text style and a padding — `OaaControl.height`'s argument applied
   to this bar, and for the same reason: the two styles differ, so the chip stood
   3.4 px taller than the buttons and its border crossed theirs in a row where
   the borders are the only horizontal line.
@@ -55,14 +55,14 @@ The shell everything else is mounted in. GPL-3.0-or-later.
   spent a phase putting a borderless, ink-rippled, keyboard-unreachable Material
   button between four bordered ones.
 
-- **A shortcut is one row in `belShortcuts` and nothing else.** The bindings,
+- **A shortcut is one row in `oaaShortcuts` and nothing else.** The bindings,
   the sheet `?` opens, and the documentation page are all derived from that
   list, and `test/shortcuts_test.dart` fails when the checked-in Markdown has
   drifted from it. Adding a binding anywhere else — a `CallbackShortcuts` in a
   panel, a bare `Focus.onKeyEvent` — creates a shortcut that works and is
   documented nowhere.
 
-- **`BelShortcuts` installs a `FocusScope`, and it is load-bearing.** A key
+- **`OaaShortcuts` installs a `FocusScope`, and it is load-bearing.** A key
   event travels *up* from whatever holds focus, so a binding is only reachable
   from below it. When a text field goes away — finishing a tab rename, closing a
   panel — Flutter does not choose a new node; it drops focus to the nearest
@@ -95,7 +95,7 @@ The shell everything else is mounted in. GPL-3.0-or-later.
   State, and disposing the ticker does not buy another. A new clock is built for
   every source, so with the single mixin the source chosen at launch worked and
   every change after it threw. Worse, it threw a `FlutterError` out of the
-  `setState` callback in `_openFor`, which catches `BelEngineException` and
+  `setState` callback in `_openFor`, which catches `OaaEngineException` and
   nothing else: the engine was already created and started, so the capture
   device was opened and held with nothing reading it, while the window went on
   painting the previous source — same label, same channel count, same elapsed

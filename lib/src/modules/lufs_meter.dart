@@ -3,8 +3,8 @@
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
-import 'package:bel_core/bel_core.dart';
-import 'package:bel_ui/bel_ui.dart';
+import 'package:oaa_core/oaa_core.dart';
+import 'package:oaa_ui/oaa_ui.dart';
 import 'package:flutter/widgets.dart';
 
 import '../clock/meter_clock.dart';
@@ -60,7 +60,7 @@ class _LufsMeterModuleState extends State<LufsMeterModule> {
 
   @override
   Widget build(BuildContext context) {
-    final colors = BelTheme.of(context);
+    final colors = OaaTheme.of(context);
 
     // Rebuilt only when the palette changes, never per frame: these hold laid
     // out paragraphs, and throwing them away every rebuild would defeat the
@@ -75,7 +75,7 @@ class _LufsMeterModuleState extends State<LufsMeterModule> {
         labelColor: colors.textFaint,
       );
 
-      final style = BelType.label.copyWith(color: colors.textFaint);
+      final style = OaaType.label.copyWith(color: colors.textFaint);
       // **Left-aligned, and centred by [_centred] instead.** These asked for
       // `TextAlign.center` and were not drawn at all: an unconstrained
       // paragraph is laid out a megapixel wide, and centre alignment then puts
@@ -124,14 +124,14 @@ class _LufsMeterPainter extends MeterPainter {
          ..color = colors.textFaint.withValues(alpha: 0.18)),
        _targetLine = (Paint()
          ..color = colors.textMuted
-         ..strokeWidth = BelStroke.mark
+         ..strokeWidth = OaaStroke.mark
          ..isAntiAlias = false),
-       _integratedLine = (Paint()..strokeWidth = BelStroke.emphasis),
+       _integratedLine = (Paint()..strokeWidth = OaaStroke.emphasis),
        super(repaint: repaint);
 
   final MeterSource engine;
   final Calibration calibration;
-  final BelColors colors;
+  final OaaColors colors;
   final ScaleGraticule graticule;
   final _LufsMeterModuleState state;
 
@@ -149,7 +149,7 @@ class _LufsMeterPainter extends MeterPainter {
   /// reading is chrome rather than a number, and the bars keep the space.
   static const double _minimumValueSize = 11;
 
-  /// Advance of one glyph of [BelType.reading], in ems. Google Sans Code is 0.6
+  /// Advance of one glyph of [OaaType.reading], in ems. Google Sans Code is 0.6
   /// and the style tightens it by half a pixel; the slack is what keeps this an
   /// upper bound rather than a measurement.
   static const double _advance = 0.62;
@@ -210,7 +210,7 @@ class _LufsMeterPainter extends MeterPainter {
     final showReadouts =
         valueSize >= _minimumValueSize &&
         size.height > _minimumHeight + readoutHeight;
-    final barLabelHeight = BelType.label.fontSize! + Space.xs;
+    final barLabelHeight = OaaType.label.fontSize! + Space.xs;
 
     final track = Rect.fromLTRB(
       graticule.gutter,
@@ -411,7 +411,7 @@ class _LufsMeterPainter extends MeterPainter {
     canvas.drawParagraph(
       value.of(
         text,
-        BelType.reading(fontSize).copyWith(color: color),
+        OaaType.reading(fontSize).copyWith(color: color),
         maxWidth: bounds.width,
       ),
       Offset(bounds.left, bounds.top + label.height + Space.xxs),

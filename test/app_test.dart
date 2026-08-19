@@ -2,16 +2,16 @@
 
 import 'dart:io';
 
-import 'package:bel/src/app/window_chrome.dart';
-import 'package:bel_ui/bel_ui.dart';
+import 'package:oaa/src/app/window_chrome.dart';
+import 'package:oaa_ui/oaa_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 Widget _wrap(Widget child) => MaterialApp(
-  home: BelTheme(
-    colors: BelColors.precisionInstrument,
+  home: OaaTheme(
+    colors: OaaColors.precisionInstrument,
     child: Material(
-      color: BelColors.precisionInstrument.background,
+      color: OaaColors.precisionInstrument.background,
       child: child,
     ),
   ),
@@ -95,7 +95,7 @@ void main() {
       await tester.pumpWidget(
         _wrap(
           WindowDragArea(
-            child: BelButton(label: 'RESET', onPressed: () => pressed = true),
+            child: OaaButton(label: 'RESET', onPressed: () => pressed = true),
           ),
         ),
       );
@@ -121,7 +121,7 @@ void main() {
 
       for (final directory in const [
         'lib/src/modules',
-        'packages/bel_ui/lib/src',
+        'packages/oaa_ui/lib/src',
       ]) {
         for (final file in Directory(directory).listSync().whereType<File>()) {
           if (!file.path.endsWith('.dart')) continue;
@@ -170,8 +170,8 @@ void main() {
     test('every numeric style uses tabular figures', () {
       // A readout whose digits change width jitters while you watch it. This
       // is the one typographic rule that is worth a test.
-      const numeric = [BelType.readingSmall, BelType.tick];
-      for (final style in [...numeric, BelType.reading(32)]) {
+      const numeric = [OaaType.readingSmall, OaaType.tick];
+      for (final style in [...numeric, OaaType.reading(32)]) {
         expect(
           style.fontFeatures,
           contains(const FontFeature.tabularFigures()),
@@ -180,7 +180,7 @@ void main() {
     });
 
     test('state colours are distinct', () {
-      const colors = BelColors.precisionInstrument;
+      const colors = OaaColors.precisionInstrument;
       final used = {
         for (final state in ReadingState.values) colorForState(state, colors),
       };
@@ -194,9 +194,9 @@ void main() {
   group('ReadoutPainter', () {
     test('reuses a laid-out paragraph until the string changes', () {
       final readout = ReadoutPainter(
-        valueStyle: BelType.reading(32),
-        unitStyle: BelType.unit,
-        labelStyle: BelType.label,
+        valueStyle: OaaType.reading(32),
+        unitStyle: OaaType.unit,
+        labelStyle: OaaType.label,
       );
       addTearDown(readout.dispose);
 

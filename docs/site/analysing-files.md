@@ -1,10 +1,10 @@
 # Analysing files
 
-Bel measures a file the same way it measures an input, because it is the same
-code. The decoder reads blocks and pushes them through the measurement path a
-capture device drives; there is no second DSP path and no offline
-approximation. A test asserts exactly that, on the same samples analysed both
-ways.
+Open Audio Analyzer measures a file the same way it measures an input, because
+it is the same code. The decoder reads blocks and pushes them through the
+measurement path a capture device drives; there is no second DSP path and no
+offline approximation. A test asserts exactly that, on the same samples analysed
+both ways.
 
 **Nothing is resampled and nothing is remixed.** A file is measured at its own
 sample rate and channel count, because a converter in front of a measurement
@@ -34,19 +34,19 @@ respectively. Never a zero.
 ## From the command line
 
 ```sh
-bel master.wav                                 # human-readable report
-bel --target streaming-14 master.wav           # …and a delivery verdict
-bel --format json --timeline master.wav        # every measurement, for scripts
-bel --format csv -o loudness.csv master.wav    # the loudness timeline
-bel --list-targets                             # what you can measure against
+oaa master.wav                                 # human-readable report
+oaa --target streaming-14 master.wav           # …and a delivery verdict
+oaa --format json --timeline master.wav        # every measurement, for scripts
+oaa --format csv -o loudness.csv master.wav    # the loudness timeline
+oaa --list-targets                             # what you can measure against
 ```
 
-`bel` is a standalone binary with no Flutter runtime, which is what makes it
+`oaa` is a standalone binary with no Flutter runtime, which is what makes it
 usable inside somebody else's CI.
 
 ### The exit code is the point
 
-With `--target`, `bel` fails a build rather than reporting to a log nobody
+With `--target`, `oaa` fails a build rather than reporting to a log nobody
 reads:
 
 | Exit | Meaning |
@@ -56,7 +56,7 @@ reads:
 | `2` | Measured, and it missed its delivery spec. |
 
 ```sh
-bel --target streaming-14 master.wav || exit 1
+oaa --target streaming-14 master.wav || exit 1
 ```
 
 A master that is two loudness units too loud stops the pipeline instead of
@@ -66,7 +66,7 @@ shipping.
 
 `--list-targets` prints the built-ins. Your own live beside them as JSON in
 `calibrations/` under the [configuration
-directory](install.html#where-bel-keeps-your-configuration), and the CLI reads
+directory](install.html#where-oaa-keeps-your-configuration), and the CLI reads
 the same library the application does — so a target you defined once in the
 interface is available to a build script by name.
 

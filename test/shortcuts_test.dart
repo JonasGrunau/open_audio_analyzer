@@ -18,15 +18,15 @@
 
 import 'dart:io';
 
-import 'package:bel/src/app/shortcuts.dart';
-import 'package:bel/src/canvas/canvas_notice.dart';
-import 'package:bel/src/canvas/grid_canvas.dart';
-import 'package:bel/src/canvas/tab_strip.dart';
-import 'package:bel/src/canvas/workspace.dart';
-import 'package:bel/src/clock/meter_clock.dart';
-import 'package:bel_core/bel_core.dart';
-import 'package:bel_engine/bel_engine.dart';
-import 'package:bel_ui/bel_ui.dart';
+import 'package:oaa/src/app/shortcuts.dart';
+import 'package:oaa/src/canvas/canvas_notice.dart';
+import 'package:oaa/src/canvas/grid_canvas.dart';
+import 'package:oaa/src/canvas/tab_strip.dart';
+import 'package:oaa/src/canvas/workspace.dart';
+import 'package:oaa/src/clock/meter_clock.dart';
+import 'package:oaa_core/oaa_core.dart';
+import 'package:oaa_engine/oaa_engine.dart';
+import 'package:oaa_ui/oaa_ui.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -48,7 +48,7 @@ class _Harness extends StatefulWidget {
 
 class _HarnessState extends State<_Harness>
     with SingleTickerProviderStateMixin {
-  late final BelEngine engine = BelEngine.start(source: BelSource.silence);
+  late final OaaEngine engine = OaaEngine.start(source: OaaSource.silence);
   late final MeterClock clock = MeterClock(engine: engine, vsync: this);
 
   /// Stands in for the status bar: focusable, and not the canvas.
@@ -65,11 +65,11 @@ class _HarnessState extends State<_Harness>
   }
 
   @override
-  Widget build(BuildContext context) => BelTheme(
-    colors: BelColors.precisionInstrument,
+  Widget build(BuildContext context) => OaaTheme(
+    colors: OaaColors.precisionInstrument,
     child: Material(
-      color: BelColors.precisionInstrument.background,
-      child: BelShortcuts(
+      color: OaaColors.precisionInstrument.background,
+      child: OaaShortcuts(
         onReset: () {
           resets++;
         },
@@ -164,7 +164,7 @@ void main() {
       // which nobody asked for.
       final seen = <String, String>{};
 
-      for (final shortcut in belShortcuts) {
+      for (final shortcut in oaaShortcuts) {
         for (final chord in shortcut.chords) {
           for (final activator in chord.activators) {
             final key =
@@ -187,7 +187,7 @@ void main() {
     });
 
     test('every shortcut has somewhere to be printed', () {
-      for (final shortcut in belShortcuts) {
+      for (final shortcut in oaaShortcuts) {
         expect(shortcut.chords, isNotEmpty, reason: shortcut.description);
         expect(shortcut.keys(apple: true), isNotEmpty);
         expect(shortcut.keys(apple: false), isNotEmpty);
@@ -343,7 +343,7 @@ void main() {
 
       // The keyboard has to survive the field going away. Focus does not move
       // to a new node when one is removed — it falls to the enclosing scope,
-      // and BelShortcuts installs one below its own bindings precisely so that
+      // and OaaShortcuts installs one below its own bindings precisely so that
       // this keystroke still has somewhere to travel up from.
       await _press(tester, LogicalKeyboardKey.digit1);
       expect(container.read(workspaceProvider).activeTab, 0);
@@ -378,7 +378,7 @@ void main() {
       await _settle(tester);
 
       expect(find.text('KEYBOARD SHORTCUTS'), findsOneWidget);
-      for (final shortcut in belShortcuts) {
+      for (final shortcut in oaaShortcuts) {
         expect(
           find.text(shortcut.description),
           findsOneWidget,

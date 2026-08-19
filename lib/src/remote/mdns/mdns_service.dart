@@ -8,13 +8,13 @@ import 'package:flutter/foundation.dart';
 import 'dns_message.dart';
 import 'host_discovery.dart';
 
-/// The service Bel advertises. `_bel._tcp` under the local domain, as DNS-SD
-/// spells it.
-const String belServiceType = '_bel._tcp.local';
+/// The service Open Audio Analyzer advertises. `_oaa._tcp` under the local
+/// domain, as DNS-SD spells it.
+const String oaaServiceType = '_oaa._tcp.local';
 
 /// The same type without the domain, which is how Apple's DNS-SD API spells it
-/// and therefore what `Info.plist` and `BelBonjour.swift` say.
-const String belServiceName = '_bel._tcp';
+/// and therefore what `Info.plist` and `OaaBonjour.swift` say.
+const String oaaServiceName = '_oaa._tcp';
 
 const String _multicastAddress = '224.0.0.251';
 const int _multicastPort = 5353;
@@ -83,7 +83,7 @@ String describeDiscoveryFailure(Object? error) {
     // with "no route to host". Nothing else about the machine looks wrong,
     // which is why this needs saying in words rather than reporting an errno.
     if (Platform.isMacOS && osError != null && osError.errorCode == 65) {
-      return 'macOS is not letting Bel search the local network. Allow it '
+      return 'macOS is not letting Open Audio Analyzer search the local network. Allow it '
           'under System Settings › Privacy & Security › Local Network, or '
           'enter an address below.';
     }
@@ -117,7 +117,8 @@ class MdnsResponder {
     _announce();
   }
 
-  /// Unique on the network. Bel uses the host name the user chose.
+  /// Unique on the network. Open Audio Analyzer uses the host name the user
+  /// chose.
   final String instanceName;
   final int port;
 
@@ -140,21 +141,22 @@ class MdnsResponder {
   /// labels.** Names are written by splitting on `.`, so a machine called
   /// `studio-mac.fritz.box` — which is what `Platform.localHostname` returns on
   /// any network whose DHCP server hands out a domain — was advertised as
-  /// `studio-mac` `fritz` `box` `_bel` `_tcp` `local`, six labels where DNS-SD
-  /// expects four. Bel's own reader takes everything before `_bel._tcp.local`
-  /// as the instance and is perfectly happy, so desktop-to-desktop discovery
-  /// worked and hid this completely; Apple's responder is not, and drops the
-  /// record. The symptom is a host that answers every query on the wire and is
-  /// invisible to `dns-sd -B` and to every iPad in the building.
+  /// `studio-mac` `fritz` `box` `_oaa` `_tcp` `local`, six labels where DNS-SD
+  /// expects four. Open Audio Analyzer's own reader takes everything before
+  /// `_oaa._tcp.local` as the instance and is perfectly happy, so
+  /// desktop-to-desktop discovery worked and hid this completely; Apple's
+  /// responder is not, and drops the record. The symptom is a host that answers
+  /// every query on the wire and is invisible to `dns-sd -B` and to every iPad
+  /// in the building.
   ///
   /// The friendly name is not lost: it rides in the TXT record's `name`, which
   /// is free-form and is what a picker shows.
   @visibleForTesting
   String get instanceLabel => instanceName.replaceAll('.', '-');
 
-  /// The `<instance>._bel._tcp.local` name the records hang off.
+  /// The `<instance>._oaa._tcp.local` name the records hang off.
   @visibleForTesting
-  String get serviceInstance => '$instanceLabel.$belServiceType';
+  String get serviceInstance => '$instanceLabel.$oaaServiceType';
 
   /// A host name for the SRV target and the A records. `.local` because that is
   /// the only domain multicast DNS claims.
@@ -163,12 +165,12 @@ class MdnsResponder {
   /// sanitising the instance alone would produce. That name belongs to the
   /// system responder, which defends it: an A record it did not announce, for a
   /// name it owns, is a conflict, and RFC 6762 says the loser renames itself.
-  /// Bel advertises every interface's address on every interface, so its set
-  /// differs from the system's per-interface set as soon as a machine has two —
-  /// and the machine that renames itself is the user's, in System Settings,
-  /// because a meter announced itself carelessly.
+  /// Open Audio Analyzer advertises every interface's address on every
+  /// interface, so its set differs from the system's per-interface set as soon
+  /// as a machine has two — and the machine that renames itself is the user's,
+  /// in System Settings, because a meter announced itself carelessly.
   @visibleForTesting
-  String get hostName => '${_sanitise(instanceLabel)}-bel.local';
+  String get hostName => '${_sanitise(instanceLabel)}-oaa.local';
 
   bool get isAdvertising => _socket != null;
 
@@ -227,7 +229,7 @@ class MdnsResponder {
 
     final asked = message.questions.any(
       (q) =>
-          (q.name == belServiceType ||
+          (q.name == oaaServiceType ||
               q.name == serviceInstance ||
               q.name == hostName) &&
           (q.type == DnsType.ptr ||
@@ -246,7 +248,7 @@ class MdnsResponder {
   Future<List<DnsRecord>> _records({int ttl = _recordTtl}) async {
     final records = <DnsRecord>[
       DnsRecord(
-        name: belServiceType,
+        name: oaaServiceType,
         type: DnsType.ptr,
         ttl: ttl,
         target: serviceInstance,
@@ -300,7 +302,7 @@ class MdnsResponder {
   }
 }
 
-/// Watches the network for hosts advertising [belServiceType].
+/// Watches the network for hosts advertising [oaaServiceType].
 ///
 /// The implementation of [HostDiscovery] for every platform that lets an
 /// application hold a multicast socket, which is all of them except iOS and
@@ -418,7 +420,7 @@ class MdnsBrowser implements HostDiscovery {
     if (socket == null) return;
     try {
       socket.send(
-        encodeQuery(belServiceType, DnsType.ptr),
+        encodeQuery(oaaServiceType, DnsType.ptr),
         InternetAddress(_multicastAddress),
         _multicastPort,
       );
@@ -450,12 +452,12 @@ class MdnsBrowser implements HostDiscovery {
 
     // **Addresses first, and all of them.** The SRV that needs one is usually
     // in the same packet and multicast promises nothing about the order; and
-    // every A record Bel sends carries the cache-flush bit, which means "this
-    // is the whole truth about this name", so a packet replaces what was known
-    // rather than adding to it. Keeping the last record seen instead — which is
-    // what a plain assignment per record does — is how a laptop that announces
-    // its Wi-Fi address and then the 169.254 address of an empty dock ends up
-    // listed at the one nothing can reach.
+    // every A record Open Audio Analyzer sends carries the cache-flush bit,
+    // which means "this is the whole truth about this name", so a packet
+    // replaces what was known rather than adding to it. Keeping the last record
+    // seen instead — which is what a plain assignment per record does — is how
+    // a laptop that announces its Wi-Fi address and then the 169.254 address of
+    // an empty dock ends up listed at the one nothing can reach.
     final announced = <String, List<String>>{};
     for (final record in message.answers) {
       if (record.type != DnsType.a || record.address.length != 4) continue;
@@ -468,7 +470,7 @@ class MdnsBrowser implements HostDiscovery {
     for (final record in message.answers) {
       switch (record.type) {
         case DnsType.ptr:
-          if (record.name != belServiceType) break;
+          if (record.name != oaaServiceType) break;
           if (record.ttl == 0) {
             // A goodbye.
             final instance = _instanceOf(record.target);
@@ -479,7 +481,7 @@ class MdnsBrowser implements HostDiscovery {
           _pending.putIfAbsent(_instanceOf(record.target), _PendingService.new);
 
         case DnsType.srv:
-          if (!record.name.endsWith(belServiceType)) break;
+          if (!record.name.endsWith(oaaServiceType)) break;
           final instance = _instanceOf(record.name);
           final pending = _pending.putIfAbsent(instance, _PendingService.new)
             ..port = record.port
@@ -487,7 +489,7 @@ class MdnsBrowser implements HostDiscovery {
           if (_resolve(instance, pending)) changed = true;
 
         case DnsType.txt:
-          if (!record.name.endsWith(belServiceType)) break;
+          if (!record.name.endsWith(oaaServiceType)) break;
           final instance = _instanceOf(record.name);
           final pending = _pending.putIfAbsent(instance, _PendingService.new)
             ..txt = record.txt;
@@ -569,8 +571,8 @@ class MdnsBrowser implements HostDiscovery {
   }
 
   static String _instanceOf(String name) {
-    if (!name.endsWith('.$belServiceType')) return name;
-    return name.substring(0, name.length - belServiceType.length - 1);
+    if (!name.endsWith('.$oaaServiceType')) return name;
+    return name.substring(0, name.length - oaaServiceType.length - 1);
   }
 
   /// Which of a host's addresses to offer.
@@ -636,5 +638,5 @@ String _sanitise(String name) {
       .map((c) => RegExp(r'[A-Za-z0-9-]').hasMatch(c) ? c : '-')
       .join();
   final trimmed = cleaned.replaceAll(RegExp('-+'), '-');
-  return trimmed.isEmpty ? 'bel' : trimmed;
+  return trimmed.isEmpty ? 'oaa' : trimmed;
 }

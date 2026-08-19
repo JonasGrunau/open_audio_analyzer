@@ -1,12 +1,12 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- The remote display opens a TCP socket to a Bel host. -->
+    <!-- The remote display opens a TCP socket to an Open Audio Analyzer host. -->
     <uses-permission android:name="android.permission.INTERNET"/>
     <!-- Receiving mDNS answers needs multicast delivery, which Android drops
          for an app that has not asked for it. Note that the permission alone is
          not sufficient on Wi-Fi: see lib/src/remote/AGENTS.md. -->
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE"/>
     <application
-        android:label="bel"
+        android:label="oaa"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

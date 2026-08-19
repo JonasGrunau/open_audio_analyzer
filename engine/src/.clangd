@@ -1,4 +1,4 @@
-# Editor-only. The real build gets these from packages/bel_engine/hook/build.dart.
+# Editor-only. The real build gets these from packages/oaa_engine/hook/build.dart.
 #
 # `-xc` is not optional: without it clangd guesses Objective-C++ for the .h
 # files on macOS, then rejects `-std=c11` as incompatible and reports a cascade

@@ -1,21 +1,22 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import 'package:bel_ui/bel_ui.dart';
+import 'package:oaa_ui/oaa_ui.dart';
 import 'package:flutter/material.dart';
 
 import '../app/shortcuts.dart';
 
 /// The shortcut sheet, drawn from the same table the bindings come from.
 ///
-/// It is a list of what Bel *does* respond to, not a list somebody wrote about
-/// it — see `lib/src/app/shortcuts.dart`. There is nothing to keep in step here
-/// because there is nothing here to keep.
+/// It is a list of what Open Audio Analyzer *does* respond to, not a list
+/// somebody wrote about it — see `lib/src/app/shortcuts.dart`. There is nothing
+/// to keep in step here because there is nothing here to keep.
 ///
 /// It exists at all because a shortcut nobody can find is a shortcut nobody
-/// uses, and Bel has no menu bar to discover them from: the application draws
-/// its own chrome, so the usual place a desktop user looks — File, Edit, the
-/// greyed-out chord printed beside each item — is not there to look at.
-Future<void> showShortcutsSheet(BuildContext context) => showBelPanel<void>(
+/// uses, and Open Audio Analyzer has no menu bar to discover them from: the
+/// application draws its own chrome, so the usual place a desktop user looks —
+/// File, Edit, the greyed-out chord printed beside each item — is not there to
+/// look at.
+Future<void> showShortcutsSheet(BuildContext context) => showOaaPanel<void>(
   context: context,
   builder: (context) => const _ShortcutsSheet(),
 );
@@ -111,18 +112,18 @@ class _ShortcutsSheet extends StatelessWidget {
 /// about a row and a section that is not first in its column costs its rule as
 /// well. Derived rather than written down: naming which group goes where would
 /// be a second place a shortcut has to be registered, and the point of
-/// `belShortcuts` is that there is one.
+/// `oaaShortcuts` is that there is one.
 (List<ShortcutGroup>, List<ShortcutGroup>) _columns() {
   final groups = [
     for (final group in ShortcutGroup.values)
-      if (belShortcuts.any((s) => s.group == group)) group,
+      if (oaaShortcuts.any((s) => s.group == group)) group,
   ];
 
   int height(Iterable<ShortcutGroup> column) {
     var total = 0;
     for (final (index, group) in column.indexed) {
       // The rows, the heading, and the rule above every section but the first.
-      total += belShortcuts.where((s) => s.group == group).length + 1;
+      total += oaaShortcuts.where((s) => s.group == group).length + 1;
       if (index > 0) total++;
     }
     return total;
@@ -159,7 +160,7 @@ class _GroupColumn extends StatelessWidget {
           // above it to rule off.
           ruled: index > 0,
           children: [
-            for (final shortcut in belShortcuts)
+            for (final shortcut in oaaShortcuts)
               if (shortcut.group == group)
                 _Row(shortcut: shortcut, apple: apple),
           ],
@@ -171,12 +172,12 @@ class _GroupColumn extends StatelessWidget {
 class _Row extends StatelessWidget {
   const _Row({required this.shortcut, required this.apple});
 
-  final BelShortcut shortcut;
+  final OaaShortcut shortcut;
   final bool apple;
 
   @override
   Widget build(BuildContext context) {
-    final colors = BelTheme.of(context);
+    final colors = OaaTheme.of(context);
 
     return Padding(
       // Tighter than a `PanelRow`, and no longer as tight as it can be made.
@@ -193,7 +194,7 @@ class _Row extends StatelessWidget {
           Expanded(
             child: Text(
               shortcut.description,
-              style: BelType.body.copyWith(color: colors.textPrimary),
+              style: OaaType.body.copyWith(color: colors.textPrimary),
             ),
           ),
           const SizedBox(width: Space.md),
@@ -225,7 +226,7 @@ class _Keycap extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = BelTheme.of(context);
+    final colors = OaaTheme.of(context);
 
     return Container(
       padding: const EdgeInsets.symmetric(
@@ -234,8 +235,8 @@ class _Keycap extends StatelessWidget {
       ),
       decoration: BoxDecoration(
         color: colors.panelRaised,
-        borderRadius: BelRadius.allXs,
-        border: Border.all(color: colors.hairline, width: BelStroke.hairline),
+        borderRadius: OaaRadius.allXs,
+        border: Border.all(color: colors.hairline, width: OaaStroke.hairline),
       ),
       // One style for every cap, whatever is printed on it. `⌘` and `Ctrl`
       // sitting at different sizes or weights in the same column reads as two
@@ -243,7 +244,7 @@ class _Keycap extends StatelessWidget {
       // under your finger.
       child: Text(
         label,
-        style: BelType.caption.copyWith(color: colors.textMuted),
+        style: OaaType.caption.copyWith(color: colors.textMuted),
       ),
     );
   }
@@ -256,7 +257,7 @@ class _Footnote extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = BelTheme.of(context);
+    final colors = OaaTheme.of(context);
 
     return Text(
       apple
@@ -264,7 +265,7 @@ class _Footnote extends StatelessWidget {
                 'aside while you are typing in a field.'
           : 'Cmd works everywhere Ctrl does. Shortcuts without Ctrl or Cmd '
                 'stand aside while you are typing in a field.',
-      style: BelType.caption.copyWith(color: colors.textFaint),
+      style: OaaType.caption.copyWith(color: colors.textFaint),
     );
   }
 }

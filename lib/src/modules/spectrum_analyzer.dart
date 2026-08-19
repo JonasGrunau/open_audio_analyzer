@@ -4,9 +4,9 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
-import 'package:bel_core/bel_core.dart';
-import 'package:bel_engine/bel_engine.dart';
-import 'package:bel_ui/bel_ui.dart';
+import 'package:oaa_core/oaa_core.dart';
+import 'package:oaa_engine/oaa_engine.dart';
+import 'package:oaa_ui/oaa_ui.dart';
 import 'package:flutter/widgets.dart';
 
 import '../clock/meter_clock.dart';
@@ -94,20 +94,20 @@ class _SpectrumAnalyzerModuleState extends State<SpectrumAnalyzerModule> {
   static const _scale = MeterScale(min: -96, max: 0, step: 12);
 
   /// x, yBottom, x, yTop per band.
-  final Float32List _bars = Float32List(kBelSpectrumBands * 4);
+  final Float32List _bars = Float32List(kOaaSpectrumBands * 4);
 
   /// x, y per band, for the peak-hold polyline.
-  final Float32List _hold = Float32List(kBelSpectrumBands * 2);
+  final Float32List _hold = Float32List(kOaaSpectrumBands * 2);
 
   /// x, y per band, for the curve stroked along the top of the fill.
-  final Float32List _curve = Float32List(kBelSpectrumBands * 2);
+  final Float32List _curve = Float32List(kOaaSpectrumBands * 2);
 
   /// The level actually drawn, per band, in dB.
   ///
   /// One pole per band, folded once per published frame — see [_advance]. On
   /// [SpectrumResponse.fast] it holds a copy of what the engine published and
   /// the arithmetic below collapses to an assignment.
-  final Float32List _shown = Float32List(kBelSpectrumBands);
+  final Float32List _shown = Float32List(kOaaSpectrumBands);
 
   /// The generation [_shown] was last folded for, and the engine time it was
   /// folded at.
@@ -144,7 +144,7 @@ class _SpectrumAnalyzerModuleState extends State<SpectrumAnalyzerModule> {
     final alpha = snap ? 1.0 : 1 - math.exp(-dt / tau);
 
     final spectrum = engine.spectrum;
-    for (var band = 0; band < kBelSpectrumBands; band++) {
+    for (var band = 0; band < kOaaSpectrumBands; band++) {
       _shown[band] = snap
           ? spectrum[band]
           : _shown[band] + (spectrum[band] - _shown[band]) * alpha;
@@ -186,7 +186,7 @@ class _SpectrumAnalyzerModuleState extends State<SpectrumAnalyzerModule> {
 
   @override
   Widget build(BuildContext context) {
-    final colors = BelTheme.of(context);
+    final colors = OaaTheme.of(context);
 
     if (_graticule == null ||
         !_graticule!.matches(_scale, ScaleSide.right, colors.textFaint)) {
@@ -198,7 +198,7 @@ class _SpectrumAnalyzerModuleState extends State<SpectrumAnalyzerModule> {
         labelColor: colors.textFaint,
       );
 
-      final style = BelType.tick.copyWith(color: colors.textFaint);
+      final style = OaaType.tick.copyWith(color: colors.textFaint);
       List<ui.Paragraph> labels(List<double> labelled) => [
         for (final hz in _gridHz)
           layoutParagraph(
@@ -237,22 +237,22 @@ class _SpectrumPainter extends MeterPainter {
        _curve = (Paint()
          ..color = colors.accent
          ..style = PaintingStyle.stroke
-         ..strokeWidth = BelStroke.mark),
+         ..strokeWidth = OaaStroke.mark),
        // Dimmer than the curve on purpose. The hold is where the signal *has*
        // been and the curve is where it is now; drawn at the same weight, the
        // eye reads the upper line as the measurement.
        _hold = (Paint()
          ..color = colors.accent.withValues(alpha: 0.45)
          ..style = PaintingStyle.stroke
-         ..strokeWidth = BelStroke.hairline),
+         ..strokeWidth = OaaStroke.hairline),
        _grid = (Paint()
          ..color = colors.hairline
-         ..strokeWidth = BelStroke.hairline
+         ..strokeWidth = OaaStroke.hairline
          ..isAntiAlias = false),
        super(repaint: repaint);
 
   final MeterSource engine;
-  final BelColors colors;
+  final OaaColors colors;
   final ScaleGraticule graticule;
   final SpectrumResponse response;
   final _SpectrumAnalyzerModuleState state;
@@ -272,13 +272,13 @@ class _SpectrumPainter extends MeterPainter {
     for (final label in wide) {
       if (label.longestLine > widest) widest = label.longestLine;
     }
-    final gap = (bandOfHz(50) - bandOfHz(20)) / kBelSpectrumBands * plot.width;
+    final gap = (bandOfHz(50) - bandOfHz(20)) / kOaaSpectrumBands * plot.width;
     return gap > widest + Space.sm ? wide : state._gridLabelsNarrow;
   }
 
   @override
   void paint(Canvas canvas, Size size) {
-    final labelHeight = BelType.tick.fontSize! + Space.xs;
+    final labelHeight = OaaType.tick.fontSize! + Space.xs;
     final plot = Rect.fromLTRB(
       0,
       0,
@@ -293,7 +293,7 @@ class _SpectrumPainter extends MeterPainter {
     final labels = _labelsFor(plot);
     for (var i = 0; i < _gridHz.length; i++) {
       final x =
-          plot.left + bandOfHz(_gridHz[i]) / kBelSpectrumBands * plot.width;
+          plot.left + bandOfHz(_gridHz[i]) / kOaaSpectrumBands * plot.width;
       if (x < plot.left || x > plot.right) continue;
       canvas.drawLine(Offset(x, plot.top), Offset(x, plot.bottom), _grid);
 
@@ -322,11 +322,11 @@ class _SpectrumPainter extends MeterPainter {
     // a stroke exactly one band wide leave a seam of background between
     // neighbours wherever the band centre lands mid-pixel, and five hundred
     // hairline seams read as vertical banding across the whole fill.
-    final bandWidth = plot.width / kBelSpectrumBands;
+    final bandWidth = plot.width / kOaaSpectrumBands;
     _fill.strokeWidth = bandWidth + 0.5;
     _fill.shader = state.fillShader(plot, colors.accent);
 
-    for (var band = 0; band < kBelSpectrumBands; band++) {
+    for (var band = 0; band < kOaaSpectrumBands; band++) {
       final x = plot.left + (band + 0.5) * bandWidth;
       final y = _y(plot, state._shown[band]);
 

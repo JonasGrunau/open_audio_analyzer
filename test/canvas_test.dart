@@ -2,7 +2,7 @@
 //
 // The parts of the canvas that only a pointer can prove.
 //
-// The placement rules are covered in packages/bel_core (grid_test.dart) and the
+// The placement rules are covered in packages/oaa_core (grid_test.dart) and the
 // edit semantics in workspace_test.dart. What is left here is everything that
 // depends on real hit testing and real gesture arithmetic: that a drag by the
 // title bar moves the module the pointer is over, that an overlapping drop is
@@ -10,20 +10,20 @@
 // — which it silently becomes if a painter forgets it is not a control.
 //
 // These run against a live engine on the silence source. That is deliberate:
-// the canvas hands every module a real BelEngine, and a fake would not exercise
+// the canvas hands every module a real OaaEngine, and a fake would not exercise
 // the one thing that makes this arrangement work — that measurements never pass
 // through the widget tree at all.
 
-import 'package:bel/src/app/shortcuts.dart';
-import 'package:bel/src/canvas/grid_canvas.dart';
-import 'package:bel/src/canvas/module_host.dart';
-import 'package:bel/src/canvas/tab_strip.dart';
-import 'package:bel/src/canvas/workspace.dart';
-import 'package:bel/src/clock/meter_clock.dart';
-import 'package:bel/src/modules/spectrum_analyzer.dart';
-import 'package:bel_core/bel_core.dart';
-import 'package:bel_engine/bel_engine.dart';
-import 'package:bel_ui/bel_ui.dart';
+import 'package:oaa/src/app/shortcuts.dart';
+import 'package:oaa/src/canvas/grid_canvas.dart';
+import 'package:oaa/src/canvas/module_host.dart';
+import 'package:oaa/src/canvas/tab_strip.dart';
+import 'package:oaa/src/canvas/workspace.dart';
+import 'package:oaa/src/clock/meter_clock.dart';
+import 'package:oaa/src/modules/spectrum_analyzer.dart';
+import 'package:oaa_core/oaa_core.dart';
+import 'package:oaa_engine/oaa_engine.dart';
+import 'package:oaa_ui/oaa_ui.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -47,7 +47,7 @@ class _Harness extends StatefulWidget {
 
 class _HarnessState extends State<_Harness>
     with SingleTickerProviderStateMixin {
-  late final BelEngine engine = BelEngine.start(source: BelSource.silence);
+  late final OaaEngine engine = OaaEngine.start(source: OaaSource.silence);
   late final MeterClock clock = MeterClock(engine: engine, vsync: this);
 
   @override
@@ -58,15 +58,15 @@ class _HarnessState extends State<_Harness>
   }
 
   @override
-  Widget build(BuildContext context) => BelTheme(
-    colors: BelColors.precisionInstrument,
+  Widget build(BuildContext context) => OaaTheme(
+    colors: OaaColors.precisionInstrument,
     child: Material(
-      color: BelColors.precisionInstrument.background,
+      color: OaaColors.precisionInstrument.background,
       // The keyboard reaches the canvas from above it, exactly as it does in
       // the application — see lib/src/app/shortcuts.dart. Without this the
       // canvas is mouse-only, which is a fair description of what it would be
       // if somebody deleted the layer.
-      child: BelShortcuts(
+      child: OaaShortcuts(
         onReset: engine.reset,
         child: Column(
           children: [
@@ -113,11 +113,12 @@ Future<ProviderContainer> _pump(WidgetTester tester) async {
 /// Builds the canvas and switches to a **deliberately sparse** tab of the
 /// tests' own making.
 ///
-/// Not the default preset. What Bel opens with is a product decision — what a
-/// new user should see first — and it is dense on purpose. Geometry tests that
-/// read strides off it and drag modules into the space below it would fail the
-/// day somebody adds a meter, for a reason that has nothing to do with dragging.
-/// Here the tests own their canvas and assert geometry rather than taste.
+/// Not the default preset. What Open Audio Analyzer opens with is a product
+/// decision — what a new user should see first — and it is dense on purpose.
+/// Geometry tests that read strides off it and drag modules into the space
+/// below it would fail the day somebody adds a meter, for a reason that has
+/// nothing to do with dragging. Here the tests own their canvas and assert
+/// geometry rather than taste.
 ///
 /// Three number boxes at the top left, four columns apart and three rows tall,
 /// with the rest of the grid empty.

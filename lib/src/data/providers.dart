@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import 'package:bel_core/bel_core.dart';
-import 'package:bel_ui/bel_ui.dart';
+import 'package:oaa_core/oaa_core.dart';
+import 'package:oaa_ui/oaa_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../storage/config_paths.dart';
@@ -60,7 +60,7 @@ class StorageNoticeController extends Notifier<String?> {
 
 // --- Settings --------------------------------------------------------------
 
-/// Everything Bel remembers between launches.
+/// Everything Open Audio Analyzer remembers between launches.
 final settingsProvider = NotifierProvider<SettingsController, AppSettings>(
   SettingsController.new,
 );
@@ -164,9 +164,9 @@ class CalibrationLibraryController extends Notifier<List<Calibration>> {
     ref.watch(startupConfigProvider).calibrations,
   );
 
-  /// Whether [id] names a target Bel ships with — which is not the same as
-  /// whether it can be edited. Editing a built-in writes a user file that
-  /// shadows it; only that file can be deleted.
+  /// Whether [id] names a target Open Audio Analyzer ships with — which is not
+  /// the same as whether it can be edited. Editing a built-in writes a user
+  /// file that shadows it; only that file can be deleted.
   bool isBuiltIn(String id) => BuiltInCalibrations.byId(id) != null;
 
   bool isOverridden(String id) => ref
@@ -322,13 +322,13 @@ final skinProvider = Provider<Skin>((ref) {
 /// The active palette.
 ///
 /// **One instance per skin, and that matters.** Every module painter's
-/// `shouldRepaint` compares its palette; building a fresh `BelColors` inside a
+/// `shouldRepaint` compares its palette; building a fresh `OaaColors` inside a
 /// widget's `build` would allocate thirteen colours per rebuild and — before
-/// `BelColors` gained value equality — would have re-rasterised all thirteen
+/// `OaaColors` gained value equality — would have re-rasterised all thirteen
 /// modules every time anything in the tree changed. A `Provider` caches until
 /// its dependencies change, which is exactly the lifetime wanted.
-final paletteProvider = Provider<BelColors>(
-  (ref) => belColorsFromSkin(ref.watch(skinProvider)),
+final paletteProvider = Provider<OaaColors>(
+  (ref) => oaaColorsFromSkin(ref.watch(skinProvider)),
 );
 
 // --- Presets ---------------------------------------------------------------

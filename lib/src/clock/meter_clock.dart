@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import 'package:bel_core/bel_core.dart';
+import 'package:oaa_core/oaa_core.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/foundation.dart';
 
@@ -58,7 +58,8 @@ class MeterClock extends ChangeNotifier {
 
   /// Whether the platform's "reduce motion" accessibility preference is set.
   ///
-  /// Bel has no decorative animation to switch off — there is not one
+  /// Open Audio Analyzer has no decorative animation to switch off — there is
+  /// not one
   /// `AnimationController` in the application — so honouring this preference
   /// cannot mean what it means elsewhere. What moves here is the measurement,
   /// and a meter that stopped moving would not be a calmer meter, it would be

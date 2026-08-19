@@ -16,10 +16,10 @@
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
-import 'package:bel/src/clock/meter_clock.dart';
-import 'package:bel/src/modules/histogram.dart';
-import 'package:bel_core/bel_core.dart';
-import 'package:bel_ui/bel_ui.dart';
+import 'package:oaa/src/clock/meter_clock.dart';
+import 'package:oaa/src/modules/histogram.dart';
+import 'package:oaa_core/oaa_core.dart';
+import 'package:oaa_ui/oaa_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -96,7 +96,7 @@ class _HarnessState extends State<_Harness>
 
   @override
   Widget build(BuildContext context) => MaterialApp(
-    home: BelTheme(
+    home: OaaTheme(
       colors: _colors,
       child: Material(
         color: _colors.background,
@@ -119,7 +119,7 @@ class _HarnessState extends State<_Harness>
   );
 }
 
-const _colors = BelColors.precisionInstrument;
+const _colors = OaaColors.precisionInstrument;
 const _size = Size(480, 220);
 
 Future<void> _frame(WidgetTester tester) =>

@@ -3,8 +3,8 @@
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
-import 'package:bel_core/bel_core.dart';
-import 'package:bel_ui/bel_ui.dart';
+import 'package:oaa_core/oaa_core.dart';
+import 'package:oaa_ui/oaa_ui.dart';
 import 'package:flutter/widgets.dart';
 
 import '../clock/meter_clock.dart';
@@ -58,11 +58,11 @@ class _SuperMeterModuleState extends State<SuperMeterModule> {
 
   @override
   Widget build(BuildContext context) {
-    final colors = BelTheme.of(context);
+    final colors = OaaTheme.of(context);
 
     if (_labelColor != colors.textFaint) {
       _labelColor = colors.textFaint;
-      final style = BelType.label.copyWith(color: colors.textFaint);
+      final style = OaaType.label.copyWith(color: colors.textFaint);
       _unit = layoutParagraph('LUFS', style);
       _rangeLabel = layoutParagraph('LRA', style);
       _arcLabels = [
@@ -104,12 +104,12 @@ class _SuperMeterPainter extends MeterPainter {
        _target = (Paint()
          ..color = colors.textMuted
          ..style = PaintingStyle.stroke
-         ..strokeWidth = BelStroke.mark),
+         ..strokeWidth = OaaStroke.mark),
        super(repaint: repaint);
 
   final MeterSource engine;
   final Calibration calibration;
-  final BelColors colors;
+  final OaaColors colors;
   final MeterScale scale;
   final _SuperMeterModuleState state;
 
@@ -289,7 +289,7 @@ class _SuperMeterPainter extends MeterPainter {
 
     final value = state._integrated.of(
       text,
-      BelType.reading(fontSize).copyWith(color: integratedColor),
+      OaaType.reading(fontSize).copyWith(color: integratedColor),
       align: TextAlign.center,
       maxWidth: textWidth,
     );
@@ -310,7 +310,7 @@ class _SuperMeterPainter extends MeterPainter {
     if (size.height > 140) {
       final range = state._range.of(
         Metric.loudnessRange.format(engine.loudnessRange),
-        BelType.readingSmall.copyWith(
+        OaaType.readingSmall.copyWith(
           color: colorForState(
             classify(Metric.loudnessRange, engine.loudnessRange, calibration),
             colors,

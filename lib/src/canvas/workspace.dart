@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import 'package:bel_core/bel_core.dart';
+import 'package:oaa_core/oaa_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -301,7 +301,7 @@ class WorkspaceController extends Notifier<Workspace> {
   }
 }
 
-/// What Bel opens with.
+/// What Open Audio Analyzer opens with.
 ///
 /// A working meter bridge on the first tab and the frequency displays on the
 /// second, rather than an empty canvas with an invitation to build one. The

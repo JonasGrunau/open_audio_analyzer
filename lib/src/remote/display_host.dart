@@ -4,8 +4,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:bel_core/bel_core.dart';
-import 'package:bel_wire/bel_wire.dart';
+import 'package:oaa_core/oaa_core.dart';
+import 'package:oaa_wire/oaa_wire.dart';
 import 'package:flutter/foundation.dart';
 
 /// Publishes what this machine is measuring, so another screen can draw it.
@@ -48,7 +48,7 @@ class DisplayHost {
   /// What the tablet shows in its list. A name, never an address.
   final String hostName;
 
-  /// `BEL_ABI_VERSION` of the engine behind [source], carried in the handshake
+  /// `OAA_ABI_VERSION` of the engine behind [source], carried in the handshake
   /// for the benefit of bug reports. It is not a compatibility check; the
   /// snapshot payload size is.
   final int abiVersion;
@@ -58,7 +58,7 @@ class DisplayHost {
   /// somebody will need it to be.
   static const int defaultPort = 47821;
 
-  /// How often measurements go out is `kRemoteFpsOptions` from `bel_core`, and
+  /// How often measurements go out is `kRemoteFpsOptions` from `oaa_core`, and
   /// it is a property of the link rather than of either screen's refresh rate:
   /// the host may be drawing at 120 fps and the tablet at 60, and neither is a
   /// reason to put more than 30 measurements a second on a Wi-Fi network.

@@ -3,10 +3,10 @@
 # Two jobs, split by what they actually need.
 #
 # `checks` runs the cheap, broad signals first. The domain tests genuinely need
-# no C toolchain — `bel_core` depends on nothing — so they run before anything
+# no C toolchain — `oaa_core` depends on nothing — so they run before anything
 # that compiles, and a domain regression is diagnosed without waiting on a
 # native build. The widget tests come after and *do* build the engine, because
-# the app depends on `bel_engine`; there is no way around that and no reason to
+# the app depends on `oaa_engine`; there is no way around that and no reason to
 # want one.
 #
 # `engine` compiles the C through the build hook and runs the meters against
@@ -60,7 +60,7 @@ jobs:
         run: dart format --output=none --set-exit-if-changed .
 
       - name: Domain tests
-        working-directory: packages/bel_core
+        working-directory: packages/oaa_core
         run: |
           dart pub get
           dart test
@@ -71,7 +71,7 @@ jobs:
       # implementations of docs/WIRE.md agreeing is the entire point of having
       # written it down.
       - name: Wire protocol tests
-        working-directory: packages/bel_wire
+        working-directory: packages/oaa_wire
         run: |
           dart pub get
           dart test
@@ -110,12 +110,12 @@ jobs:
       # Includes the EBU Tech 3341/3342 conformance cases. A red conformance
       # run is a red build: these numbers are what users deliver against.
       - name: Engine and conformance tests
-        working-directory: packages/bel_engine
+        working-directory: packages/oaa_engine
         run: |
           dart pub get
           dart test
 
-      # Runs the real `bel` binary as a subprocess and asserts on its exit
+      # Runs the real `oaa` binary as a subprocess and asserts on its exit
       # codes. On all three platforms because file decoding is where they
       # differ most: Windows takes a UTF-16 path, and a filename with an umlaut
       # in it fails there and nowhere else.

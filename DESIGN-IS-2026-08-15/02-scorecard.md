@@ -17,7 +17,7 @@ socket-fed `MeterSource` and the open skin format.
 
 **2. Good design makes a product useful — 3/3** (R1 2, R2 **3**)
 Evidence: `05`/`06-controls`; every painted control built through
-`BelFocusable`.
+`OaaFocusable`.
 Justification: unchanged and still met — the primary task completes in zero
 steps and the configuration surface beside it is fully keyboard-operable.
 
@@ -77,7 +77,7 @@ endpoints were hoisted out of `paint`, removing 24 `pow` calls a frame.
 Justification: unchanged, and marginally better.
 
 **10. Good design is as little design as possible — 2/3** (R1 2, R2 2)
-Evidence: the frame-rate chip is gone from `bel_app.dart`; the rule that
+Evidence: the frame-rate chip is gone from `oaa_app.dart`; the rule that
 replaced it is written at the top of `_StatusBar`.
 Justification: the clearer of the two duplicated affordances is removed and the
 rule for the next candidate is stated in the code — the bar carries what changes

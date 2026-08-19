@@ -21,9 +21,9 @@
 # glibc is forward-compatible and not backward-compatible, so an AppImage built
 # against a newer one refuses to start on an older distribution — with a loader
 # error and nothing else. `ubuntu-22.04` is therefore pinned rather than
-# `ubuntu-latest`, and moving it forward silently narrows who can run Bel. The
-# flatpak has no such constraint because its runtime carries its own libc,
-# which is most of the reason to have both.
+# `ubuntu-latest`, and moving it forward silently narrows who can run Open Audio
+# Analyzer. The flatpak has no such constraint because its runtime carries its
+# own libc, which is most of the reason to have both.
 #
 # ---------------------------------------------------------------------------
 # Unsigned artefacts are published, and labelled
@@ -57,13 +57,13 @@ jobs:
 
       - name: Build and package
         env:
-          BEL_SIGNING_IDENTITY: ${{ secrets.BEL_SIGNING_IDENTITY }}
-          BEL_NOTARY_PROFILE: ${{ secrets.BEL_NOTARY_PROFILE }}
+          OAA_SIGNING_IDENTITY: ${{ secrets.OAA_SIGNING_IDENTITY }}
+          OAA_NOTARY_PROFILE: ${{ secrets.OAA_NOTARY_PROFILE }}
         run: sh packaging/macos/make_dmg.sh
 
       - uses: actions/upload-artifact@v4
         with:
-          name: bel-macos-dmg
+          name: oaa-macos-dmg
           path: build/packaging/*.dmg
           if-no-files-found: error
 
@@ -81,14 +81,14 @@ jobs:
       - name: Build and package
         shell: pwsh
         env:
-          BEL_WINDOWS_CERT: ${{ secrets.BEL_WINDOWS_CERT }}
-          BEL_WINDOWS_CERT_PASS: ${{ secrets.BEL_WINDOWS_CERT_PASS }}
-          BEL_WINDOWS_PUBLISHER: ${{ secrets.BEL_WINDOWS_PUBLISHER }}
+          OAA_WINDOWS_CERT: ${{ secrets.OAA_WINDOWS_CERT }}
+          OAA_WINDOWS_CERT_PASS: ${{ secrets.OAA_WINDOWS_CERT_PASS }}
+          OAA_WINDOWS_PUBLISHER: ${{ secrets.OAA_WINDOWS_PUBLISHER }}
         run: pwsh packaging/windows/make_msix.ps1
 
       - uses: actions/upload-artifact@v4
         with:
-          name: bel-windows-msix
+          name: oaa-windows-msix
           path: build/packaging/*.msix
           if-no-files-found: error
 
@@ -119,7 +119,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: bel-linux-appimage
+          name: oaa-linux-appimage
           path: build/packaging/*.AppImage
           if-no-files-found: error
 
@@ -151,12 +151,12 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: bel-linux-flatpak
+          name: oaa-linux-flatpak
           path: build/packaging/*.flatpak
           if-no-files-found: error
 
   cli:
-    name: bel CLI
+    name: oaa CLI
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -176,14 +176,14 @@ jobs:
         working-directory: cli
         run: |
           dart pub get
-          dart compile exe bin/bel.dart -o bel
+          dart compile exe bin/oaa.dart -o oaa
 
       - uses: actions/upload-artifact@v4
         with:
-          name: bel-cli-${{ matrix.os }}
+          name: oaa-cli-${{ matrix.os }}
           path: |
-            cli/bel
-            cli/bel.exe
+            cli/oaa
+            cli/oaa.exe
           if-no-files-found: error
 
   publish:
@@ -207,6 +207,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "${GITHUB_REF_NAME}" \
-            --title "Bel ${GITHUB_REF_NAME}" \
+            --title "Open Audio Analyzer ${GITHUB_REF_NAME}" \
             --notes-file <(sed -n '/^## \[/,/^## \[/p' CHANGELOG.md | sed '$d') \
             $(find artifacts -type f | sort)

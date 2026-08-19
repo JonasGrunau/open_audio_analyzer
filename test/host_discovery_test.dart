@@ -2,19 +2,20 @@
 //
 // Finding a host, on both of the two paths there are.
 //
-// `mdns_test.dart` covers the DNS codec — that a packet Bel writes is a packet
-// Bel reads. This covers what happens after that: the browser's state machine,
-// the channel iOS has to use instead of it, and the sentence the panel shows
-// when neither of them can work. All three were untested, and the third did not
-// exist: a search that could not run showed "Looking for hosts on this
-// network…" for as long as anybody was willing to wait.
+// `mdns_test.dart` covers the DNS codec — that a packet Open Audio Analyzer
+// writes is a packet Open Audio Analyzer reads. This covers what happens after
+// that: the browser's state machine, the channel iOS has to use instead of it,
+// and the sentence the panel shows when neither of them can work. All three
+// were untested, and the third did not exist: a search that could not run
+// showed "Looking for hosts on this network…" for as long as anybody was
+// willing to wait.
 
-import 'package:bel/src/remote/host_picker.dart';
-import 'package:bel/src/remote/mdns/bonjour_discovery.dart';
-import 'package:bel/src/remote/mdns/dns_message.dart';
-import 'package:bel/src/remote/mdns/host_discovery.dart';
-import 'package:bel/src/remote/mdns/mdns_service.dart';
-import 'package:bel_ui/bel_ui.dart';
+import 'package:oaa/src/remote/host_picker.dart';
+import 'package:oaa/src/remote/mdns/bonjour_discovery.dart';
+import 'package:oaa/src/remote/mdns/dns_message.dart';
+import 'package:oaa/src/remote/mdns/host_discovery.dart';
+import 'package:oaa/src/remote/mdns/mdns_service.dart';
+import 'package:oaa_ui/oaa_ui.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -36,11 +37,11 @@ Uint8List announcement({
   },
   int ttl = 120,
 }) {
-  final serviceInstance = '$instance.$belServiceType';
+  final serviceInstance = '$instance.$oaaServiceType';
   return encodeResponse(
     answers: [
       DnsRecord(
-        name: belServiceType,
+        name: oaaServiceType,
         type: DnsType.ptr,
         ttl: ttl,
         target: serviceInstance,
@@ -152,7 +153,7 @@ void main() {
       expect(browser.hosts.value, isEmpty);
     });
 
-    test('nothing about another device on port 5353 is a Bel host', () {
+    test('nothing about another device on port 5353 is an Open Audio Analyzer host', () {
       final browser = MdnsBrowser()
         ..handleDatagram(
           encodeResponse(
@@ -198,15 +199,17 @@ void main() {
 
   group('what the responder puts on the wire', () {
     // Everything in this group is about one rule: **a DNS-SD instance name is
-    // one label.** Bel writes a name by splitting it on dots, so a dot in the
-    // instance does not name an instance containing a dot — it invents labels,
-    // and the record stops being `<instance>._bel._tcp.local` at all.
+    // one label.** Open Audio Analyzer writes a name by splitting it on dots,
+    // so a dot in the instance does not name an instance containing a dot — it
+    // invents labels, and the record stops being `<instance>._oaa._tcp.local`
+    // at all.
     //
-    // Nothing caught it because Bel's own reader takes everything before
-    // `_bel._tcp.local` as the instance, so a Bel desktop found a Bel desktop
-    // perfectly. Apple's responder drops the record, so `dns-sd -B` and every
-    // iPad saw nothing, on any network whose DHCP hands out a domain —
-    // `Platform.localHostname` is `studio-mac.fritz.box` on one of those.
+    // Nothing caught it because Open Audio Analyzer's own reader takes
+    // everything before `_oaa._tcp.local` as the instance, so an Open Audio
+    // Analyzer desktop found an Open Audio Analyzer desktop perfectly. Apple's
+    // responder drops the record, so `dns-sd -B` and every iPad saw nothing, on
+    // any network whose DHCP hands out a domain — `Platform.localHostname` is
+    // `studio-mac.fritz.box` on one of those.
 
     test('a machine name with a domain in it is still one label', () {
       final responder = MdnsResponder(
@@ -215,8 +218,8 @@ void main() {
       );
 
       expect(responder.instanceLabel, 'studio-mac-fritz-box');
-      expect(responder.serviceInstance, 'studio-mac-fritz-box.$belServiceType');
-      // `<instance>._bel._tcp.local` is four labels. The bug made it six, and
+      expect(responder.serviceInstance, 'studio-mac-fritz-box.$oaaServiceType');
+      // `<instance>._oaa._tcp.local` is four labels. The bug made it six, and
       // six labels are not a service instance whatever they read as.
       expect(responder.serviceInstance.split('.'), hasLength(4));
     });
@@ -238,7 +241,7 @@ void main() {
       final responder = MdnsResponder(instanceName: 'studio-mac', port: 1);
 
       expect(responder.hostName, isNot('studio-mac.local'));
-      expect(responder.hostName, 'studio-mac-bel.local');
+      expect(responder.hostName, 'studio-mac-oaa.local');
     });
 
     test('a plain machine name is left alone', () {
@@ -247,7 +250,7 @@ void main() {
     });
   });
 
-  group('the browser iOS makes Bel use', () {
+  group('the browser iOS makes Open Audio Analyzer use', () {
     tearDown(() {
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockStreamHandler(bonjourChannel, null);
@@ -301,7 +304,7 @@ void main() {
         MockStreamHandler.inline(
           onListen: (arguments, sink) => sink.error(
             code: 'browse-failed',
-            message: 'iPadOS is not letting Bel search the local network.',
+            message: 'iPadOS is not letting Open Audio Analyzer search the local network.',
           ),
         ),
       );
@@ -364,9 +367,9 @@ void main() {
 
       // A channel holds one sink. A second `listen` would have cancelled the
       // browse underneath the panel still on screen, and the `cancel` that
-      // followed it would have been answered with "No active stream to
-      // cancel" — reported from inside the framework, where Bel cannot catch
-      // it.
+      // followed it would have been answered with "No active stream to cancel"
+      // — reported from inside the framework, where Open Audio Analyzer cannot
+      // catch it.
       expect(listens, 1);
       expect(cancels, isZero);
 
@@ -383,7 +386,7 @@ void main() {
     testWidgets('the reason, when there is one', (tester) async {
       final discovery = _StaticDiscovery()
         ..failure.value =
-            'macOS is not letting Bel search the local network. Allow it '
+            'macOS is not letting Open Audio Analyzer search the local network. Allow it '
             'under System Settings › Privacy & Security › Local Network, '
             'or enter an address below.';
 
@@ -419,8 +422,8 @@ void main() {
   });
 }
 
-Widget _panel(HostDiscovery discovery) => BelTheme(
-  colors: BelColors.precisionInstrument,
+Widget _panel(HostDiscovery discovery) => OaaTheme(
+  colors: OaaColors.precisionInstrument,
   child: MaterialApp(
     home: HostPickerPanel(onConnect: (_, _) {}, discovery: discovery),
   ),

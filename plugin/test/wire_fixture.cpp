@@ -7,8 +7,9 @@
  * ---------------------------------------------------------------------------
  * The bug this exists to catch
  *
- * There are two implementations of the Bel wire protocol: this one in C++ and
- * `packages/bel_wire/` in Dart. They are written against `docs/WIRE.md` rather
+ * There are two implementations of the Open Audio Analyzer wire protocol: this
+ * one in C++ and
+ * `packages/oaa_wire/` in Dart. They are written against `docs/WIRE.md` rather
  * than against each other, which is right — the Dart end must be implementable
  * by somebody who has never seen the C++ — and which means nothing in either
  * codebase forces them to agree.
@@ -28,8 +29,8 @@
  *
  * Regenerating, after a *deliberate* protocol change only:
  *
- *   cmake --build plugin/build --target bel_wire_fixture
- *   ./plugin/build/bel_wire_fixture plugin/test/golden/wire_v1.bin
+ *   cmake --build plugin/build --target oaa_wire_fixture
+ *   ./plugin/build/oaa_wire_fixture plugin/test/golden/wire_v2.bin
  *
  * The values below include a NaN and a negative infinity on purpose. Both have
  * bit patterns that a careless serialiser normalises — NaN through arithmetic,
@@ -44,19 +45,19 @@
 #include <limits>
 #include <vector>
 
-#include "../src/BelWire.h"
+#include "../src/OaaWire.h"
 
 namespace {
 
-bel_snapshot makeSnapshot() {
-  bel_snapshot s;
+oaa_snapshot makeSnapshot() {
+  oaa_snapshot s;
   std::memset(&s, 0, sizeof(s));
 
   s.generation      = 0x0123456789ABCDEFull;
   s.elapsed_seconds = 123.456;
   s.sample_rate     = 48000;
   s.channels        = 2;
-  s.flags           = BEL_FLAG_RUNNING;
+  s.flags           = OAA_FLAG_RUNNING;
   s.dropped_frames  = 7;
 
   /* Not measured. Must survive as NaN, not as zero. */
@@ -81,7 +82,7 @@ bel_snapshot makeSnapshot() {
   s.correlation     = 0.5f;
   s.balance         = -0.25f;
 
-  for (int i = 0; i < BEL_MAX_CHANNELS; ++i) {
+  for (int i = 0; i < OAA_MAX_CHANNELS; ++i) {
     s.peak[i] = -static_cast<float>(i);
     s.rms[i]  = -10.0f - static_cast<float>(i);
     s.vu[i]   = static_cast<float>(i) * 0.5f;
@@ -90,7 +91,7 @@ bel_snapshot makeSnapshot() {
 
   /* Distinct per-array patterns, so that an array serialised in the wrong slot
    * is caught rather than merely being the wrong length. */
-  for (int i = 0; i < BEL_SPECTRUM_BANDS; ++i) {
+  for (int i = 0; i < OAA_SPECTRUM_BANDS; ++i) {
     s.spectrum[i]      = -static_cast<float>(i % 100);
     s.spectrum_peak[i] = -static_cast<float>(i % 100) + 1.0f;
     s.spectrum_pan[i]  = static_cast<float>(i % 3) - 1.0f;
@@ -101,22 +102,22 @@ bel_snapshot makeSnapshot() {
   s.lra_gate  = -34.0f;
   s.reserved3 = 0.0f;
 
-  for (int i = 0; i < BEL_SCOPE_POINTS * 2; ++i)
+  for (int i = 0; i < OAA_SCOPE_POINTS * 2; ++i)
     s.scope[i] = static_cast<float>(i % 7) / 7.0f - 0.5f;
 
-  for (int i = 0; i < BEL_HISTOGRAM_BINS; ++i)
+  for (int i = 0; i < OAA_HISTOGRAM_BINS; ++i)
     s.histogram[i] = static_cast<float>(i) / 120.0f;
 
   return s;
 }
 
-bel::wire::Transport makeTransport() {
-  bel::wire::Transport t;
-  t.flags = bel::wire::kPlaying | bel::wire::kHasTimeSeconds |
-            bel::wire::kHasPpq | bel::wire::kHasBpm |
-            bel::wire::kHasTimeSig | bel::wire::kHasTimecode |
-            bel::wire::kHasTimeSamples | bel::wire::kHasLoopPoints |
-            bel::wire::kHasBarStart | bel::wire::kDiscontinuity;
+oaa::wire::Transport makeTransport() {
+  oaa::wire::Transport t;
+  t.flags = oaa::wire::kPlaying | oaa::wire::kHasTimeSeconds |
+            oaa::wire::kHasPpq | oaa::wire::kHasBpm |
+            oaa::wire::kHasTimeSig | oaa::wire::kHasTimecode |
+            oaa::wire::kHasTimeSamples | oaa::wire::kHasLoopPoints |
+            oaa::wire::kHasBarStart | oaa::wire::kDiscontinuity;
 
   t.frameRate          = 5;  /* 29.97 drop */
   t.timeSeconds        = 61.5;
@@ -137,7 +138,7 @@ bel::wire::Transport makeTransport() {
 
 int main(int argc, char** argv) {
   if (argc != 2) {
-    std::fprintf(stderr, "usage: bel_wire_fixture <output-path>\n");
+    std::fprintf(stderr, "usage: oaa_wire_fixture <output-path>\n");
     return 2;
   }
 
@@ -159,19 +160,19 @@ int main(int argc, char** argv) {
    * producer whose ABI differs from the consumer's is accepted, because the
    * payload size is what decides whether the bytes can be read, and refusing a
    * link that would have worked is its own kind of wrong answer. */
-  bel::wire::writeHelloFrame(frame, "Bel plugin — fixture", 3);
+  oaa::wire::writeHelloFrame(frame, "Open Audio Analyzer plugin — fixture", 3);
   out.insert(out.end(), frame.begin(), frame.end());
 
-  bel::wire::writeTransportFrame(frame, makeTransport());
+  oaa::wire::writeTransportFrame(frame, makeTransport());
   out.insert(out.end(), frame.begin(), frame.end());
 
-  const bel_snapshot snapshot = makeSnapshot();
-  bel::wire::writeSnapshotFrame(frame, snapshot);
+  const oaa_snapshot snapshot = makeSnapshot();
+  oaa::wire::writeSnapshotFrame(frame, snapshot);
   out.insert(out.end(), frame.begin(), frame.end());
 
   std::FILE* file = std::fopen(argv[1], "wb");
   if (file == nullptr) {
-    std::fprintf(stderr, "bel_wire_fixture: cannot open %s\n", argv[1]);
+    std::fprintf(stderr, "oaa_wire_fixture: cannot open %s\n", argv[1]);
     return 1;
   }
 
@@ -179,7 +180,7 @@ int main(int argc, char** argv) {
   std::fclose(file);
 
   if (written != out.size()) {
-    std::fprintf(stderr, "bel_wire_fixture: short write\n");
+    std::fprintf(stderr, "oaa_wire_fixture: short write\n");
     return 1;
   }
 

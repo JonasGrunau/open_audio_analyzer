@@ -19,15 +19,15 @@
 // deliberate layout that says the same thing every time.
 //
 // It also has to live in `lib/` rather than beside the other exports in
-// `bel_core`, because rendering needs `dart:ui` and `bel_core` is the package
+// `oaa_core`, because rendering needs `dart:ui` and `oaa_core` is the package
 // three engine-less consumers depend on. A `Canvas` in there would drag Flutter
 // into all of them.
 
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
-import 'package:bel_core/bel_core.dart';
-import 'package:bel_ui/bel_ui.dart';
+import 'package:oaa_core/oaa_core.dart';
+import 'package:oaa_ui/oaa_ui.dart';
 import 'package:flutter/painting.dart';
 
 /// Fixed so that every card is the same size regardless of the window that
@@ -41,7 +41,7 @@ const double _scale = 2;
 /// light. Returns null only if the encoder does, which it does not in practice.
 Future<Uint8List?> renderReportCard(
   AnalysisReport report,
-  BelColors colors,
+  OaaColors colors,
 ) async {
   final recorder = ui.PictureRecorder();
   final canvas = Canvas(recorder);
@@ -82,7 +82,7 @@ Future<Uint8List?> renderReportCard(
 ///
 /// Laid out top-down with a running cursor rather than by a widget tree,
 /// because there is no tree here — this runs offscreen, against a raw Canvas.
-double _paint(Canvas canvas, AnalysisReport report, BelColors colors) {
+double _paint(Canvas canvas, AnalysisReport report, OaaColors colors) {
   const left = Space.xl;
   const right = _cardWidth - Space.xl;
 
@@ -94,7 +94,7 @@ double _paint(Canvas canvas, AnalysisReport report, BelColors colors) {
       Offset(right, y),
       Paint()
         ..color = colors.hairline
-        ..strokeWidth = BelStroke.hairline,
+        ..strokeWidth = OaaStroke.hairline,
     );
     y += Space.md;
   }
@@ -122,12 +122,12 @@ double _paint(Canvas canvas, AnalysisReport report, BelColors colors) {
   // --- Header -------------------------------------------------------------
   y += draw(
     report.fileName,
-    BelType.reading(26).copyWith(color: colors.textPrimary),
+    OaaType.reading(26).copyWith(color: colors.textPrimary),
   );
   y += Space.xs;
   y += draw(
     '${report.describeSource()}  ·  ${report.describeDuration()}',
-    BelType.body.copyWith(color: colors.textMuted),
+    OaaType.body.copyWith(color: colors.textMuted),
   );
   y += Space.lg;
   rule();
@@ -156,7 +156,7 @@ double _paint(Canvas canvas, AnalysisReport report, BelColors colors) {
 
     y += draw(
       headline[i].label,
-      BelType.caption.copyWith(color: colors.textFaint),
+      OaaType.caption.copyWith(color: colors.textFaint),
       x: x,
       width: columnWidth,
     );
@@ -165,7 +165,7 @@ double _paint(Canvas canvas, AnalysisReport report, BelColors colors) {
     final value = values[i];
     y += draw(
       '${headline[i].format(value)}${headline[i].unit.isEmpty ? '' : ' ${headline[i].unit}'}',
-      BelType.reading(
+      OaaType.reading(
         22,
       ).copyWith(color: value.isNaN ? colors.textFaint : colors.textPrimary),
       x: x,
@@ -182,7 +182,7 @@ double _paint(Canvas canvas, AnalysisReport report, BelColors colors) {
   if (report.timeline.length > 1) {
     y += draw(
       'SHORT-TERM LOUDNESS',
-      BelType.caption.copyWith(color: colors.textFaint),
+      OaaType.caption.copyWith(color: colors.textFaint),
     );
     y += Space.sm;
     // Inset from the left by a gutter, because the graph draws its LUFS scale
@@ -206,12 +206,12 @@ double _paint(Canvas canvas, AnalysisReport report, BelColors colors) {
     final rowTop = y;
     final used = draw(
       metric.label,
-      BelType.body.copyWith(color: colors.textMuted),
+      OaaType.body.copyWith(color: colors.textMuted),
     );
     y = rowTop;
     draw(
       '${metric.format(value)}${metric.unit.isEmpty ? '' : ' ${metric.unit}'}',
-      BelType.readingSmall.copyWith(
+      OaaType.readingSmall.copyWith(
         color: value.isNaN ? colors.textFaint : colors.textPrimary,
       ),
       x: right,
@@ -229,7 +229,7 @@ double _paint(Canvas canvas, AnalysisReport report, BelColors colors) {
 
     y += draw(
       'TARGET — ${target.name.toUpperCase()}',
-      BelType.caption.copyWith(color: colors.textFaint),
+      OaaType.caption.copyWith(color: colors.textFaint),
     );
     y += Space.sm;
 
@@ -237,13 +237,13 @@ double _paint(Canvas canvas, AnalysisReport report, BelColors colors) {
       final rowTop = y;
       final used = draw(
         check.metric.label,
-        BelType.body.copyWith(color: colors.textMuted),
+        OaaType.body.copyWith(color: colors.textMuted),
       );
 
       y = rowTop;
       draw(
         '${check.metric.format(check.value)}   required ${check.limitLabel}',
-        BelType.readingSmall.copyWith(color: colors.textPrimary),
+        OaaType.readingSmall.copyWith(color: colors.textPrimary),
         x: right - 90,
         align: TextAlign.right,
         width: 420,
@@ -252,7 +252,7 @@ double _paint(Canvas canvas, AnalysisReport report, BelColors colors) {
       y = rowTop;
       draw(
         check.verdictLabel,
-        BelType.caption.copyWith(
+        OaaType.caption.copyWith(
           color: switch (check.verdict) {
             ComplianceVerdict.pass => colors.accent,
             ComplianceVerdict.fail => colors.over,
@@ -274,10 +274,10 @@ double _paint(Canvas canvas, AnalysisReport report, BelColors colors) {
   y += Space.lg;
   rule();
   y += draw(
-    '${report.toolVersion.isEmpty ? 'Bel' : report.toolVersion}  ·  '
+    '${report.toolVersion.isEmpty ? 'Open Audio Analyzer' : report.toolVersion}  ·  '
     'ITU-R BS.1770-4 / EBU R 128  ·  '
     '${report.generatedAt.toUtc().toIso8601String().split('.').first}Z',
-    BelType.caption.copyWith(color: colors.textFaint),
+    OaaType.caption.copyWith(color: colors.textFaint),
   );
 
   return y + Space.xl;
@@ -290,7 +290,7 @@ double _paint(Canvas canvas, AnalysisReport report, BelColors colors) {
 void _paintGraph(
   Canvas canvas,
   AnalysisReport report,
-  BelColors colors,
+  OaaColors colors,
   Rect area,
 ) {
   const top = 0.0;
@@ -301,7 +301,7 @@ void _paintGraph(
 
   final grid = Paint()
     ..color = colors.hairline
-    ..strokeWidth = BelStroke.hairline;
+    ..strokeWidth = OaaStroke.hairline;
 
   for (var lufs = top; lufs >= bottom; lufs -= 10) {
     final y = toY(lufs);
@@ -310,7 +310,7 @@ void _paintGraph(
     final label = TextPainter(
       text: TextSpan(
         text: lufs.toStringAsFixed(0),
-        style: BelType.tick.copyWith(color: colors.textFaint),
+        style: OaaType.tick.copyWith(color: colors.textFaint),
       ),
       textDirection: TextDirection.ltr,
     )..layout();
@@ -336,7 +336,7 @@ void _paintGraph(
       path,
       Paint()
         ..style = PaintingStyle.stroke
-        ..strokeWidth = BelStroke.mark
+        ..strokeWidth = OaaStroke.mark
         ..color = colors.meterFill,
     );
   }
@@ -348,7 +348,7 @@ void _paintGraph(
       Offset(area.right, y),
       Paint()
         ..color = colors.accent
-        ..strokeWidth = BelStroke.hairline,
+        ..strokeWidth = OaaStroke.hairline,
     );
   }
 }

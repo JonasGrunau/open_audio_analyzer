@@ -3,14 +3,15 @@
 // The three modules that keep a history, held to the property whose absence
 // crashed the application.
 //
-// Bel used to accumulate the spectrogram, the phase trail and the stereo cloud
-// into an image kept between frames, taken with `Picture.toImageSync`. That
-// image is a handle to a display list the engine has not rasterised yet, and it
-// holds that display list for as long as the image lives — so frame *n* pinned
-// frame *n−1*, back to the first frame, and disposing the Dart handle released
-// none of it. The application leaked a full-size image per published frame and
-// died on the raster thread with a stack overflow, recursing 3,286 destructors
-// deep through the chain as it was finally dropped.
+// Open Audio Analyzer used to accumulate the spectrogram, the phase trail and
+// the stereo cloud into an image kept between frames, taken with
+// `Picture.toImageSync`. That image is a handle to a display list the engine
+// has not rasterised yet, and it holds that display list for as long as the
+// image lives — so frame *n* pinned frame *n−1*, back to the first frame, and
+// disposing the Dart handle released none of it. The application leaked a
+// full-size image per published frame and died on the raster thread with a
+// stack overflow, recursing 3,286 destructors deep through the chain as it was
+// finally dropped.
 //
 // The fix is that these modules keep their history as data and redraw it. The
 // first test below is the one that would have caught the crash: while audio is
@@ -21,12 +22,12 @@
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
-import 'package:bel/src/clock/meter_clock.dart';
-import 'package:bel/src/modules/phase_scope.dart';
-import 'package:bel/src/modules/spectrogram.dart';
-import 'package:bel/src/modules/stereo_cloud.dart';
-import 'package:bel_core/bel_core.dart';
-import 'package:bel_ui/bel_ui.dart';
+import 'package:oaa/src/clock/meter_clock.dart';
+import 'package:oaa/src/modules/phase_scope.dart';
+import 'package:oaa/src/modules/spectrogram.dart';
+import 'package:oaa/src/modules/stereo_cloud.dart';
+import 'package:oaa_core/oaa_core.dart';
+import 'package:oaa_ui/oaa_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -116,10 +117,10 @@ class _HarnessState extends State<_Harness>
 
   @override
   Widget build(BuildContext context) => MaterialApp(
-    home: BelTheme(
-      colors: BelColors.precisionInstrument,
+    home: OaaTheme(
+      colors: OaaColors.precisionInstrument,
       child: Material(
-        color: BelColors.precisionInstrument.background,
+        color: OaaColors.precisionInstrument.background,
         child: Center(child: widget.child(widget.source, clock)),
       ),
     ),

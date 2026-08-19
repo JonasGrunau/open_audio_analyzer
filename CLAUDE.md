@@ -1,6 +1,6 @@
 <!-- Generated: 2026-08-15 | Updated: 2026-08-15 -->
 
-# Bel
+# Open Audio Analyzer
 
 ## Purpose
 
@@ -18,7 +18,7 @@ All thirteen modules measure something. Loudness and true peak are held against
 the EBU conformance cases in CI, and the spectrum against a sine of known
 amplitude. Layouts, settings, delivery targets and skins persist as JSON under
 the platform's configuration directory. Files are analysed offline by the app
-and by the `bel` CLI, a tablet mirrors the canvas over the wire protocol, and a
+and by the `oaa` CLI, a tablet mirrors the canvas over the wire protocol, and a
 headless VST3 / AU plugin streams the DAW's audio and transport to the app. The
 canvas is driven from the keyboard, there is a dmg, an msix, an AppImage and a
 flatpak, and the documentation site is generated from this repository. See the
@@ -29,35 +29,35 @@ is still not built, and `docs/PLAN.md` for what was planned.
 
 | File | Description |
 |------|-------------|
-| `engine/include/bel/bel.h` | The entire public C ABI. One header, three consumers. If it is not declared here it is not part of the engine. |
+| `engine/include/oaa/oaa.h` | The entire public C ABI. One header, three consumers. If it is not declared here it is not part of the engine. |
 | `lib/src/clock/meter_clock.dart` | The only `Ticker` in the app. Everything repaints from it. |
-| `packages/bel_engine/hook/build.dart` | Compiles `engine/` and bundles it as a code asset. The app's only native build description. |
+| `packages/oaa_engine/hook/build.dart` | Compiles `engine/` and bundles it as a code asset. The app's only native build description. |
 | `engine/CMakeLists.txt` | The same compile, for consumers that are not Dart. A plugin CI runner has no Flutter SDK. **Add a new engine source to both, or `plugin/test/sources_match.sh` fails the build.** |
-| `plugin/src/BelWire.h` | The wire protocol, producer side. `docs/WIRE.md` is the specification; this and `packages/bel_wire/` are two implementations of it that must agree byte for byte. |
-| `packages/bel_ui/lib/src/tokens.dart` | `Space`, `BelControl`, `BelRadius`, `BelStroke`, `BelColors`, `BelType`. Nothing outside this file invents a spatial or colour value. |
-| `packages/bel_ui/lib/src/scale.dart` | `MeterScale` and `ScaleGraticule`. Five modules draw a dB scale; two side by side whose ticks disagree look like a rendering bug. |
-| `packages/bel_ui/lib/src/point_buckets.dart` | Marks sorted by the colour they are drawn in, one call per colour. What lets the spectrogram and the stereo cloud redraw their whole history every published frame instead of accumulating it into an image. |
-| `engine/src/bel_spectrum.h` | The Hann STFT: a 4096-point window, zero-padded into a 16384-point transform. The two lengths are not the same thing and the header says why. One set of transforms serves all three frequency modules. |
+| `plugin/src/OaaWire.h` | The wire protocol, producer side. `docs/WIRE.md` is the specification; this and `packages/oaa_wire/` are two implementations of it that must agree byte for byte. |
+| `packages/oaa_ui/lib/src/tokens.dart` | `Space`, `OaaControl`, `OaaRadius`, `OaaStroke`, `OaaColors`, `OaaType`. Nothing outside this file invents a spatial or colour value. |
+| `packages/oaa_ui/lib/src/scale.dart` | `MeterScale` and `ScaleGraticule`. Five modules draw a dB scale; two side by side whose ticks disagree look like a rendering bug. |
+| `packages/oaa_ui/lib/src/point_buckets.dart` | Marks sorted by the colour they are drawn in, one call per colour. What lets the spectrogram and the stereo cloud redraw their whole history every published frame instead of accumulating it into an image. |
+| `engine/src/oaa_spectrum.h` | The Hann STFT: a 4096-point window, zero-padded into a 16384-point transform. The two lengths are not the same thing and the header says why. One set of transforms serves all three frequency modules. |
 | `lib/src/canvas/module_host.dart` | The only place that knows which `ModuleKind`s exist as code. Exhaustive switch, no default arm. |
-| `packages/bel_core/lib/src/layout.dart` | `ModuleSpec` / `TabSpec` / `PresetSpec` — the serialised layout model. |
-| `packages/bel_core/lib/src/meter_source.dart` | `MeterSource` — everything a module is allowed to read. `BelEngine` implements it; so does the remote display's decoder. |
+| `packages/oaa_core/lib/src/layout.dart` | `ModuleSpec` / `TabSpec` / `PresetSpec` — the serialised layout model. |
+| `packages/oaa_core/lib/src/meter_source.dart` | `MeterSource` — everything a module is allowed to read. `OaaEngine` implements it; so does the remote display's decoder. |
 | `docs/WIRE.md` | The wire protocol, normative. Three implementations, none written against another. |
-| `ios/Runner/BelBonjour.swift` | The only platform channel in the application. iOS refuses an app the multicast socket every other platform browses with, so a tablet searches through the system's Bonjour responder instead; `lib/src/remote/mdns/host_discovery.dart` is where the two meet. |
-| `packages/bel_core/lib/src/grid.dart` | Every rule about where a module may go, as pure functions. No pixels. |
+| `ios/Runner/OaaBonjour.swift` | The only platform channel in the application. iOS refuses an app the multicast socket every other platform browses with, so a tablet searches through the system's Bonjour responder instead; `lib/src/remote/mdns/host_discovery.dart` is where the two meet. |
+| `packages/oaa_core/lib/src/grid.dart` | Every rule about where a module may go, as pure functions. No pixels. |
 | `lib/src/canvas/grid_canvas.dart` | The canvas: drag, resize, selection, the preview overlay. |
 | `lib/src/canvas/workspace.dart` | The one path every layout edit takes, and the undo history. |
 | `lib/src/storage/config_store.dart` | Every read and write of the user's configuration. Atomic, never throws, and the only code in the app that touches the filesystem. |
 | `lib/src/data/providers.dart` | Settings, and the libraries of targets, skins and presets. One direction only: state is written to disk, never read back from it. |
-| `packages/bel_ui/lib/src/panel.dart` | The chrome every panel is built from, and `showBelPanel`. |
-| `packages/bel_core/lib/src/skin.dart` | The thirteen colour roles a skin names, as data. `bel_ui` owns the one adapter to `BelColors`. |
-| `engine/src/bel_decode.c` | The only file that does I/O. `bel_file_*` over dr_libs; no analysis, the caller pushes what it reads. |
-| `packages/bel_engine/lib/src/offline.dart` | The decode-push-read loop. Both the app and the CLI drive files through this one function. |
-| `packages/bel_core/lib/src/report.dart` | `AnalysisReport` and the delivery verdict. Holds no engine handle, so it round-trips through JSON. |
-| `cli/bin/bel.dart` | The `bel` analyser. Its exit code is the product — see `cli/AGENTS.md`. |
+| `packages/oaa_ui/lib/src/panel.dart` | The chrome every panel is built from, and `showOaaPanel`. |
+| `packages/oaa_core/lib/src/skin.dart` | The thirteen colour roles a skin names, as data. `oaa_ui` owns the one adapter to `OaaColors`. |
+| `engine/src/oaa_decode.c` | The only file that does I/O. `oaa_file_*` over dr_libs; no analysis, the caller pushes what it reads. |
+| `packages/oaa_engine/lib/src/offline.dart` | The decode-push-read loop. Both the app and the CLI drive files through this one function. |
+| `packages/oaa_core/lib/src/report.dart` | `AnalysisReport` and the delivery verdict. Holds no engine handle, so it round-trips through JSON. |
+| `cli/bin/oaa.dart` | The `oaa` analyser. Its exit code is the product — see `cli/AGENTS.md`. |
 | `lib/src/app/shortcuts.dart` | Every keyboard shortcut, as one table. The bindings, the `?` sheet and `docs/site/keyboard.md` are all derived from it; `test/shortcuts_test.dart` fails when the page has drifted. |
 | `lib/src/app/launch_options.dart` | `--config-dir` and `--open-panel`. Both exist to make something else testable — see the file. |
 | `tool/docs.dart` | The documentation site. No dependencies, so `docs.yml` needs a Dart SDK and nothing else. The page list is written out, never globbed. |
-| `packaging/icon/make_icons.dart` | The app mark as geometry, rendered to every size the four installers want. `bel.svg` is its vector twin and the one deliberate duplicate. |
+| `packaging/icon/make_icons.dart` | The app mark as geometry, rendered to every size the four installers want. `oaa.svg` is its vector twin and the one deliberate duplicate. |
 | `.tool-versions` | Pins Flutter `3.44.5-stable`. CI pins the same; keep them in step. |
 
 ## Subdirectories
@@ -65,20 +65,21 @@ is still not built, and `docs/PLAN.md` for what was planned.
 | Directory | Purpose | License |
 |-----------|---------|---------|
 | `engine/` | C11 DSP core. No Dart, no Flutter. | MIT |
-| `packages/bel_engine/` | FFI bindings and the build hook. | MIT |
-| `packages/bel_core/` | Domain model. Pure Dart. | MIT |
-| `packages/bel_wire/` | The remote-display protocol. Pure Dart, no I/O. | MIT |
-| `packages/bel_ui/` | Design tokens and shared primitives. | GPL-3.0-or-later |
+| `packages/oaa_engine/` | FFI bindings and the build hook. | MIT |
+| `packages/oaa_core/` | Domain model. Pure Dart. | MIT |
+| `packages/oaa_wire/` | The remote-display protocol. Pure Dart, no I/O. | MIT |
+| `packages/oaa_ui/` | Design tokens and shared primitives. | GPL-3.0-or-later |
 | `lib/` | The application. | GPL-3.0-or-later |
-| `cli/` | The `bel` command-line analyser. No Flutter binding. | GPL-3.0-or-later |
+| `cli/` | The `oaa` command-line analyser. No Flutter binding. | GPL-3.0-or-later |
 | `plugin/` | Headless VST3 / AU. Measures the DAW's audio, streams it to the app. | **AGPL-3.0-or-later** |
 | `docs/` | `PLAN.md`, `METRICS.md`, `WIRE.md`, and `site/` — the pages with no other home. | |
 | `tool/` | Repository scripts. Nothing here ships. | GPL-3.0-or-later |
 | `packaging/` | dmg, msix, AppImage, flatpak, and the app icon they all need. | GPL-3.0-or-later |
+| `assets/` | The fonts the application bundles, and the logo the repository publishes. | GPL-3.0-or-later; fonts SIL OFL 1.1 |
 
 **`plugin/` is the one AGPL directory**, because JUCE 7 and 8 are
 AGPLv3-or-commercial (only JUCE 6 offered GPLv3, which `docs/PLAN.md` still
-assumes). Nothing there may be moved into `engine/` or `bel_core/`, which are
+assumes). Nothing there may be moved into `engine/` or `oaa_core/`, which are
 MIT and must stay linkable by people who are not writing free software. The app
 is unaffected: it never links JUCE — it talks to the plugin over a socket.
 
@@ -87,7 +88,7 @@ is unaffected: it never links JUCE — it talks to the plugin over a socket.
 ### Working In This Directory
 
 - **Never invent a measurement.** A quantity the engine does not compute is
-  `NaN` and carries a `BEL_FLAG_*_UNAVAILABLE` flag; the UI renders an em dash.
+  `NaN` and carries a `OAA_FLAG_*_UNAVAILABLE` flag; the UI renders an em dash.
   Zero is *not* a placeholder — it is a legitimate reading for correlation,
   balance and several dB quantities. If you are tempted to return 0.0 so
   something "looks right", you are about to ship a number nobody measured, and
@@ -100,7 +101,7 @@ is unaffected: it never links JUCE — it talks to the plugin over a socket.
   generator.
 
 - **Nothing allocates on the frame path.** One FFI call per frame
-  (`bel_snapshot_acquire`), then painters read `Float32List` views built once at
+  (`oaa_snapshot_acquire`), then painters read `Float32List` views built once at
   startup. Specifically, do not:
   - create a `Paint`, `Path`, `TextPainter` or list inside `paint()`;
   - route measurements through Riverpod, a `Stream`, or a `ValueNotifier` that
@@ -109,14 +110,14 @@ is unaffected: it never links JUCE — it talks to the plugin over a socket.
     tickers drift so that two meters can disagree within a frame;
   - lay out a `ui.Paragraph` when the formatted string has not changed.
 
-- **`engine/` must not learn about Flutter, and `bel_core` must not learn about
+- **`engine/` must not learn about Flutter, and `oaa_core` must not learn about
   `dart:ffi`.** Four consumers need the domain vocabulary and three of them have
   no engine — the tablet display reads measurements off a socket. The moment
-  `bel_core` imports `bel_engine`, all three drag in a native library they never
+  `oaa_core` imports `oaa_engine`, all three drag in a native library they never
   call. `lib/src/data/metric_reader.dart` is the *only* place the two meet.
 
 - **A module reads `MeterSource`, never a concrete engine.** There are two
-  implementations — `BelEngine` over native memory, and `WireSnapshot` over a
+  implementations — `OaaEngine` over native memory, and `WireSnapshot` over a
   socket — and the thirteen modules cannot tell them apart. That is what lets a
   tablet with no engine draw the desktop's meters with the desktop's painters.
   If something cannot be drawn from a `MeterSource`, widen the interface; do not
@@ -124,22 +125,22 @@ is unaffected: it never links JUCE — it talks to the plugin over a socket.
   that will eventually disagree about what the signal did.
 
 - **`docs/WIRE.md` is normative and its byte tables are frozen per protocol
-  version.** They were *derived* from `bel_snapshot` but they are not tied to
-  it: `BEL_ABI_VERSION` is a private matter between the engine and what links
+  version.** They were *derived* from `oaa_snapshot` but they are not tied to
+  it: `OAA_ABI_VERSION` is a private matter between the engine and what links
   it, and if an ABI bump silently changed the wire, every display in the field
   would break by drawing wrong numbers rather than by failing. The handshake
   rejects on payload size, which moves exactly when a layout moves; the ABI
   version rides along as information and never refuses a link.
 
-- **`bel_engine` is not publishable.** `hook/build.dart` reaches out to
+- **`oaa_engine` is not publishable.** `hook/build.dart` reaches out to
   `../../engine` with relative paths, which no published archive would contain.
   It is a workspace package and must stay one.
 
 - **Every spatial value comes from `Space`.** No `EdgeInsets.all(11)`, no
   `SizedBox(height: 20)`. Thirteen modules written over as many weeks drift apart
-  one raw number at a time. Same for colour: use `BelColors`, never a literal.
+  one raw number at a time. Same for colour: use `OaaColors`, never a literal.
 
-- **Every number on screen is monospaced with tabular figures.** `BelType`
+- **Every number on screen is monospaced with tabular figures.** `OaaType`
   already does this. A readout whose digits change width jitters while you watch
   it.
 
@@ -152,21 +153,21 @@ is unaffected: it never links JUCE — it talks to the plugin over a socket.
   module, so any of the three makes meters unclickable and undraggable with no
   error anywhere. Module painters extend `MeterPainter`, and inert chrome is
   painted rather than decorated. This cost real debugging time; see the header
-  of `packages/bel_ui/lib/src/module_frame.dart`.
+  of `packages/oaa_ui/lib/src/module_frame.dart`.
 
-- **Nothing in Bel recognises a double tap.** `DoubleTapGestureRecognizer` calls
-  `gestureArena.hold` on the first tap and releases it only when
-  `kDoubleTapTimeout` expires 300 ms later, and a held arena is never swept — so
-  every tap recogniser beneath one, anywhere in the subtree, waits a third of a
-  second before it can win. Three gestures were double clicks and each delayed
-  everything under it: the status bar's zoom made every control in the row late
-  on macOS, a tab's rename made switching tabs late, and adding a module on
-  empty canvas made clearing the selection late. It presents as an application
-  that is slow rather than as a gesture that is waiting, which is why it stood
-  for a phase. **Use a long press** — it holds nothing and rejects as soon as
-  the pointer lifts early, it works on a tablet, and it can open the same menu
-  the secondary click does. A pan may share an arena with the buttons under it
-  freely; only the double tap holds.
+- **Nothing in Open Audio Analyzer recognises a double tap.**
+  `DoubleTapGestureRecognizer` calls `gestureArena.hold` on the first tap and
+  releases it only when `kDoubleTapTimeout` expires 300 ms later, and a held
+  arena is never swept — so every tap recogniser beneath one, anywhere in the
+  subtree, waits a third of a second before it can win. Three gestures were
+  double clicks and each delayed everything under it: the status bar's zoom made
+  every control in the row late on macOS, a tab's rename made switching tabs
+  late, and adding a module on empty canvas made clearing the selection late. It
+  presents as an application that is slow rather than as a gesture that is
+  waiting, which is why it stood for a phase. **Use a long press** — it holds
+  nothing and rejects as soon as the pointer lifts early, it works on a tablet,
+  and it can open the same menu the secondary click does. A pan may share an
+  arena with the buttons under it freely; only the double tap holds.
 
 - **A drag detector takes `supportedDevices: kDragDevices`, always.** The
   companion trap to the one above, and it hides better. A `PanGestureRecognizer`
@@ -179,7 +180,7 @@ is unaffected: it never links JUCE — it talks to the plugin over a socket.
   trackpad sends a right click, so right-clicking a module's title bar flashed
   the placement grid on screen; a two-finger scroll over one dragged the module,
   and over the status bar it handed the whole window to the compositor. All
-  three sites are one constant in `packages/bel_ui/lib/src/drag_devices.dart`.
+  three sites are one constant in `packages/oaa_ui/lib/src/drag_devices.dart`.
 
 - **A panel is built outside the application's `Material`,** because that lives
   under `MaterialApp.home` and a route pushed with `showGeneralDialog` is built
@@ -187,17 +188,17 @@ is unaffected: it never links JUCE — it talks to the plugin over a socket.
   response — `PopupMenuButton`, `TextField` — is then replaced by an error box
   whose *intrinsic width is near 100 000 px*, which surfaces as a `RenderFlex`
   overflow blaming a `Row` that is perfectly fine. `PanelScaffold` provides the
-  `Material`; use it and `showBelPanel` rather than pushing a route by hand.
+  `Material`; use it and `showOaaPanel` rather than pushing a route by hand.
 
 - **The palette is installed above the `Navigator`, in `MaterialApp.builder`,
   next to the Material theme.** It was under `home` for eight phases, so a panel
-  could only be handed a copy of it taken when the panel opened — and Bel's
-  skins are chosen *in* the settings panel. Choosing one repainted the canvas,
-  the window chrome and every Material widget inside the panel while the panel's
-  own hairlines, fills and text stayed in the previous skin until it was closed
-  and reopened: one panel in two skins at once. A palette a route cannot see is
-  a palette a route cannot follow. `showBelPanel` reads it from there and falls
-  back to the call site's for a tree that wraps only its home.
+  could only be handed a copy of it taken when the panel opened — and Open Audio
+  Analyzer's skins are chosen *in* the settings panel. Choosing one repainted
+  the canvas, the window chrome and every Material widget inside the panel while
+  the panel's own hairlines, fills and text stayed in the previous skin until it
+  was closed and reopened: one panel in two skins at once. A palette a route
+  cannot see is a palette a route cannot follow. `showOaaPanel` reads it from
+  there and falls back to the call site's for a tree that wraps only its home.
 
 - **Nothing on the settings path may write to disk synchronously,** and nothing
   reads back from disk to find out what the state is. A user action calls a
@@ -216,7 +217,7 @@ is unaffected: it never links JUCE — it talks to the plugin over a socket.
   `Border`.** Flutter asserts, the decoration paint aborts, and it silently
   takes the child with it — a correctly sized box containing nothing. Use a
   sibling strip inside a `ClipRRect` instead. This cost real debugging time; see
-  `_Notice` in `lib/src/app/bel_app.dart`.
+  `_Notice` in `lib/src/app/oaa_app.dart`.
 
 - **A `ClipRRect` does not round a border — it amputates it.** The corollary of
   the rule above: once a surface is wrapped in a rounded clip, its
@@ -226,7 +227,7 @@ is unaffected: it never links JUCE — it talks to the plugin over a socket.
   invisible in a widget test and unmistakable on screen. A *uniform* border may
   be combined with a radius freely; only a non-uniform one asserts. Every panel
   in the application shipped this way — see `PanelScaffold` in
-  `packages/bel_ui/lib/src/panel.dart`.
+  `packages/oaa_ui/lib/src/panel.dart`.
 
 - **Never draw a `toImageSync` image into the picture that produces the next
   one.** That image is a handle to a display list the engine has not rasterised
@@ -256,7 +257,7 @@ is unaffected: it never links JUCE — it talks to the plugin over a socket.
 
   **`--open-panel=<name>` opens one of the five panels at startup**, in a debug
   build, which is how a panel gets looked at without clicking through to it:
-  `open -a build/macos/Build/Products/Debug/bel.app --args --open-panel=settings`.
+  `open -a build/macos/Build/Products/Debug/oaa.app --args --open-panel=settings`.
 
   **`screencapture` returns a black frame without screen-recording permission,**
   and macOS grants that per terminal application, so an agent usually cannot
@@ -268,30 +269,30 @@ is unaffected: it never links JUCE — it talks to the plugin over a socket.
   completes. Two of the three layout defects found in Phase 8 were found this
   way and by nothing else. Anchor the boundary above `MaterialApp` or the panel,
   which the `Navigator` builds, is not in the picture — and open the panel from
-  a context *below* `BelTheme`, or `showBelPanel` asserts.
+  a context *below* `OaaTheme`, or `showOaaPanel` asserts.
 
 - **A feature that only fails on the device is a feature nobody tested.** Three
-  of Bel's platforms lie about the network in a way a development machine
-  cannot show you. On **iPadOS**, custom multicast needs a restricted
-  entitlement Apple grants per team by request — but the **simulator is exempt**,
-  so the socket browses perfectly there and finds nothing, ever, on the iPad;
-  that shipped, and the tablet now uses the system responder through the one
-  platform channel in the application. On **macOS**, Local Network permission is
-  attributed to the *responsible* process, so the same code is allowed inside
-  `open -a bel.app` and denied under `flutter test` or a bare
-  `bel.app/Contents/MacOS/bel` — a discovery test that opens a real socket fails
+  of Open Audio Analyzer's platforms lie about the network in a way a
+  development machine cannot show you. On **iPadOS**, custom multicast needs a
+  restricted entitlement Apple grants per team by request — but the **simulator
+  is exempt**, so the socket browses perfectly there and finds nothing, ever, on
+  the iPad; that shipped, and the tablet now uses the system responder through
+  the one platform channel in the application. On **macOS**, Local Network
+  permission is attributed to the *responsible* process, so the same code is
+  allowed inside `open -a oaa.app` and denied under `flutter test` or a bare
+  `oaa.app/Contents/MacOS/oaa` — a discovery test that opens a real socket fails
   on a machine where the feature works, and `EHOSTUNREACH` on a multicast send
   is what that denial looks like from inside. On **Android**, receiving needs a
   `MulticastLock` Dart cannot take and the socket opens happily without one.
   None of the three logs anything. See `lib/src/remote/AGENTS.md` § Platform
   notes.
 
-- **Bump `BEL_ABI_VERSION` when `bel.h` changes shape,** and regenerate the
-  bindings (`cd packages/bel_engine && dart run ffigen --config ffigen.yaml`).
+- **Bump `OAA_ABI_VERSION` when `oaa.h` changes shape,** and regenerate the
+  bindings (`cd packages/oaa_engine && dart run ffigen --config ffigen.yaml`).
   The Dart side asserts the version at startup, because a stale library does not
   crash — it reads a reordered struct and displays plausible wrong numbers.
 
-  **`BEL_ABI_VERSION` and `BelEngine.expectedAbiVersion` move in the same
+  **`OAA_ABI_VERSION` and `OaaEngine.expectedAbiVersion` move in the same
   commit, always.** The constant is not an independent value; it is an assertion
   *about* the header. Committing one without the other is a build where the
   library says 3 and Dart demands 4, which fails every job on every platform.
@@ -313,9 +314,9 @@ claim something about it:
 
 | You changed | Check |
 |---|---|
-| A number Bel reports, or its definition | `docs/METRICS.md` (definition + **Availability**), `CHANGELOG.md` 📐, `README.md` measurement table |
-| A metric moving from unavailable to measured | The same three, plus the `BEL_FLAG_*_UNAVAILABLE` comment in `bel.h` that says whether this build sets it |
-| `engine/include/bel/bel.h` | `engine/AGENTS.md`, `packages/bel_engine/AGENTS.md`, and `docs/WIRE.md` **only if the protocol version moved** — the wire tables are frozen per protocol version and deliberately *not* tied to the ABI |
+| A number Open Audio Analyzer reports, or its definition | `docs/METRICS.md` (definition + **Availability**), `CHANGELOG.md` 📐, `README.md` measurement table |
+| A metric moving from unavailable to measured | The same three, plus the `OAA_FLAG_*_UNAVAILABLE` comment in `oaa.h` that says whether this build sets it |
+| `engine/include/oaa/oaa.h` | `engine/AGENTS.md`, `packages/oaa_engine/AGENTS.md`, and `docs/WIRE.md` **only if the protocol version moved** — the wire tables are frozen per protocol version and deliberately *not* tied to the ABI |
 | A file added to or removed from any package | That directory's `AGENTS.md` file table. They are enumerations, not samples; a missing row reads as "this file does not exist" |
 | A new directory | Its own `AGENTS.md`, plus the parent's table and `CLAUDE.md`'s Subdirectories table |
 | A new dependency | `CLAUDE.md` Dependencies, `README.md`, and the licence column if it is not permissive |
@@ -330,7 +331,7 @@ Two rules that are not obvious:
 - **A file table in an `AGENTS.md` is exhaustive.** They are read as "here is
   everything in this directory", which is what makes them useful for finding
   the right file without listing it. Adding a file and not the row is how
-  `packages/bel_wire/` existed for a whole phase with no directory note and no
+  `packages/oaa_wire/` existed for a whole phase with no directory note and no
   mention in `packages/AGENTS.md`.
 
 - **Stale future tense is the most common failure, and the least visible.**
@@ -358,7 +359,7 @@ because readers learn the shape and scan by position.
 
 | | Section | Contents |
 |---|---|---|
-| 📐 | `Measurement` | Anything that changes a number Bel reports. |
+| 📐 | `Measurement` | Anything that changes a number Open Audio Analyzer reports. |
 | ✨ | `Added` | New capability that was not there before. |
 | ⚡ | `Changed` | Existing behaviour that works differently now. |
 | 🐛 | `Fixed` | A defect that is no longer there. |
@@ -404,8 +405,8 @@ heading twice, never anywhere else in the file.
 ### 🚧 Internal
 - The engine's POSIX feature-test macros are declared in the build hook. (#26)
 
-[unreleased]: https://github.com/JonasGrunau/open_music_analyzer/compare/v0.2.0...HEAD
-[0.2.0]: https://github.com/JonasGrunau/open_music_analyzer/compare/v0.1.0...v0.2.0
+[unreleased]: https://github.com/JonasGrunau/open_audio_analyzer/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/JonasGrunau/open_audio_analyzer/compare/v0.1.0...v0.2.0
 ```
 
 ### Testing Requirements
@@ -413,10 +414,10 @@ heading twice, never anywhere else in the file.
 ```sh
 flutter analyze                       # whole workspace, must be clean
 flutter test                          # widget and golden tests
-dart test packages/bel_core           # domain, no toolchain needed
-dart test packages/bel_wire           # the wire protocol, including the C++ golden
-cd packages/bel_engine && dart test   # engine, through FFI
-cd cli && dart test                   # the `bel` binary, as a subprocess
+dart test packages/oaa_core           # domain, no toolchain needed
+dart test packages/oaa_wire           # the wire protocol, including the C++ golden
+cd packages/oaa_engine && dart test   # engine, through FFI
+cd cli && dart test                   # the `oaa` binary, as a subprocess
 sh plugin/test/sources_match.sh       # the engine's two build lists agree
 dart run tool/docs.dart               # the documentation site still builds
 ```
@@ -441,8 +442,8 @@ Two of these fail in a way that looks like something else:
 - Long file-header comments stating *why*, usually naming the failure mode that
   forced the design. Match that register. If a comment could be deleted without
   losing information, delete it.
-- C: C11, `bel_` prefix on everything exported, no globals, no allocation
-  outside `bel_engine_create`.
+- C: C11, `oaa_` prefix on everything exported, no globals, no allocation
+  outside `oaa_engine_create`.
 - Dart: sealed classes with exhaustive `switch` where it fits; Riverpod for
   configuration only; `CustomPainter(repaint:)` for anything that shows a
   measurement.
@@ -453,11 +454,11 @@ Two of these fail in a way that looks like something else:
 
 ### Internal
 
-`lib/` → `bel_ui` → `bel_core`; `lib/` → `bel_engine` → `engine/`;
-`lib/` → `bel_wire` → `bel_core`. `bel_core` depends on nothing.
+`lib/` → `oaa_ui` → `oaa_core`; `lib/` → `oaa_engine` → `engine/`;
+`lib/` → `oaa_wire` → `oaa_core`. `oaa_core` depends on nothing.
 
-`bel_engine` → `bel_core` as well, for `MeterSource` and nothing else. The rule
-that matters is unchanged and points the other way: **`bel_core` must never
+`oaa_engine` → `oaa_core` as well, for `MeterSource` and nothing else. The rule
+that matters is unchanged and points the other way: **`oaa_core` must never
 learn about `dart:ffi`**. Three of the four consumers have no engine, and the
 remote display has no native library at all.
 
@@ -469,7 +470,7 @@ remote display has no native library at all.
   to accept a dropped file and to choose where an export goes. Keep the list
   this short: anything else that wants to be a dependency should be weighed
   against writing it, and nothing on the frame path may acquire one at all.
-- **CLI:** `args`, plus `bel_core` and `bel_engine`. **No Flutter binding** —
+- **CLI:** `args`, plus `oaa_core` and `oaa_engine`. **No Flutter binding** —
   that is what keeps `dart compile exe` working and the CLI usable in CI.
 - **Engine:** `miniaudio` (capture), `pffft` (FFT) and `dr_libs` — `dr_wav`,
   `dr_flac`, `dr_mp3` (file decoding). All vendored under

@@ -1,20 +1,20 @@
-# Bel
+# Open Audio Analyzer
 
-Bel is a modular metering suite: a canvas of resizable meter modules —
-loudness, true peak, VU, spectrum, spectrogram, phase scope, histogram —
-organised into tabs, driven by presets, delivery targets and skins, with
+Open Audio Analyzer is a modular metering suite: a canvas of resizable meter
+modules — loudness, true peak, VU, spectrum, spectrogram, phase scope, histogram
+— organised into tabs, driven by presets, delivery targets and skins, with
 offline file analysis and a companion display that mirrors a tab to a tablet
 over Wi-Fi.
 
 It is free software, and it is a free reimplementation of the ideas in
 [Decibel](https://process.audio/products/decibel) by process.audio, whose
-modular canvas is the best interaction model anybody has found for this
-problem. The measurement work, the architecture and the visual language are our
-own, and where Bel cannot honestly match Decibel it says so rather than
+modular canvas is the best interaction model anybody has found for this problem.
+The measurement work, the architecture and the visual language are our own, and
+where Open Audio Analyzer cannot honestly match Decibel it says so rather than
 approximating.
 
 [Install it](install.html) · [What every number means](metrics.html) ·
-[Source on GitHub](https://github.com/JonasGrunau/open_music_analyzer)
+[Source on GitHub](https://github.com/JonasGrunau/open_audio_analyzer)
 
 ## What it measures
 
@@ -30,16 +30,16 @@ red build. The spectrum is held against a sine of known amplitude on a bin
 centre in the same way.
 
 [The metrics reference](metrics.html) gives the definition, the standard and
-the current availability of every quantity Bel reports.
+the current availability of every quantity Open Audio Analyzer reports.
 
 ## What it will not do
 
-**Bel does not invent a measurement.** A quantity the engine has not computed
-is drawn as an em dash, exported as `null`, and written to CSV as an empty
-cell. It is never a zero — zero is a legitimate reading for correlation, for
-stereo balance and for several dB quantities, so it cannot double as "no
-data". A metering tool that fills gaps with plausible numbers is worse than one
-that admits them.
+**Open Audio Analyzer does not invent a measurement.** A quantity the engine has
+not computed is drawn as an em dash, exported as `null`, and written to CSV as
+an empty cell. It is never a zero — zero is a legitimate reading for
+correlation, for stereo balance and for several dB quantities, so it cannot
+double as "no data". A metering tool that fills gaps with plausible numbers is
+worse than one that admits them.
 
 ## The canvas
 
@@ -71,7 +71,7 @@ and the capture device — and reopens with the window.
 
 ## Beyond the desktop
 
-**Files.** Drop one on the analysis panel, or run the `bel` command-line
+**Files.** Drop one on the analysis panel, or run the `oaa` command-line
 analyser. Both push the decoded blocks through the same measurement path a
 capture device drives, so an offline reading and a live reading of the same
 audio are identical rather than close. With `--target`, the CLI's exit code is

@@ -1,24 +1,31 @@
-# The Bel wire protocol
+# The Open Audio Analyzer wire protocol
 
-**Protocol version 1.** This document is normative. Where an implementation and
+**Protocol version 2.** This document is normative. Where an implementation and
 this file disagree, this file is right and the implementation has a bug.
+
+Version 2 differs from version 1 in one field: the magic, which spells the
+application's name and moved when the name did. Every other table below is the
+version-1 table unchanged, byte for byte. The version still had to move — a
+frozen table is frozen including its magic, and a display that read version 1
+must refuse this stream rather than hunt for a frame boundary that will never
+match.
 
 There are three implementations of it and they were written by different people
 against this page, not against each other:
 
 | Producer / consumer | Language | Lives in |
 |---|---|---|
-| Desktop app → tablet display | Dart | `packages/bel_wire/`, `lib/src/remote/` |
-| VST3 / AU plugin → desktop app | C++ | `plugin/src/BelWire.h` |
+| Desktop app → tablet display | Dart | `packages/oaa_wire/`, `lib/src/remote/` |
+| VST3 / AU plugin → desktop app | C++ | `plugin/src/OaaWire.h` |
 | Anything you write | yours | this page is the whole contract |
 
 ## What it is for
 
-A Bel host publishes what it is measuring so that another screen can draw it.
-That is the entire feature. The protocol carries **measurements and the layout
-to draw them in** — never audio, never control.
+A Open Audio Analyzer host publishes what it is measuring so that another screen
+can draw it. That is the entire feature. The protocol carries **measurements and
+the layout to draw them in** — never audio, never control.
 
-It is deliberately one-directional. A remote display in version 1 cannot reset
+It is deliberately one-directional. A remote display in version 2 cannot reset
 the host's integrated loudness, cannot change its device and cannot load a
 preset on it. That is not an omission to be filled in later without thought: a
 read-only stream has no attack surface beyond the measurements it already
@@ -37,16 +44,17 @@ human turns it on.
 
 The protocol has a **producer** — whatever is measuring — and a **consumer**,
 whatever is drawing. The producer sends `HELLO` first and then everything else;
-the consumer sends nothing at all in version 1. Which of the two opened the TCP
-connection is a separate question, and Bel needs it both ways round:
+the consumer sends nothing at all in version 2. Which of the two opened the TCP
+connection is a separate question, and Open Audio Analyzer needs it both ways
+round:
 
 | port | service | listener | producer |
 |---|---|---|---|
-| 47821 | display | the Bel app | the Bel app |
-| 47822 | producer ingest | the Bel app | a plugin instance |
+| 47821 | display | the Open Audio Analyzer app | the Open Audio Analyzer app |
+| 47822 | producer ingest | the Open Audio Analyzer app | a plugin instance |
 
-A desktop Bel *publishes* to tablets, and a plugin *publishes* to a desktop Bel.
-Same frames, opposite direction of connection.
+A desktop Open Audio Analyzer *publishes* to tablets, and a plugin *publishes*
+to a desktop Open Audio Analyzer. Same frames, opposite direction of connection.
 
 **They are two ports rather than one, and that is deliberate.** If both services
 shared a port, an accepted socket would be ambiguous about which end is supposed
@@ -76,7 +84,7 @@ set of things that can connect is the set of things already running as this
 user, which is a boundary that a password would not improve. Control frames
 (`0x0020`–`0x002F`) are therefore permissible **on the ingest port only**, and
 still need a protocol version bump and the same frozen-table discipline as
-`0x0003`. Nothing in version 1 defines one.
+`0x0003`. Nothing in version 2 defines one.
 
 A host that deliberately exposes ingest beyond loopback — a plugin on another
 machine — is opting out of that reasoning and must not enable control frames.
@@ -90,8 +98,8 @@ picture that looks slightly wrong.
 
 | off | type | field |
 |---|---|---|
-| 0 | `u8[4]` | magic, the ASCII bytes `B`, `E`, `L`, `W` |
-| 4 | `u16` | protocol version, currently `1` |
+| 0 | `u8[4]` | magic, the ASCII bytes `O`, `A`, `A`, `W` |
+| 4 | `u16` | protocol version, currently `2` |
 | 6 | `u16` | frame type |
 | 8 | `u32` | payload length in bytes |
 | 12 | … | payload |
@@ -103,7 +111,7 @@ not understand cost it a `seek` and nothing else.
 
 **A payload longer than 1 MiB is rejected and the connection is dropped.** A
 length field is an instruction to allocate, and a corrupt or hostile one that
-says four gigabytes must not be obeyed. Nothing in version 1 comes close to the
+says four gigabytes must not be obeyed. Nothing in version 2 comes close to the
 cap; the largest legitimate frame is a snapshot at 15,068 bytes.
 
 ## Frame types
@@ -127,7 +135,7 @@ Sent once, immediately on accept, before anything else.
 | 0 | `u16` | protocol version, repeated |
 | 2 | `u16` | flags, reserved, zero |
 | 4 | `u32` | snapshot payload length this producer will send |
-| 8 | `u32` | producer ABI version (`BEL_ABI_VERSION`) |
+| 8 | `u32` | producer ABI version (`OAA_ABI_VERSION`) |
 | 12 | `u32` | `maxChannels` |
 | 16 | `u32` | `spectrumBands` |
 | 20 | `u32` | `scopePoints` |
@@ -155,7 +163,7 @@ answer. The payload length is what catches a real reordering.
 ### `0x0002` — LAYOUT
 
 Payload is UTF-8 JSON: exactly `PresetSpec.toJson()` from
-`packages/bel_core/lib/src/layout.dart`.
+`packages/oaa_core/lib/src/layout.dart`.
 
 The remote display renders the same `ModuleSpec` tree with the same painters, so
 it needs the same description of it, and there is already exactly one — the
@@ -182,7 +190,7 @@ different colours.
 ### `0x0005` — CALIBRATION
 
 Payload is UTF-8 JSON of the active `Calibration`, from
-`packages/bel_core/lib/src/calibration.dart`.
+`packages/oaa_core/lib/src/calibration.dart`.
 
 Resolved rather than named, for the same reason as the skin — and with more at
 stake. A reading is drawn green, amber or red by comparing it against a target,
@@ -193,18 +201,18 @@ two is going to be believed.
 
 ### `0x0003` — SNAPSHOT
 
-**Payload is exactly 15,056 bytes at protocol version 1.**
+**Payload is exactly 15,056 bytes at protocol version 2.**
 
 The layout was *derived* mechanically, so that two hand-written serialisers
-cannot drift: take `bel_snapshot` from `engine/include/bel/bel.h` at
-`BEL_ABI_VERSION` 3, walk it top to bottom in declaration order, emit every
+cannot drift: take `oaa_snapshot` from `engine/include/oaa/oaa.h` at
+`OAA_ABI_VERSION` 3, walk it top to bottom in declaration order, emit every
 member including the `reservedN` padding members, each in its natural width,
 little-endian, with no alignment padding between members.
 
 **That derivation produced the table below, and the table is what is
-normative — not the current contents of `bel.h`.** The distinction is the whole
-reason this is not a struct copy. `bel_snapshot` will grow: fields get appended
-and `BEL_ABI_VERSION` is bumped, which is a private matter between the engine
+normative — not the current contents of `oaa.h`.** The distinction is the whole
+reason this is not a struct copy. `oaa_snapshot` will grow: fields get appended
+and `OAA_ABI_VERSION` is bumped, which is a private matter between the engine
 and the things that link it. The wire layout changes only when the *protocol*
 version changes. If the two were the same thing, every engine change would
 silently break every remote display in the field, and it would break them by
@@ -233,18 +241,18 @@ drawing wrong numbers rather than by failing.
 | 80 | `f32` | `psr` | | | | |
 | 84 | `f32` | `reserved2` | | | | |
 
-`flags` are the `BEL_FLAG_*` bits from `bel.h`: `1<<0` running, `1<<1` loudness
+`flags` are the `OAA_FLAG_*` bits from `oaa.h`: `1<<0` running, `1<<1` loudness
 unavailable, `1<<2` spectrum unavailable, `1<<3` overrun.
 
 Reserved members are transmitted and ignored. Carrying them means a future
 field that fills a reserved slot moves nothing, and a receiver that ignores them
 costs nothing.
 
-Because `bel.h` declares its 8-byte members first and everything after is
-4-byte, `sizeof(bel_snapshot)` is *also* 15,056 with no internal padding on
-every platform Bel targets. A C or C++ producer may therefore `memcpy` the
-struct instead of walking it — but only behind
-`static_assert(sizeof(bel_snapshot) == 15056)`, so that the day the two stop
+Because `oaa.h` declares its 8-byte members first and everything after is
+4-byte, `sizeof(oaa_snapshot)` is *also* 15,056 with no internal padding on
+every platform Open Audio Analyzer targets. A C or C++ producer may therefore
+`memcpy` the struct instead of walking it — but only behind
+`static_assert(sizeof(oaa_snapshot) == 15056)`, so that the day the two stop
 agreeing is a build failure rather than a shifted frame.
 
 #### NaN is data
@@ -264,7 +272,7 @@ immediately before each `0x0003 SNAPSHOT`; absent entirely when the producer has
 no DAW. Payload is 88 bytes.
 
 Transport is metadata, not measurement, which is why it rides in its own frame
-and never in `bel_snapshot`: the engine must not learn what a DAW is.
+and never in `oaa_snapshot`: the engine must not learn what a DAW is.
 
 | off | type | field | meaning |
 |---|---|---|---|
@@ -353,7 +361,7 @@ stopped existing.
 
 ## Discovery
 
-The host advertises `_bel._tcp.local` over mDNS / DNS-SD (RFC 6762, 6763) with
+The host advertises `_oaa._tcp.local` over mDNS / DNS-SD (RFC 6762, 6763) with
 the instance name the user gave it. TXT records:
 
 | key | value |

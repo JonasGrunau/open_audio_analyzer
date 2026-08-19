@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Bel measures the loudness of audio you route into it. Audio is analysed on this device and never recorded, stored or sent anywhere.</string>
+	<string>Open Audio Analyzer measures the loudness of audio you route into it. Audio is analysed on this device and never recorded, stored or sent anywhere.</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleExecutable</key>
@@ -31,10 +31,10 @@
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>Bel finds and connects to Bel hosts on your local network so that a tablet can display another machine's meters. It never sends audio.</string>
+	<string>Open Audio Analyzer finds and connects to Open Audio Analyzer hosts on your local network so that a tablet can display another machine's meters. It never sends audio.</string>
 	<key>NSBonjourServices</key>
 	<array>
-		<string>_bel._tcp</string>
+		<string>_oaa._tcp</string>
 	</array>
 </dict>
 </plist>

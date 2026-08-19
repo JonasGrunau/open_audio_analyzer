@@ -4,25 +4,25 @@
 //
 // Hand-rolled protocol parsing is where bugs go to hide, and this one runs on
 // port 5353 — where every device on the network is talking at once, most of it
-// about services Bel has never heard of. The two things worth proving are that
-// a well-formed packet round-trips exactly, and that a malformed or hostile one
-// produces null rather than an exception or a loop.
+// about services Open Audio Analyzer has never heard of. The two things worth
+// proving are that a well-formed packet round-trips exactly, and that a
+// malformed or hostile one produces null rather than an exception or a loop.
 
 import 'dart:typed_data';
 
-import 'package:bel/src/remote/mdns/dns_message.dart';
+import 'package:oaa/src/remote/mdns/dns_message.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('queries', () {
     test('round-trip a service query', () {
       final message = decodeMessage(
-        encodeQuery('_bel._tcp.local', DnsType.ptr),
+        encodeQuery('_oaa._tcp.local', DnsType.ptr),
       );
 
       expect(message, isNotNull);
       expect(message!.isResponse, isFalse);
-      expect(message.questions.single.name, '_bel._tcp.local');
+      expect(message.questions.single.name, '_oaa._tcp.local');
       expect(message.questions.single.type, DnsType.ptr);
     });
   });
@@ -32,15 +32,15 @@ void main() {
       final packet = encodeResponse(
         answers: [
           DnsRecord(
-            name: '_bel._tcp.local',
+            name: '_oaa._tcp.local',
             type: DnsType.ptr,
             ttl: 120,
-            target: 'Studio Mac._bel._tcp.local',
+            target: 'Studio Mac._oaa._tcp.local',
           ),
         ],
         additionals: [
           DnsRecord(
-            name: 'Studio Mac._bel._tcp.local',
+            name: 'Studio Mac._oaa._tcp.local',
             type: DnsType.srv,
             ttl: 120,
             cacheFlush: true,
@@ -48,7 +48,7 @@ void main() {
             target: 'Studio-Mac.local',
           ),
           DnsRecord(
-            name: 'Studio Mac._bel._tcp.local',
+            name: 'Studio Mac._oaa._tcp.local',
             type: DnsType.txt,
             ttl: 120,
             txt: const {'v': '1', 'name': 'Studio Mac', 'sr': '48000'},
@@ -68,8 +68,8 @@ void main() {
       expect(message.answers.length, 4);
 
       final ptr = message.answers.firstWhere((r) => r.type == DnsType.ptr);
-      expect(ptr.name, '_bel._tcp.local');
-      expect(ptr.target, 'Studio Mac._bel._tcp.local');
+      expect(ptr.name, '_oaa._tcp.local');
+      expect(ptr.target, 'Studio Mac._oaa._tcp.local');
 
       final srv = message.answers.firstWhere((r) => r.type == DnsType.srv);
       expect(srv.port, 47821);
@@ -92,17 +92,17 @@ void main() {
         encodeResponse(
           answers: [
             DnsRecord(
-              name: '_bel._tcp.local',
+              name: '_oaa._tcp.local',
               type: DnsType.ptr,
               ttl: 0,
-              target: 'Gone._bel._tcp.local',
+              target: 'Gone._oaa._tcp.local',
             ),
           ],
         ),
       );
 
       expect(message!.answers.single.ttl, 0);
-      expect(message.answers.single.target, 'Gone._bel._tcp.local');
+      expect(message.answers.single.target, 'Gone._oaa._tcp.local');
     });
 
     test('a non-ASCII instance name survives', () {
@@ -110,10 +110,10 @@ void main() {
         encodeResponse(
           answers: [
             DnsRecord(
-              name: '_bel._tcp.local',
+              name: '_oaa._tcp.local',
               type: DnsType.ptr,
               ttl: 120,
-              target: 'Björns Regieraum._bel._tcp.local',
+              target: 'Björns Regieraum._oaa._tcp.local',
             ),
           ],
         ),
@@ -121,7 +121,7 @@ void main() {
 
       expect(
         message!.answers.single.target,
-        'Björns Regieraum._bel._tcp.local',
+        'Björns Regieraum._oaa._tcp.local',
       );
     });
 
@@ -130,7 +130,7 @@ void main() {
       // rdata is one some resolvers drop the whole record for.
       final packet = encodeResponse(
         answers: [
-          DnsRecord(name: 'x._bel._tcp.local', type: DnsType.txt, ttl: 120),
+          DnsRecord(name: 'x._oaa._tcp.local', type: DnsType.txt, ttl: 120),
         ],
       );
 
@@ -144,13 +144,14 @@ void main() {
   group('reading what other devices send', () {
     test('a compressed name is followed', () {
       // Every other responder on the network compresses names; this one does
-      // not emit pointers but must read them, or Bel is the only service on
-      // the LAN that cannot see its own kind announced by anyone else.
+      // not emit pointers but must read them, or Open Audio Analyzer is the
+      // only service on the LAN that cannot see its own kind announced by
+      // anyone else.
       final packet = _packetWithCompressedTarget();
 
       final message = decodeMessage(packet);
       expect(message, isNotNull);
-      expect(message!.answers.single.target, 'Studio._bel._tcp.local');
+      expect(message!.answers.single.target, 'Studio._oaa._tcp.local');
     });
 
     test('a pointer loop is refused rather than followed', () {
@@ -164,10 +165,10 @@ void main() {
       final full = encodeResponse(
         answers: [
           DnsRecord(
-            name: '_bel._tcp.local',
+            name: '_oaa._tcp.local',
             type: DnsType.ptr,
             ttl: 120,
-            target: 'Studio._bel._tcp.local',
+            target: 'Studio._oaa._tcp.local',
           ),
         ],
       );
@@ -181,11 +182,12 @@ void main() {
       }
     });
 
-    test('random bytes are not a Bel announcement', () {
+    test('random bytes are not an Open Audio Analyzer announcement', () {
       final noise = Uint8List.fromList(
         List<int>.generate(64, (i) => (i * 37 + 11) & 0xFF),
       );
-      // Either null or a message with nothing Bel cares about — never a throw.
+      // Either null or a message with nothing Open Audio Analyzer cares about —
+      // never a throw.
       expect(() => decodeMessage(noise), returnsNormally);
     });
 
@@ -205,10 +207,10 @@ void main() {
             ],
           ),
           DnsRecord(
-            name: '_bel._tcp.local',
+            name: '_oaa._tcp.local',
             type: DnsType.ptr,
             ttl: 120,
-            target: 'Studio._bel._tcp.local',
+            target: 'Studio._oaa._tcp.local',
           ),
         ],
       );
@@ -216,7 +218,7 @@ void main() {
       final message = decodeMessage(packet);
       expect(message!.answers.length, 2);
       expect(message.answers.last.type, DnsType.ptr);
-      expect(message.answers.last.target, 'Studio._bel._tcp.local');
+      expect(message.answers.last.target, 'Studio._oaa._tcp.local');
     });
   });
 }
@@ -238,9 +240,9 @@ Uint8List _packetWithCompressedTarget() {
   uint16(0);
   uint16(0);
 
-  // The name `_bel._tcp.local` begins at offset 12 and is what the target will
+  // The name `_oaa._tcp.local` begins at offset 12 and is what the target will
   // point at.
-  for (final label in ['_bel', '_tcp', 'local']) {
+  for (final label in ['_oaa', '_tcp', 'local']) {
     out.addByte(label.length);
     out.add(label.codeUnits);
   }

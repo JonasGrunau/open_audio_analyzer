@@ -2,10 +2,11 @@
 
 /// The part of the window Flutter does not paint.
 ///
-/// Bel's window has no title bar on macOS. The frame belongs to Flutter from
-/// the top edge down and AppKit keeps drawing only the three window buttons,
-/// which now sit inside the status bar on the same row as BEL and the source —
-/// see `macos/Runner/MainFlutterWindow.swift` for the window side of it.
+/// Open Audio Analyzer's window has no title bar on macOS. The frame belongs to
+/// Flutter from the top edge down and AppKit keeps drawing only the three
+/// window buttons, which now sit inside the status bar on the same row as OAA
+/// and the source — see `macos/Runner/MainFlutterWindow.swift` for the window
+/// side of it.
 ///
 /// Three consequences land here:
 ///
@@ -27,7 +28,7 @@ library;
 
 import 'dart:io' show Platform;
 
-import 'package:bel_ui/bel_ui.dart';
+import 'package:oaa_ui/oaa_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
@@ -35,7 +36,7 @@ abstract final class WindowChrome {
   /// The same name as the channel in `MainFlutterWindow.swift`. A typo here is
   /// silent: every call fails with `MissingPluginException` and is swallowed,
   /// and the window simply keeps the colour it launched with.
-  static const MethodChannel _channel = MethodChannel('bel/window_chrome');
+  static const MethodChannel _channel = MethodChannel('oaa/window_chrome');
 
   /// The status bar's leading padding.
   ///
@@ -47,17 +48,17 @@ abstract final class WindowChrome {
   /// take the row off the buttons rather than with them.
   ///
   /// 80 leaves the same gap after the buttons that [Space.md] leaves before
-  /// `BEL` on a platform that still has a title bar of its own.
+  /// `OAA` on a platform that still has a title bar of its own.
   static double get statusBarLeading => Platform.isMacOS ? 80 : Space.md;
 
-  static BelColors? _applied;
+  static OaaColors? _applied;
 
   /// Points the window's background and its buttons at [colors].
   ///
   /// Safe to call from `build`: a palette that is already in force does not
   /// cross the channel, and `paletteProvider` hands out one instance per skin,
   /// so the common case is an identity comparison.
-  static void applyPalette(BelColors colors) {
+  static void applyPalette(OaaColors colors) {
     if (colors == _applied) return;
     _applied = colors;
 

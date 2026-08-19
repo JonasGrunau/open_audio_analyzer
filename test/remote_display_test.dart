@@ -2,7 +2,7 @@
 //
 // The remote display, end to end over a real socket.
 //
-// `packages/bel_wire` proves the codec in isolation; this proves the two halves
+// `packages/oaa_wire` proves the codec in isolation; this proves the two halves
 // that use it actually talk. It runs a DisplayHost and a DisplayClient in one
 // process over the loopback interface, which is a genuine TCP connection with
 // genuine framing — no fakes between them — so a mistake in the handshake, the
@@ -13,10 +13,10 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:bel/src/remote/display_client.dart';
-import 'package:bel/src/remote/display_host.dart';
-import 'package:bel_core/bel_core.dart';
-import 'package:bel_wire/bel_wire.dart';
+import 'package:oaa/src/remote/display_client.dart';
+import 'package:oaa/src/remote/display_host.dart';
+import 'package:oaa_core/oaa_core.dart';
+import 'package:oaa_wire/oaa_wire.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

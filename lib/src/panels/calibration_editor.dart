@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import 'package:bel_core/bel_core.dart';
-import 'package:bel_ui/bel_ui.dart';
+import 'package:oaa_core/oaa_core.dart';
+import 'package:oaa_ui/oaa_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -13,7 +13,7 @@ import '../storage/config_paths.dart';
 /// [base] is the target to start from — the active one, usually. Null starts
 /// from the streaming default, which is the one most people are aiming at.
 Future<void> showCalibrationEditor(BuildContext context, {Calibration? base}) =>
-    showBelPanel<void>(
+    showOaaPanel<void>(
       context: context,
       builder: (context) => CalibrationEditor(base: base),
     );
@@ -67,7 +67,7 @@ class _CalibrationEditorState extends ConsumerState<CalibrationEditor> {
 
   @override
   Widget build(BuildContext context) {
-    final colors = BelTheme.of(context);
+    final colors = OaaTheme.of(context);
     final library = ref.watch(calibrationLibraryProvider.notifier);
     final isBuiltIn = library.isBuiltIn(_base.id);
 
@@ -77,18 +77,18 @@ class _CalibrationEditorState extends ConsumerState<CalibrationEditor> {
       footer: Row(
         children: [
           if (!isBuiltIn && widget.base != null)
-            BelButton(
+            OaaButton(
               label: 'Delete',
               emphasis: ButtonEmphasis.destructive,
               onPressed: _delete,
             ),
           const Spacer(),
-          BelButton(
+          OaaButton(
             label: 'Save as new',
             onPressed: () => _save(keepId: false),
           ),
           const SizedBox(width: Space.sm),
-          BelButton(
+          OaaButton(
             label: isBuiltIn ? 'Replace built-in' : 'Save',
             emphasis: ButtonEmphasis.primary,
             onPressed: () => _save(keepId: true),
@@ -103,7 +103,7 @@ class _CalibrationEditorState extends ConsumerState<CalibrationEditor> {
               padding: const EdgeInsets.only(bottom: Space.smd),
               child: Text(
                 _error!,
-                style: BelType.caption.copyWith(color: colors.over),
+                style: OaaType.caption.copyWith(color: colors.over),
               ),
             ),
           ],
@@ -113,7 +113,7 @@ class _CalibrationEditorState extends ConsumerState<CalibrationEditor> {
             children: [
               PanelRow(
                 label: 'Name',
-                child: BelTextField(controller: _name, width: 260),
+                child: OaaTextField(controller: _name, width: 260),
               ),
               // The note is prose, and it does not fit beside its own label.
               // In a 260 px field the built-in target's own note truncated at
@@ -128,14 +128,14 @@ class _CalibrationEditorState extends ConsumerState<CalibrationEditor> {
                   children: [
                     Text(
                       'Note',
-                      style: BelType.body.copyWith(color: colors.textPrimary),
+                      style: OaaType.body.copyWith(color: colors.textPrimary),
                     ),
                     Text(
                       'Where the numbers come from.',
-                      style: BelType.caption.copyWith(color: colors.textFaint),
+                      style: OaaType.caption.copyWith(color: colors.textFaint),
                     ),
                     const SizedBox(height: Space.xs),
-                    BelTextField(controller: _note, width: double.infinity),
+                    OaaTextField(controller: _note, width: double.infinity),
                   ],
                 ),
               ),
@@ -182,10 +182,10 @@ class _CalibrationEditorState extends ConsumerState<CalibrationEditor> {
           ),
           if (isBuiltIn)
             Text(
-              'This is a target Bel ships with. "Replace built-in" writes a file '
+              'This is a target Open Audio Analyzer ships with. "Replace built-in" writes a file '
               'that shadows it everywhere, including in presets that already '
               'name it; deleting that file brings the original back.',
-              style: BelType.caption.copyWith(color: colors.textFaint),
+              style: OaaType.caption.copyWith(color: colors.textFaint),
             ),
         ],
       ),
@@ -193,17 +193,17 @@ class _CalibrationEditorState extends ConsumerState<CalibrationEditor> {
   }
 
   Widget _number(TextEditingController controller, String unit) {
-    final colors = BelTheme.of(context);
+    final colors = OaaTheme.of(context);
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        BelTextField(controller: controller, numeric: true, width: 84),
+        OaaTextField(controller: controller, numeric: true, width: 84),
         const SizedBox(width: Space.sm),
         SizedBox(
           width: 40,
           child: Text(
             unit,
-            style: BelType.unit.copyWith(color: colors.textFaint),
+            style: OaaType.unit.copyWith(color: colors.textFaint),
           ),
         ),
       ],
@@ -311,7 +311,8 @@ String _format(double value) {
 ///
 /// Accepts the typographic minus and the comma decimal separator. Both arrive
 /// constantly: the interface itself renders "−14 LUFS" with U+2212, so anybody
-/// who copies a target out of Bel and pastes it back in is pasting a character
+/// who copies a target out of Open Audio Analyzer and pastes it back in is
+/// pasting a character
 /// `double.parse` rejects, and half of Europe types "−0,5".
 double? _parse(String text, {required double min, required double max}) {
   final normalised = text

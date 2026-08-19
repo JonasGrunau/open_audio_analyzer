@@ -1,11 +1,12 @@
 #!/bin/sh
 #
-# make_appimage.sh — build Bel for Linux and wrap it in an AppImage.
+# make_appimage.sh — build Open Audio Analyzer for Linux and wrap it in an
+# AppImage.
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
 # Usage:  sh packaging/linux/make_appimage.sh [--skip-build]
-# Output: build/packaging/Bel-<version>-<arch>.AppImage
+# Output: build/packaging/Open Audio Analyzer-<version>-<arch>.AppImage
 #
 # ---------------------------------------------------------------------------
 # What an AppImage is for here, given there is also a flatpak
@@ -24,11 +25,12 @@
 # ---------------------------------------------------------------------------
 # GTK is not bundled
 #
-# Flutter's Linux embedder links GTK 3, and bundling GTK inside an AppImage is
-# a well-known way to produce something that crashes on a host whose GTK theme
-# engine or GIO modules do not match the bundled ones. Bel takes the usual trade
-# for a GTK application: GTK is expected from the host, everything else travels.
-# Every desktop Linux that can run a Flutter application already has it.
+# Flutter's Linux embedder links GTK 3, and bundling GTK inside an AppImage is a
+# well-known way to produce something that crashes on a host whose GTK theme
+# engine or GIO modules do not match the bundled ones. Open Audio Analyzer takes
+# the usual trade for a GTK application: GTK is expected from the host,
+# everything else travels. Every desktop Linux that can run a Flutter
+# application already has it.
 
 set -eu
 
@@ -39,8 +41,8 @@ version=$(grep '^version:' pubspec.yaml | head -1 | cut -d' ' -f2 | cut -d'+' -f
 arch=$(uname -m)
 bundle="build/linux/$( [ "$arch" = "aarch64" ] && echo arm64 || echo x64 )/release/bundle"
 out="build/packaging"
-appdir="build/packaging/Bel.AppDir"
-image="$out/Bel-$version-$arch.AppImage"
+appdir="build/packaging/Open Audio Analyzer.AppDir"
+image="$out/Open Audio Analyzer-$version-$arch.AppImage"
 
 if [ "${1:-}" != "--skip-build" ]; then
   echo "==> flutter build linux --release"
@@ -76,26 +78,26 @@ cp -r "$bundle"/* "$appdir/usr/bin/"
 # The desktop file and the icon are needed twice: once where the standard says
 # they live, and once at the root of the AppDir, which is where appimagetool
 # looks. Symlinks rather than copies so there is one of each to edit.
-install -Dm644 packaging/linux/bel.desktop \
-  "$appdir/usr/share/applications/dev.belmeter.bel.desktop"
-ln -sf usr/share/applications/dev.belmeter.bel.desktop \
-  "$appdir/dev.belmeter.bel.desktop"
+install -Dm644 packaging/linux/oaa.desktop \
+  "$appdir/usr/share/applications/dev.openaudioanalyzer.oaa.desktop"
+ln -sf usr/share/applications/dev.openaudioanalyzer.oaa.desktop \
+  "$appdir/dev.openaudioanalyzer.oaa.desktop"
 
 for size in 16 32 48 64 128 256 512; do
-  install -Dm644 "packaging/linux/icons/${size}x${size}/dev.belmeter.bel.png" \
-    "$appdir/usr/share/icons/hicolor/${size}x${size}/apps/dev.belmeter.bel.png"
+  install -Dm644 "packaging/linux/icons/${size}x${size}/dev.openaudioanalyzer.oaa.png" \
+    "$appdir/usr/share/icons/hicolor/${size}x${size}/apps/dev.openaudioanalyzer.oaa.png"
 done
-cp packaging/linux/icons/256x256/dev.belmeter.bel.png "$appdir/dev.belmeter.bel.png"
-ln -sf dev.belmeter.bel.png "$appdir/.DirIcon"
+cp packaging/linux/icons/256x256/dev.openaudioanalyzer.oaa.png "$appdir/dev.openaudioanalyzer.oaa.png"
+ln -sf dev.openaudioanalyzer.oaa.png "$appdir/.DirIcon"
 
-install -Dm644 packaging/linux/dev.belmeter.bel.metainfo.xml \
-  "$appdir/usr/share/metainfo/dev.belmeter.bel.metainfo.xml"
+install -Dm644 packaging/linux/dev.openaudioanalyzer.oaa.metainfo.xml \
+  "$appdir/usr/share/metainfo/dev.openaudioanalyzer.oaa.metainfo.xml"
 
 # The licences travel with the binary. Both bundled font families are SIL OFL
 # 1.1 and their licence files must ship with anything they are embedded in.
-install -Dm644 LICENSE "$appdir/usr/share/doc/bel/LICENSE"
+install -Dm644 LICENSE "$appdir/usr/share/doc/oaa/LICENSE"
 for licence in assets/fonts/*-LICENSE.txt; do
-  [ -e "$licence" ] && install -Dm644 "$licence" "$appdir/usr/share/doc/bel/$(basename "$licence")"
+  [ -e "$licence" ] && install -Dm644 "$licence" "$appdir/usr/share/doc/oaa/$(basename "$licence")"
 done
 
 # AppRun. `exec` rather than a wrapper that lingers, and $APPDIR resolved from
@@ -105,7 +107,7 @@ cat > "$appdir/AppRun" <<'APPRUN'
 #!/bin/sh
 here=$(dirname "$(readlink -f "$0")")
 export LD_LIBRARY_PATH="$here/usr/bin/lib:${LD_LIBRARY_PATH:-}"
-exec "$here/usr/bin/bel" "$@"
+exec "$here/usr/bin/oaa" "$@"
 APPRUN
 chmod +x "$appdir/AppRun"
 

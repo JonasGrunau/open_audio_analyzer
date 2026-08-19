@@ -2,8 +2,8 @@
 
 import 'dart:ui' as ui;
 
-import 'package:bel_core/bel_core.dart';
-import 'package:bel_ui/bel_ui.dart';
+import 'package:oaa_core/oaa_core.dart';
+import 'package:oaa_ui/oaa_ui.dart';
 import 'package:flutter/widgets.dart';
 
 import '../clock/meter_clock.dart';
@@ -50,9 +50,9 @@ class _NumberBoxModuleState extends State<NumberBoxModule> {
   /// `build` runs, and throwing away laid-out paragraphs on every theme change
   /// would defeat the point of caching them.
   late final ReadoutPainter _readout = ReadoutPainter(
-    valueStyle: BelType.reading(32),
-    unitStyle: BelType.unit,
-    labelStyle: BelType.label,
+    valueStyle: OaaType.reading(32),
+    unitStyle: OaaType.unit,
+    labelStyle: OaaType.label,
   );
 
   @override
@@ -63,7 +63,7 @@ class _NumberBoxModuleState extends State<NumberBoxModule> {
 
   @override
   Widget build(BuildContext context) {
-    final colors = BelTheme.of(context);
+    final colors = OaaTheme.of(context);
 
     return CustomPaint(
       painter: _NumberBoxPainter(
@@ -93,7 +93,7 @@ class _NumberBoxPainter extends MeterPainter {
   final MeterSource engine;
   final Metric metric;
   final Calibration calibration;
-  final BelColors colors;
+  final OaaColors colors;
   final ReadoutPainter readout;
 
   @override
@@ -189,7 +189,7 @@ class _ElapsedReadoutState extends State<ElapsedReadout> {
 
   @override
   Widget build(BuildContext context) {
-    final colors = BelTheme.of(context);
+    final colors = OaaTheme.of(context);
     return SizedBox(
       width: 72,
       height: 16,
@@ -209,13 +209,13 @@ class _ElapsedReadoutState extends State<ElapsedReadout> {
       _text = text;
       final builder =
           ui.ParagraphBuilder(
-              BelType.readingSmall.getParagraphStyle(
+              OaaType.readingSmall.getParagraphStyle(
                 textAlign: TextAlign.right,
                 maxLines: 1,
               ),
             )
             ..pushStyle(
-              BelType.readingSmall.copyWith(color: color).getTextStyle(),
+              OaaType.readingSmall.copyWith(color: color).getTextStyle(),
             )
             ..addText(text);
       _paragraph = builder.build()
@@ -234,7 +234,7 @@ class _ElapsedPainter extends MeterPainter {
   }) : super(repaint: repaint);
 
   final MeterSource engine;
-  final BelColors colors;
+  final OaaColors colors;
   final _ElapsedReadoutState state;
 
   @override

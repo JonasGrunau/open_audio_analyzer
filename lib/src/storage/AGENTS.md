@@ -1,6 +1,6 @@
 # lib/src/storage/
 
-Everything Bel remembers between launches. GPL-3.0-or-later.
+Everything Open Audio Analyzer remembers between launches. GPL-3.0-or-later.
 
 | File | Purpose |
 |------|---------|
@@ -9,7 +9,7 @@ Everything Bel remembers between launches. GPL-3.0-or-later.
 | `startup_config.dart` | The one read of the whole directory, performed before the first frame. |
 
 The models these files serialise are **not here** — `AppSettings`, `Skin`,
-`PresetSpec` and `Calibration` all live in `bel_core`, because the `bel` CLI and
+`PresetSpec` and `Calibration` all live in `oaa_core`, because the `oaa` CLI and
 the remote display parse the same documents and neither may drag Flutter in.
 This directory knows about files; it does not know what is in them.
 
@@ -26,9 +26,9 @@ This directory knows about files; it does not know what is in them.
   discarded `false` is a silent data loss.
 
 - **A document that fails to parse is skipped, named, and left alone.** Never
-  rewrite a file Bel could not read: the user hand-edited it, the mistake is
-  probably a trailing comma, and overwriting it destroys the thing they were
-  trying to write. One broken skin costs one skin.
+  rewrite a file Open Audio Analyzer could not read: the user hand-edited it,
+  the mistake is probably a trailing comma, and overwriting it destroys the
+  thing they were trying to write. One broken skin costs one skin.
 
 - **One file per preset, per skin, per target.** A single `presets.json` is
   marginally less code and takes the whole library out with one corrupt byte,
@@ -41,7 +41,7 @@ This directory knows about files; it does not know what is in them.
 
 - **`flush()` before the process exits.** A debounced write that has not landed
   is the last edit before quitting — the one edit a user is most likely to
-  notice losing. `bel_app.dart` calls it from `AppLifecycleListener`.
+  notice losing. `oaa_app.dart` calls it from `AppLifecycleListener`.
 
 - **Do not reach for `path_provider`.** It needs a `WidgetsBinding`, so it
   throws in a plain Dart entrypoint and in a unit test — both of which have to
@@ -49,7 +49,7 @@ This directory knows about files; it does not know what is in them.
   container keyed by bundle identifier, which relocates every user's
   configuration the first time a build is signed differently.
 
-- **The precedence is `--config-dir`, then `BEL_CONFIG_DIR`, then the
+- **The precedence is `--config-dir`, then `OAA_CONFIG_DIR`, then the
   platform's convention** — and all three are decided in one place.
   `resolveConfigRoot` takes the flag as an argument rather than reading it, so
   it stays pure and the order is visible in a single function instead of being
@@ -77,7 +77,7 @@ This directory knows about files; it does not know what is in them.
 - **Every path here is only correct because the macOS app is not sandboxed.**
   A sandboxed app's `HOME` is its own container, so all three platform branches
   would quietly resolve under `~/Library/Containers/<bundle id>/Data` and
-  `BEL_CONFIG_DIR` could not escape it — with the denial surfacing as "could not
+  `OAA_CONFIG_DIR` could not escape it — with the denial surfacing as "could not
   read <file>", which reads like a corrupt file rather than a permission.
   `macos/Runner/*.entitlements` omits `com.apple.security.app-sandbox` for that
   reason and documents it. **No test can catch a regression here**: it is a
@@ -86,7 +86,7 @@ This directory knows about files; it does not know what is in them.
 
 - **On macOS override the path with the flag, not the variable, whenever the
   microphone is also in play.** Handing an environment variable to a bundle
-  means launching `bel.app/Contents/MacOS/bel` directly, and a bare binary
+  means launching `oaa.app/Contents/MacOS/oaa` directly, and a bare binary
   launch changes how TCC attributes the microphone request — so the device fails
   to open and the engine falls back to the test tone. Through `open` the device
   works and the variable never reaches the process. For a phase that was the
@@ -94,7 +94,7 @@ This directory knows about files; it does not know what is in them.
   source is ignored". The flag settles it:
 
   ```sh
-  open -a build/macos/Build/Products/Debug/bel.app --args --config-dir=/tmp/bel
+  open -a build/macos/Build/Products/Debug/oaa.app --args --config-dir=/tmp/oaa
   ```
 
   overrides the directory with TCC still attributing the request to the bundle,

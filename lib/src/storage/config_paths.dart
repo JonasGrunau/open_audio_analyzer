@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-/// Where Bel keeps the things it remembers.
+/// Where Open Audio Analyzer keeps the things it remembers.
 ///
 /// The resolution below is written out by hand rather than delegated to
 /// `path_provider`, and the reason is not purity. `path_provider` is a Flutter
 /// plugin: it needs a `WidgetsBinding` and a platform channel, so it throws in
-/// exactly the two places Bel most needs these paths — the `bel analyze` CLI,
-/// which is a plain Dart entrypoint with no engine attached, and a unit test.
-/// Both have to read the same presets and the same calibrations as the app, and
-/// a second implementation of "where the config lives" is a second answer that
-/// will drift from the first.
+/// exactly the two places Open Audio Analyzer most needs these paths — the `oaa
+/// analyze` CLI, which is a plain Dart entrypoint with no engine attached, and
+/// a unit test. Both have to read the same presets and the same calibrations as
+/// the app, and a second implementation of "where the config lives" is a second
+/// answer that will drift from the first.
 ///
 /// It also names the conventional directory on each platform explicitly, rather
 /// than asking `path_provider` for one, so that the CLI and the app cannot
@@ -39,7 +39,8 @@ library;
 /// The environment variable that overrides the platform's convention.
 ///
 /// For tests, for portable installs on a USB stick, and for anybody who keeps
-/// their dotfiles in a repository and wants Bel's config alongside them.
+/// their dotfiles in a repository and wants Open Audio Analyzer's config
+/// alongside them.
 ///
 /// Subject to the platform's own file access: it can only name a directory the
 /// process is allowed to read. That is unrestricted today on all three desktop
@@ -51,12 +52,12 @@ library;
 /// the bundle, which changes how TCC attributes the microphone request — so this
 /// variable and device capture could not be used in the same launch. See
 /// `lib/src/app/launch_options.dart`.
-const String kConfigDirEnvVar = 'BEL_CONFIG_DIR';
+const String kConfigDirEnvVar = 'OAA_CONFIG_DIR';
 
 /// The configuration root for [operatingSystem], as a path string.
 ///
 /// Pure: it reads nothing and creates nothing, which is what makes all three
-/// platforms testable from any one of them, and what lets the `bel` CLI call it
+/// platforms testable from any one of them, and what lets the `oaa` CLI call it
 /// with no Flutter binding. [operatingSystem] takes the values
 /// `Platform.operatingSystem` produces, and [override] arrives from the
 /// `--config-dir` flag — passed *in* rather than read here, so that the
@@ -66,9 +67,9 @@ const String kConfigDirEnvVar = 'BEL_CONFIG_DIR';
 /// Returns null when the environment gives it nothing to work with — no `HOME`
 /// on a Unix, no `APPDATA` on Windows. That happens in stripped service
 /// environments and in some CI containers, and it is a legitimate state rather
-/// than an error: Bel runs perfectly well without persistence, it just does not
-/// remember anything. Guessing `/` and failing at write time instead would be
-/// worse.
+/// than an error: Open Audio Analyzer runs perfectly well without persistence,
+/// it just does not remember anything. Guessing `/` and failing at write time
+/// instead would be worse.
 ///
 /// [temporaryDirectory] is `Directory.systemTemp.path`, and is read by the iOS
 /// branch alone — see the library comment. Passing it in rather than reading it
@@ -94,14 +95,14 @@ String? resolveConfigRoot({
     case 'windows':
       final appData = environment['APPDATA'];
       if (appData == null || appData.isEmpty) return null;
-      return '$appData\\Bel';
+      return '$appData\\Open Audio Analyzer';
 
     case 'macos':
       final home = environment['HOME'];
       if (home == null || home.isEmpty) return null;
       // The platform convention, and where an unsandboxed app's HOME actually
       // points — see the library comment on why that second half is not free.
-      return '$home/Library/Application Support/Bel';
+      return '$home/Library/Application Support/Open Audio Analyzer';
 
     case 'ios':
       // `HOME` is deliberately not consulted. It is either absent — which is
@@ -114,7 +115,7 @@ String? resolveConfigRoot({
       // Apple's own convention, and the same shape as the macOS row above.
       // Nothing here is user-visible: an iPad shows its configuration through
       // Settings → Session, not through the Files app.
-      return '$container/Library/Application Support/Bel';
+      return '$container/Library/Application Support/Open Audio Analyzer';
 
     // Linux and anything else Unix-shaped — including Android, which has no
     // `HOME` either and therefore no configuration directory. Its container is
@@ -127,10 +128,10 @@ String? resolveConfigRoot({
     // they want this.
     default:
       final xdg = environment['XDG_CONFIG_HOME'];
-      if (xdg != null && xdg.isNotEmpty) return '$xdg/bel';
+      if (xdg != null && xdg.isNotEmpty) return '$xdg/oaa';
       final home = environment['HOME'];
       if (home == null || home.isEmpty) return null;
-      return '$home/.config/bel';
+      return '$home/.config/oaa';
   }
 }
 
@@ -141,9 +142,10 @@ String? resolveConfigRoot({
 /// The check that the last component really is `tmp` is not defensive
 /// programming: a process whose `TMPDIR` is unset gets `/tmp`, whose parent is
 /// `/`, and returning that would put the configuration root at
-/// `/Library/Application Support/Bel` — a path outside the sandbox that fails
-/// at write time with a permission error, which reads like a broken install
-/// rather than an environment Bel cannot place anything in.
+/// `/Library/Application Support/Open Audio Analyzer` — a path outside the
+/// sandbox that fails at write time with a permission error, which reads like a
+/// broken install rather than an environment Open Audio Analyzer cannot place
+/// anything in.
 String? _containerOf(String? temporaryDirectory) {
   if (temporaryDirectory == null) return null;
 

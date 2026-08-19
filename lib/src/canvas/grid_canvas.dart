@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import 'package:bel_core/bel_core.dart';
-import 'package:bel_ui/bel_ui.dart';
+import 'package:oaa_core/oaa_core.dart';
+import 'package:oaa_ui/oaa_ui.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -181,7 +181,7 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
   }
 
   Future<void> _showModuleMenu(Offset globalPosition, ModuleSpec module) async {
-    final colors = BelTheme.of(context);
+    final colors = OaaTheme.of(context);
     _controller.select(module.id);
 
     final action = await showMenu<_ModuleAction>(
@@ -189,14 +189,14 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
       color: colors.panelRaised,
       position: menuPositionAt(context, globalPosition),
       items: [
-        if (module.kind == ModuleKind.numberBox) belMenuItem(context, _ModuleAction.metric, 'Metric — ${module.metric.label}', color: colors.textMuted),
+        if (module.kind == ModuleKind.numberBox) oaaMenuItem(context, _ModuleAction.metric, 'Metric — ${module.metric.label}', color: colors.textMuted),
         // Named "Response" rather than a refresh rate, because that is what it
         // is: the analyser draws every frame the engine publishes at every
         // setting, and what changes is how long the drawn level takes to follow
         // one. See `SpectrumResponse`.
-        if (module.kind == ModuleKind.spectrumAnalyzer) belMenuItem(context, _ModuleAction.response, 'Response — ${module.spectrumResponse.label}', color: colors.textMuted),
-        belMenuItem(context, _ModuleAction.duplicate, 'Duplicate'),
-        belMenuItem(context, _ModuleAction.delete, 'Delete', color: colors.over),
+        if (module.kind == ModuleKind.spectrumAnalyzer) oaaMenuItem(context, _ModuleAction.response, 'Response — ${module.spectrumResponse.label}', color: colors.textMuted),
+        oaaMenuItem(context, _ModuleAction.duplicate, 'Duplicate'),
+        oaaMenuItem(context, _ModuleAction.delete, 'Delete', color: colors.over),
       ],
     );
 
@@ -217,12 +217,12 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
   }
 
   Future<void> _showMetricMenu(Offset globalPosition, ModuleSpec module) async {
-    final colors = BelTheme.of(context);
+    final colors = OaaTheme.of(context);
     final metric = await showMenu<Metric>(
       context: context,
       color: colors.panelRaised,
       position: menuPositionAt(context, globalPosition),
-      items: [for (final metric in Metric.values) belMenuItem(context, metric, metric.label, color: metric == module.metric ? colors.textPrimary : colors.textMuted)],
+      items: [for (final metric in Metric.values) oaaMenuItem(context, metric, metric.label, color: metric == module.metric ? colors.textPrimary : colors.textMuted)],
     );
 
     if (metric == null || !mounted) return;
@@ -230,13 +230,13 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
   }
 
   Future<void> _showResponseMenu(Offset globalPosition, ModuleSpec module) async {
-    final colors = BelTheme.of(context);
+    final colors = OaaTheme.of(context);
     final current = module.spectrumResponse;
     final response = await showMenu<SpectrumResponse>(
       context: context,
       color: colors.panelRaised,
       position: menuPositionAt(context, globalPosition),
-      items: [for (final response in SpectrumResponse.values) belMenuItem(context, response, response.label, color: response == current ? colors.textPrimary : colors.textMuted)],
+      items: [for (final response in SpectrumResponse.values) oaaMenuItem(context, response, response.label, color: response == current ? colors.textPrimary : colors.textMuted)],
     );
 
     if (response == null || !mounted) return;
@@ -247,7 +247,7 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
 
   @override
   Widget build(BuildContext context) {
-    final colors = BelTheme.of(context);
+    final colors = OaaTheme.of(context);
     final workspace = ref.watch(workspaceProvider);
     final calibration = ref.watch(calibrationProvider);
     final tab = workspace.tab;
@@ -387,7 +387,7 @@ class _ModuleSlot extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = BelTheme.of(context);
+    final colors = OaaTheme.of(context);
 
     return Stack(
       fit: StackFit.expand,
@@ -471,7 +471,7 @@ class _GripPainter extends MeterPainter {
   _GripPainter(this.color)
     : _stroke = Paint()
         ..color = color
-        ..strokeWidth = BelStroke.hairline
+        ..strokeWidth = OaaStroke.hairline
         ..isAntiAlias = false;
 
   /// Distance from the slot's edge to the corner the ticks are drawn around.
@@ -479,7 +479,7 @@ class _GripPainter extends MeterPainter {
   /// The grip sits in the same square as the frame's bottom-right corner, and
   /// that corner is a rounded rectangle: a tick that ran to the slot's edge
   /// ended *on* the border — half a hairline of it outside the panel, over the
-  /// gutter between modules — and at [BelStroke.emphasis], while the module is
+  /// gutter between modules — and at [OaaStroke.emphasis], while the module is
   /// selected, it crossed the selection outline outright. [Space.xs] is the
   /// frame's corner radius, so insetting by it keeps both ticks clear of the
   /// arc as well as of the widest border the frame draws.
@@ -520,7 +520,7 @@ class _Preview {
   /// notifier and nothing else.
   final GridRect source;
 
-  /// False when the target overlaps another module. Drawn in [BelColors.over]
+  /// False when the target overlaps another module. Drawn in [OaaColors.over]
   /// and refused on release.
   final bool valid;
 
@@ -553,12 +553,12 @@ class _PreviewPainter extends MeterPainter {
   _PreviewPainter({required this.preview, required this.geometry, required this.colors}) : super(repaint: preview) {
     _guide = Paint()
       ..color = colors.hairline
-      ..strokeWidth = BelStroke.hairline
+      ..strokeWidth = OaaStroke.hairline
       ..isAntiAlias = false;
     _edge = Paint()
       ..color = colors.hairlineStrong
       ..style = PaintingStyle.stroke
-      ..strokeWidth = BelStroke.hairline;
+      ..strokeWidth = OaaStroke.hairline;
     _scrim = Paint()..color = colors.background.withValues(alpha: _scrimAlpha);
   }
 
@@ -582,7 +582,7 @@ class _PreviewPainter extends MeterPainter {
 
   final ValueListenable<_Preview?> preview;
   final GridGeometry geometry;
-  final BelColors colors;
+  final OaaColors colors;
 
   late final Paint _guide;
   late final Paint _edge;
@@ -601,7 +601,7 @@ class _PreviewPainter extends MeterPainter {
     // it and the window. The radius is the module's, so the sheet the modules
     // are arranged on is shaped like the things arranged on it.
     final bounds = (Offset.zero & size).inflate(geometry.gap / 2);
-    final border = RRect.fromRectAndRadius(bounds, BelRadius.sm);
+    final border = RRect.fromRectAndRadius(bounds, OaaRadius.sm);
 
     // The sheet the modules are arranged on, with the one being carried punched
     // out of it: everything else is washed toward the canvas colour, so the
@@ -612,7 +612,7 @@ class _PreviewPainter extends MeterPainter {
     final sheet = Path()
       ..fillType = PathFillType.evenOdd
       ..addRRect(border)
-      ..addRRect(RRect.fromRectAndRadius(geometry.rectFor(target.source), BelRadius.sm));
+      ..addRRect(RRect.fromRectAndRadius(geometry.rectFor(target.source), OaaRadius.sm));
 
     canvas.drawPath(sheet, _scrim);
 
@@ -647,7 +647,7 @@ class _PreviewPainter extends MeterPainter {
     // spec" across readings that are still live underneath. Refusal keeps
     // `over` — see its note in tokens.dart.
     final colour = target.valid ? colors.textPrimary : colors.over;
-    final box = RRect.fromRectAndRadius(geometry.rectFor(target.rect), BelRadius.sm);
+    final box = RRect.fromRectAndRadius(geometry.rectFor(target.rect), OaaRadius.sm);
 
     canvas.drawRRect(box, Paint()..color = colour.withValues(alpha: 0.10));
     canvas.drawRRect(
@@ -655,7 +655,7 @@ class _PreviewPainter extends MeterPainter {
       Paint()
         ..color = colour
         ..style = PaintingStyle.stroke
-        ..strokeWidth = BelStroke.emphasis,
+        ..strokeWidth = OaaStroke.emphasis,
     );
   }
 
@@ -668,14 +668,14 @@ class _Empty extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = BelTheme.of(context);
+    final colors = OaaTheme.of(context);
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text('EMPTY TAB', style: BelType.label.copyWith(color: colors.textFaint)),
+          Text('EMPTY TAB', style: OaaType.label.copyWith(color: colors.textFaint)),
           const SizedBox(height: Space.sm),
-          Text('Right-click anywhere to add a module.', style: BelType.caption.copyWith(color: colors.textFaint)),
+          Text('Right-click anywhere to add a module.', style: OaaType.caption.copyWith(color: colors.textFaint)),
         ],
       ),
     );
@@ -694,7 +694,7 @@ class _Toast extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = BelTheme.of(context);
+    final colors = OaaTheme.of(context);
     return Align(
       alignment: Alignment.bottomCenter,
       child: Container(
@@ -702,10 +702,10 @@ class _Toast extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: Space.md, vertical: Space.sm),
         decoration: BoxDecoration(
           color: colors.panelRaised,
-          borderRadius: BelRadius.allSm,
-          border: Border.all(color: colors.warn, width: BelStroke.hairline),
+          borderRadius: OaaRadius.allSm,
+          border: Border.all(color: colors.warn, width: OaaStroke.hairline),
         ),
-        child: Text(message, style: BelType.caption.copyWith(color: colors.textPrimary)),
+        child: Text(message, style: OaaType.caption.copyWith(color: colors.textPrimary)),
       ),
     );
   }

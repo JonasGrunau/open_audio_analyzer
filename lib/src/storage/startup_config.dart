@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import 'package:bel_core/bel_core.dart';
+import 'package:oaa_core/oaa_core.dart';
 import 'package:flutter/foundation.dart';
 
 import 'config_paths.dart';

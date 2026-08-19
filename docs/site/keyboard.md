@@ -1,12 +1,12 @@
 # Keyboard
 
-Bel is a meter you leave open, so the shortcuts are the ones you reach
+Open Audio Analyzer is a meter you leave open, so the shortcuts are the ones you reach
 for while a mix is playing: rearrange the canvas, jump between tabs,
 start the measurement again.
 
 Press `?` or `F1` in the application for the same list.
 
-`Ctrl` and `Cmd` are both accepted on every platform. Bel does
+`Ctrl` and `Cmd` are both accepted on every platform. Open Audio Analyzer does
 not ask the operating system which one you meant — a Mac with a
 PC keyboard plugged into it takes either.
 

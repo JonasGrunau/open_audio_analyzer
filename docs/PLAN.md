@@ -1,4 +1,4 @@
-# Bel — a free, open-source loudness & spectrum analyzer
+# Open Audio Analyzer — a free, open-source loudness & spectrum analyzer
 
 > **This is the plan as it was approved, kept as the record of intent. It is
 > written in the future tense and most of it has happened.** Phases 0–7 are
@@ -16,8 +16,8 @@
 > | LRA histogram at 0.1 LU per bin | **0.01 LU**, 8000 bins | An order of magnitude inside the ±0.1 LU the standard asks for, at the same O(1) cost. |
 > | True peak 2× at ≥96 kHz | **4× at every rate** | 2× needs a second filter design to be correct, and 4× is never *less* accurate. See `docs/METRICS.md`. |
 > | FFT sizes 1024–8192, A/C/Z weighting | **4096 points, unweighted** | One transform serves the analyser, spectrogram and stereo cloud. Selectable size and weighting are not built. |
-> | `engine/test/` C unit tests, `cmake --build engine/build && ctest` | The engine is tested **through FFI** from `packages/bel_engine/test/` | The tests need no C runner, and one suite that CI already runs beats two. |
-> | `tool/conformance.dart` | `packages/bel_engine/test/conformance_test.dart` | Same job, inside the suite that gates every push. |
+> | `engine/test/` C unit tests, `cmake --build engine/build && ctest` | The engine is tested **through FFI** from `packages/oaa_engine/test/` | The tests need no C runner, and one suite that CI already runs beats two. |
+> | `tool/conformance.dart` | `packages/oaa_engine/test/conformance_test.dart` | Same job, inside the suite that gates every push. |
 > | Cross-check against `libebur128` as an oracle | Not done | The EBU Tech 3341/3342 cases are generated and asserted directly, with sample-rate and block-size independence on top. |
 > | BS.2217 WAV vectors in CI | Not used | The material is not licensed for redistribution here, and fetching it in CI would make the one suite that must never be flaky depend on the network. |
 > | Elapsed & Timecode LUFS modes arrive with the plugin in Phase 7 | **Not built.** The plugin ships and delivers the playhead, the timecode and a discontinuity flag; no module offers the modes. | Tying an integration window to the transport means restarting it when the playhead moves, and that command travels app→plugin: it needs a control frame, and so **wire protocol 2**. |
@@ -36,8 +36,9 @@ Windows, Linux and tablets. Phone and web are explicitly out of scope. The hard 
 **latency-free, perfectly smooth rendering** — a meter that stutters is not a meter — which
 drives essentially every architectural decision below.
 
-Product name: **Bel** (the unit a *deci*bel is a tenth of — an honest nod, not a copy).
-Repo stays `open_music_analyzer`; binary and packages are `bel*`.
+Product name: **Open Audio Analyzer** — descriptive rather than clever, so the
+name says what the thing is and nothing else has to be explained. Repo, binary
+and packages follow it: `open_audio_analyzer`, `oaa`, `oaa_*`.
 
 The repo is currently empty (one commit, no files). Everything below is greenfield.
 
@@ -46,7 +47,7 @@ The repo is currently empty (one commit, no files). Everything below is greenfie
 | | |
 |---|---|
 | **Scope** | All three tiers: standalone app → LAN remote display → headless DAW plugin. Phased so each ships alone. |
-| **License** | Dual. `engine/` + `packages/bel_core` → **MIT**. App, UI, plugin, CLI → **GPL-3.0-or-later**. Rationale: the DSP engine is worth embedding everywhere and needs outside scrutiny; the finished product should not be re-closable. MIT→GPL is one-way compatible, so this composes cleanly. |
+| **License** | Dual. `engine/` + `packages/oaa_core` → **MIT**. App, UI, plugin, CLI → **GPL-3.0-or-later**. Rationale: the DSP engine is worth embedding everywhere and needs outside scrutiny; the finished product should not be re-closable. MIT→GPL is one-way compatible, so this composes cleanly. |
 | **Visual language** | "Precision Instrument" — graphite black `#0B0C0E`, panel `#121417`, 1px hairline `#1F2328`, single accent `#35E0C4`, warn `#F2B01E`, over `#FF4D4D`. Inter + Google Sans Code (tabular figures). No shadows, no gradients, flat. |
 | **State** | Riverpod for UI/config. **Meter data never enters it** — see the performance thesis. |
 | **Flutter** | Pin `3.44.5-stable` in `.tool-versions` (matches `gather-v2-app`). |
@@ -64,7 +65,7 @@ per frame, and never rebuilds a widget.** Three tiers:
 2. **Analysis thread (C, high priority, not realtime).** Drains the ring, runs the whole DSP
    graph, publishes results into a **seqlock-protected snapshot struct** in shared memory.
 3. **UI thread (Dart).** One `Ticker`. Per frame: a single `@Native(isLeaf: true)` call
-   (`bel_snapshot_acquire`, ~2–5 ns, no safepoint transition) then every painter reads
+   (`oaa_snapshot_acquire`, ~2–5 ns, no safepoint transition) then every painter reads
    `Float32List` views **created once at startup** via `Pointer.asTypedList()` over that native
    memory. Zero copies into the Dart heap, zero allocation per frame.
 
@@ -109,7 +110,7 @@ no zoom and no scroll, so there was never a committed layer to rebuild.
 ## Repository structure
 
 ```
-open_music_analyzer/
+open_audio_analyzer/
 ├── README.md                  # the real design document (gather-v2-app register)
 ├── CLAUDE.md                  # agent instructions
 ├── AGENTS.md                  # + one per directory, gather-style
@@ -117,26 +118,26 @@ open_music_analyzer/
 ├── engine/LICENSE             # MIT
 ├── .tool-versions             # flutter 3.44.5-stable
 ├── engine/                    # C11 DSP core — knows nothing about Dart or Flutter
-│   ├── include/bel/bel.h      # the entire public C ABI, one header
+│   ├── include/oaa/oaa.h      # the entire public C ABI, one header
 │   ├── src/{ring,seqlock,kweight,loudness,lra,truepeak,rms,vu,fft,phase,cloud,
 │   │        spectro,histogram,snapshot,graph,device,decode}.c
 │   ├── third_party/{miniaudio,pffft,dr_libs,stb_vorbis}
 │   ├── test/                  # C unit tests + EBU conformance vectors
 │   └── CMakeLists.txt         # only for the C test runner and the plugin build
 ├── packages/
-│   ├── bel_engine/            # FFI package; hook/build.dart, ffigen.yaml, typed snapshot facade
-│   ├── bel_core/              # pure Dart domain — no dart:ffi, no Flutter
-│   └── bel_ui/                # design system: tokens, primitives, painter bases
+│   ├── oaa_engine/            # FFI package; hook/build.dart, ffigen.yaml, typed snapshot facade
+│   ├── oaa_core/              # pure Dart domain — no dart:ffi, no Flutter
+│   └── oaa_ui/                # design system: tokens, primitives, painter bases
 ├── lib/src/{app,clock,modules,canvas,panels,data}/
-├── cli/                       # `bel analyze file.wav --json`
+├── cli/                       # `oaa analyze file.wav --json`
 ├── plugin/                    # headless VST3 + AU plugin (Phase 7)
 ├── tool/                      # icons, conformance runner, release scripts
 └── .github/workflows/
 ```
 
-**The load-bearing boundary:** `engine/` has no knowledge of Flutter; `bel_core` has no
+**The load-bearing boundary:** `engine/` has no knowledge of Flutter; `oaa_core` has no
 knowledge of `dart:ffi`. That is the clean-architecture line that actually matters here — it is
-also what makes "all three tiers" tractable, because *the same `libbel` serves all of them.*
+also what makes "all three tiers" tractable, because *the same `liboaa` serves all of them.*
 
 ---
 
@@ -174,9 +175,9 @@ lands in Phase 1, not "later".
 
 ---
 
-## Feature mapping — Decibel → Bel
+## Feature mapping — Decibel → Open Audio Analyzer
 
-| Decibel | Bel | Note |
+| Decibel | Open Audio Analyzer | Note |
 |---|---|---|
 | Modules: LUFS, Super, Digital, VU, Spectrum, Spectrogram, Phase Scope, Stereo Cloud, Histogram, Number Box, Alert, Validator | all twelve | VU keeps Vintage/Modern/"Destroyed" variants and mono/stereo/mid/side |
 | Free-pixel canvas, corner resize | **24-column snapping grid**, cell-based | Our twist: deterministic, responsive tablet↔desktop for free. Keeps shift-to-fill, alt-drag duplicate, right-click menu, click-empty-to-add |
@@ -186,14 +187,14 @@ lands in Phase 1, not "later".
 | Skins | token-based JSON skins | users author them without a build |
 | LUFS modes: Continuous / System / Elapsed / Timecode | same | Elapsed & Timecode arrive with the plugin (Phase 7) |
 | Offline drag-and-drop analysis | same, same DSP code path at max speed | identical numbers to realtime — that *is* the correctness argument |
-| Export `.txt` report | `.txt` **+ JSON + CSV + rendered report card**, plus a `bel analyze --json` CLI | scriptable in a release pipeline; a genuine win over the original, nearly free once the engine is a C lib |
-| Companion display, connect by typing an IP | remote display via **mDNS discovery** (`_bel._tcp`) | strictly better UX than typing IPs |
-| Standalone / VST3 / AU / AAX | standalone + **VST3** + **Audio Unit** | Flutter cannot be a plugin GUI. The plugin is headless C++ around the same `libbel`, streaming snapshots + DAW transport to the app. AAX is out of scope — it needs Avid's SDK and a registered account |
+| Export `.txt` report | `.txt` **+ JSON + CSV + rendered report card**, plus a `oaa analyze --json` CLI | scriptable in a release pipeline; a genuine win over the original, nearly free once the engine is a C lib |
+| Companion display, connect by typing an IP | remote display via **mDNS discovery** (`_oaa._tcp`) | strictly better UX than typing IPs |
+| Standalone / VST3 / AU / AAX | standalone + **VST3** + **Audio Unit** | Flutter cannot be a plugin GUI. The plugin is headless C++ around the same `liboaa`, streaming snapshots + DAW transport to the app. AAX is out of scope — it needs Avid's SDK and a registered account |
 | 30/60 fps option | 30/60/120 | |
 
 ---
 
-## Design system (`packages/bel_ui`)
+## Design system (`packages/oaa_ui`)
 
 - **Spacing** `2, 4, 8, 12, 16, 24, 32, 48, 64` exposed as `Space.*`. **No raw numbers in widget
   code** — enforced as a review rule in `CLAUDE.md`.
@@ -229,15 +230,15 @@ failure mode that forced each design.
 Each phase is independently shippable.
 
 - **Phase 0 — Skeleton + spike (proves the thesis).** Repo scaffolding, both LICENSEs, README,
-  CLAUDE.md/AGENTS.md tree, CI, `gh repo create JonasGrunau/open_music_analyzer --public --push`.
-  Flutter app shell + `bel_engine` package_ffi compiling one C file; a C sine generator writing
+  CLAUDE.md/AGENTS.md tree, CI, `gh repo create JonasGrunau/open_audio_analyzer --public --push`.
+  Flutter app shell + `oaa_engine` package_ffi compiling one C file; a C sine generator writing
   a snapshot; one Number Box painting it via the Ticker path.
   **Gate: profile-mode frame time < 2 ms including the FFI read.** If `hook/build.dart` native
   assets misbehave on any desktop target, we find out here — fallback is legacy `plugin_ffi` +
   CMake, and finding out in Phase 0 costs a day instead of a month.
 - **Phase 1 — Engine core.** miniaudio capture, ring buffer, seqlock snapshot, K-weighting,
   M/S/I, LRA, true peak, RMS, VU ballistics, crest. C tests **+ EBU conformance in CI**.
-- **Phase 2 — Design system + canvas.** `bel_ui` tokens and primitives; grid canvas with
+- **Phase 2 — Design system + canvas.** `oaa_ui` tokens and primitives; grid canvas with
   add/move/resize/duplicate/delete; tabs.
 - **Phase 3 — The twelve modules,** in dependency order: Number Box → LUFS → Digital → Alert →
   Validator → Super → Histogram → VU → Spectrum → Phase Scope → Spectrogram → Stereo Cloud.
@@ -250,25 +251,26 @@ Each phase is independently shippable.
   with the test that holds it against arithmetic. **3b** is the eleven painters. Building the
   measurement first is what stops a module inventing a number to draw.
 - **Phase 4 — Presets, Calibration, Skins, audio settings, persistence.**
-- **Phase 5 — Offline analysis, report panel, exports, `bel` CLI.**
+- **Phase 5 — Offline analysis, report panel, exports, `oaa` CLI.**
 - **Phase 6 — Remote display:** mDNS discovery, binary snapshot wire format, tablet mode
   rendering the same `ModuleSpec` tree with the same painters.
 - **Phase 7 — VST3 and Audio Unit plugin**, DAW transport → Elapsed/Timecode modes.
 
   Built with **JUCE under its GPL-3.0 option**, which produces both formats — plus a
-  standalone target — from one headless C++ source set wrapped around `libbel`. The
+  standalone target — from one headless C++ source set wrapped around `liboaa`. The
   alternative is writing against Steinberg's VST3 SDK and Apple's AudioUnit API
   separately, which is two substantial implementations of boilerplate that a framework
   exists to absorb, for a plugin whose actual job is thirty lines: take the DAW's buffer,
-  push it into `bel_engine_push`, and stream snapshots and transport position to the app
+  push it into `oaa_engine_push`, and stream snapshots and transport position to the app
   over a local socket.
 
-  **The licensing is coherent but it is a one-way door for `plugin/` only.** JUCE and the
-  VST3 SDK are both dual-licensed — proprietary, or GPL-3.0. Bel takes the GPL-3.0 path,
-  which is available *because* the application and plugin are already
-  GPL-3.0-or-later. The combined plugin binary is therefore GPL-3.0, and nobody can ship
-  a closed-source fork of it without buying both licences. `engine/` stays MIT and is
-  not touched by this: the plugin links it, it does not link the plugin.
+  **The licensing is coherent but it is a one-way door for `plugin/` only.**
+  JUCE and the VST3 SDK are both dual-licensed — proprietary, or GPL-3.0. Open
+  Audio Analyzer takes the GPL-3.0 path, which is available *because* the
+  application and plugin are already GPL-3.0-or-later. The combined plugin
+  binary is therefore GPL-3.0, and nobody can ship a closed-source fork of it
+  without buying both licences. `engine/` stays MIT and is not touched by this:
+  the plugin links it, it does not link the plugin.
 
   CLAP was the earlier choice and is dropped. Its SDK is MIT and technically the nicest
   of the three, but **Ableton Live does not host CLAP**, and a metering plugin that
@@ -302,14 +304,14 @@ Each phase is independently shippable.
 ## Verification
 
 - `flutter analyze && flutter test` — lints and widget/golden tests.
-- `dart test packages/bel_core` — domain layer, no widget tree needed.
+- `dart test packages/oaa_core` — domain layer, no widget tree needed.
 - `cmake --build engine/build && ctest` — DSP unit tests.
 - **`tool/conformance.dart`** — runs the EBU R128 / BS.2217 vectors through the engine, asserts
   ±0.1 LU. Red conformance = red CI = no release.
 - Golden tests per module painter at fixed snapshot values.
 - **Perf gate:** a benchmark asserting frame build + raster stays in budget with 12 modules
   live; verified with `flutter run --profile` and the DevTools timeline.
-- Manual: play a known-loudness reference file through the app and through `bel analyze`, and
+- Manual: play a known-loudness reference file through the app and through `oaa analyze`, and
   confirm the two agree — realtime and offline share the DSP path, so divergence is a bug.
 
 ---
@@ -317,5 +319,5 @@ Each phase is independently shippable.
 ## First actions on approval
 
 1. Scaffold the repo, both LICENSE files, README, CLAUDE.md and the AGENTS.md tree.
-2. `gh repo create JonasGrunau/open_music_analyzer --public --source=. --push`.
+2. `gh repo create JonasGrunau/open_audio_analyzer --public --source=. --push`.
 3. Phase 0 spike, and hold it against the < 2 ms gate before going further.

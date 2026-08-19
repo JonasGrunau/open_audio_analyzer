@@ -30,17 +30,17 @@
 
 import 'dart:io';
 
-import 'package:bel/src/app/bel_app.dart';
-import 'package:bel/src/app/shortcuts.dart';
-import 'package:bel/src/canvas/module_host.dart';
-import 'package:bel/src/clock/meter_clock.dart';
-import 'package:bel/src/data/providers.dart';
-import 'package:bel/src/panels/shortcuts_sheet.dart';
-import 'package:bel/src/storage/config_store.dart';
-import 'package:bel/src/storage/startup_config.dart';
-import 'package:bel_core/bel_core.dart';
-import 'package:bel_engine/bel_engine.dart';
-import 'package:bel_ui/bel_ui.dart';
+import 'package:oaa/src/app/oaa_app.dart';
+import 'package:oaa/src/app/shortcuts.dart';
+import 'package:oaa/src/canvas/module_host.dart';
+import 'package:oaa/src/clock/meter_clock.dart';
+import 'package:oaa/src/data/providers.dart';
+import 'package:oaa/src/panels/shortcuts_sheet.dart';
+import 'package:oaa/src/storage/config_store.dart';
+import 'package:oaa/src/storage/startup_config.dart';
+import 'package:oaa_core/oaa_core.dart';
+import 'package:oaa_engine/oaa_engine.dart';
+import 'package:oaa_ui/oaa_ui.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -48,7 +48,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// The fonts the application ships, loaded so that "does the row fit" is a
-/// question about Bel and not about the test binding.
+/// question about Open Audio Analyzer and not about the test binding.
 ///
 /// Without this every glyph is the placeholder font's square em box, which is
 /// far wider than Inter or Google Sans Code — the status bar then overflows by
@@ -148,7 +148,7 @@ Future<void> _pumpApp(
   addTearDown(container.dispose);
 
   await tester.pumpWidget(
-    UncontrolledProviderScope(container: container, child: const BelApp()),
+    UncontrolledProviderScope(container: container, child: const OaaApp()),
   );
   await tester.pump();
 
@@ -180,7 +180,7 @@ class _Solo extends StatefulWidget {
 }
 
 class _SoloState extends State<_Solo> with SingleTickerProviderStateMixin {
-  late final BelEngine engine = BelEngine.start(source: BelSource.silence);
+  late final OaaEngine engine = OaaEngine.start(source: OaaSource.silence);
   late final MeterClock clock = MeterClock(engine: engine, vsync: this);
 
   @override
@@ -191,10 +191,10 @@ class _SoloState extends State<_Solo> with SingleTickerProviderStateMixin {
   }
 
   @override
-  Widget build(BuildContext context) => BelTheme(
-    colors: BelColors.precisionInstrument,
+  Widget build(BuildContext context) => OaaTheme(
+    colors: OaaColors.precisionInstrument,
     child: Material(
-      color: BelColors.precisionInstrument.background,
+      color: OaaColors.precisionInstrument.background,
       child: ModuleHost(
         spec: ModuleSpec(id: 'solo', kind: widget.kind, rect: widget.rect),
         engine: engine,
@@ -414,8 +414,8 @@ void main() {
             // passes a scroll check while reading like a squeezed table. Two
             // lines of description beside one keycap is also the shape that
             // makes a row hard to attribute to its own chord.
-            const line = 13 * 1.45; // BelType.body, one line.
-            for (final shortcut in belShortcuts) {
+            const line = 13 * 1.45; // OaaType.body, one line.
+            for (final shortcut in oaaShortcuts) {
               expect(
                 tester.getSize(find.text(shortcut.description)).height,
                 lessThan(line * 1.5),
@@ -440,7 +440,7 @@ void main() {
       await _pumpSheet(tester, const Size(800, 600));
 
       const line = 13 * 1.45;
-      for (final shortcut in belShortcuts) {
+      for (final shortcut in oaaShortcuts) {
         expect(
           tester.getSize(find.text(shortcut.description)).height,
           lessThan(line * 1.5),
@@ -454,7 +454,7 @@ void main() {
 /// The keyboard sheet, open, over nothing else.
 ///
 /// The application is not pumped: the sheet reads no measurement and owns no
-/// engine, and pumping `BelApp` to reach it would make this test depend on a
+/// engine, and pumping `OaaApp` to reach it would make this test depend on a
 /// capture device opening.
 Future<void> _pumpSheet(WidgetTester tester, Size window) async {
   tester.view.physicalSize = window * 3;
@@ -464,11 +464,11 @@ Future<void> _pumpSheet(WidgetTester tester, Size window) async {
   await tester.pumpWidget(
     MaterialApp(
       debugShowCheckedModeBanner: false,
-      theme: belThemeData(BelColors.precisionInstrument),
+      theme: oaaThemeData(OaaColors.precisionInstrument),
       // Above the `Navigator`, where the application puts it and where
-      // `showBelPanel` looks for it.
+      // `showOaaPanel` looks for it.
       builder: (context, child) =>
-          BelTheme(colors: BelColors.precisionInstrument, child: child!),
+          OaaTheme(colors: OaaColors.precisionInstrument, child: child!),
       home: Builder(
         builder: (context) => TextButton(
           onPressed: () => showShortcutsSheet(context),

@@ -1,19 +1,19 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-/// What Bel was started with.
+/// What Open Audio Analyzer was started with.
 ///
 /// Two flags, and both exist because of something that could not be done
 /// otherwise rather than because a flag seemed nice to have.
 ///
-/// **`--config-dir` is not a duplicate of `BEL_CONFIG_DIR`.** Passing an
+/// **`--config-dir` is not a duplicate of `OAA_CONFIG_DIR`.** Passing an
 /// environment variable to a Mac application means launching the binary inside
-/// the bundle directly — `bel.app/Contents/MacOS/bel` — and a bare binary launch
-/// changes how TCC attributes the microphone request, so the device silently
-/// fails to open and Bel falls back to the test tone. The net effect is that the
-/// config override and device capture could not be exercised in the same launch,
-/// which has already been mis-reported once as "the persisted source is
-/// ignored". `open --args` passes arguments where it cannot pass an environment,
-/// so the flag removes the conflict outright.
+/// the bundle directly — `oaa.app/Contents/MacOS/oaa` — and a bare binary
+/// launch changes how TCC attributes the microphone request, so the device
+/// silently fails to open and Open Audio Analyzer falls back to the test tone.
+/// The net effect is that the config override and device capture could not be
+/// exercised in the same launch, which has already been mis-reported once as
+/// "the persisted source is ignored". `open --args` passes arguments where it
+/// cannot pass an environment, so the flag removes the conflict outright.
 ///
 /// **`--open-panel` is a debug-build affordance and asserts if used in a release
 /// build.** Driving Flutter on macOS from a script needs synthetic `CGEvent`s
@@ -31,8 +31,9 @@ library;
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-/// What Bel was started with. Overridden in `main()`; defaults to nothing, so
-/// every widget test gets an application launched with a bare command line.
+/// What Open Audio Analyzer was started with. Overridden in `main()`; defaults
+/// to nothing, so every widget test gets an application launched with a bare
+/// command line.
 final launchOptionsProvider = Provider<LaunchOptions>(
   (ref) => LaunchOptions.none,
 );
@@ -71,7 +72,7 @@ class LaunchOptions {
   });
 
   /// Where to keep settings, presets, calibrations and skins. Beats
-  /// `BEL_CONFIG_DIR`, which beats the platform's convention.
+  /// `OAA_CONFIG_DIR`, which beats the platform's convention.
   final String? configDir;
 
   /// A panel to open once the first frame is on screen. Ignored in a release
@@ -90,7 +91,7 @@ class LaunchOptions {
   static const LaunchOptions none = LaunchOptions();
 }
 
-/// Reads [arguments] as Bel's command line.
+/// Reads [arguments] as Open Audio Analyzer's command line.
 ///
 /// Accepts `--flag=value` and `--flag value` for both, because both are typed by
 /// people and neither is wrong. Unknown arguments are collected rather than

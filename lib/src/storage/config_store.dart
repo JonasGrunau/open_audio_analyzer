@@ -14,7 +14,7 @@ import 'config_paths.dart';
 /// preset has to remove the file that actually exists.
 typedef StoredJson = ({String fileName, Map<String, Object?> json});
 
-/// Reads and writes everything Bel remembers.
+/// Reads and writes everything Open Audio Analyzer remembers.
 ///
 /// Three properties, each of which is there because of a specific way
 /// persistence layers fail:

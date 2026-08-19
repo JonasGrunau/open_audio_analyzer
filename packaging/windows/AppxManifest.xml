@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Bel's msix manifest.
+  Open Audio Analyzer's msix manifest.
 
   SPDX-License-Identifier: GPL-3.0-or-later
 
@@ -26,14 +26,14 @@
   IgnorableNamespaces="uap rescap">
 
   <Identity
-    Name="dev.belmeter.bel"
+    Name="dev.openaudioanalyzer.oaa"
     Publisher="{{PUBLISHER}}"
     Version="{{VERSION}}"
     ProcessorArchitecture="x64" />
 
   <Properties>
-    <DisplayName>Bel</DisplayName>
-    <PublisherDisplayName>The Bel contributors</PublisherDisplayName>
+    <DisplayName>Open Audio Analyzer</DisplayName>
+    <PublisherDisplayName>The Open Audio Analyzer contributors</PublisherDisplayName>
     <Description>Loudness and spectrum metering for mixing, mastering and delivery</Description>
     <Logo>images\StoreLogo.png</Logo>
   </Properties>
@@ -58,9 +58,9 @@
   </Capabilities>
 
   <Applications>
-    <Application Id="Bel" Executable="bel.exe" EntryPoint="Windows.FullTrustApplication">
+    <Application Id="Open Audio Analyzer" Executable="oaa.exe" EntryPoint="Windows.FullTrustApplication">
       <uap:VisualElements
-        DisplayName="Bel"
+        DisplayName="Open Audio Analyzer"
         Description="Loudness and spectrum metering for mixing, mastering and delivery"
         BackgroundColor="#0B0C0E"
         Square150x150Logo="images\Square150x150Logo.png"

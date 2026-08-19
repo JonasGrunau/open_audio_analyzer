@@ -18,7 +18,7 @@ execute_process(
   OUTPUT_QUIET
 )
 if(NOT status EQUAL 0)
-  message(FATAL_ERROR "bel_wire_fixture failed with status ${status}")
+  message(FATAL_ERROR "oaa_wire_fixture failed with status ${status}")
 endif()
 
 file(SIZE "${GOLDEN}" golden_size)
@@ -36,7 +36,7 @@ if(NOT golden_hash STREQUAL actual_hash)
     "This is the check described in plugin/test/wire_fixture.cpp. Either the C++\n"
     "serialiser drifted — in which case fix it, do NOT regenerate the golden —\n"
     "or the protocol changed deliberately, in which case bump kProtocolVersion,\n"
-    "update docs/WIRE.md and packages/bel_wire/, and regenerate with:\n"
+    "update docs/WIRE.md and packages/oaa_wire/, and regenerate with:\n"
     "  ${FIXTURE} ${GOLDEN}")
 endif()
 

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import 'package:bel_core/bel_core.dart';
-import 'package:bel_ui/bel_ui.dart';
+import 'package:oaa_core/oaa_core.dart';
+import 'package:oaa_ui/oaa_ui.dart';
 import 'package:flutter/material.dart';
 
 import '../canvas/module_host.dart';
@@ -30,9 +30,10 @@ class RemoteDisplayScreen extends StatefulWidget {
 
   /// Where to attach on arrival, when something upstream already asked.
   ///
-  /// Null is the state a tablet is in when it opens Bel with no host in mind,
-  /// and it is not an error — the screen shows [HostPickerPanel] until it has
-  /// somewhere to point. Nothing else about the screen differs between the two.
+  /// Null is the state a tablet is in when it opens Open Audio Analyzer with no
+  /// host in mind, and it is not an error — the screen shows [HostPickerPanel]
+  /// until it has somewhere to point. Nothing else about the screen differs
+  /// between the two.
   final String? host;
   final int? port;
 
@@ -83,13 +84,13 @@ class _RemoteDisplayScreenState extends State<RemoteDisplayScreen>
       valueListenable: _client.skin,
       builder: (context, skin, _) {
         final colors = skin == null
-            ? BelColors.precisionInstrument
-            : belColorsFromSkin(skin);
+            ? OaaColors.precisionInstrument
+            : oaaColorsFromSkin(skin);
 
-        return BelTheme(
+        return OaaTheme(
           colors: colors,
           child: Theme(
-            data: belThemeData(colors),
+            data: oaaThemeData(colors),
             child: Scaffold(
               backgroundColor: colors.background,
               body: SafeArea(
@@ -182,7 +183,7 @@ class _LiveDisplay extends StatelessWidget {
 /// which tab is showing.
 ///
 /// Built like the desktop's own status bar — panel fill under a hairline, and
-/// `bel_ui` controls on it. The tabs and the way out were stock `TextButton`s,
+/// `oaa_ui` controls on it. The tabs and the way out were stock `TextButton`s,
 /// which in a theme that has stripped Material of its splash and highlight are
 /// text with no border, no hover and no focus ring: three controls that could
 /// not be told from the labels beside them.
@@ -205,18 +206,18 @@ class _LinkBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = BelTheme.of(context);
+    final colors = OaaTheme.of(context);
     final tabs = layout?.tabs ?? const <TabSpec>[];
 
     return DecoratedBox(
       decoration: BoxDecoration(
         color: colors.panel,
         border: Border(
-          bottom: BorderSide(color: colors.hairline, width: BelStroke.hairline),
+          bottom: BorderSide(color: colors.hairline, width: OaaStroke.hairline),
         ),
       ),
       child: Padding(
-        // **`Space.sm` above and below a `BelControl.height` control, not
+        // **`Space.sm` above and below a `OaaControl.height` control, not
         // `Space.xs`.** This bar is not the desktop's 40 px status bar and does
         // not have its problem: there is no source, no clock, no calibration and
         // no frame rate to fit, just a name, the tabs and the way out. At 4 px
@@ -240,7 +241,7 @@ class _LinkBar extends StatelessWidget {
               valueListenable: client.hostName,
               builder: (context, name, _) => Text(
                 name ?? 'Connecting…',
-                style: BelType.body.copyWith(color: colors.textPrimary),
+                style: OaaType.body.copyWith(color: colors.textPrimary),
               ),
             ),
 
@@ -266,7 +267,7 @@ class _LinkBar extends StatelessWidget {
             ),
             const SizedBox(width: Space.sm),
 
-            BelButton(label: 'Disconnect', onPressed: onDisconnect),
+            OaaButton(label: 'Disconnect', onPressed: onDisconnect),
           ],
         ),
       ),
@@ -282,7 +283,7 @@ class _StateDot extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = BelTheme.of(context);
+    final colors = OaaTheme.of(context);
     final color = switch (state) {
       RemoteLinkState.live => colors.accent,
       RemoteLinkState.stale => colors.warn,
@@ -322,7 +323,7 @@ class _StateMessage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = BelTheme.of(context);
+    final colors = OaaTheme.of(context);
 
     return ValueListenableBuilder<String?>(
       valueListenable: client.failure,
@@ -347,7 +348,7 @@ class _StateMessage extends StatelessWidget {
         return Text(
           text,
           overflow: TextOverflow.ellipsis,
-          style: BelType.label.copyWith(color: color),
+          style: OaaType.label.copyWith(color: color),
         );
       },
     );
@@ -359,11 +360,11 @@ class _NothingToDraw extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = BelTheme.of(context);
+    final colors = OaaTheme.of(context);
     return Center(
       child: Text(
         'The host has not sent a layout yet.',
-        style: BelType.label.copyWith(color: colors.textMuted),
+        style: OaaType.label.copyWith(color: colors.textMuted),
       ),
     );
   }

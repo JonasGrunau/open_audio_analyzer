@@ -10,12 +10,13 @@
 /// not-invented-here. The service has to be **advertised** as well as browsed,
 /// and the pure-Dart package that everyone reaches for only browses; the
 /// packages that do both wrap each platform's native responder through plugin
-/// channels, which on Linux desktop is the platform Bel would then quietly stop
-/// supporting. One implementation that behaves identically on macOS, Windows
-/// and Linux is worth a few hundred lines, especially when the alternative is
-/// discovering the gap on the one machine in the studio that runs Linux.
+/// channels, which on Linux desktop is the platform Open Audio Analyzer would
+/// then quietly stop supporting. One implementation that behaves identically on
+/// macOS, Windows and Linux is worth a few hundred lines, especially when the
+/// alternative is discovering the gap on the one machine in the studio that
+/// runs Linux.
 ///
-/// **iPadOS is the exception, and it is not one Bel chose.** Apple will not let
+/// **iPadOS is the exception, and it is not one Open Audio Analyzer chose.** Apple will not let
 /// an app hold a multicast socket on real hardware without a restricted
 /// entitlement granted per team on request, so the tablet browses through the
 /// system responder instead — `mdns/bonjour_discovery.dart`, and the reasoning
@@ -162,8 +163,9 @@ Uint8List encodeResponse({
 ///
 /// Returning null rather than throwing is the right shape here: port 5353 on a
 /// busy network carries every kind of announcement from every kind of device,
-/// most of it for services Bel has never heard of, some of it malformed. A
-/// parser that threw would make normal network traffic look like an error.
+/// most of it for services Open Audio Analyzer has never heard of, some of it
+/// malformed. A parser that threw would make normal network traffic look like
+/// an error.
 DnsMessage? decodeMessage(Uint8List datagram) {
   try {
     final reader = _Reader(datagram);

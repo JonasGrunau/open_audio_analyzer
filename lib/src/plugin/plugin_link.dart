@@ -5,8 +5,8 @@
 // ---------------------------------------------------------------------------
 // Why this listens instead of connecting
 //
-// The two halves of Bel's wire protocol dial in opposite directions, and which
-// end listens is decided by which end is long-lived:
+// The two halves of Open Audio Analyzer's wire protocol dial in opposite
+// directions, and which end listens is decided by which end is long-lived:
 //
 //   47821  a desktop publishes, a tablet connects in   (remote display)
 //   47822  a plugin publishes, this accepts            (here)
@@ -36,18 +36,18 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:bel_core/bel_core.dart';
-import 'package:bel_wire/bel_wire.dart';
+import 'package:oaa_core/oaa_core.dart';
+import 'package:oaa_wire/oaa_wire.dart';
 import 'package:flutter/foundation.dart';
 
-/// The port a desktop Bel accepts plugin connections on.
+/// The port a desktop Open Audio Analyzer accepts plugin connections on.
 const int kPluginLinkPort = 47822;
 
 /// One connected plugin instance.
 ///
 /// A session is a DAW insert: its measurements are of one track, or one bus, or
-/// one master, and several may be open at once because somebody has put Bel on
-/// more than one of them.
+/// one master, and several may be open at once because somebody has put Open
+/// Audio Analyzer on more than one of them.
 class PluginSession {
   PluginSession._(this._socket, this.id);
 
@@ -57,8 +57,8 @@ class PluginSession {
   /// across frames without holding the session object itself.
   final int id;
 
-  /// What the plugin calls itself, which includes the host — "Bel plugin —
-  /// Logic Pro". Null until its HELLO arrives.
+  /// What the plugin calls itself, which includes the host — "Open Audio
+  /// Analyzer plugin — Logic Pro". Null until its HELLO arrives.
   String? producerName;
 
   /// The plugin's engine ABI. Shown, never used to decide anything: an additive
@@ -150,8 +150,9 @@ class PluginLink extends ChangeNotifier {
 
   /// Why listening failed, in a sentence meant for a person. Null when fine.
   ///
-  /// The overwhelmingly common cause is a second copy of Bel already running,
-  /// and saying so is considerably more use than "address in use".
+  /// The overwhelmingly common cause is a second copy of Open Audio Analyzer
+  /// already running, and saying so is considerably more use than "address in
+  /// use".
   final ValueNotifier<String?> failure = ValueNotifier(null);
 
   bool get isListening => _server != null;
@@ -174,15 +175,16 @@ class PluginLink extends ChangeNotifier {
       // port exists to serve.
       //
       // The reason that will bite somebody later: **this is what makes control
-      // frames permissible here at all.** The two Bel ports have deliberately
-      // different trust boundaries — 47821 binds every interface for the remote
-      // display and stays strictly read-only, while 47822 binds loopback, where
-      // the set of things that can connect is the set of things already running
-      // as this user, a boundary a password would not improve. That asymmetry
-      // is why `docs/WIRE.md` allows app-to-plugin control frames (0x0020–
-      // 0x002F) on this port and forbids them on the other one. Restarting an
-      // integration mid-programme is wrong in a way nothing on screen reveals,
-      // and it is not a capability to hand to an unauthenticated LAN port.
+      // frames permissible here at all.** The two Open Audio Analyzer ports
+      // have deliberately different trust boundaries — 47821 binds every
+      // interface for the remote display and stays strictly read-only, while
+      // 47822 binds loopback, where the set of things that can connect is the
+      // set of things already running as this user, a boundary a password would
+      // not improve. That asymmetry is why `docs/WIRE.md` allows app-to-plugin
+      // control frames (0x0020– 0x002F) on this port and forbids them on the
+      // other one. Restarting an integration mid-programme is wrong in a way
+      // nothing on screen reveals, and it is not a capability to hand to an
+      // unauthenticated LAN port.
       //
       // So: if this ever becomes `anyIPv4` to reach a plugin on another
       // machine, that reasoning lapses and control frames must be refused on
@@ -321,7 +323,7 @@ class PluginLink extends ChangeNotifier {
   static String _describe(Object error) => switch (error) {
     SocketException(:final osError)
         when osError?.errorCode == 48 || osError?.errorCode == 98 =>
-      'Another copy of Bel is already listening for plugins on port '
+      'Another copy of Open Audio Analyzer is already listening for plugins on port '
           '$kPluginLinkPort.',
     SocketException(:final message, :final osError) =>
       osError == null ? message : '$message (${osError.message})',

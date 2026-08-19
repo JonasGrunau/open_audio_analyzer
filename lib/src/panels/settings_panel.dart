@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import 'package:bel_core/bel_core.dart';
-import 'package:bel_engine/bel_engine.dart';
-import 'package:bel_ui/bel_ui.dart';
+import 'package:oaa_core/oaa_core.dart';
+import 'package:oaa_engine/oaa_engine.dart';
+import 'package:oaa_ui/oaa_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -13,12 +13,12 @@ import 'calibration_editor.dart';
 import 'preset_browser.dart';
 
 /// Opens the settings panel.
-Future<void> showSettingsPanel(BuildContext context) => showBelPanel<void>(
+Future<void> showSettingsPanel(BuildContext context) => showOaaPanel<void>(
   context: context,
   builder: (context) => const SettingsPanel(),
 );
 
-/// Everything Bel remembers, in the order somebody sets it up.
+/// Everything Open Audio Analyzer remembers, in the order somebody sets it up.
 ///
 /// Signal first, because a meter with nothing going into it is not measuring
 /// anything; then the meters themselves; then how they look; then what is kept
@@ -38,14 +38,14 @@ class _SettingsPanelState extends ConsumerState<SettingsPanel> {
   /// Devices come and go in a studio, so a list cached at launch would be
   /// wrong — but a list rebuilt on every setState would also re-enumerate the
   /// audio subsystem every time a toggle moved, which on Windows is not free.
-  late List<BelDevice> _devices = _enumerate();
+  late List<OaaDevice> _devices = _enumerate();
 
   String? _status;
 
-  List<BelDevice> _enumerate() {
+  List<OaaDevice> _enumerate() {
     try {
-      return BelEngine.devices();
-    } on BelEngineException {
+      return OaaEngine.devices();
+    } on OaaEngineException {
       // No audio subsystem is a legitimate state — a headless CI box, a
       // machine whose audio service has died. The rest of the panel still
       // works.
@@ -55,7 +55,7 @@ class _SettingsPanelState extends ConsumerState<SettingsPanel> {
 
   @override
   Widget build(BuildContext context) {
-    final colors = BelTheme.of(context);
+    final colors = OaaTheme.of(context);
     final settings = ref.watch(settingsProvider);
     final store = ref.watch(configStoreProvider);
 
@@ -69,10 +69,10 @@ class _SettingsPanelState extends ConsumerState<SettingsPanel> {
               _status ?? '',
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: BelType.caption.copyWith(color: colors.textFaint),
+              style: OaaType.caption.copyWith(color: colors.textFaint),
             ),
           ),
-          BelButton(
+          OaaButton(
             label: 'Done',
             emphasis: ButtonEmphasis.primary,
             onPressed: () => Navigator.of(context).pop(),
@@ -102,7 +102,7 @@ class _SettingsPanelState extends ConsumerState<SettingsPanel> {
 
     return PanelSection(
       title: 'Signal',
-      note: 'What Bel is listening to. Changing it restarts the measurement.',
+      note: 'What Open Audio Analyzer is listening to. Changing it restarts the measurement.',
       ruled: false,
       children: [
         PanelRow(
@@ -125,7 +125,7 @@ class _SettingsPanelState extends ConsumerState<SettingsPanel> {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              BelButton(
+              OaaButton(
                 label: 'Rescan',
                 onPressed: () => setState(() => _devices = _enumerate()),
               ),
@@ -160,7 +160,7 @@ class _SettingsPanelState extends ConsumerState<SettingsPanel> {
         const PanelNote(
           'Input devices only. To measure what this machine is playing, '
           'select a loopback device — BlackHole on macOS, VB-Cable on '
-          'Windows, a PulseAudio monitor on Linux. Bel ships no system-audio '
+          'Windows, a PulseAudio monitor on Linux. Open Audio Analyzer ships no system-audio '
           'driver of its own; the README says why.',
         ),
       ],
@@ -213,7 +213,7 @@ class _SettingsPanelState extends ConsumerState<SettingsPanel> {
                 onSelected: controller.setCalibrationId,
               ),
               const SizedBox(width: Space.sm),
-              BelButton(
+              OaaButton(
                 label: 'Edit',
                 onPressed: () =>
                     showCalibrationEditor(context, base: calibration),
@@ -247,8 +247,8 @@ class _SettingsPanelState extends ConsumerState<SettingsPanel> {
           ),
         PanelActions(
           children: [
-            BelButton(label: 'Reload from disk', onPressed: _reloadSkins),
-            BelButton(
+            OaaButton(label: 'Reload from disk', onPressed: _reloadSkins),
+            OaaButton(
               label: 'Duplicate for editing',
               onPressed: _duplicateSkin,
             ),
@@ -300,7 +300,7 @@ class _SettingsPanelState extends ConsumerState<SettingsPanel> {
   // --- Session --------------------------------------------------------------
 
   Widget _session(AppSettings settings, ConfigStore store) {
-    final colors = BelTheme.of(context);
+    final colors = OaaTheme.of(context);
 
     return PanelSection(
       title: 'Session',
@@ -308,9 +308,9 @@ class _SettingsPanelState extends ConsumerState<SettingsPanel> {
         PanelRow(
           label: 'Restore the last layout at launch',
           note:
-              'Off means Bel opens on its default arrangement every time, '
+              'Off means Open Audio Analyzer opens on its default arrangement every time, '
               'whatever you left on the canvas.',
-          child: BelToggle(
+          child: OaaToggle(
             semanticLabel: 'Restore the last layout at launch',
             value: settings.restoreSession,
             onChanged: ref.read(settingsProvider.notifier).setRestoreSession,
@@ -319,7 +319,7 @@ class _SettingsPanelState extends ConsumerState<SettingsPanel> {
         PanelRow(
           label: 'Presets',
           note: 'Save the current arrangement, or open one you saved before.',
-          child: BelButton(
+          child: OaaButton(
             label: 'Browse',
             onPressed: () => showPresetBrowser(context),
           ),
@@ -338,14 +338,14 @@ class _SettingsPanelState extends ConsumerState<SettingsPanel> {
           // **Selectable, and monospaced, because the path is not guessable.**
           // On macOS the app is sandboxed, so this is a container directory
           // named after the bundle identifier rather than the
-          // ~/Library/Application Support/Bel anybody would think to look in.
-          // Printing an unselectable path a user cannot navigate to is the same
-          // as not printing it.
+          // ~/Library/Application Support/Open Audio Analyzer anybody would
+          // think to look in. Printing an unselectable path a user cannot
+          // navigate to is the same as not printing it.
           Padding(
             padding: const EdgeInsets.only(top: Space.xs),
             child: SelectableText(
               store.root!.path,
-              style: BelType.readingSmall.copyWith(color: colors.textMuted),
+              style: OaaType.readingSmall.copyWith(color: colors.textMuted),
             ),
           ),
         ],
@@ -371,7 +371,7 @@ class _Swatches extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = BelTheme.of(context);
+    final colors = OaaTheme.of(context);
 
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -383,10 +383,10 @@ class _Swatches extends StatelessWidget {
             margin: const EdgeInsets.only(left: Space.xxs),
             decoration: BoxDecoration(
               color: Color(skin.resolve(role)),
-              borderRadius: BelRadius.allXs,
+              borderRadius: OaaRadius.allXs,
               border: Border.all(
                 color: colors.hairline,
-                width: BelStroke.hairline,
+                width: OaaStroke.hairline,
               ),
             ),
           ),

@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import 'package:bel_core/bel_core.dart';
-import 'package:bel_ui/bel_ui.dart';
+import 'package:oaa_core/oaa_core.dart';
+import 'package:oaa_ui/oaa_ui.dart';
 import 'package:flutter/material.dart';
 
 /// The popup menus the canvas and the tab strip share.
 ///
 /// Both places offer "add a module", and a second copy of that list is a second
-/// place to forget a module kind. Bel draws almost nothing with Material, but
-/// its menus are one of the few stock widgets worth keeping: they handle
-/// screen-edge collision, keyboard traversal and dismissal correctly, and
-/// reimplementing that to avoid one dependency would be a poor trade.
+/// place to forget a module kind. Open Audio Analyzer draws almost nothing with
+/// Material, but its menus are one of the few stock widgets worth keeping: they
+/// handle screen-edge collision, keyboard traversal and dismissal correctly,
+/// and reimplementing that to avoid one dependency would be a poor trade.
 
 /// Anchors a menu at a pointer position.
 RelativeRect menuPositionAt(BuildContext context, Offset globalPosition) {
@@ -21,19 +21,19 @@ RelativeRect menuPositionAt(BuildContext context, Offset globalPosition) {
   );
 }
 
-PopupMenuItem<T> belMenuItem<T>(
+PopupMenuItem<T> oaaMenuItem<T>(
   BuildContext context,
   T value,
   String label, {
   Color? color,
 }) {
-  final colors = BelTheme.of(context);
+  final colors = OaaTheme.of(context);
   return PopupMenuItem<T>(
     value: value,
     height: Space.xl,
     child: Text(
       label,
-      style: BelType.body.copyWith(color: color ?? colors.textPrimary),
+      style: OaaType.body.copyWith(color: color ?? colors.textPrimary),
     ),
   );
 }
@@ -48,14 +48,14 @@ Future<ModuleKind?> showModuleKindMenu(
   BuildContext context,
   Offset globalPosition,
 ) {
-  final colors = BelTheme.of(context);
+  final colors = OaaTheme.of(context);
   return showMenu<ModuleKind>(
     context: context,
     color: colors.panelRaised,
     position: menuPositionAt(context, globalPosition),
     items: [
       for (final kind in ModuleKind.values)
-        belMenuItem(context, kind, kind.label),
+        oaaMenuItem(context, kind, kind.label),
     ],
   );
 }

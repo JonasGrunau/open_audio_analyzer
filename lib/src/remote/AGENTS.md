@@ -16,10 +16,10 @@ halves live here.
 | `mdns/dns_message.dart` | Just enough DNS to advertise and find one service. |
 | `mdns/mdns_service.dart` | The responder, and the browser every platform but iOS uses. |
 | `mdns/host_discovery.dart` | `DiscoveredHost`, the `HostDiscovery` interface the picker draws, and which of the two searches this platform is allowed to run. |
-| `mdns/bonjour_discovery.dart` | The iOS search, over a channel to the system responder. Its native half is `ios/Runner/BelBonjour.swift` — the only platform channel in the application. |
+| `mdns/bonjour_discovery.dart` | The iOS search, over a channel to the system responder. Its native half is `ios/Runner/OaaBonjour.swift` — the only platform channel in the application. |
 
 `docs/WIRE.md` is the protocol and it is normative. The codec is
-`packages/bel_wire/`; nothing in here re-implements a byte of it.
+`packages/oaa_wire/`; nothing in here re-implements a byte of it.
 
 ## Rules
 
@@ -29,12 +29,12 @@ halves live here.
   `BarButton`s and an `AlertDialog` where every other panel is a
   `PanelScaffold`. The second one did not merely look wrong: a route pushed
   with `showDialog` is built by the `Navigator`, above `MaterialApp.home` —
-  which is where the application's `BelTheme` lived at the time — so the panel
-  threw "No BelTheme in scope" for the whole of Phase 6 and the button did
+  which is where the application's `OaaTheme` lived at the time — so the panel
+  threw "No OaaTheme in scope" for the whole of Phase 6 and the button did
   nothing at all. Chrome
-  here comes from `bel_ui` and `lib/src/app/bar_controls.dart`; panels open
-  through `showBelPanel`, and how one is composed is specified in
-  `packages/bel_ui/AGENTS.md` § Panels. `test/panels_test.dart` opens this one
+  here comes from `oaa_ui` and `lib/src/app/bar_controls.dart`; panels open
+  through `showOaaPanel`, and how one is composed is specified in
+  `packages/oaa_ui/AGENTS.md` § Panels. `test/panels_test.dart` opens this one
   by tapping the button, which is the only way that class of failure is caught.
 
   It happened a third time and outlasted both: the display's own connect screen
@@ -166,57 +166,59 @@ halves live here.
   threw, because its `stop` happens not to await — which is one added `await`
   away from the same defect, and why both are written the same way.
 
-- **An `EventChannel` holds one sink, so Bel subscribes to the Bonjour channel
-  once and shares it.** The companion trap to the one above, and it hides
-  better, because both halves of it are silent. A second `listen` on a channel
-  that already has a sink calls the *native* handler's `onCancel` before
+- **An `EventChannel` holds one sink, so Open Audio Analyzer subscribes to the
+  Bonjour channel once and shares it.** The companion trap to the one above, and
+  it hides better, because both halves of it are silent. A second `listen` on a
+  channel that already has a sink calls the *native* handler's `onCancel` before
   installing the new one — so an arriving reader tears down the browse the
   leaving one is still showing — and a `cancel` that arrives with no sink set is
   answered `PlatformException(error, No active stream to cancel)` from inside
-  the framework's own `onCancel`, where nothing in Bel can catch it. Two host
-  pickers overlap by a frame every time one replaces another, because a route's
-  `initState` runs before the outgoing route's `dispose`, and that frame was
-  enough: the panel on screen searched a browse that had already been cancelled
-  and then logged the exception on its way out. `_SharedBrowse` in
-  `mdns/bonjour_discovery.dart` reference-counts the readers, replays the last
-  list to one that attaches mid-browse, and cancels when the last lets go. The
-  engine's rule is `SetStreamHandlerMessageHandlerOnChannel` in
+  the framework's own `onCancel`, where nothing in Open Audio Analyzer can catch
+  it. Two host pickers overlap by a frame every time one replaces another,
+  because a route's `initState` runs before the outgoing route's `dispose`, and
+  that frame was enough: the panel on screen searched a browse that had already
+  been cancelled and then logged the exception on its way out. `_SharedBrowse`
+  in `mdns/bonjour_discovery.dart` reference-counts the readers, replays the
+  last list to one that attaches mid-browse, and cancels when the last lets go.
+  The engine's rule is `SetStreamHandlerMessageHandlerOnChannel` in
   `FlutterChannels.mm`; a second channel added here inherits the same rule.
 
 - **An instance name is one label, and the writer splits on dots.** Those two
   facts together are a trap that cost a phase. `Platform.localHostname` is
   `studio-mac.local` on a plain network and `studio-mac.fritz.box` on any
   network whose DHCP server hands out a domain — which is most routers — and
-  advertising that produced `studio-mac` `fritz` `box` `_bel` `_tcp` `local`:
-  six labels where DNS-SD defines four. **Bel's own reader accepted it**, since
-  `_instanceOf` takes everything before `_bel._tcp.local`, so desktop found
-  desktop and the feature looked healthy; the system responder drops the record,
-  so `dns-sd -B` and every iPad saw nothing while the host sat there answering
-  every query on the wire. `MdnsResponder.instanceLabel` is the single place
-  that guarantees the label, and the friendly name — free-form, dots and all —
-  travels in the TXT record's `name`, which is what a picker shows.
+  advertising that produced `studio-mac` `fritz` `box` `_oaa` `_tcp` `local`:
+  six labels where DNS-SD defines four. **Open Audio Analyzer's own reader
+  accepted it**, since `_instanceOf` takes everything before `_oaa._tcp.local`,
+  so desktop found desktop and the feature looked healthy; the system responder
+  drops the record, so `dns-sd -B` and every iPad saw nothing while the host sat
+  there answering every query on the wire. `MdnsResponder.instanceLabel` is the
+  single place that guarantees the label, and the friendly name — free-form,
+  dots and all — travels in the TXT record's `name`, which is what a picker
+  shows.
 
   The corollary is the SRV target. Sanitising the instance into a host name
   yields the machine's own `.local` name, which the system responder owns and
   **defends**: an address record it did not announce, for a name it owns, is a
-  conflict, and RFC 6762 says the loser renames itself. Bel announces every
-  interface's address on every interface, so its set differs from the system's
-  as soon as a machine has two, and the machine that would get renamed is the
-  user's. The target is `<name>-bel.local`, which nothing else claims.
+  conflict, and RFC 6762 says the loser renames itself. Open Audio Analyzer
+  announces every interface's address on every interface, so its set differs
+  from the system's as soon as a machine has two, and the machine that would get
+  renamed is the user's. The target is `<name>-oaa.local`, which nothing else
+  claims.
 
 - **The DNS reader must survive anything.** Port 5353 carries every device on
-  the network announcing services Bel has never heard of, some of it malformed
-  and some of it hostile. `decodeMessage` returns null rather than throwing,
-  compression pointers must point backwards and have a jump budget, and an
-  unknown record type advances the cursor to the end of its rdata so the records
-  after it still parse.
+  the network announcing services Open Audio Analyzer has never heard of, some
+  of it malformed and some of it hostile. `decodeMessage` returns null rather
+  than throwing, compression pointers must point backwards and have a jump
+  budget, and an unknown record type advances the cursor to the end of its rdata
+  so the records after it still parse.
 
 ## Platform notes
 
 - **macOS needs both entitlements and a usage string.** The same binary listens
   and connects, so `com.apple.security.network.server` *and* `.client` are set
   in both entitlement files. `NSLocalNetworkUsageDescription` and
-  `NSBonjourServices` (`_bel._tcp`) are in both `Info.plist`s; without them the
+  `NSBonjourServices` (`_oaa._tcp`) are in both `Info.plist`s; without them the
   OS silently drops multicast and the symptom is a host nobody can find, with
   nothing logged.
 
@@ -230,8 +232,8 @@ halves live here.
 
   **It is also how a terminal poisons a test.** macOS attributes the permission
   to the *responsible* process, so a build launched from a shell inherits the
-  shell's answer: `flutter test` and a bare `bel.app/Contents/MacOS/bel` are
-  denied while the same code inside `open -a bel.app` is allowed. A discovery
+  shell's answer: `flutter test` and a bare `oaa.app/Contents/MacOS/oaa` are
+  denied while the same code inside `open -a oaa.app` is allowed. A discovery
   test that opens a real socket therefore fails on a machine where the feature
   works. `launch_options.dart` records the same trap for the microphone.
 
@@ -241,7 +243,7 @@ halves live here.
   grants per team on request — so a project people build for themselves cannot
   have one. `NSLocalNetworkUsageDescription` and `NSBonjourServices` do **not**
   cover it; they cover Bonjour through the system responder, which is why
-  `BonjourDiscovery` and `ios/Runner/BelBonjour.swift` exist and need no
+  `BonjourDiscovery` and `ios/Runner/OaaBonjour.swift` exist and need no
   entitlement of any kind. The **simulator is exempt from the restriction**,
   which is how a tablet shipped with a browser that had never found anything:
   it works on a simulator and fails on the iPad, silently, for a phase.

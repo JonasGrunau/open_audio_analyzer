@@ -1,0 +1,30 @@
+# Regenerate with:  dart run ffigen --config ffigen.yaml
+#
+# The generated file is committed. It has to be: `flutter analyze` and the IDE
+# both need it to exist before any build hook has ever run, and a contributor
+# who only touches Dart should never be required to have a C toolchain.
+#
+# The tripwire for it going stale is OAA_ABI_VERSION, which the Dart side
+# asserts against the compiled library at startup. Bump it in oaa.h whenever the
+# header changes shape, and a forgotten regeneration fails loudly at launch
+# rather than quietly misreading the snapshot struct.
+name: OaaBindings
+description: |
+  Generated bindings for `engine/include/oaa/oaa.h`.
+
+  AUTO GENERATED — do not edit. Hand written bindings live in
+  `lib/src/oaa_ffi.dart`.
+output: 'lib/oaa_engine_bindings_generated.dart'
+headers:
+  entry-points:
+    - '../../engine/include/oaa/oaa.h'
+  include-directives:
+    # Only our own header. Without this, everything reachable from <stdint.h>
+    # comes along too.
+    - '**/oaa.h'
+compiler-opts:
+  - '-I../../engine/include'
+ffi-native:
+comments:
+  style: any
+  length: full

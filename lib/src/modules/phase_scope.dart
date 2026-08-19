@@ -4,8 +4,8 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
-import 'package:bel_core/bel_core.dart';
-import 'package:bel_ui/bel_ui.dart';
+import 'package:oaa_core/oaa_core.dart';
+import 'package:oaa_ui/oaa_ui.dart';
 import 'package:flutter/widgets.dart';
 
 import '../clock/meter_clock.dart';
@@ -121,11 +121,11 @@ class _PhaseScopeModuleState extends State<PhaseScopeModule> {
 
   @override
   Widget build(BuildContext context) {
-    final colors = BelTheme.of(context);
+    final colors = OaaTheme.of(context);
 
     if (_builtColor != colors.textFaint) {
       _builtColor = colors.textFaint;
-      final style = BelType.tick.copyWith(color: colors.textFaint);
+      final style = OaaType.tick.copyWith(color: colors.textFaint);
       _left = layoutParagraph('L', style);
       _right = layoutParagraph('R', style);
       _mono = layoutParagraph('M', style);
@@ -163,13 +163,13 @@ class _PhaseScopePainter extends MeterPainter {
   }) : _guide = (Paint()
          ..color = colors.hairline
          ..style = PaintingStyle.stroke
-         ..strokeWidth = BelStroke.hairline),
+         ..strokeWidth = OaaStroke.hairline),
        _correlation = (Paint()..color = colors.meterFill),
        _correlationTrack = (Paint()..color = colors.meterTrack),
        super(repaint: repaint);
 
   final MeterSource engine;
-  final BelColors colors;
+  final OaaColors colors;
   final _PhaseScopeModuleState state;
 
   final Paint _guide;

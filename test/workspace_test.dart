@@ -7,8 +7,8 @@
 // drag arithmetic, the hit-test layering — are left for canvas_test.dart, which
 // is slower and less precise by nature.
 
-import 'package:bel/src/canvas/workspace.dart';
-import 'package:bel_core/bel_core.dart';
+import 'package:oaa/src/canvas/workspace.dart';
+import 'package:oaa_core/oaa_core.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -20,12 +20,12 @@ ProviderContainer _container() {
 
 /// A container sitting on a fresh, empty tab.
 ///
-/// What Bel opens with is a product decision — what a new user should see — and
-/// it is dense on purpose. A test that fills a canvas until it refuses, or
-/// counts what is left after a delete, would otherwise be asserting that
-/// decision rather than the edit it is about, and would fail the day somebody
-/// adds a meter to the default layout. Only the `default preset` group above
-/// looks at the real thing.
+/// What Open Audio Analyzer opens with is a product decision — what a new user
+/// should see — and it is dense on purpose. A test that fills a canvas until it
+/// refuses, or counts what is left after a delete, would otherwise be asserting
+/// that decision rather than the edit it is about, and would fail the day
+/// somebody adds a meter to the default layout. Only the `default preset` group
+/// above looks at the real thing.
 ProviderContainer _onEmptyTab() {
   final container = _container();
   container.read(workspaceProvider.notifier).addTab();

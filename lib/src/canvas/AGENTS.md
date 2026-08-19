@@ -8,11 +8,11 @@ The arrangeable canvas. GPL-3.0-or-later.
 | `grid_canvas.dart` | The canvas: positioning, drag, resize, selection, the drag preview overlay. |
 | `canvas_notice.dart` | The one line the canvas says out loud. Refusals only. |
 | `module_host.dart` | The only place that knows which `ModuleKind`s exist as code, and where "too small" is decided — in cells *and* in pixels. |
-| `tab_strip.dart` | Tabs, inline rename, and the add/undo/redo buttons. Three of the four are a word with a `BelMark` or a `+` beside it; only the tab plus stands alone. |
+| `tab_strip.dart` | Tabs, inline rename, and the add/undo/redo buttons. Three of the four are a word with a `OaaMark` or a `+` beside it; only the tab plus stands alone. |
 | `menus.dart` | The popup menus the canvas and the strip share. |
 
 The placement rules themselves are **not here** — they are pure functions over
-`TabSpec` in `bel_core/src/grid.dart`, so the same rules hold for a preset
+`TabSpec` in `oaa_core/src/grid.dart`, so the same rules hold for a preset
 loaded from disk and for the remote display, and so they can be tested with no
 window. Anything that decides *where a module may go* belongs there; anything
 that decides *what a pointer means* belongs here.
@@ -66,10 +66,10 @@ that decides *what a pointer means* belongs here.
 - **Selection is not an edit.** It never enters the undo history. Undo that
   walks back through every click before it undoes anything is undo nobody uses.
 
-- **Every affordance needs a non-keyboard, non-right-click route.** Bel runs on
-  tablets. Add, undo and redo are buttons in the tab strip for that reason, and
-  a long press opens the same menu a secondary click does — on empty canvas and
-  on a tab.
+- **Every affordance needs a non-keyboard, non-right-click route.** Open Audio
+  Analyzer runs on tablets. Add, undo and redo are buttons in the tab strip for
+  that reason, and a long press opens the same menu a secondary click does — on
+  empty canvas and on a tab.
 
 - **Not a double tap. Ever.** `DoubleTapGestureRecognizer` holds the gesture
   arena from the first tap until `kDoubleTapTimeout` — 300 ms — and a held

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import 'package:bel_core/bel_core.dart';
-import 'package:bel_ui/bel_ui.dart';
+import 'package:oaa_core/oaa_core.dart';
+import 'package:oaa_ui/oaa_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -72,8 +72,8 @@ class _RemoteDisplayControlState extends ConsumerState<RemoteDisplayControl> {
     // A `BarButton` like the four beside it, not a `TextButton`. A stock
     // Material button in this row has no border where its neighbours have one,
     // Material's own minimum size rather than the bar's, an ink ripple nothing
-    // else in Bel draws, and no keyboard focus ring — five differences that
-    // read as one: the button that does not belong here.
+    // else in Open Audio Analyzer draws, and no keyboard focus ring — five
+    // differences that read as one: the button that does not belong here.
     return ValueListenableBuilder<bool>(
       valueListenable: _service.isPublishing,
       builder: (context, publishing, _) => ValueListenableBuilder<int>(
@@ -104,13 +104,13 @@ class _RemoteDisplayControlState extends ConsumerState<RemoteDisplayControl> {
   }
 
   void _open(BuildContext context) {
-    // `showBelPanel`, not `showDialog`. A route is built by the `Navigator`,
+    // `showOaaPanel`, not `showDialog`. A route is built by the `Navigator`,
     // which sits above `MaterialApp.home` and therefore above the application's
-    // `BelTheme` — so a panel that reads the palette the obvious way throws
-    // "No BelTheme in scope" the moment it opens, in release as well as debug.
+    // `OaaTheme` — so a panel that reads the palette the obvious way throws
+    // "No OaaTheme in scope" the moment it opens, in release as well as debug.
     // This one did, for the whole of Phase 6: the button was unclickable and
     // nothing said so until somebody pressed it.
-    showBelPanel<void>(
+    showOaaPanel<void>(
       context: context,
       builder: (context) => _PairingPanel(service: _service),
     );
@@ -128,7 +128,7 @@ class _RemoteDisplayControlState extends ConsumerState<RemoteDisplayControl> {
 /// by pressing the button that looked most like Cancel.
 ///
 /// The second panel is *pushed* rather than this one swapping its own body.
-/// `showBelPanel` is a `showGeneralDialog` route with a zero-length transition,
+/// `showOaaPanel` is a `showGeneralDialog` route with a zero-length transition,
 /// so pushing costs nothing on screen, Escape and the system back gesture
 /// return here for free, and each panel stays a plain widget with its own
 /// title. A panel that mutated its own body would have to hand-roll the back
@@ -150,8 +150,8 @@ class _PairingPanel extends StatelessWidget {
             title: 'Send or receive',
             ruled: false,
             note:
-                'Bel can send these meters to another screen, or become a '
-                'screen for a Bel running somewhere else.',
+                'Open Audio Analyzer can send these meters to another screen, or become a '
+                'screen for an Open Audio Analyzer running somewhere else.',
             children: [
               ValueListenableBuilder<bool>(
                 valueListenable: service.isPublishing,
@@ -165,7 +165,7 @@ class _PairingPanel extends StatelessWidget {
                         // them apart — and it is brightness rather than hue,
                         // like the bar button, because the signal colour means
                         // "in spec" and nothing else.
-                        mark: BelMark.broadcast,
+                        mark: OaaMark.broadcast,
                         opens: true,
                         // The row carries the live state, so "am I already
                         // publishing" is answered on the first screen rather
@@ -180,7 +180,7 @@ class _PairingPanel extends StatelessWidget {
                             'Publishing. $n displays attached.',
                         },
                         selected: publishing,
-                        onTap: () => showBelPanel<void>(
+                        onTap: () => showOaaPanel<void>(
                           context: context,
                           builder: (context) => _SendPanel(service: service),
                         ),
@@ -194,10 +194,10 @@ class _PairingPanel extends StatelessWidget {
               const SizedBox(height: Space.sm),
               PanelListRow(
                 title: 'Show another machine',
-                mark: BelMark.display,
+                mark: OaaMark.display,
                 opens: true,
                 note:
-                    'Turn this screen into a display for a Bel running '
+                    'Turn this screen into a display for an Open Audio Analyzer running '
                     'elsewhere. It shows only — it cannot change what that '
                     'machine is measuring.',
                 onTap: () => _receive(context),
@@ -217,7 +217,7 @@ class _PairingPanel extends StatelessWidget {
   Future<void> _receive(BuildContext context) async {
     final navigator = Navigator.of(context);
 
-    await showBelPanel<void>(
+    await showOaaPanel<void>(
       context: context,
       builder: (context) => HostPickerPanel(
         onClose: () => Navigator.of(context).pop(),
@@ -288,7 +288,7 @@ class _SendPanelState extends ConsumerState<_SendPanel> {
 
   @override
   Widget build(BuildContext context) {
-    final colors = BelTheme.of(context);
+    final colors = OaaTheme.of(context);
     final service = widget.service;
 
     // Read from the settings rather than from the service: the settings are
@@ -303,7 +303,7 @@ class _SendPanelState extends ConsumerState<_SendPanel> {
       footer: Row(
         children: [
           const Spacer(),
-          BelButton(
+          OaaButton(
             label: 'Done',
             emphasis: ButtonEmphasis.primary,
             onPressed: () => Navigator.of(context).pop(),
@@ -335,7 +335,7 @@ class _SendPanelState extends ConsumerState<_SendPanel> {
                           (true, final n) =>
                             'Publishing. $n displays attached.',
                         },
-                        child: BelToggle(
+                        child: OaaToggle(
                           value: publishing,
                           semanticLabel: 'Publish to this network',
                           onChanged: (value) async {
@@ -368,7 +368,7 @@ class _SendPanelState extends ConsumerState<_SendPanel> {
                 'network who can find it can watch these meters, so leave it '
                 'off on a network you do not trust.',
                 tone: colors.warn,
-                mark: BelMark.warning,
+                mark: OaaMark.warning,
               ),
               ValueListenableBuilder<String?>(
                 valueListenable: service.failure,
@@ -380,7 +380,7 @@ class _SendPanelState extends ConsumerState<_SendPanel> {
                     : PanelNote(
                         'Could not publish: $failure',
                         tone: colors.over,
-                        mark: BelMark.warning,
+                        mark: OaaMark.warning,
                       ),
               ),
             ],
@@ -408,20 +408,20 @@ class _SendPanelState extends ConsumerState<_SendPanel> {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    BelTextField(
+                    OaaTextField(
                       controller: _name,
                       width: 200,
                       onSubmitted: (_) => _apply(),
                     ),
                     const SizedBox(width: Space.sm),
-                    BelTextField(
+                    OaaTextField(
                       controller: _port,
                       width: 88,
                       numeric: true,
                       onSubmitted: (_) => _apply(),
                     ),
                     const SizedBox(width: Space.sm),
-                    BelButton(label: 'Apply', onPressed: _apply),
+                    OaaButton(label: 'Apply', onPressed: _apply),
                   ],
                 ),
               ),

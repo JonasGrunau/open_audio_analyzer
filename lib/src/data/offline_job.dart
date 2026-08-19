@@ -8,13 +8,13 @@
 // app that has stopped metering. So the analysis runs on its own isolate and
 // reports back, and the live meters keep their frame budget throughout.
 //
-// Cancellation goes through [BelCancelToken] rather than killing the isolate,
+// Cancellation goes through [OaaCancelToken] rather than killing the isolate,
 // because the worker owns a native engine and an open decoder and killing it
-// mid-loop leaks both. The reasoning is with the token, in bel_engine.
+// mid-loop leaks both. The reasoning is with the token, in oaa_engine.
 
 import 'dart:isolate';
 
-import 'package:bel_engine/bel_engine.dart';
+import 'package:oaa_engine/oaa_engine.dart';
 
 /// What a running analysis reports back.
 sealed class OfflineEvent {
@@ -66,7 +66,7 @@ class OfflineAnalysisJob {
     String path, {
     Duration timelineInterval = const Duration(milliseconds: 100),
   }) async {
-    final token = BelCancelToken();
+    final token = OaaCancelToken();
     final receive = ReceivePort();
 
     try {
@@ -91,7 +91,7 @@ class OfflineAnalysisJob {
     return OfflineAnalysisJob._(token, _listen(receive));
   }
 
-  final BelCancelToken _token;
+  final OaaCancelToken _token;
   final Stream<OfflineEvent> _events;
 
   Stream<OfflineEvent> get events => _events;
@@ -147,7 +147,7 @@ class _Request {
 
 void _worker(_Request request) {
   final reply = request.reply;
-  final cancel = BelCancelToken.fromAddress(request.cancelAddress);
+  final cancel = OaaCancelToken.fromAddress(request.cancelAddress);
 
   // Progress is throttled on wall-clock time rather than sent for every
   // timeline point. At a point every 100 ms of signal, an hour-long file would
@@ -172,9 +172,9 @@ void _worker(_Request request) {
     reply.send(OfflineDoneEvent(result));
   } on OfflineCancelled {
     reply.send(const OfflineCancelledEvent());
-  } on BelFileException catch (error) {
+  } on OaaFileException catch (error) {
     reply.send(OfflineFailedEvent(error.message));
-  } on BelEngineException catch (error) {
+  } on OaaEngineException catch (error) {
     reply.send(OfflineFailedEvent(error.message));
   } on Object catch (error) {
     reply.send(OfflineFailedEvent('$error'));

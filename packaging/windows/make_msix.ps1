@@ -1,9 +1,9 @@
-# make_msix.ps1 — build Bel for Windows and pack it as an msix.
+# make_msix.ps1 — build Open Audio Analyzer for Windows and pack it as an msix.
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
 # Usage:  pwsh packaging/windows/make_msix.ps1 [-SkipBuild]
-# Output: build/packaging/Bel-<version>-windows-x64.msix
+# Output: build/packaging/Open Audio Analyzer-<version>-windows-x64.msix
 #
 # ---------------------------------------------------------------------------
 # No pub package does this, on purpose
@@ -18,9 +18,9 @@
 # ---------------------------------------------------------------------------
 # Signing, and the thing that will actually bite
 #
-#   BEL_WINDOWS_CERT      path to a .pfx
-#   BEL_WINDOWS_CERT_PASS its password
-#   BEL_WINDOWS_PUBLISHER the certificate's subject, e.g. "CN=Jonas Grunau"
+#   OAA_WINDOWS_CERT      path to a .pfx
+#   OAA_WINDOWS_CERT_PASS its password
+#   OAA_WINDOWS_PUBLISHER the certificate's subject, e.g. "CN=Jonas Grunau"
 #
 # **`Publisher` in the manifest must equal the certificate's subject exactly.**
 # Not the display name, not a tidied version of it — the DN as the certificate
@@ -43,7 +43,7 @@ $version = (Select-String -Path pubspec.yaml -Pattern '^version:\s*(.+)$').Match
 $bundle = 'build\windows\x64\runner\Release'
 $out = 'build\packaging'
 $staging = "$out\msix-staging"
-$msix = "$out\Bel-$version-windows-x64.msix"
+$msix = "$out\Open Audio Analyzer-$version-windows-x64.msix"
 
 if (-not $SkipBuild) {
   Write-Host '==> flutter build windows --release'
@@ -97,7 +97,7 @@ Get-ChildItem 'assets\fonts\*-LICENSE.txt' -ErrorAction SilentlyContinue |
 
 # Windows wants four parts and rejects a three-part version with a message that
 # does not mention the version.
-$publisher = if ($env:BEL_WINDOWS_PUBLISHER) { $env:BEL_WINDOWS_PUBLISHER } else { 'CN=Bel Development' }
+$publisher = if ($env:OAA_WINDOWS_PUBLISHER) { $env:OAA_WINDOWS_PUBLISHER } else { 'CN=Open Audio Analyzer Development' }
 (Get-Content 'packaging\windows\AppxManifest.xml' -Raw).
   Replace('{{VERSION}}', "$version.0").
   Replace('{{PUBLISHER}}', $publisher) |
@@ -116,21 +116,21 @@ Remove-Item $staging -Recurse -Force
 
 # --- Sign ------------------------------------------------------------------
 
-if ($env:BEL_WINDOWS_CERT) {
+if ($env:OAA_WINDOWS_CERT) {
   Write-Host '==> signtool'
   # SHA256 because SHA1 packages are refused outright by current Windows, and
   # a timestamp so the signature outlives the certificate.
   & $signtool sign /fd SHA256 `
-    /f $env:BEL_WINDOWS_CERT `
-    /p $env:BEL_WINDOWS_CERT_PASS `
+    /f $env:OAA_WINDOWS_CERT `
+    /p $env:OAA_WINDOWS_CERT_PASS `
     /tr http://timestamp.digicert.com /td SHA256 `
     $msix
   if ($LASTEXITCODE -ne 0) { throw 'signtool failed' }
   Write-Host '==> signed'
 } else {
   Write-Host '==> NOT signed. Windows will refuse to install this package.'
-  Write-Host '    Set BEL_WINDOWS_CERT, BEL_WINDOWS_CERT_PASS and'
-  Write-Host '    BEL_WINDOWS_PUBLISHER (the certificate subject, exactly).'
+  Write-Host '    Set OAA_WINDOWS_CERT, OAA_WINDOWS_CERT_PASS and'
+  Write-Host '    OAA_WINDOWS_PUBLISHER (the certificate subject, exactly).'
 }
 
 Write-Host $msix

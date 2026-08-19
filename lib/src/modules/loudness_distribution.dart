@@ -3,9 +3,9 @@
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
-import 'package:bel_core/bel_core.dart';
-import 'package:bel_engine/bel_engine.dart';
-import 'package:bel_ui/bel_ui.dart';
+import 'package:oaa_core/oaa_core.dart';
+import 'package:oaa_engine/oaa_engine.dart';
+import 'package:oaa_ui/oaa_ui.dart';
 import 'package:flutter/widgets.dart';
 
 import '../clock/meter_clock.dart';
@@ -61,15 +61,15 @@ class _LoudnessDistributionModuleState
   /// The published range, exactly. Drawing a different one would either clip
   /// bins that exist or invent axis that has no bins behind it.
   static const _scale = MeterScale(
-    min: kBelHistogramMinLufs,
-    max: kBelHistogramMaxLufs,
+    min: kOaaHistogramMinLufs,
+    max: kOaaHistogramMaxLufs,
     step: 10,
   );
 
   /// Two points per bar — top and bottom — drawn as one `PointMode.lines` call.
   /// Allocated once: a `Path` rebuilt each frame would be 120 segments of
   /// garbage sixty times a second.
-  final Float32List _bars = Float32List(kBelHistogramBins * 4);
+  final Float32List _bars = Float32List(kOaaHistogramBins * 4);
 
   /// The target line's dashes, allocated on resize. Every slot is written every
   /// frame, so the whole buffer goes over as it is — a `sublistView` to trim it
@@ -96,7 +96,7 @@ class _LoudnessDistributionModuleState
   Paint? _fillUnder;
   Paint? _fillOver;
   Rect? _shadedPlot;
-  BelColors? _shadedColors;
+  OaaColors? _shadedColors;
 
   /// The same construction, direction and alphas as the Histogram's fill: a
   /// shader on the `Paint`, evaluated in canvas space, so a hundred and twenty
@@ -104,7 +104,7 @@ class _LoudnessDistributionModuleState
   /// `Path` would — and none of them allocates. Bright at the top means the
   /// mode of the distribution is the brightest thing on the module, which is
   /// the right emphasis: it is where the programme actually lived.
-  void _ensureFills(Rect plot, BelColors colors, double barWidth) {
+  void _ensureFills(Rect plot, OaaColors colors, double barWidth) {
     if (_shadedPlot == plot && _shadedColors == colors) return;
     _shadedPlot = plot;
     _shadedColors = colors;
@@ -134,7 +134,7 @@ class _LoudnessDistributionModuleState
 
   @override
   Widget build(BuildContext context) {
-    final colors = BelTheme.of(context);
+    final colors = OaaTheme.of(context);
 
     if (_graticule == null ||
         !_graticule!.matches(_scale, ScaleSide.bottom, colors.textFaint)) {
@@ -145,12 +145,12 @@ class _LoudnessDistributionModuleState
         lineColor: colors.hairline,
         labelColor: colors.textFaint,
       );
-      final style = BelType.tick.copyWith(color: colors.textMuted);
+      final style = OaaType.tick.copyWith(color: colors.textMuted);
       _lowLabel = layoutParagraph('10%', style);
       _highLabel = layoutParagraph('95%', style);
       _unit = layoutParagraph(
         'LUFS',
-        BelType.tick.copyWith(color: colors.textFaint),
+        OaaType.tick.copyWith(color: colors.textFaint),
       );
     }
 
@@ -193,18 +193,18 @@ class _DistributionPainter extends MeterPainter {
        // matches the bars is a percentile line nobody can find.
        _percentile = (Paint()
          ..color = colors.textPrimary
-         ..strokeWidth = BelStroke.mark
+         ..strokeWidth = OaaStroke.mark
          ..isAntiAlias = false),
        _target = (Paint()
          ..color = colors.textMuted
-         ..strokeWidth = BelStroke.mark
+         ..strokeWidth = OaaStroke.mark
          ..strokeCap = StrokeCap.butt
          ..isAntiAlias = false),
        super(repaint: repaint);
 
   final MeterSource engine;
   final Calibration calibration;
-  final BelColors colors;
+  final OaaColors colors;
   final ScaleGraticule graticule;
   final _LoudnessDistributionModuleState state;
 
@@ -223,7 +223,7 @@ class _DistributionPainter extends MeterPainter {
     );
     if (plot.width < 80 || plot.height < 32) return;
 
-    final barWidth = plot.width / kBelHistogramBins;
+    final barWidth = plot.width / kOaaHistogramBins;
     state._ensureFills(plot, colors, barWidth);
     state._ensureDashes(plot.height);
 
@@ -277,7 +277,7 @@ class _DistributionPainter extends MeterPainter {
     // more than a few percent in any one bin — and a plot fixed at 0..1 would
     // be an empty rectangle with a hairline along the bottom.
     var tallest = 0.0;
-    for (var bin = 0; bin < kBelHistogramBins; bin++) {
+    for (var bin = 0; bin < kOaaHistogramBins; bin++) {
       final value = engine.histogram[bin];
       if (value > tallest) tallest = value;
     }
@@ -296,7 +296,7 @@ class _DistributionPainter extends MeterPainter {
       // a percentile. The strip left over is where the annotations live.
       final headroom = plot.height * _annotationStrip;
 
-      for (var bin = 0; bin < kBelHistogramBins; bin++) {
+      for (var bin = 0; bin < kOaaHistogramBins; bin++) {
         final x = plot.left + (bin + 0.5) * barWidth;
         final height =
             engine.histogram[bin] / tallest * (plot.height - headroom);
@@ -354,7 +354,7 @@ class _DistributionPainter extends MeterPainter {
 
     final label = state._targetValue.of(
       Metric.lufsIntegrated.format(calibration.lufsTarget),
-      BelType.tick.copyWith(color: colors.textMuted),
+      OaaType.tick.copyWith(color: colors.textMuted),
     );
 
     final scale = graticule.scale;

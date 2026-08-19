@@ -3,8 +3,8 @@
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
-import 'package:bel_core/bel_core.dart';
-import 'package:bel_ui/bel_ui.dart';
+import 'package:oaa_core/oaa_core.dart';
+import 'package:oaa_ui/oaa_ui.dart';
 import 'package:flutter/widgets.dart';
 
 import '../clock/meter_clock.dart';
@@ -112,11 +112,11 @@ class _AlertMeterModuleState extends State<AlertMeterModule> {
 
   @override
   Widget build(BuildContext context) {
-    final colors = BelTheme.of(context);
+    final colors = OaaTheme.of(context);
 
     if (_labelColor != colors.textFaint) {
       _labelColor = colors.textFaint;
-      final style = BelType.label.copyWith(color: colors.textFaint);
+      final style = OaaType.label.copyWith(color: colors.textFaint);
       _name = layoutParagraph(widget.metric.label.toUpperCase(), style);
       _worstLabel = layoutParagraph('WORST', style);
     }
@@ -144,14 +144,14 @@ class _AlertPainter extends MeterPainter {
     required Listenable repaint,
   }) : _lamp = Paint(),
        _rule = (Paint()
-         ..strokeWidth = BelStroke.emphasis
+         ..strokeWidth = OaaStroke.emphasis
          ..isAntiAlias = false),
        super(repaint: repaint);
 
   final MeterSource engine;
   final Metric metric;
   final Calibration calibration;
-  final BelColors colors;
+  final OaaColors colors;
   final _AlertMeterModuleState state;
 
   final Paint _lamp;
@@ -197,7 +197,7 @@ class _AlertPainter extends MeterPainter {
         .toDouble();
     final live = state._value.of(
       metric.format(value),
-      BelType.reading(fontSize).copyWith(color: color),
+      OaaType.reading(fontSize).copyWith(color: color),
       maxWidth: size.width - _textLeft,
     );
 
@@ -234,7 +234,7 @@ class _AlertPainter extends MeterPainter {
       canvas.drawParagraph(
         state._worstValue.of(
           metric.format(state.worstValue),
-          BelType.reading(worstSize).copyWith(color: latched),
+          OaaType.reading(worstSize).copyWith(color: latched),
         ),
         Offset(
           _textLeft + state._worstLabel!.longestLine + Space.xs,

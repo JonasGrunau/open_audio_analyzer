@@ -1,6 +1,6 @@
 import struct, zlib, glob, os, sys
 
-SHOTS = '/private/tmp/claude-501/-Users-jonasgrunau-Projects-open-music-analyzer/96d62785-4014-4fa3-b7d7-3d6015c6a1bc/scratchpad/shots2'
+SHOTS = '/private/tmp/claude-501/-Users-jonasgrunau-Projects-open-audio-analyzer/96d62785-4014-4fa3-b7d7-3d6015c6a1bc/scratchpad/shots2'
 
 
 def read_png(path):

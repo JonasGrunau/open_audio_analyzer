@@ -5,7 +5,7 @@
 ///
 /// There are two implementations and the picker cannot tell them apart:
 ///
-/// * [MdnsBrowser] speaks multicast DNS over a socket Bel owns. It is the one
+/// * [MdnsBrowser] speaks multicast DNS over a socket Open Audio Analyzer owns. It is the one
 ///   that works on macOS, Windows and Linux, and it is the reason
 ///   `mdns/dns_message.dart` exists rather than a plugin — see its header.
 /// * `BonjourDiscovery` asks the system responder, over a channel. It exists
@@ -91,7 +91,7 @@ class DiscoveredHost {
   );
 }
 
-/// Watching the network for Bel hosts.
+/// Watching the network for Open Audio Analyzer hosts.
 abstract interface class HostDiscovery {
   /// Hosts seen recently, newest information winning. A [ValueNotifier] rather
   /// than a stream because the discovery list is a widget that rebuilds — this

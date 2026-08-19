@@ -19,7 +19,7 @@ class MainFlutterWindow: NSWindow {
 
   /// The height of the bar Flutter draws across the top of the window.
   ///
-  /// **The same number as `_StatusBar.height` in `lib/src/app/bel_app.dart`.**
+  /// **The same number as `_StatusBar.height` in `lib/src/app/oaa_app.dart`.**
   /// There is no way to share it — this file is compiled before Dart runs, and
   /// the buttons have to be in the right place in the first frame, not after a
   /// round trip. What it buys is the window buttons sitting on the row they are
@@ -62,10 +62,10 @@ class MainFlutterWindow: NSWindow {
     // **The window has no title bar of its own.** `fullSizeContentView` gives
     // the whole frame to Flutter, `titlebarAppearsTransparent` stops AppKit
     // painting a system material over the top of it, and hiding the title
-    // removes the one piece of text in the window whose font, colour and
-    // weight Bel does not choose. What is left is a single bar of `panel` from
-    // the top edge down, with the three window buttons sitting inside it on the
-    // same row as BEL and the source.
+    // removes the one piece of text in the window whose font, colour and weight
+    // Open Audio Analyzer does not choose. What is left is a single bar of
+    // `panel` from the top edge down, with the three window buttons sitting
+    // inside it on the same row as OAA and the source.
     //
     // Dragging the window goes with the title bar, and the status bar asks for
     // it back over the channel below. A window that cannot be moved is not a
@@ -78,7 +78,7 @@ class MainFlutterWindow: NSWindow {
     self.backgroundColor = MainFlutterWindow.initialBackground
 
     self.chrome = FlutterMethodChannel(
-      name: "bel/window_chrome",
+      name: "oaa/window_chrome",
       binaryMessenger: flutterViewController.engine.binaryMessenger)
     self.chrome?.setMethodCallHandler { [weak self] call, result in
       self?.handle(call, result: result)
@@ -89,7 +89,7 @@ class MainFlutterWindow: NSWindow {
     // throw away the position and size the user chose. Checking the defaults
     // key is how you ask "has this ever been saved?" — `frameAutosaveName` is
     // read-only and tells you nothing about whether a frame exists for it.
-    let autosaveName = "BelMainWindow"
+    let autosaveName = "OaaMainWindow"
     let hasSavedFrame =
       UserDefaults.standard.string(forKey: "NSWindow Frame \(autosaveName)") != nil
 
@@ -161,11 +161,11 @@ class MainFlutterWindow: NSWindow {
       srgbRed: CGFloat(red), green: CGFloat(green), blue: CGFloat(blue),
       alpha: CGFloat(alpha))
 
-    // The three buttons are the only pixels in the window Bel does not paint,
-    // and they are drawn by the appearance rather than by a colour: under a
-    // light skin a dark appearance greys them the wrong way and puts a dark
-    // focus ring around a light bar. This is the one thing the skin's `light`
-    // flag decides that no colour value could.
+    // The three buttons are the only pixels in the window Open Audio Analyzer
+    // does not paint, and they are drawn by the appearance rather than by a
+    // colour: under a light skin a dark appearance greys them the wrong way and
+    // puts a dark focus ring around a light bar. This is the one thing the
+    // skin's `light` flag decides that no colour value could.
     self.appearance = NSAppearance(named: isLight ? .aqua : .darkAqua)
   }
 

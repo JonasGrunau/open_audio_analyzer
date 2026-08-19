@@ -1,21 +1,28 @@
-# Bel
+# Open Audio Analyzer
 
 A free and open-source loudness and spectrum analyzer, for desktop and tablets.
 
-Bel is a modular metering suite: a canvas of resizable meter modules — loudness,
-true peak, VU, spectrum, spectrogram, phase scope, histogram — organised into
-tabs, driven by presets, delivery targets and skins, with offline file analysis
-and a companion display that mirrors a tab to a tablet over Wi-Fi.
+> Open Audio Analyzer was called **Bel** up to and including v0.1.0. Nothing it
+> measures changed with the name, but the configuration directory, the
+> application identifier, the `oaa` binary and the wire protocol all moved with
+> it — see [CHANGELOG.md](CHANGELOG.md) before upgrading.
+
+Open Audio Analyzer is a modular metering suite: a canvas of resizable meter
+modules — loudness, true peak, VU, spectrum, spectrogram, phase scope, histogram
+— organised into tabs, driven by presets, delivery targets and skins, with
+offline file analysis and a companion display that mirrors a tab to a tablet
+over Wi-Fi.
 
 It is a free reimplementation of the ideas in
 [Decibel](https://process.audio/products/decibel) by process.audio, whose
 modular canvas is the best interaction model anybody has found for this problem.
 The measurement work, the architecture and the visual language are our own, and
-where Bel cannot honestly match Decibel it says so rather than approximating.
+where Open Audio Analyzer cannot honestly match Decibel it says so rather than
+approximating.
 
 > **Status: Phase 8 complete. Every phase in [docs/PLAN.md](docs/PLAN.md) has
 > shipped.**
-> **All thirteen modules exist and measure something.** Bel opens on a working
+> **All thirteen modules exist and measure something.** Open Audio Analyzer opens on a working
 > meter bridge — loudness, super, digital, VU, validator, histogram, alert —
 > with the analyser, spectrogram, phase scope and stereo cloud on a second tab,
 > and the canvas is arrangeable: add, move, resize, duplicate, delete, tabs,
@@ -29,11 +36,11 @@ where Bel cannot honestly match Decibel it says so rather than approximating.
 > delivery targets and your own skins are plain JSON files in a documented
 > directory; see [Configuration](#configuration).
 >
-> Files are analysed offline by the app and by the [`bel` CLI](#analysing-files),
+> Files are analysed offline by the app and by the [`oaa` CLI](#analysing-files),
 > a tablet [mirrors the canvas](#roadmap) over Wi-Fi, and a headless
 > [VST3 / AU plugin](#in-a-daw) meters what your DAW is playing. There is a dmg,
 > an msix, an AppImage and a flatpak — see [Installing](#installing) — and a
-> [documentation site](https://jonasgrunau.github.io/open_music_analyzer/).
+> [documentation site](https://jonasgrunau.github.io/open_audio_analyzer/).
 >
 > What is *not* built is listed under
 > [Known gaps](#known-gaps-stated-plainly), and the list is honest rather than
@@ -59,7 +66,7 @@ Three tiers, and the boundary between each is deliberate:
 ### The per-frame path
 
 Once per frame, [`MeterClock`](lib/src/clock/meter_clock.dart) makes a single
-`@Native(isLeaf: true)` call to `bel_snapshot_acquire` — an atomic load, a
+`@Native(isLeaf: true)` call to `oaa_snapshot_acquire` — an atomic load, a
 memcpy, and a second atomic load, with no VM state transition. Then every
 painter reads `Float32List` views that were **built once at startup** over
 native memory that never moves.
@@ -77,7 +84,7 @@ Three consequences worth naming, because they are what usually goes wrong:
 - **Text is cached by formatted string.** A value changes continuously; the
   string rounded to one decimal changes about ten times a second. Laying out a
   `ui.Paragraph` on the other fifty frames is pure waste, so
-  [`ReadoutPainter`](packages/bel_ui/lib/src/readout.dart) rebuilds only when
+  [`ReadoutPainter`](packages/oaa_ui/lib/src/readout.dart) rebuilds only when
   the string actually differs.
 - **The reader retries, never the writer.** The snapshot is a seqlock precisely
   because it is wait-free for the analysis thread. A mutex would let a
@@ -117,7 +124,7 @@ spec rather than to intuition.
 
 Every one of these is measured today and checked in CI, the spectrum included:
 a full-scale sine on a bin centre reads 0.0 dBFS on every push.
-`BEL_FLAG_SPECTRUM_UNAVAILABLE` stays in the ABI and consumers must keep
+`OAA_FLAG_SPECTRUM_UNAVAILABLE` stays in the ABI and consumers must keep
 checking it, because a future source that cannot produce a spectrum needs a way
 to say so — but this build never sets it.
 
@@ -125,11 +132,12 @@ to say so — but this build never sets it.
 
 Decibel reports a dynamics figure called *TrueDyn*. It is proprietary and
 undocumented, so any claim to match it would be a guess presented as a
-measurement. Bel does not implement it.
+measurement. Open Audio Analyzer does not implement it.
 
-Instead Bel reports `DR-S` and `DR-I`, defined as `TruePeak − LUFS-S` and
-`TruePeakMax − LUFS-I`, published in [docs/METRICS.md](docs/METRICS.md) and
-reproducible from the definition by anybody who wants to check.
+Instead Open Audio Analyzer reports `DR-S` and `DR-I`, defined as `TruePeak −
+LUFS-S` and `TruePeakMax − LUFS-I`, published in
+[docs/METRICS.md](docs/METRICS.md) and reproducible from the definition by
+anybody who wants to check.
 
 The same principle runs through the code. A quantity this build does not
 measure is **NaN**, never zero — zero is a legitimate reading for correlation,
@@ -172,17 +180,17 @@ The official **BS.2217 WAV vectors are still not used**, and the obstacle is no
 longer technical. The EBU and ITU test material is not licensed for
 redistribution here, and fetching it in CI would put a network dependency in
 front of the one suite that must never be flaky. Running them locally against
-`bel` is worthwhile and is a one-liner; they are not a gate. See
+`oaa` is worthwhile and is a one-liner; they are not a gate. See
 [docs/METRICS.md](docs/METRICS.md#conformance).
 
 ---
 
 ## Layout
 
-Bel's canvas is a **24-column snapping grid** rather than Decibel's free pixel
-positioning. 24 divides by 2, 3, 4, 6, 8 and 12, so halves, thirds and quarters
-are all exact — a 12-column grid cannot express thirds and quarters at once,
-which is the first thing anybody wants when arranging meters.
+Open Audio Analyzer's canvas is a **24-column snapping grid** rather than
+Decibel's free pixel positioning. 24 divides by 2, 3, 4, 6, 8 and 12, so halves,
+thirds and quarters are all exact — a 12-column grid cannot express thirds and
+quarters at once, which is the first thing anybody wants when arranging meters.
 
 **The row count is fixed too, at 16.** The obvious alternative — square cells
 and a canvas that scrolls — keeps module aspect ratios identical everywhere, and
@@ -195,8 +203,8 @@ to 8×2.
 
 The practical win is that a preset stores grid cells, so it is
 screen-independent by construction. Decibel stores fractions of the window and
-reconstitutes them per display; Bel opens the same layout on a 32" monitor and
-an 11" tablet with nobody writing responsive code.
+reconstitutes them per display; Open Audio Analyzer opens the same layout on a
+32" monitor and an 11" tablet with nobody writing responsive code.
 
 The interactions: **drag a module's title bar** to move it, **drag the corner
 grip** to resize, **alt-drag** to duplicate, **right-click or long-press empty
@@ -206,22 +214,23 @@ to add a module there, **right-click a module** for its options, and
 for add, undo and redo sit in the tab strip as well, because tablets have
 neither a right mouse button nor `⌘Z`.
 
-Nothing in Bel is a double click. A double-tap recogniser holds Flutter's
-gesture arena for 300 ms before it gives up, and every button underneath one
-waits that long to fire — which is a third of a second of an application that
-feels broken, in exchange for a gesture a long press does better on both a
-mouse and a tablet.
+Nothing in Open Audio Analyzer is a double click. A double-tap recogniser holds
+Flutter's gesture arena for 300 ms before it gives up, and every button
+underneath one waits that long to fire — which is a third of a second of an
+application that feels broken, in exchange for a gesture a long press does
+better on both a mouse and a tablet.
 
 ### Keyboard
 
-Press `?` or `F1`, or the `?` in the status bar. Bel draws its own chrome and so
-has no menu bar, which is the usual place a desktop user reads a shortcut off —
-without that sheet the shortcuts would be undiscoverable by design.
+Press `?` or `F1`, or the `?` in the status bar. Open Audio Analyzer draws its
+own chrome and so has no menu bar, which is the usual place a desktop user reads
+a shortcut off — without that sheet the shortcuts would be undiscoverable by
+design.
 
 `⌫` deletes the selection, arrow keys nudge it a cell and `⇧`+arrows resize it,
 `⌘Z` / `⌘⇧Z` undo and redo, `⌘D` duplicates, `1`–`9` switch tabs, `⌘R` restarts
 the measurement, `⌘O` analyses a file. The full list is on the
-[documentation site](https://jonasgrunau.github.io/open_music_analyzer/keyboard.html),
+[documentation site](https://jonasgrunau.github.io/open_audio_analyzer/keyboard.html),
 and it is not written twice: the page, the in-app sheet and the bindings
 themselves all come from one table in `lib/src/app/shortcuts.dart`, and a test
 fails if the page has drifted from it.
@@ -241,9 +250,9 @@ Three details that are decisions rather than defaults:
 alternatives are worse: allowing overlap turns a meter bridge into a stack of
 half-hidden panels and needs a z-order, and pushing neighbours aside — what most
 dashboard grids do — means a drag near an edge can rearrange a layout you spent
-ten minutes on, irreversibly. Bel shows the target cells while the pointer is
-down — bright when the drop is legal, red when it is not — and an illegal drop
-simply does not happen. Nothing moves that you did not move.
+ten minutes on, irreversibly. Open Audio Analyzer shows the target cells while
+the pointer is down — bright when the drop is legal, red when it is not — and an
+illegal drop simply does not happen. Nothing moves that you did not move.
 
 While the pointer is down the canvas becomes the placement grid: the cells are
 ruled inside a border that sits one gutter outside the modules, and every module
@@ -276,25 +285,25 @@ JSON file you write; see [Configuration](#configuration).
 
 ## Configuration
 
-Everything Bel remembers is a JSON file you can open, edit, copy between
-machines or keep in version control.
+Everything Open Audio Analyzer remembers is a JSON file you can open, edit, copy
+between machines or keep in version control.
 
 | | |
 |---|---|
-| **macOS** | `~/Library/Application Support/Bel` |
-| **Windows** | `%APPDATA%\Bel` |
-| **Linux** | `$XDG_CONFIG_HOME/bel`, or `~/.config/bel` |
-| **iPadOS** | `Library/Application Support/Bel` inside the app's own container |
+| **macOS** | `~/Library/Application Support/Open Audio Analyzer` |
+| **Windows** | `%APPDATA%\Open Audio Analyzer` |
+| **Linux** | `$XDG_CONFIG_HOME/oaa`, or `~/.config/oaa` |
+| **iPadOS** | `Library/Application Support/Open Audio Analyzer` inside the app's own container |
 
 The iPad row is the one you cannot open in a file manager, because iOS gives an
 app a private container and no way out of it. Settings → Session prints the
 path; a display persists its layout, its skin and the host it last connected to,
 and nothing else on the device can read them. **An Android tablet persists
 nothing** and says so at launch: its container is not derivable without a
-platform channel Bel does not have.
+platform channel Open Audio Analyzer does not have.
 
-`BEL_CONFIG_DIR` overrides the three desktop rows — for a portable install, or
-for keeping Bel's configuration alongside your dotfiles — and
+`OAA_CONFIG_DIR` overrides the three desktop rows — for a portable install, or
+for keeping Open Audio Analyzer's configuration alongside your dotfiles — and
 `--config-dir=<path>` on the command line beats the variable in turn, which is
 the one that works on macOS where an environment cannot be handed to an
 application bundle. Settings → Session prints the directory actually in use and
@@ -302,12 +311,13 @@ lets you select it, which beats retyping any of the above.
 
 **The macOS app is deliberately not sandboxed**, and that is what makes the
 first row true. A sandboxed app's `HOME` is redirected into
-`~/Library/Containers/dev.belmeter.bel/Data`, which would put your presets
-somewhere you would never find them and stop either override from pointing
-anywhere outside it — defeating the point of keeping configuration in files you
-can edit, mail and version. The trade is that Bel cannot ship on the Mac App
-Store, which it was never going to; notarisation for the dmg does not require
-the sandbox. See `macos/Runner/Release.entitlements`, which says so at the top.
+`~/Library/Containers/dev.openaudioanalyzer.oaa/Data`, which would put your
+presets somewhere you would never find them and stop either override from
+pointing anywhere outside it — defeating the point of keeping configuration in
+files you can edit, mail and version. The trade is that Open Audio Analyzer
+cannot ship on the Mac App Store, which it was never going to; notarisation for
+the dmg does not require the sandbox. See `macos/Runner/Release.entitlements`,
+which says so at the top.
 
 ```
 settings.json          the frame rate, source, target, skin
@@ -322,14 +332,14 @@ preset can be sent to somebody or dropped in from a forum post, and that one
 corrupt file costs one preset instead of all of them. Every write goes to a
 temporary file and is renamed over the target, so an interrupted save leaves the
 previous version intact rather than a half-written one. A file that fails to
-parse is named in the interface and left alone — Bel never rewrites something it
-could not read.
+parse is named in the interface and left alone — Open Audio Analyzer never
+rewrites something it could not read.
 
 The path this does *not* take is `path_provider`. That function needs a Flutter
-binding, so it throws in the two places Bel most needs these paths — the `bel`
-CLI and a unit test — and on macOS it returns a sandbox container keyed by
-bundle identifier, which moves your entire configuration the first time a build
-is signed differently.
+binding, so it throws in the two places Open Audio Analyzer most needs these
+paths — the `oaa` CLI and a unit test — and on macOS it returns a sandbox
+container keyed by bundle identifier, which moves your entire configuration the
+first time a build is signed differently.
 
 ### Writing a skin
 
@@ -370,10 +380,10 @@ A delivery target is the same idea:
 }
 ```
 
-A file whose `id` matches one Bel ships with **replaces** it everywhere,
-including in presets that already name it — so if you disagree with our reading
-of a published spec, your number wins. Delete the file and the original comes
-back.
+A file whose `id` matches one Open Audio Analyzer ships with **replaces** it
+everywhere, including in presets that already name it — so if you disagree with
+our reading of a published spec, your number wins. Delete the file and the
+original comes back.
 
 ---
 
@@ -409,7 +419,7 @@ width, tracking and cap height all differ between macOS, Windows and Linux, and
 a layout tuned on one is subtly wrong on the other two. Both are SIL OFL 1.1 and
 their licences ship in `assets/fonts/`.
 
-Every one of the thirteen modules is [`ModuleFrame`](packages/bel_ui/lib/src/module_frame.dart)
+Every one of the thirteen modules is [`ModuleFrame`](packages/oaa_ui/lib/src/module_frame.dart)
 plus a painter. That is the whole reuse strategy: a module that also owns its
 own border and title treatment is a module that will drift from the other
 eleven.
@@ -421,34 +431,34 @@ eleven.
 ```
 engine/            C11 DSP core. Knows nothing about Dart or Flutter.        MIT
 packages/
-  bel_engine/      FFI bindings + the build hook that compiles engine/.      MIT
-  bel_core/        Domain model. Pure Dart — no Flutter, no dart:ffi.        MIT
-  bel_wire/        The remote-display protocol. Pure Dart, no I/O.           MIT
-  bel_ui/          Design tokens and the primitives modules are built from.  GPL
+  oaa_engine/      FFI bindings + the build hook that compiles engine/.      MIT
+  oaa_core/        Domain model. Pure Dart — no Flutter, no dart:ffi.        MIT
+  oaa_wire/        The remote-display protocol. Pure Dart, no I/O.           MIT
+  oaa_ui/          Design tokens and the primitives modules are built from.  GPL
 lib/               The application.                                          GPL
 assets/fonts/      Inter and Google Sans Code, with their licences.      SIL OFL
-cli/               The `bel` command-line analyser.                          GPL
+cli/               The `oaa` command-line analyser.                          GPL
 plugin/            Headless VST3 + AU plugin.                              AGPL
 docs/              PLAN.md, METRICS.md, WIRE.md.
 ```
 
-`plugin/` is the one **AGPL** directory. JUCE 7 and 8 are AGPLv3-or-commercial
-— only JUCE 6 offered GPLv3 — and Bel takes the AGPLv3 option, which is
-available because everything here is free software already. It changes the
-licence of the plugin binary alone: the engine stays MIT, and the app stays GPL
-because it never links JUCE. It talks to the plugin over a socket, which is not
-linking. GPLv3 section 13 expressly permits the combination. Steinberg's VST3
-SDK, meanwhile, is now MIT and vendored inside JUCE, so there is no second
+`plugin/` is the one **AGPL** directory. JUCE 7 and 8 are AGPLv3-or-commercial —
+only JUCE 6 offered GPLv3 — and Open Audio Analyzer takes the AGPLv3 option,
+which is available because everything here is free software already. It changes
+the licence of the plugin binary alone: the engine stays MIT, and the app stays
+GPL because it never links JUCE. It talks to the plugin over a socket, which is
+not linking. GPLv3 section 13 expressly permits the combination. Steinberg's
+VST3 SDK, meanwhile, is now MIT and vendored inside JUCE, so there is no second
 copyleft dependency and no SDK to check out.
 
 Two boundaries carry weight:
 
-- **`engine/` knows nothing about Flutter, and `bel_core` knows nothing about
+- **`engine/` knows nothing about Flutter, and `oaa_core` knows nothing about
   `dart:ffi`.** Four things need the domain vocabulary — the app, the tablet
   display, the CLI and the plugin — and three of them have no engine of their
-  own. The tablet reads measurements off a socket. The moment `bel_core`
-  imports `bel_engine`, all three drag in a native library they never call.
-- **One `libbel` serves all three tiers.** That is what makes standalone,
+  own. The tablet reads measurements off a socket. The moment `oaa_core`
+  imports `oaa_engine`, all three drag in a native library they never call.
+- **One `liboaa` serves all three tiers.** That is what makes standalone,
   remote display and plugin tractable as one project rather than three.
 
 ### Licensing
@@ -456,12 +466,12 @@ Two boundaries carry weight:
 Deliberately split, and set on day one because it is nearly free now and
 expensive once outside contributors arrive:
 
-- **`engine/`, `packages/bel_engine`, `packages/bel_core`, `packages/bel_wire`
+- **`engine/`, `packages/oaa_engine`, `packages/oaa_core`, `packages/oaa_wire`
   — MIT.** A metering engine's value is that anyone can embed and audit it, and
   a measurement tool needs that scrutiny more than most software. The wire
   protocol is on this side of the line for the same reason: a third-party
   display should not have to be GPL to speak it.
-- **`packages/bel_ui`, `lib/`, `cli/` — GPL-3.0-or-later.** A free clone of a
+- **`packages/oaa_ui`, `lib/`, `cli/` — GPL-3.0-or-later.** A free clone of a
   paid product should not be trivially re-closable.
 - **`plugin/` — AGPL-3.0-or-later**, because it links JUCE. See above.
 
@@ -472,25 +482,25 @@ MIT is one-way compatible with GPL, so the combination composes cleanly.
 ## Installing
 
 Every release publishes four installers and a standalone CLI binary on the
-[releases page](https://github.com/JonasGrunau/open_music_analyzer/releases).
+[releases page](https://github.com/JonasGrunau/open_audio_analyzer/releases).
 Full instructions, including the loopback-device workaround for system audio,
 are on the [documentation
-site](https://jonasgrunau.github.io/open_music_analyzer/install.html).
+site](https://jonasgrunau.github.io/open_audio_analyzer/install.html).
 
 | Platform | Artefact | |
 |---|---|---|
-| macOS 11+ | `Bel-<version>-macos-<arch>.dmg` | Universal — Apple silicon and Intel. |
-| Windows 10 1809+ | `Bel-<version>-windows-x64.msix` | |
-| Linux | `Bel-<version>-<arch>.AppImage` | One file, no root, GTK from the host. |
-| Linux | `Bel-<version>-<arch>.flatpak` | Sandboxed, carries its own runtime. |
-| Any | `bel` / `bel.exe` | The analyser. No Flutter runtime. |
+| macOS 11+ | `Open Audio Analyzer-<version>-macos-<arch>.dmg` | Universal — Apple silicon and Intel. |
+| Windows 10 1809+ | `Open Audio Analyzer-<version>-windows-x64.msix` | |
+| Linux | `Open Audio Analyzer-<version>-<arch>.AppImage` | One file, no root, GTK from the host. |
+| Linux | `Open Audio Analyzer-<version>-<arch>.flatpak` | Sandboxed, carries its own runtime. |
+| Any | `oaa` / `oaa.exe` | The analyser. No Flutter runtime. |
 
 **There is no Mac App Store build and there will not be one.** The store
 requires the app sandbox, and a sandboxed application has its home directory
 redirected into `~/Library/Containers` — which put every preset, skin and
 delivery target somewhere no user goes looking and no override could escape.
-Bel is distributed directly, signed with a Developer ID and notarised. See
-`macos/Runner/*.entitlements`, which carries the reasoning, and
+Open Audio Analyzer is distributed directly, signed with a Developer ID and
+notarised. See `macos/Runner/*.entitlements`, which carries the reasoning, and
 `packaging/macos/make_dmg.sh`, which repeats it where somebody signing a build
 will be standing.
 
@@ -513,14 +523,14 @@ flutter run -d macos          # or windows, linux
 flutter run -d <ipad>         # the display build; `flutter devices` names it
 ```
 
-On iOS the engine is compiled as **Objective-C**, because miniaudio's Core
-Audio backend is: it configures an `AVAudioSession` there, and iOS offers no C
-way to do that. `hook/build.dart` handles it. This is worth knowing only
-because of how it fails if it is ever undone — several hundred errors inside
-Apple's own `Foundation` headers, not one of which names a file in Bel.
+On iOS the engine is compiled as **Objective-C**, because miniaudio's Core Audio
+backend is: it configures an `AVAudioSession` there, and iOS offers no C way to
+do that. `hook/build.dart` handles it. This is worth knowing only because of how
+it fails if it is ever undone — several hundred errors inside Apple's own
+`Foundation` headers, not one of which names a file in Open Audio Analyzer.
 
 The app needs **no podspec, no `build.gradle` and no per-platform
-`CMakeLists.txt`**. `packages/bel_engine/hook/build.dart` compiles the C
+`CMakeLists.txt`**. `packages/oaa_engine/hook/build.dart` compiles the C
 through `native_toolchain_c` and bundles it as a code asset, which has been the
 recommended way to ship native code with Flutter since 3.38. One build
 description that works on five platforms beats five that each work on one.
@@ -536,10 +546,10 @@ in both.**
 ```sh
 flutter analyze                       # lints, whole workspace
 flutter test                          # widget and golden tests
-dart test packages/bel_core           # domain layer, no toolchain needed
-dart test packages/bel_wire           # the wire protocol, incl. the C++ golden
-cd packages/bel_engine && dart test   # engine, through FFI
-cd cli && dart test                   # the `bel` binary, as a subprocess
+dart test packages/oaa_core           # domain layer, no toolchain needed
+dart test packages/oaa_wire           # the wire protocol, incl. the C++ golden
+cd packages/oaa_engine && dart test   # engine, through FFI
+cd cli && dart test                   # the `oaa` binary, as a subprocess
 sh plugin/test/sources_match.sh       # the engine's two build lists agree
 dart run tool/docs.dart               # the documentation site still builds
 ```
@@ -555,7 +565,7 @@ hardware anywhere near it.
 ## Analysing files
 
 Drop a file on the analysis panel, or run the CLI. Both decode the file and push
-the blocks through the *same* `bel_analyse` a capture device drives — there is
+the blocks through the *same* `oaa_analyse` a capture device drives — there is
 no second DSP path — so an offline reading and a live reading of the same audio
 are identical rather than merely close. A test asserts exactly that, on the same
 samples analysed both ways.
@@ -565,11 +575,11 @@ channel count, because a converter in front of a measurement changes the
 measurement. WAV, AIFF, RF64, Wave64, FLAC and MP3.
 
 ```sh
-bel master.wav                                 # human-readable report
-bel --target streaming-14 master.wav           # …and a delivery verdict
-bel --format json --timeline master.wav        # every measurement, for scripts
-bel --format csv -o loudness.csv master.wav    # the loudness timeline
-bel --list-targets                             # what you can measure against
+oaa master.wav                                 # human-readable report
+oaa --target streaming-14 master.wav           # …and a delivery verdict
+oaa --format json --timeline master.wav        # every measurement, for scripts
+oaa --format csv -o loudness.csv master.wav    # the loudness timeline
+oaa --list-targets                             # what you can measure against
 ```
 
 **The exit code is the point.** With `--target`, a file that misses its delivery
@@ -578,7 +588,7 @@ release pipeline can fail a build on a master that is 2 LU too loud instead of
 shipping it:
 
 ```sh
-bel --target streaming-14 master.wav || exit 1
+oaa --target streaming-14 master.wav || exit 1
 ```
 
 Reports export as text, JSON and CSV. A quantity nobody measured is an em dash,
@@ -596,7 +606,8 @@ does not render it — a pipeline reads the text, JSON or CSV.
 
 ## In a DAW
 
-Bel installs as a **VST3** and an **Audio Unit** that draws nothing.
+Open Audio Analyzer installs as a **VST3** and an **Audio Unit** that draws
+nothing.
 
 Insert it on a track, a bus or the master, and the desktop app meters what your
 DAW is playing — through the same engine, on the same canvas, with the same
@@ -610,7 +621,7 @@ cmake -B plugin/build -S plugin -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build plugin/build
 ```
 
-Products land in `plugin/build/BelPlugin_artefacts/Release/`. Nothing is copied
+Products land in `plugin/build/OaaPlugin_artefacts/Release/`. Nothing is copied
 into a system plugin folder unless you copy it — a build that installed itself
 would mean the DAW you have open is now running a binary you did not knowingly
 install. JUCE is fetched and pinned, not vendored, so a fresh clone builds
@@ -636,12 +647,12 @@ integration window to the transport means restarting it when the transport
 moves, which is a command travelling from the app back to the plugin, and this
 version of the protocol only runs one way.
 
-Hosts differ enormously in what they actually report, and Bel does not paper
-over it: every transport value carries a flag saying whether the host supplied
-it, and one that did not arrive reads as an em dash. A tempo that arrives as
-zero is indistinguishable from a real one, and "bar 1, beat 1, 00:00:00:00" is a
-perfectly plausible thing to show somebody while their session is parked at bar
-57.
+Hosts differ enormously in what they actually report, and Open Audio Analyzer
+does not paper over it: every transport value carries a flag saying whether the
+host supplied it, and one that did not arrive reads as an em dash. A tempo that
+arrives as zero is indistinguishable from a real one, and "bar 1, beat 1,
+00:00:00:00" is a perfectly plausible thing to show somebody while their session
+is parked at bar 57.
 
 ---
 
@@ -654,7 +665,7 @@ perfectly plausible thing to show somebody while their session is parked at bar
 | 2 | The 24×16 canvas: add, move, resize, duplicate, tabs, undo; bundled type | ✅ done |
 | 3 | The twelve modules, the FFT, the scope and the loudness distribution | ✅ done |
 | 4 | Presets, calibrations, skins, audio settings, persistence | ✅ done |
-| 5 | Offline file analysis, report panel, exports, `bel` CLI | ✅ done |
+| 5 | Offline file analysis, report panel, exports, `oaa` CLI | ✅ done |
 | 6 | Remote display: mDNS discovery, wire protocol, tablet mode | ✅ done² |
 | 7 | VST3 and Audio Unit plugin, DAW transport and timecode | ✅ done¹ |
 | 8 | Keyboard shortcuts, docs site, packaging (dmg / msix / AppImage / flatpak) | ✅ done³ |
@@ -689,8 +700,9 @@ so a release built from a fork is unsigned and every script says so. See
   monitoring driver.
   - **Windows** — nothing to do. WASAPI loopback captures whatever is playing.
   - **macOS** — install [BlackHole](https://existential.audio/blackhole/) (free)
-    or Loopback, route your output through it, and it appears in Bel's source
-    menu like any other input. ScreenCaptureKit is a later evaluation.
+    or Loopback, route your output through it, and it appears in Open Audio
+    Analyzer's source menu like any other input. ScreenCaptureKit is a later
+    evaluation.
   - **Linux** — a PulseAudio or PipeWire monitor source already appears in the
     list.
 
@@ -713,14 +725,14 @@ so a release built from a fork is unsigned and every script says so. See
   Wi-Fi you do not control.
 - **Finding hosts automatically does not work on Android.** Receiving multicast
   there needs a `WifiManager.MulticastLock`, which is a platform call Dart
-  cannot make and Bel has no native plugin for. An Android tablet browses
-  nothing and has to be given an address, and its screen says exactly that
-  rather than showing an empty list that reads as "no hosts are running". macOS,
-  Windows, Linux and iPadOS discover normally — iPadOS through the system's own
-  Bonjour responder, because Apple does not let an app hold a multicast socket
-  without an entitlement it grants per developer on request. Typing an address
-  is supported everywhere and always will be, because multicast is also the
-  first thing a guest network blocks.
+  cannot make and Open Audio Analyzer has no native plugin for. An Android
+  tablet browses nothing and has to be given an address, and its screen says
+  exactly that rather than showing an empty list that reads as "no hosts are
+  running". macOS, Windows, Linux and iPadOS discover normally — iPadOS through
+  the system's own Bonjour responder, because Apple does not let an app hold a
+  multicast socket without an entitlement it grants per developer on request.
+  Typing an address is supported everywhere and always will be, because
+  multicast is also the first thing a guest network blocks.
 - **Publishing is never remembered, on purpose.** The display's name, port and
   update rate persist like every other setting; whether to publish does not, and
   starts off at every launch. There is no password on that port, and a
@@ -733,9 +745,9 @@ so a release built from a fork is unsigned and every script says so. See
   identifies itself — which is a client→host frame, so **wire protocol 2** — or
   the host keys assignments by address, which breaks on DHCP. Until then the
   display shows the whole preset and the viewer picks the tab.
-- **An Android tablet remembers nothing between launches.** Every other
-  platform resolves a configuration directory; Android is the one whose
-  container Bel cannot find without a platform call — `HOME` is unset and the
+- **An Android tablet remembers nothing between launches.** Every other platform
+  resolves a configuration directory; Android is the one whose container Open
+  Audio Analyzer cannot find without a platform call — `HOME` is unset and the
   temporary directory an iPad's container is derived from is `/data/local/tmp`
   there, which belongs to no app. The display works, and says at launch that
   nothing is being saved. Fixing it means a channel to `getFilesDir()`.
@@ -743,17 +755,17 @@ so a release built from a fork is unsigned and every script says so. See
   *input* selection differs sharply per platform. The tablet build's primary
   role is the remote display.
 - **Flutter cannot be a VST3/AU plugin GUI.** The plugin is a headless C++
-  wrapper around the same `libbel`, streaming measurements and DAW transport to
+  wrapper around the same `liboaa`, streaming measurements and DAW transport to
   the app over a local socket. It ships as **VST3 and Audio Unit** — the two
   formats that reach every DAW people actually master in, Ableton Live
   included. AAX is out of scope: it needs Avid's SDK and a registered developer
   account, neither of which a free project can promise.
 - **A light skin does not lighten the window frame on Windows or Linux.**
-  Everything Bel paints follows the skin; the window frame belongs to the
-  operating system, and Flutter has no supported desktop API for it. macOS no
-  longer has a title bar at all — the status bar runs to the top edge and the
-  window buttons sit inside it — but that took platform code in the runner, and
-  the other two each need their own.
+  Everything Open Audio Analyzer paints follows the skin; the window frame
+  belongs to the operating system, and Flutter has no supported desktop API for
+  it. macOS no longer has a title bar at all — the status bar runs to the top
+  edge and the window buttons sit inside it — but that took platform code in the
+  runner, and the other two each need their own.
 - **Native assets are young.** Recommended since Flutter 3.38, but the fallback
   if a platform misbehaves is the legacy `plugin_ffi` template plus CMake.
 

@@ -9,8 +9,8 @@
 // parsing would take the thing it enables with it, and the failure would look
 // like the config being ignored rather than like an argument being dropped.
 
-import 'package:bel/src/app/launch_options.dart';
-import 'package:bel/src/storage/config_paths.dart';
+import 'package:oaa/src/app/launch_options.dart';
+import 'package:oaa/src/storage/config_paths.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -24,12 +24,12 @@ void main() {
 
     test('both spellings of a flag are accepted', () {
       expect(
-        parseLaunchOptions(const ['--config-dir=/tmp/bel']).configDir,
-        '/tmp/bel',
+        parseLaunchOptions(const ['--config-dir=/tmp/oaa']).configDir,
+        '/tmp/oaa',
       );
       expect(
-        parseLaunchOptions(const ['--config-dir', '/tmp/bel']).configDir,
-        '/tmp/bel',
+        parseLaunchOptions(const ['--config-dir', '/tmp/oaa']).configDir,
+        '/tmp/oaa',
       );
     });
 
@@ -46,11 +46,11 @@ void main() {
     test('the value of one flag is not read as another flag', () {
       final options = parseLaunchOptions(const [
         '--config-dir',
-        '/tmp/bel',
+        '/tmp/oaa',
         '--open-panel',
         'settings',
       ]);
-      expect(options.configDir, '/tmp/bel');
+      expect(options.configDir, '/tmp/oaa');
       expect(options.openPanel, StartupPanel.settings);
       expect(options.warnings, isEmpty);
     });
@@ -63,9 +63,9 @@ void main() {
         '-psn_0_1234567',
         '-NSDocumentRevisionsDebugMode',
         'YES',
-        '--config-dir=/tmp/bel',
+        '--config-dir=/tmp/oaa',
       ]);
-      expect(options.configDir, '/tmp/bel');
+      expect(options.configDir, '/tmp/oaa');
       expect(options.warnings, isEmpty);
     });
 
@@ -137,18 +137,18 @@ void main() {
     test('with neither, the platform decides', () {
       expect(
         resolveConfigRoot(operatingSystem: 'linux', environment: home),
-        '/home/someone/.config/bel',
+        '/home/someone/.config/oaa',
       );
       expect(
         resolveConfigRoot(operatingSystem: 'macos', environment: home),
-        '/home/someone/Library/Application Support/Bel',
+        '/home/someone/Library/Application Support/Open Audio Analyzer',
       );
       expect(
         resolveConfigRoot(
           operatingSystem: 'windows',
           environment: const {r'APPDATA': r'C:\Users\someone\AppData\Roaming'},
         ),
-        r'C:\Users\someone\AppData\Roaming\Bel',
+        r'C:\Users\someone\AppData\Roaming\Open Audio Analyzer',
       );
     });
   });

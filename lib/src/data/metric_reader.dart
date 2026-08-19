@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import 'package:bel_core/bel_core.dart';
-import 'package:bel_engine/bel_engine.dart';
-import 'package:bel_ui/bel_ui.dart';
+import 'package:oaa_core/oaa_core.dart';
+import 'package:oaa_engine/oaa_engine.dart';
+import 'package:oaa_ui/oaa_ui.dart';
 
 /// Reads a [Metric] out of a [MeterSource].
 ///
 /// This function is the only place the domain vocabulary meets the engine, and
-/// it lives in the app rather than in either package on purpose: `bel_core`
-/// must not depend on `bel_engine` (the tablet remote display has no engine at
-/// all — it reads measurements off a socket), and `bel_engine` must not know
+/// it lives in the app rather than in either package on purpose: `oaa_core`
+/// must not depend on `oaa_engine` (the tablet remote display has no engine at
+/// all — it reads measurements off a socket), and `oaa_engine` must not know
 /// what a `Metric` is (the CLI and the plugin never draw one).
 ///
 /// Phase 6 adds a second implementation of exactly this signature backed by the
@@ -40,7 +40,7 @@ double readMetric(MeterSource engine, Metric metric) => switch (metric) {
 /// checked against. Averaging channels would hide a single hot one, which is
 /// precisely the thing somebody looking at a peak reading wants to catch.
 double _loudestChannel(List<double> values, int channels) {
-  var loudest = kBelDbFloor;
+  var loudest = kOaaDbFloor;
   final count = channels.clamp(1, values.length);
   for (var i = 0; i < count; i++) {
     if (values[i] > loudest) loudest = values[i];

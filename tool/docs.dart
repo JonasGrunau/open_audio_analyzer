@@ -77,7 +77,7 @@ const List<Page> pages = [
   Page(
     source: 'docs/site/index.md',
     slug: 'index',
-    title: 'Bel',
+    title: 'Open Audio Analyzer',
     blurb: 'A free loudness and spectrum analyzer.',
   ),
   Page(
@@ -87,21 +87,21 @@ const List<Page> pages = [
     blurb:
         'dmg, msix, AppImage and flatpak — and what each one will and will '
         'not do.',
-    section: 'Using Bel',
+    section: 'Using Open Audio Analyzer',
   ),
   Page(
     source: 'docs/site/keyboard.md',
     slug: 'keyboard',
     title: 'Keyboard',
     blurb: 'Every shortcut, generated from the table the application binds.',
-    section: 'Using Bel',
+    section: 'Using Open Audio Analyzer',
   ),
   Page(
     source: 'docs/site/analysing-files.md',
     slug: 'analysing-files',
     title: 'Analysing files',
-    blurb: 'The report panel and the `bel` command-line analyser.',
-    section: 'Using Bel',
+    blurb: 'The report panel and the `oaa` command-line analyser.',
+    section: 'Using Open Audio Analyzer',
   ),
   Page(
     source: 'docs/METRICS.md',
@@ -147,7 +147,7 @@ void main(List<String> arguments) {
   }
 
   final directory = Directory(out)..createSync(recursive: true);
-  stdout.writeln('Bel documentation -> ${directory.path}');
+  stdout.writeln('Open Audio Analyzer documentation -> ${directory.path}');
 
   var failed = false;
   for (final page in pages) {
@@ -456,7 +456,7 @@ String _inline(String text) {
 /// A link to `docs/METRICS.md` has to become `metrics.html` or the site is a
 /// set of pages that link to raw files on GitHub. One that points at something
 /// the site does not publish is left alone and resolves on GitHub, which is
-/// where a link to `engine/src/bel_spectrum.h` should go anyway.
+/// where a link to `engine/src/oaa_spectrum.h` should go anyway.
 String _link(String target) {
   if (target.startsWith('#') ||
       target.startsWith('http://') ||
@@ -480,7 +480,7 @@ String _link(String target) {
   }
 
   if (!path.endsWith('.md')) return target;
-  return 'https://github.com/JonasGrunau/open_music_analyzer/blob/main/$path$anchor';
+  return 'https://github.com/JonasGrunau/open_audio_analyzer/blob/main/$path$anchor';
 }
 
 String _escape(String text) => text
@@ -564,7 +564,7 @@ String _shell(Page page, _Rendered rendered) {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${_escape(page.title)} — Bel</title>
+<title>${_escape(page.title)} — Open Audio Analyzer</title>
 <meta name="description" content="${_escape(_plain(page.blurb))}">
 <link rel="icon" href="data:image/svg+xml,${Uri.encodeComponent(_favicon)}">
 <link rel="stylesheet" href="style.css">
@@ -575,10 +575,10 @@ String _shell(Page page, _Rendered rendered) {
 <header class="side">
   <a class="brand" href="index.html">
     $_brandMark
-    <span>Bel</span>
+    <span>Open Audio Analyzer</span>
   </a>
   <nav>$nav</nav>
-  <a class="repo" href="https://github.com/JonasGrunau/open_music_analyzer">Source on GitHub</a>
+  <a class="repo" href="https://github.com/JonasGrunau/open_audio_analyzer">Source on GitHub</a>
 </header>
 <main id="content">
   <h1>${_escape(page.title)}</h1>
@@ -586,9 +586,9 @@ String _shell(Page page, _Rendered rendered) {
   $contents
   ${rendered.body}
   <footer>
-    Bel is free software. The application is GPL-3.0-or-later, the engine and
+    Open Audio Analyzer is free software. The application is GPL-3.0-or-later, the engine and
     domain model are MIT, and the plugin is AGPL-3.0-or-later —
-    <a href="https://github.com/JonasGrunau/open_music_analyzer#licensing">the
+    <a href="https://github.com/JonasGrunau/open_audio_analyzer#licensing">the
     split is explained in the README</a>.
   </footer>
 </main>
@@ -598,7 +598,7 @@ String _shell(Page page, _Rendered rendered) {
 ''';
 }
 
-/// The mark from `packaging/icon/bel.svg`, small enough to inline twice.
+/// The mark from `packaging/icon/oaa.svg`, small enough to inline twice.
 const String _brandMark =
     '<svg viewBox="0 0 1024 1024" width="24" height="24" aria-hidden="true">'
     '<rect x="6" y="6" width="1012" height="1012" rx="199" fill="#0B0C0E" '
@@ -817,7 +817,7 @@ hr {
   margin: 40px 0;
 }
 
-/* Numbers are monospaced with tabular figures everywhere in Bel, and a
+/* Numbers are monospaced with tabular figures everywhere in Open Audio Analyzer, and a
    documentation page full of dB values is no exception. */
 code {
   font-family: var(--mono);

@@ -16,15 +16,15 @@ broken for six weeks by the time anybody finds out.
 
 The `ci.yml` jobs are split by what they need, and the split is deliberate:
 
-- **`checks`** runs `flutter analyze`, `dart format`, the `bel_core` domain
-  tests, the `bel_wire` protocol tests, `plugin/test/sources_match.sh` and then
-  the widget tests. The first four need **no C toolchain** — `bel_core` and
-  `bel_wire` depend on nothing, and the source-list check is a shell script — so
+- **`checks`** runs `flutter analyze`, `dart format`, the `oaa_core` domain
+  tests, the `oaa_wire` protocol tests, `plugin/test/sources_match.sh` and then
+  the widget tests. The first four need **no C toolchain** — `oaa_core` and
+  `oaa_wire` depend on nothing, and the source-list check is a shell script — so
   they run first and a regression in any of them is diagnosed without waiting on
   a native build. The widget tests do compile the engine, because the app
-  depends on `bel_engine`.
+  depends on `oaa_engine`.
 - **`engine`** compiles the C through the build hook and runs the meters, the
-  EBU Tech 3341/3342 conformance cases and then the `bel` CLI on Linux, macOS
+  EBU Tech 3341/3342 conformance cases and then the `oaa` CLI on Linux, macOS
   and Windows. It needs no audio hardware — that is what the built-in test tone
   is for. The CLI runs on all three because **file decoding is where the
   platforms differ most**: Windows takes a UTF-16 path, so a filename with an
@@ -51,7 +51,7 @@ The `ci.yml` jobs are split by what they need, and the split is deliberate:
   gate,** because everybody believes it is running. When a suite is added to the
   repository it is added here in the same change, and `CLAUDE.md`'s Testing
   Requirements and `README.md`'s Tests list are the two places that must agree
-  with this file. `dart test packages/bel_wire` and `sources_match.sh` were both
+  with this file. `dart test packages/oaa_wire` and `sources_match.sh` were both
   documented as gates for a phase before either was actually wired in.
 - **An installer that cannot be installed is published, and labelled.** Signing
   needs secrets a fork does not have, so every packaging script produces an

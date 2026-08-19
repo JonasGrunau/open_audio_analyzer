@@ -4,8 +4,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:bel_core/bel_core.dart';
-import 'package:bel_wire/bel_wire.dart';
+import 'package:oaa_core/oaa_core.dart';
+import 'package:oaa_wire/oaa_wire.dart';
 import 'package:flutter/foundation.dart';
 
 /// Where the link stands. Everything the display's chrome says comes from here.

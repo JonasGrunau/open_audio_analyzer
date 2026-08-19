@@ -6,12 +6,12 @@
 # What this builds, and why it is nearly empty
 #
 # The plugin's entire job is three lines of real work: take the DAW's buffer,
-# get it to `bel_engine_push`, and stream the resulting snapshot and the DAW's
-# transport position to the Bel app over a socket. It draws no meters. Flutter
-# cannot be a plugin GUI, and rewriting twelve meter modules a second time in
-# C++ so that the plugin could draw them itself is precisely the outcome this
-# architecture exists to avoid — there would then be two implementations of
-# every measurement's *presentation*, and they would drift.
+# get it to `oaa_engine_push`, and stream the resulting snapshot and the DAW's
+# transport position to the Open Audio Analyzer app over a socket. It draws no
+# meters. Flutter cannot be a plugin GUI, and rewriting twelve meter modules a
+# second time in C++ so that the plugin could draw them itself is precisely the
+# outcome this architecture exists to avoid — there would then be two
+# implementations of every measurement's *presentation*, and they would drift.
 #
 # So the plugin is a sensor and the app is the display, and the socket between
 # them is the whole design.
@@ -26,7 +26,7 @@
 #
 #   engine/            MIT             unchanged; the plugin links it, so MIT
 #                                      flows in without obligation
-#   packages/bel_core  MIT             unchanged, not involved here
+#   packages/oaa_core  MIT             unchanged, not involved here
 #   lib/ (the app)     GPL-3.0-or-later  unchanged — the app never links JUCE.
 #                                      It talks to this plugin over a socket,
 #                                      which is not linking, so nothing about
@@ -35,9 +35,9 @@
 #
 # GPLv3 section 13 expressly permits combining a GPLv3 work with AGPLv3 code,
 # and the app being "GPL-3.0-**or-later**" is what makes the combination clean
-# rather than merely arguable. The practical consequence of AGPL over GPL is
-# its network clause, and since Bel publishes all of its source anyway, that
-# clause asks us for nothing we were not already doing.
+# rather than merely arguable. The practical consequence of AGPL over GPL is its
+# network clause, and since Open Audio Analyzer publishes all of its source
+# anyway, that clause asks us for nothing we were not already doing.
 #
 # One piece of good news the plan did not anticipate: **Steinberg relicensed the
 # VST3 SDK to MIT**, and JUCE 8 vendors it (in juce_audio_processors_headless).
@@ -50,14 +50,14 @@
 #   cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 #   cmake --build build
 #
-# Products land in build/BelPlugin_artefacts/. Nothing is installed into a
+# Products land in build/OaaPlugin_artefacts/. Nothing is installed into a
 # system plugin folder unless you ask for it — see COPY_PLUGIN_AFTER_BUILD.
 
 cmake_minimum_required(VERSION 3.22)
 
-project(bel_plugin
+project(oaa_plugin
   VERSION 0.1.0
-  DESCRIPTION "Bel — headless metering plugin"
+  DESCRIPTION "Open Audio Analyzer — headless metering plugin"
   LANGUAGES C CXX
 )
 
@@ -75,39 +75,39 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # AudioPlayHead and CMake APIs this plugin is written against are stable there,
 # and a metering plugin gains nothing from 9's new features. Revisit when
 # there is a reason, not on a schedule.
-set(BEL_JUCE_TAG "8.0.15" CACHE STRING "JUCE release tag to build against.")
+set(OAA_JUCE_TAG "8.0.15" CACHE STRING "JUCE release tag to build against.")
 
 # A checkout at plugin/third_party/JUCE wins if it is there, so that a working
 # tree that already paid the ~110 MB download does not pay it again, and so
 # that an offline build is possible at all. Otherwise fetch it.
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/JUCE/CMakeLists.txt")
-  message(STATUS "Bel: using vendored JUCE at third_party/JUCE")
+  message(STATUS "Open Audio Analyzer: using vendored JUCE at third_party/JUCE")
   add_subdirectory(third_party/JUCE EXCLUDE_FROM_ALL)
 else()
-  message(STATUS "Bel: fetching JUCE ${BEL_JUCE_TAG}")
+  message(STATUS "Open Audio Analyzer: fetching JUCE ${OAA_JUCE_TAG}")
   include(FetchContent)
   FetchContent_Declare(JUCE
     GIT_REPOSITORY https://github.com/juce-framework/JUCE.git
-    GIT_TAG        ${BEL_JUCE_TAG}
+    GIT_TAG        ${OAA_JUCE_TAG}
     GIT_SHALLOW    TRUE
   )
   FetchContent_MakeAvailable(JUCE)
 endif()
 
 # ---------------------------------------------------------------------------
-# libbel
+# liboaa
 #
 # Built from source rather than located as an installed package. The plugin and
 # the engine are versioned together in one repository and there is no scenario
 # where you want this plugin against a different engine than the one beside it
-# — that is exactly the stale-library case bel.h's ABI assertion exists to
+# — that is exactly the stale-library case oaa.h's ABI assertion exists to
 # catch, and not creating the opportunity is better than catching it.
 #
 # The plugin never opens a file: the DAW hands it audio. So the decode sources
 # and their dr_libs dependency are switched off, which is a couple of hundred
 # kilobytes of vendored MP3 and FLAC decoders that would otherwise be linked
 # into every plugin bundle to do nothing.
-set(BEL_BUILD_DECODE OFF CACHE BOOL "" FORCE)
+set(OAA_BUILD_DECODE OFF CACHE BOOL "" FORCE)
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../engine ${CMAKE_CURRENT_BINARY_DIR}/engine)
 
 # ---------------------------------------------------------------------------
@@ -117,24 +117,24 @@ add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../engine ${CMAKE_CURRENT_BINARY_DI
 # it elsewhere is not a portability problem to solve — it is a request that
 # cannot be honoured. Standalone is built everywhere because it is how you test
 # the socket path without opening a DAW.
-set(BEL_FORMATS VST3 Standalone)
+set(OAA_FORMATS VST3 Standalone)
 if(APPLE)
-  list(APPEND BEL_FORMATS AU)
+  list(APPEND OAA_FORMATS AU)
 endif()
 
-juce_add_plugin(BelPlugin
-  PRODUCT_NAME              "Bel"
-  COMPANY_NAME              "Bel"
-  COMPANY_WEBSITE           "https://github.com/JonasGrunau/open_music_analyzer"
+juce_add_plugin(OaaPlugin
+  PRODUCT_NAME              "Open Audio Analyzer"
+  COMPANY_NAME              "Open Audio Analyzer"
+  COMPANY_WEBSITE           "https://github.com/JonasGrunau/open_audio_analyzer"
   BUNDLE_ID                 "io.github.jonasgrunau.bel"
 
   # Four characters each, at least one uppercase — an Audio Unit requirement,
   # not a JUCE one, and a lowercase-only code fails validation at load time in
   # Logic rather than at build time here.
-  PLUGIN_MANUFACTURER_CODE  BelA
-  PLUGIN_CODE               BelM
+  PLUGIN_MANUFACTURER_CODE  OaaA
+  PLUGIN_CODE               OaaM
 
-  FORMATS                   ${BEL_FORMATS}
+  FORMATS                   ${OAA_FORMATS}
 
   IS_SYNTH                  FALSE
   NEEDS_MIDI_INPUT          FALSE
@@ -156,14 +156,14 @@ juce_add_plugin(BelPlugin
   COPY_PLUGIN_AFTER_BUILD   FALSE
 )
 
-target_sources(BelPlugin PRIVATE
-  src/BelPluginProcessor.cpp
-  src/BelPluginEditor.cpp
-  src/BelStreamer.cpp
-  src/BelWire.cpp
+target_sources(OaaPlugin PRIVATE
+  src/OaaPluginProcessor.cpp
+  src/OaaPluginEditor.cpp
+  src/OaaStreamer.cpp
+  src/OaaWire.cpp
 )
 
-target_compile_definitions(BelPlugin PUBLIC
+target_compile_definitions(OaaPlugin PUBLIC
   JUCE_WEB_BROWSER=0
   JUCE_USE_CURL=0
 
@@ -180,9 +180,9 @@ target_compile_definitions(BelPlugin PUBLIC
   # saying so.
 )
 
-target_link_libraries(BelPlugin
+target_link_libraries(OaaPlugin
   PRIVATE
-    bel::bel
+    oaa::oaa
     juce::juce_audio_utils   # pulls in audio_basics / devices / processors
     juce::juce_gui_basics
   PUBLIC
@@ -193,7 +193,7 @@ target_link_libraries(BelPlugin
 # Link-time optimisation on release builds only. It is worth having on the
 # analysis path and it makes a debug build considerably slower to produce for
 # no benefit at all.
-target_link_libraries(BelPlugin PUBLIC
+target_link_libraries(OaaPlugin PUBLIC
   $<$<CONFIG:Release>:juce::juce_recommended_lto_flags>)
 
 # ---------------------------------------------------------------------------
@@ -204,23 +204,23 @@ target_link_libraries(BelPlugin PUBLIC
 # test/wire_fixture.cpp for why a cross-implementation golden is the only test
 # that catches the failure that matters here.
 #
-# Links libbel and nothing else — no JUCE. That is deliberate: it means the
+# Links liboaa and nothing else — no JUCE. That is deliberate: it means the
 # fixture builds on a machine with no framework, in about a second, so CI can
 # run the byte-layout check without paying for a plugin build.
-add_executable(bel_wire_fixture
+add_executable(oaa_wire_fixture
   test/wire_fixture.cpp
-  src/BelWire.cpp
+  src/OaaWire.cpp
 )
-target_link_libraries(bel_wire_fixture PRIVATE bel::bel)
-target_include_directories(bel_wire_fixture PRIVATE src)
+target_link_libraries(oaa_wire_fixture PRIVATE oaa::oaa)
+target_include_directories(oaa_wire_fixture PRIVATE src)
 
 enable_testing()
 
 add_test(NAME wire_fixture_matches_golden
   COMMAND ${CMAKE_COMMAND}
-    -DFIXTURE=$<TARGET_FILE:bel_wire_fixture>
-    -DGOLDEN=${CMAKE_CURRENT_SOURCE_DIR}/test/golden/wire_v1.bin
-    -DSCRATCH=${CMAKE_CURRENT_BINARY_DIR}/wire_v1.actual.bin
+    -DFIXTURE=$<TARGET_FILE:oaa_wire_fixture>
+    -DGOLDEN=${CMAKE_CURRENT_SOURCE_DIR}/test/golden/wire_v2.bin
+    -DSCRATCH=${CMAKE_CURRENT_BINARY_DIR}/wire_v2.actual.bin
     -P ${CMAKE_CURRENT_SOURCE_DIR}/test/compare_golden.cmake
 )
 

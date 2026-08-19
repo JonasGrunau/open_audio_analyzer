@@ -33,20 +33,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.13.1"
-  bel_core:
-    dependency: "direct main"
-    description:
-      path: "../packages/bel_core"
-      relative: true
-    source: path
-    version: "0.1.0"
-  bel_engine:
-    dependency: "direct main"
-    description:
-      path: "../packages/bel_engine"
-      relative: true
-    source: path
-    version: "0.1.0"
   boolean_selector:
     dependency: transitive
     description:
@@ -223,6 +209,20 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.0.2"
+  oaa_core:
+    dependency: "direct main"
+    description:
+      path: "../packages/oaa_core"
+      relative: true
+    source: path
+    version: "0.1.0"
+  oaa_engine:
+    dependency: "direct main"
+    description:
+      path: "../packages/oaa_engine"
+      relative: true
+    source: path
+    version: "0.1.0"
   package_config:
     dependency: transitive
     description:

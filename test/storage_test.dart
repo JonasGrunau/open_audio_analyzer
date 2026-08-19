@@ -11,14 +11,14 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:bel/src/storage/config_paths.dart';
-import 'package:bel/src/storage/config_store.dart';
-import 'package:bel/src/storage/startup_config.dart';
-import 'package:bel_core/bel_core.dart';
+import 'package:oaa/src/storage/config_paths.dart';
+import 'package:oaa/src/storage/config_store.dart';
+import 'package:oaa/src/storage/startup_config.dart';
+import 'package:oaa_core/oaa_core.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 Directory _tempDir() {
-  final directory = Directory.systemTemp.createTempSync('bel_test_');
+  final directory = Directory.systemTemp.createTempSync('oaa_test_');
   addTearDown(() {
     if (directory.existsSync()) directory.deleteSync(recursive: true);
   });
@@ -41,7 +41,7 @@ void main() {
           operatingSystem: 'macos',
           environment: {'HOME': '/Users/jo'},
         ),
-        '/Users/jo/Library/Application Support/Bel',
+        '/Users/jo/Library/Application Support/Open Audio Analyzer',
       );
     });
 
@@ -51,7 +51,7 @@ void main() {
           operatingSystem: 'windows',
           environment: {'APPDATA': r'C:\Users\jo\AppData\Roaming'},
         ),
-        r'C:\Users\jo\AppData\Roaming\Bel',
+        r'C:\Users\jo\AppData\Roaming\Open Audio Analyzer',
       );
     });
 
@@ -61,14 +61,14 @@ void main() {
           operatingSystem: 'linux',
           environment: {'HOME': '/home/jo', 'XDG_CONFIG_HOME': '/home/jo/.cfg'},
         ),
-        '/home/jo/.cfg/bel',
+        '/home/jo/.cfg/oaa',
       );
       expect(
         resolveConfigRoot(
           operatingSystem: 'linux',
           environment: {'HOME': '/home/jo'},
         ),
-        '/home/jo/.config/bel',
+        '/home/jo/.config/oaa',
       );
     });
 
@@ -82,7 +82,7 @@ void main() {
           environment: {},
           temporaryDirectory: '$container/tmp',
         ),
-        '$container/Library/Application Support/Bel',
+        '$container/Library/Application Support/Open Audio Analyzer',
       );
       // TMPDIR arrives with a trailing slash on a device.
       expect(
@@ -91,14 +91,14 @@ void main() {
           environment: {},
           temporaryDirectory: '$container/tmp/',
         ),
-        '$container/Library/Application Support/Bel',
+        '$container/Library/Application Support/Open Audio Analyzer',
       );
     });
 
     test('iOS resolves to nothing rather than to a path outside the app', () {
       // `/tmp` is what a process with no TMPDIR gets. Its parent is `/`, and
-      // `/Library/Application Support/Bel` would fail at write time as a
-      // permission error, which reads like a broken install.
+      // `/Library/Application Support/Open Audio Analyzer` would fail at write
+      // time as a permission error, which reads like a broken install.
       for (final temp in ['/tmp', '/tmp/', 'tmp', '/', '']) {
         expect(
           resolveConfigRoot(
@@ -123,7 +123,7 @@ void main() {
           environment: {'HOME': '/Users/jo'},
           temporaryDirectory: '/private/var/mobile/Containers/Data/App/A1/tmp',
         ),
-        '/Users/jo/Library/Application Support/Bel',
+        '/Users/jo/Library/Application Support/Open Audio Analyzer',
       );
     });
 
@@ -132,19 +132,19 @@ void main() {
         expect(
           resolveConfigRoot(
             operatingSystem: os,
-            environment: {kConfigDirEnvVar: '/tmp/bel', 'HOME': '/home/jo'},
+            environment: {kConfigDirEnvVar: '/tmp/oaa', 'HOME': '/home/jo'},
             temporaryDirectory:
                 '/private/var/mobile/Containers/Data/App/A1/tmp',
           ),
-          '/tmp/bel',
+          '/tmp/oaa',
         );
       }
     });
 
     test('an environment with nothing in it resolves to nothing', () {
       // A legitimate state — a stripped service environment, some CI
-      // containers. Bel runs without persistence rather than guessing `/` and
-      // failing at write time.
+      // containers. Open Audio Analyzer runs without persistence rather than
+      // guessing `/` and failing at write time.
       expect(
         resolveConfigRoot(operatingSystem: 'linux', environment: {}),
         isNull,

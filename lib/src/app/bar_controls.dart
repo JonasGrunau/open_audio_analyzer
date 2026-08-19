@@ -2,24 +2,24 @@
 
 // The two shapes the status bar is built from.
 //
-// They live here rather than in `bel_app.dart` because the bar is not assembled
+// They live here rather than in `oaa_app.dart` because the bar is not assembled
 // in one file: `RemoteDisplayControl` owns a socket and an mDNS responder and
 // therefore has to stay in `lib/src/remote/`, but the thing it puts in the row
 // is a button like any other. It was a stock `TextButton` for a whole phase —
 // borderless, ink-rippled and Material-sized in a row of four bordered
-// `BarButton`s — which is what a private widget in `bel_app.dart` costs.
+// `BarButton`s — which is what a private widget in `oaa_app.dart` costs.
 //
-// They are *not* `BelButton` and they never will be. `bel_ui`'s buttons are
+// They are *not* `OaaButton` and they never will be. `oaa_ui`'s buttons are
 // sized for a panel, where a control has a whole row to itself; these are sized
 // for a 40 px bar that also has to hold the source, the clock, the calibration
 // and the frame rate.
 
-import 'package:bel_ui/bel_ui.dart';
+import 'package:oaa_ui/oaa_ui.dart';
 import 'package:flutter/material.dart';
 
 /// The height of everything bordered in the status bar.
 ///
-/// `BelControl.height` for the bar, and it exists for the reason that one does.
+/// `OaaControl.height` for the bar, and it exists for the reason that one does.
 /// Both shapes below used to take their height from their own text style plus
 /// their own vertical padding, and the two styles are not the same: `caption` at
 /// 11 px on a 1.4 line box made the chip 25.4 px tall, `label` at 10 px on a 1.2
@@ -57,13 +57,13 @@ class BarChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = BelTheme.of(context);
+    final colors = OaaTheme.of(context);
     return Container(
       height: _barControlHeight,
       padding: const EdgeInsets.symmetric(horizontal: Space.sm),
       decoration: BoxDecoration(
-        borderRadius: BelRadius.allXs,
-        border: Border.all(color: colors.hairline, width: BelStroke.hairline),
+        borderRadius: OaaRadius.allXs,
+        border: Border.all(color: colors.hairline, width: OaaStroke.hairline),
       ),
       // `Center`, not `Container.alignment`: an aligned `Container` expands to
       // whatever bounded width it is offered, and this one is offered 220 px by
@@ -79,7 +79,7 @@ class BarChip extends StatelessWidget {
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           softWrap: false,
-          style: BelType.label.copyWith(color: colors.textMuted),
+          style: OaaType.label.copyWith(color: colors.textMuted),
         ),
       ),
     );
@@ -119,19 +119,19 @@ class BarButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = BelTheme.of(context);
-    final button = BelFocusable(
+    final colors = OaaTheme.of(context);
+    final button = OaaFocusable(
       onActivate: onPressed,
       semanticLabel: semanticLabel,
       builder: (context, hovered, focused) => Container(
         height: _barControlHeight,
         padding: const EdgeInsets.symmetric(horizontal: Space.smd),
         decoration: BoxDecoration(
-          borderRadius: BelRadius.allXs,
+          borderRadius: OaaRadius.allXs,
           color: hovered ? colors.panelRaised : null,
           border: Border.all(
             color: focused ? colors.textPrimary : colors.hairlineStrong,
-            width: BelStroke.hairline,
+            width: OaaStroke.hairline,
           ),
         ),
         // See `BarChip` for why the height is centred with a width factor
@@ -140,7 +140,7 @@ class BarButton extends StatelessWidget {
           widthFactor: 1,
           child: Text(
             label,
-            style: BelType.label.copyWith(
+            style: OaaType.label.copyWith(
               color: lit ? colors.textPrimary : colors.textMuted,
             ),
           ),

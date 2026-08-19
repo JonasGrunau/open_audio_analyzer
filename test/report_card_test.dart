@@ -8,11 +8,11 @@
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
-import 'package:bel_core/bel_core.dart';
-import 'package:bel_ui/bel_ui.dart';
+import 'package:oaa_core/oaa_core.dart';
+import 'package:oaa_ui/oaa_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:bel/src/panels/report_card.dart';
+import 'package:oaa/src/panels/report_card.dart';
 
 AnalysisReport _report({
   Calibration? calibration,
@@ -42,7 +42,7 @@ AnalysisReport _report({
   channelPeakMax: const [-1.8, -1.9],
   calibration: calibration,
   timeline: timeline,
-  toolVersion: 'Bel 0.1.0',
+  toolVersion: 'Open Audio Analyzer 0.1.0',
 );
 
 List<ReportTimelinePoint> _timeline(int count) => [
@@ -64,7 +64,7 @@ Future<ui.Image> _decode(Uint8List bytes) async {
 }
 
 void main() {
-  const colors = BelColors.precisionInstrument;
+  const colors = OaaColors.precisionInstrument;
 
   test('renders a decodable PNG', () async {
     final bytes = await renderReportCard(_report(), colors);

@@ -1,8 +1,8 @@
 # 00 — Scope
 
-**Audit date:** 2026-08-15
-**Subject:** Bel — free/open-source loudness and spectrum analyser (`open_music_analyzer`)
-**Framework:** Dieter Rams' ten principles
+**Audit date:** 2026-08-15 **Subject:** Open Audio Analyzer — free/open-source
+loudness and spectrum analyser (`open_audio_analyzer`) **Framework:** Dieter
+Rams' ten principles
 
 ## What was audited
 
@@ -11,11 +11,11 @@
 | Surface | Paths |
 |---|---|
 | Canvas and modules | `lib/src/canvas/`, `lib/src/modules/` (12 module kinds) |
-| Shared UI primitives | `packages/bel_ui/lib/src/` (tokens, panel, module_frame, readout, scale) |
+| Shared UI primitives | `packages/oaa_ui/lib/src/` (tokens, panel, module_frame, readout, scale) |
 | Panels | `lib/src/panels/` (settings, presets, calibration editor, report, shortcuts) |
-| App chrome | `lib/src/app/bel_app.dart`, `shortcuts.dart` |
+| App chrome | `lib/src/app/oaa_app.dart`, `shortcuts.dart` |
 | Remote display | `lib/src/remote/` |
-| Domain vocabulary | `packages/bel_core/lib/src/` (metric, skin, layout, report) |
+| Domain vocabulary | `packages/oaa_core/lib/src/` (metric, skin, layout, report) |
 | Product copy | `README.md` |
 
 **Excluded:** `engine/` C DSP internals (no user-facing surface), `cli/` (separate
@@ -23,10 +23,10 @@ interaction model, no visual design), `plugin/` (headless by definition).
 
 ## Primary user and task
 
-**Both, weighted to monitoring.** Bel is a live meter first and a delivery
-checker second. Scoring treats the canvas as a monitoring instrument — glanceable,
-continuous, trustworthy at a distance — and the file-analysis flow as the
-secondary path to a pass/fail delivery verdict.
+**Both, weighted to monitoring.** Open Audio Analyzer is a live meter first and
+a delivery checker second. Scoring treats the canvas as a monitoring instrument
+— glanceable, continuous, trustworthy at a distance — and the file-analysis flow
+as the secondary path to a pass/fail delivery verdict.
 
 ## Constraints
 
@@ -39,8 +39,8 @@ secondary path to a pass/fail delivery verdict.
 
 ## Reference design
 
-`process.audio` **Decibel** — Bel is a stated reimplementation of its ideas.
-Relevant to principle #1 only.
+`process.audio` **Decibel** — Open Audio Analyzer is a stated reimplementation
+of its ideas. Relevant to principle #1 only.
 
 ## Method deviations (stated for honesty)
 

@@ -4,8 +4,8 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
-import 'package:bel_core/bel_core.dart';
-import 'package:bel_ui/bel_ui.dart';
+import 'package:oaa_core/oaa_core.dart';
+import 'package:oaa_ui/oaa_ui.dart';
 import 'package:flutter/widgets.dart';
 
 import '../clock/meter_clock.dart';
@@ -30,8 +30,8 @@ import '../clock/meter_clock.dart';
 /// happening rather than infer from two numbers that moved.
 ///
 /// Colour is the target and nothing else. Everything under the calibration's
-/// LUFS target is drawn in [BelColors.accent], everything over it in
-/// [BelColors.over], and the split is a clip rather than a per-column verdict —
+/// LUFS target is drawn in [OaaColors.accent], everything over it in
+/// [OaaColors.over], and the split is a clip rather than a per-column verdict —
 /// a short-term reading above target is not a delivery failure and must not be
 /// coloured as though somebody had classified it as one. It is the *area* over
 /// the line that carries the meaning, and the eye adds that up on its own.
@@ -161,7 +161,7 @@ class _HistogramModuleState extends State<HistogramModule> {
   Paint? _bandUnder;
   Paint? _bandOver;
   Rect? _shadedPlot;
-  BelColors? _shadedColors;
+  OaaColors? _shadedColors;
 
   /// Bright along the top edge and nearly gone at the floor, which is what stops
   /// a filled area reading as a block of paint and lets the shape of the curve
@@ -169,7 +169,7 @@ class _HistogramModuleState extends State<HistogramModule> {
   /// analyser: a shader on the `Paint` is evaluated in canvas space, so a
   /// thousand butt-capped vertical strokes drawn through it produce exactly the
   /// gradient one filled `Path` would — without the path.
-  void _ensureFills(Rect plot, BelColors colors) {
+  void _ensureFills(Rect plot, OaaColors colors) {
     if (_shadedPlot == plot && _shadedColors == colors) return;
     _shadedPlot = plot;
     _shadedColors = colors;
@@ -206,7 +206,7 @@ class _HistogramModuleState extends State<HistogramModule> {
 
   @override
   Widget build(BuildContext context) {
-    final colors = BelTheme.of(context);
+    final colors = OaaTheme.of(context);
 
     if (_graticule == null ||
         !_graticule!.matches(_scale, ScaleSide.left, colors.textFaint)) {
@@ -218,7 +218,7 @@ class _HistogramModuleState extends State<HistogramModule> {
         labelColor: colors.textFaint,
       );
 
-      final style = BelType.tick.copyWith(color: colors.textFaint);
+      final style = OaaType.tick.copyWith(color: colors.textFaint);
       _unit = layoutParagraph('LUFS', style);
       _widestTimeLabel = 0;
       _timeLabels = [
@@ -350,23 +350,23 @@ class _HistogramPainter extends MeterPainter {
          // the thing worth landing on is where the area crosses the target.
          ..color = colors.accent
          ..style = PaintingStyle.stroke
-         ..strokeWidth = BelStroke.mark),
+         ..strokeWidth = OaaStroke.mark),
        _grid = (Paint()
          ..color = colors.hairline
-         ..strokeWidth = BelStroke.hairline
+         ..strokeWidth = OaaStroke.hairline
          ..isAntiAlias = false),
        // Dashed, so that the one line on the display the user chose cannot be
        // mistaken for one the signal drew.
        _target = (Paint()
          ..color = colors.textMuted
-         ..strokeWidth = BelStroke.mark
+         ..strokeWidth = OaaStroke.mark
          ..strokeCap = StrokeCap.butt
          ..isAntiAlias = false),
        super(repaint: repaint);
 
   final MeterSource engine;
   final Calibration calibration;
-  final BelColors colors;
+  final OaaColors colors;
   final ScaleGraticule graticule;
   final _LoudnessHistory history;
   final _HistogramModuleState state;
@@ -402,7 +402,7 @@ class _HistogramPainter extends MeterPainter {
     // empty display, unreadable on a full one, which is the one that matters.
     final targetLabel = state._targetValue.of(
       Metric.lufsIntegrated.format(calibration.lufsTarget),
-      BelType.tick.copyWith(color: colors.textMuted),
+      OaaType.tick.copyWith(color: colors.textMuted),
     );
 
     // ...and it is dropped rather than allowed to collide with a tick.
@@ -417,7 +417,7 @@ class _HistogramPainter extends MeterPainter {
     // scale, which is the order of precedence a measuring instrument has to
     // have. Where there is room — the default size and anything larger — the
     // number is drawn.
-    final labelHeight = BelType.tick.fontSize! + Space.sm;
+    final labelHeight = OaaType.tick.fontSize! + Space.sm;
     final plotHeight = size.height - labelHeight;
     final scale = graticule.scale;
     final target = calibration.lufsTarget.clamp(scale.min, scale.max);
@@ -505,8 +505,8 @@ class _HistogramPainter extends MeterPainter {
     // exactly where it is most visible — a display at rest is nothing but the
     // line along the floor — so the *curve* is held half a stroke inside. The
     // bars are not: they carry the extent of the reading and keep it exact.
-    final curveTop = plot.top + BelStroke.mark / 2;
-    final curveBottom = plot.bottom - BelStroke.mark / 2;
+    final curveTop = plot.top + OaaStroke.mark / 2;
+    final curveBottom = plot.bottom - OaaStroke.mark / 2;
 
     for (var i = 0; i < columns; i++) {
       final x = plot.right - (i + 0.5) * columnWidth;
@@ -600,8 +600,8 @@ class _HistogramPainter extends MeterPainter {
     // Right-aligned against the same edge the graticule aligns its ticks to,
     // and centred on the line rather than sitting above it — a reader looking
     // for the target reads across from the number, so the number has to be at
-    // the height of the thing it names. Drawn in [BelColors.textMuted] where
-    // the ticks are [BelColors.textFaint], because it is a statement about the
+    // the height of the thing it names. Drawn in [OaaColors.textMuted] where
+    // the ticks are [OaaColors.textFaint], because it is a statement about the
     // delivery target and not another mark on the scale.
     canvas.drawParagraph(
       label,

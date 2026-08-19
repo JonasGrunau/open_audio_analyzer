@@ -1,7 +1,7 @@
 # Changelog
 
-All notable changes to Bel are recorded here. The format is defined in
-[CLAUDE.md](CLAUDE.md#changelogmd-format); the short version is that
+All notable changes to Open Audio Analyzer are recorded here. The format is
+defined in [CLAUDE.md](CLAUDE.md#changelogmd-format); the short version is that
 **📐 Measurement always comes first**, because a change to a reported number can
 invalidate a decision somebody already made about a master.
 
@@ -12,15 +12,15 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### 📐 Measurement
 
 - **The VU meter reads differently, and lower on most material.** It was a
-  one-pole smoother over mean square — an RMS meter with a 300 ms time
-  constant. It is now what a VU movement actually is: **average-responding and
+  one-pole smoother over mean square — an RMS meter with a 300 ms time constant.
+  It is now what a VU movement actually is: **average-responding and
   RMS-calibrated**, through a second-order mechanism. A steady sine still reads
   its own RMS exactly, so a calibration tone is unchanged; anything peakier now
   reads **lower**, by 9 dB on a signal with a 10% duty cycle and typically 1 to
   4 dB on dense modern masters. If you have been matching levels by VU against
-  Bel's previous readings, re-check them. The needle also overshoots by about
-  1.2% on a transient, which is inside the tolerance the standard allows and is
-  most of why a VU feels like a VU.
+  Open Audio Analyzer's previous readings, re-check them. The needle also
+  overshoots by about 1.2% on a transient, which is inside the tolerance the
+  standard allows and is most of why a VU feels like a VU.
 - **The spectrum is now measured.** 512 log-spaced bands from 20 Hz to 20 kHz,
   from a 4096-point Hann window per channel at a 1024-sample hop, zero-padded
   to a 16384-point transform. A band wide enough to contain bins takes the
@@ -64,9 +64,9 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   device or file source can supply it.
 
 - **A device's own sample rate and channel count are adopted, not converted
-  to.** Bel measures the stream the hardware produced; resampling in front of
-  the measurement would move inter-sample peaks and shift the K-weighted
-  energy, and the resulting numbers would still look plausible.
+  to.** Open Audio Analyzer measures the stream the hardware produced;
+  resampling in front of the measurement would move inter-sample peaks and shift
+  the K-weighted energy, and the resulting numbers would still look plausible.
 - An interface wider than 7.1 is **refused** rather than measured eight
   channels at a time and reported as programme loudness.
 - An unknown device id **fails** instead of falling back to the default. A
@@ -75,7 +75,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - **Files can now be measured, and they read exactly as the live meters do.**
   Analysing a file decodes it and pushes the blocks through the same
-  `bel_analyse` a capture device drives — there is no second DSP path — so the
+  `oaa_analyse` a capture device drives — there is no second DSP path — so the
   numbers are identical rather than merely close. A test asserts that equality
   on the same samples analysed both ways, to the bit. A file is measured at its
   own sample rate and channel count; nothing resamples or remixes, because a
@@ -108,7 +108,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   tablet on the same network shows the same meters — the same modules, the same
   layout, the same skin and the same delivery target, rendered by the same
   painters from measurements sent over the network rather than reimplemented.
-  Hosts are found by name over mDNS (`_bel._tcp`), and an address can always be
+  Hosts are found by name over mDNS (`_oaa._tcp`), and an address can always be
   typed instead, because multicast is the first thing a guest network blocks.
 - **A remote display says when it has stopped being current.** Two seconds
   without a measurement and every reading becomes a dash and the link is marked
@@ -121,13 +121,13 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   until a human opens it. There is no password on the connection; anyone who can
   reach the port can read the measurements and the layout, which is why it is
   offered rather than assumed.
-- **A headless VST3 and Audio Unit plugin.** Insert Bel on any track, bus or
-  master and the desktop app meters what the DAW is playing, through the same
-  engine and the same painters as a live input — so a plugin reading and a
-  device reading of the same audio cannot disagree. The plugin draws no meters
-  itself; it measures and streams, and a small status panel says whether it is
-  connected. Built for macOS, Windows and Linux, plus a standalone target for
-  testing the link without opening a host.
+- **A headless VST3 and Audio Unit plugin.** Insert Open Audio Analyzer on any
+  track, bus or master and the desktop app meters what the DAW is playing,
+  through the same engine and the same painters as a live input — so a plugin
+  reading and a device reading of the same audio cannot disagree. The plugin
+  draws no meters itself; it measures and streams, and a small status panel says
+  whether it is connected. Built for macOS, Windows and Linux, plus a standalone
+  target for testing the link without opening a host.
 - **The DAW's transport reaches the app**: play and record state, playhead in
   seconds, samples and quarter-notes, tempo, time signature, loop points and
   SMPTE timecode with its frame rate. Every field carries a "the host supplied
@@ -160,8 +160,8 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   **Spectrogram**; a
   **Phase Scope**; and a **Stereo Cloud** (per-band stereo position, which
   answers *which part* of a mix folds badly rather than only that it does).
-- **Bel opens on a working meter bridge**, with the frequency displays on a
-  second tab, instead of six readings on an empty grid.
+- **Open Audio Analyzer opens on a working meter bridge**, with the frequency
+  displays on a second tab, instead of six readings on an empty grid.
 
 - **The canvas is arrangeable.** A 24-column by 16-row grid: drag a module by
   its title bar to move it, drag the corner grip to resize, alt-drag to
@@ -180,7 +180,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   from the source menu in the status bar. On Windows, WASAPI loopback meters
   system output with no setup; on macOS and Linux a virtual loopback device
   (BlackHole, a PipeWire monitor) appears in the same list — see the README.
-- `BelSource.push` and `bel_engine_push()`: audio supplied synchronously by the
+- `OaaSource.push` and `oaa_engine_push()`: audio supplied synchronously by the
   caller, with no thread and no clock. It makes the engine a pure function of
   the samples it was given, which is what the conformance suite needs and what
   file analysis will be built on.
@@ -204,17 +204,17 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   a plot. An unmeasured value is an em dash, a `null` and an empty cell
   respectively — never a zero, which is a legitimate reading for correlation
   and several dB quantities and so cannot double as "no data".
-- **A `bel` command-line analyser**, so a loudness check can be a step in a
+- **A `oaa` command-line analyser**, so a loudness check can be a step in a
   release pipeline instead of something somebody remembers to do. It runs the
-  same engine and the same decoder as the app. `bel --target streaming-14
+  same engine and the same decoder as the app. `oaa --target streaming-14
   master.wav` **exits 2** when the file misses its delivery spec, 1 on a file it
   cannot read and 0 when all is well, which is what lets a build fail on a
   master that is 2 LU too loud.
 
-- **Bel remembers what you set up.** The frame rate, the delivery target, the
-  skin, the signal source and the arrangement on the canvas all survive
-  quitting. The window reopens on the layout it was closed on, listening to the
-  device it was listening to.
+- **Open Audio Analyzer remembers what you set up.** The frame rate, the
+  delivery target, the skin, the signal source and the arrangement on the canvas
+  all survive quitting. The window reopens on the layout it was closed on,
+  listening to the device it was listening to.
 - **Presets.** Save the arrangement under a name, open it again later, delete
   it. One JSON file per preset in a documented directory, so a preset can be
   sent to somebody, dropped in from a forum post or kept in version control —
@@ -222,12 +222,12 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   optionally carries the delivery target and skin it was saved with; leaving
   either out means "follow whatever is selected", which is what makes a layout
   reusable across jobs.
-- **A delivery-target editor.** Any spec Bel does not ship — a label's house
-  standard, a game platform's submission requirement — is now twenty seconds of
-  typing rather than a feature request. User targets appear beside the built-ins
-  everywhere, and a user file carrying a built-in's id replaces that built-in,
-  including in presets that already name it. Deleting the file brings the
-  original back.
+- **A delivery-target editor.** Any spec Open Audio Analyzer does not ship — a
+  label's house standard, a game platform's submission requirement — is now
+  twenty seconds of typing rather than a feature request. User targets appear
+  beside the built-ins everywhere, and a user file carrying a built-in's id
+  replaces that built-in, including in presets that already name it. Deleting
+  the file brings the original back.
 - **Skins.** The palette is thirteen named roles in a JSON file. A skin may set
   as few as one of them and inherit the rest, so changing the accent colour is a
   three-line file. Ships with Precision Instrument and **Daylight**, a light
@@ -244,15 +244,15 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   because somebody enabled it once at home.
 - **The macOS build is no longer sandboxed.** It was, which put your settings,
   presets, skins and delivery targets inside
-  `~/Library/Containers/dev.belmeter.bel/Data/…` instead of
-  `~/Library/Application Support/Bel`, and stopped `BEL_CONFIG_DIR` from
-  pointing anywhere outside that container. Configuration you cannot find is
-  configuration you cannot edit, mail to somebody or keep in version control,
-  which is most of the point of it being files. Bel gives up Mac App Store
-  eligibility, which was never planned; notarising the dmg does not need the
-  sandbox. **If you ran an earlier build, your existing configuration is in the
-  container path above — move it across, or it will look as though Bel forgot
-  everything.**
+  `~/Library/Containers/dev.openaudioanalyzer.oaa/Data/…` instead of
+  `~/Library/Application Support/Open Audio Analyzer`, and stopped
+  `OAA_CONFIG_DIR` from pointing anywhere outside that container. Configuration
+  you cannot find is configuration you cannot edit, mail to somebody or keep in
+  version control, which is most of the point of it being files. Open Audio
+  Analyzer gives up Mac App Store eligibility, which was never planned;
+  notarising the dmg does not need the sandbox. **If you ran an earlier build,
+  your existing configuration is in the container path above — move it across,
+  or it will look as though Open Audio Analyzer forgot everything.**
 - The settings panel prints the configuration directory as selectable text
   rather than a path you would have to retype.
 - The capture device is reopened **by name when its id no longer matches**.
@@ -260,45 +260,91 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   id-only lookup silently drops you back to the test tone after a restart with
   no explanation.
 
-- **Keyboard shortcuts, and a sheet that lists them.** Press `?` or `F1`, or
-  the `?` in the status bar. Arrow keys nudge the selected module a cell and
+- **Keyboard shortcuts, and a sheet that lists them.** Press `?` or `F1`, or the
+  `?` in the status bar. Arrow keys nudge the selected module a cell and
   `Shift`+arrows resize it; `Ctrl`/`Cmd` with `N`, `D`, `Z`, `T`, `R`, `O`, `P`
   and `,` add a module, duplicate, undo, open a tab, restart the measurement,
-  analyse a file, open presets and open settings. Bel draws its own chrome and
-  so has no menu bar to read a chord off, which is why the sheet exists.
-- **`--config-dir` names where Bel keeps settings, presets, delivery targets
-  and skins**, and beats the `BEL_CONFIG_DIR` environment variable. On macOS it
-  is the only one of the two that works on an installed `.app`: passing an
-  environment variable means launching the binary inside the bundle, which
-  changes how the system attributes the microphone request, so the variable and
-  device capture could not be used in the same run.
+  analyse a file, open presets and open settings. Open Audio Analyzer draws its
+  own chrome and so has no menu bar to read a chord off, which is why the sheet
+  exists.
+- **`--config-dir` names where Open Audio Analyzer keeps settings, presets,
+  delivery targets and skins**, and beats the `OAA_CONFIG_DIR` environment
+  variable. On macOS it is the only one of the two that works on an installed
+  `.app`: passing an environment variable means launching the binary inside the
+  bundle, which changes how the system attributes the microphone request, so the
+  variable and device capture could not be used in the same run.
 - **`--open-panel=<name>` opens one panel once the window is up**, for
   `settings`, `presets`, `calibration`, `report` or `shortcuts`. Debug builds
   only; a release build says so rather than ignoring it.
 - **Installers for all four desktop targets** — dmg, msix, AppImage and flatpak
-  — plus the `bel` analyser as a standalone binary, published on every tag.
+  — plus the `oaa` analyser as a standalone binary, published on every tag.
 - **A documentation site**, built from the Markdown in this repository and
   published from `main`. The keyboard page is generated from the same table the
   application binds, and a test fails if it has drifted.
 - **An application icon**, at every size the four installers ask for.
+- **The icon now covers iOS and Android too.** Both platforms were still
+  shipping Flutter's default logo — the blue chevron on white — so the app
+  installed on a phone or tablet under somebody else's mark. iOS gets the full
+  asset catalogue, drawn square and alpha-free because it applies its own
+  rounding and rejects a transparent icon; Android gets an adaptive icon, so
+  the launcher masks it to whatever shape it uses and Android 13's themed home
+  screen has a monochrome layer to tint instead of shrinking the icon inside a
+  grey circle. There is a Play Store icon in `packaging/android/` for the
+  console to be given by hand.
 
 ### ⚡ Changed
+
+- **The icon's bars no longer climb in order.** They were 0.34, 0.55, 0.74,
+  1.00 — which is the cellular signal glyph, drawn that way in the status bar
+  of every phone the icon was about to appear on, and the shape is what the eye
+  reads rather than the colour. They are now 0.62, 1.00, 0.44, 0.80: up, peak,
+  valley, up, which is a meter. The bars also have slightly rounded corners,
+  the tile's ground is a diagonal gradient from `hairline` to `background`
+  instead of flat graphite, and the hairline border is gone — it was a
+  one-pixel detail that iOS masked off, Android cropped, and 16 px could not
+  draw. Every platform's artwork is regenerated from the same change.
+
+- **The application is now called Open Audio Analyzer.** It was Bel. Nothing it
+  measures changed — every reading is identical to the previous build — but
+  the name it installs under, the directory it keeps your configuration in,
+  the command-line binary and the protocol the tablet and the plugin speak
+  all moved with it. The four below are the ones that can cost you something.
+- **Your settings, presets, delivery targets and skins are not carried across.**
+  Configuration now lives in `~/Library/Application Support/Open Audio Analyzer`
+  on macOS, in `$XDG_CONFIG_HOME/oaa` or `~/.config/oaa` on Linux, and in the
+  matching path on Windows. The old directory is left untouched and is never
+  read; copy its contents over before the first launch to keep what you had.
+- **This installs beside the previous version rather than over it.** The
+  application identifier is now `dev.openaudioanalyzer.oaa`, so every installer
+  and package manager treats this as a new application. Remove the old one by
+  hand if you do not want both.
+- **A tablet or a plugin from an earlier release will not connect.** The wire
+  protocol is at version 2: the frame magic spells the new name, and a host
+  advertises `_oaa._tcp` rather than `_bel._tcp`. A mismatched peer is refused
+  at the handshake rather than drawing wrong numbers, which is the failure
+  that matters — but both ends have to be updated together.
+- **The command-line analyser is `oaa`, not `bel`.** Any script or CI step that
+  calls it needs the new name; its arguments and its exit codes are unchanged.
+- The status bar wordmark reads OAA, and the gap between it and the source
+  picker is one step tighter. OAA sets about 3.4 px wider than the mark it
+  replaced, which on its own was enough to run that row past its edge at
+  1000 px with the longest delivery-target name.
 
 - **Every number is set in Google Sans Code instead of JetBrains Mono.** The
   advance is 0.6 em in both faces, so nothing moves and no readout changes
   width; the digits are a little smaller on the body and rounder in the bowls.
   One character the old face carried is missing from the new one — `∞`, which a
   reading only shows if it is not finite, and nothing the engine produces is —
-  so it now falls back to Inter, which Bel already bundles, rather than to
-  whatever the host offers. Both faces remain SIL OFL 1.1 and their licences
-  still ship with every package.
+  so it now falls back to Inter, which Open Audio Analyzer already bundles,
+  rather than to whatever the host offers. Both faces remain SIL OFL 1.1 and
+  their licences still ship with every package.
 - **Undo and redo in the tab strip carry a mirrored arrow beside the word.** The
   two words differ by one letter in the middle, and a mirrored pair says which
   way it goes before either has been read — but the arrow alone left the row's
   two most-used controls unnamed, so it now punctuates `UNDO` and `REDO` the way
   the plus punctuates `+ MODULE`. The arrows are drawn, like every other mark in
-  Bel, so they are the same on every platform and cost no dependency. The
-  keyboard shortcuts are unchanged.
+  Open Audio Analyzer, so they are the same on every platform and cost no
+  dependency. The keyboard shortcuts are unchanged.
 - **The delivery target in the status bar is built like the buttons beside it,
   one step quieter.** Same height and the same capitals, because it opens a menu
   on a click exactly as the four buttons to its right do and a control that can
@@ -332,9 +378,10 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   line explaining that Ctrl and Cmd are interchangeable in half. It is now two
   columns on a wider panel — Canvas and Measurement on the left, Tabs and
   Configuration on the right — with the rows further apart and the whole list on
-  screen at once, down to the smallest window Bel supports. Below that it stacks
-  back into one column rather than clipping. Measurement now comes before Tabs
-  on the documentation site's keyboard page as well, which is the same ordering.
+  screen at once, down to the smallest window Open Audio Analyzer supports.
+  Below that it stacks back into one column rather than clipping. Measurement
+  now comes before Tabs on the documentation site's keyboard page as well, which
+  is the same ordering.
 - **The remote panels are marked rather than only worded.** Sending and
   receiving were two rows of the same shape whose only difference was the
   sentence in them; each now carries a mark — a machine broadcasting, a screen
@@ -412,7 +459,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   what it was always for.
 - **The status bar drops items in a stated order as the window narrows**, one
   at a time and each at the width below which the rest stop fitting: first the
-  sample-rate readout, then the BEL wordmark, then ANALYSE FILE, then REMOTE,
+  sample-rate readout, then the OAA wordmark, then ANALYSE FILE, then REMOTE,
   then the `?` button. All four buttons keep their keyboard shortcuts, which
   are listed in the `?` sheet and in
   [docs/site/keyboard.md](docs/site/keyboard.md). What never drops is the
@@ -438,14 +485,15 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   opening anything further.
 
 - **The remote display's connect screen is a panel like every other panel.** It
-  was the one screen in Bel that had never been near the design system — an
-  unstyled list, a stock text field with a rounded outline and Material text
-  buttons, on the hardware the feature exists for. Discovered hosts are panel
-  rows now, the typed address is a Bel field with Connect in the footer, and it
-  is the same panel the desktop opens rather than a second implementation of
-  it. The strip across the top of a live display gets the status bar's fill and
-  hairline, with the tab picker and Disconnect as controls rather than as text.
-  Disconnecting returns to the picker instead of to a dead screen.
+  was the one screen in Open Audio Analyzer that had never been near the design
+  system — an unstyled list, a stock text field with a rounded outline and
+  Material text buttons, on the hardware the feature exists for. Discovered
+  hosts are panel rows now, the typed address is an Open Audio Analyzer field
+  with Connect in the footer, and it is the same panel the desktop opens rather
+  than a second implementation of it. The strip across the top of a live display
+  gets the status bar's fill and hairline, with the tab picker and Disconnect as
+  controls rather than as text. Disconnecting returns to the picker instead of
+  to a dead screen.
 
 - **Every boxed control in a panel is the same height.** Buttons, menus,
   segmented controls and text fields derived their heights independently and
@@ -518,9 +566,9 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the top edge of the window, and the close, minimise and zoom buttons sit
   inside it on the same row as the source and the elapsed clock. The strip of
   system grey above a bar of panel grey, and the window title printed in a font
-  Bel does not choose, are both gone. Dragging the status bar moves the window
-  and double-clicking it zooms, as dragging and double-clicking the title bar
-  did. Windows and Linux are unchanged.
+  Open Audio Analyzer does not choose, are both gone. Dragging the status bar
+  moves the window and double-clicking it zooms, as dragging and double-clicking
+  the title bar did. Windows and Linux are unchanged.
 - **A light skin no longer runs under dark window buttons on macOS.** The window
   follows the skin's `light` flag, so Daylight gets light chrome and the two
   stop disagreeing about which way up the room is.
@@ -544,8 +592,8 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   leaves the layout, target and skin alone.
 - The meters cap themselves at 30 fps when the system asks for reduced motion,
   and the settings panel says so rather than showing a rate nothing is running
-  at. Bel has no decorative animation to switch off — what moves is the
-  measurement — so a lower redraw rate is the only honest reading of that
+  at. Open Audio Analyzer has no decorative animation to switch off — what moves
+  is the measurement — so a lower redraw rate is the only honest reading of that
   preference. No reading is withheld.
 - The main view is an arrangeable canvas instead of a fixed wall showing every
   metric at once. It opens on six readings — LUFS-M, LUFS-S, LUFS-I, LRA, TP
@@ -585,9 +633,9 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   sync on whatever followed, and dropped the link again, carrying the leftovers
   into every attempt after that. A tablet that lost a single frame to a Wi-Fi
   hiccup stopped recovering until the app was restarted — Disconnect and
-  reattach did not clear it either. Nothing about how Bel measures has changed
-  and no past reading needs re-checking: the desktop and the CLI were never on
-  this path.
+  reattach did not clear it either. Nothing about how Open Audio Analyzer
+  measures has changed and no past reading needs re-checking: the desktop and
+  the CLI were never on this path.
 - **The status bar's controls are one height.** The delivery target read 25.4 px
   tall against 22 px for the four buttons beside it, because each shape derived
   its height from its own text style plus its own padding rather than being
@@ -612,28 +660,30 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   callback a dangling pointer into a block the allocator was about to reuse.
   Startup now tears the device down on every failing path.
 - **An iPad can now find hosts on the network.** It never could: iOS and iPadOS
-  refuse an app the multicast socket Bel browses with unless it carries an
-  entitlement Apple grants per developer on request, so every send was rejected
-  and nothing was ever delivered — on the hardware the remote display exists
-  for. The tablet now searches through the system's own Bonjour responder,
-  which needs no entitlement, and finds the same hosts by the same name.
-  Typing an address still works and still always will.
-- **A host on a network that hands out a domain is visible again.** Most
-  routers give DHCP clients one, which makes the machine's name
-  `studio-mac.fritz.box` rather than `studio-mac.local` — and Bel advertised
-  that whole string where DNS-SD allows a single label, so the announcement
-  came out as six labels instead of four. Bel's own browser read it anyway, so
-  a Bel desktop found a Bel desktop and nothing looked wrong; every browser
-  built on the system responder — an iPad, `dns-sd`, anything Apple — dropped
-  the record, and the host answered every query on the wire while appearing to
-  no one. The instance is now one label whatever the machine is called, and the
-  name you read in the list is unchanged.
-- **Bel no longer advertises an address record for the machine's own name.**
-  The name a Mac answers to belongs to the system responder, which defends it:
-  an address record it did not publish, for a name it owns, is a conflict, and
-  the loser of a conflict renames itself. On a machine with a second network
-  interface the two sets differ, so the loser would have been the user's
-  computer. Bel publishes its own name for the service to point at.
+  refuse an app the multicast socket Open Audio Analyzer browses with unless it
+  carries an entitlement Apple grants per developer on request, so every send
+  was rejected and nothing was ever delivered — on the hardware the remote
+  display exists for. The tablet now searches through the system's own Bonjour
+  responder, which needs no entitlement, and finds the same hosts by the same
+  name. Typing an address still works and still always will.
+- **A host on a network that hands out a domain is visible again.** Most routers
+  give DHCP clients one, which makes the machine's name `studio-mac.fritz.box`
+  rather than `studio-mac.local` — and Open Audio Analyzer advertised that whole
+  string where DNS-SD allows a single label, so the announcement came out as six
+  labels instead of four. Open Audio Analyzer's own browser read it anyway, so
+  an Open Audio Analyzer desktop found an Open Audio Analyzer desktop and
+  nothing looked wrong; every browser built on the system responder — an iPad,
+  `dns-sd`, anything Apple — dropped the record, and the host answered every
+  query on the wire while appearing to no one. The instance is now one label
+  whatever the machine is called, and the name you read in the list is
+  unchanged.
+- **Open Audio Analyzer no longer advertises an address record for the machine's
+  own name.** The name a Mac answers to belongs to the system responder, which
+  defends it: an address record it did not publish, for a name it owns, is a
+  conflict, and the loser of a conflict renames itself. On a machine with a
+  second network interface the two sets differ, so the loser would have been the
+  user's computer. Open Audio Analyzer publishes its own name for the service to
+  point at.
 - **A search that cannot run says why.** A device that could not search showed
   *Looking for hosts on this network…* indefinitely, which is exactly what a
   network with no hosts on it looks like. It now names the reason where there
@@ -690,17 +740,18 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   so the button's own tap could not be resolved until the wait for a second
   click had expired. The double clicks are gone (see ⚡ Changed) and the
   controls answer on release.
-- **Bel crashed after a few minutes with a spectrogram, phase scope or stereo
-  cloud on the canvas, and grew without bound until it did.** One report showed
-  the application holding 266 GB before macOS stopped it. Those three modules
-  accumulated their history into an image taken with `toImageSync`, which
-  retains the display list that drew it for as long as the image lives — so
-  every frame's image pinned the frame before it, back to the first one, and
-  disposing the handle released none of it. The application then died on the
-  raster thread when that chain was finally dropped and its destructors
-  recursed once per retained frame, 3,286 deep in the report that found this.
-  All three now keep their history as data and redraw it, which costs memory
-  proportional to the module's size rather than to how long Bel has been open.
+- **Open Audio Analyzer crashed after a few minutes with a spectrogram, phase
+  scope or stereo cloud on the canvas, and grew without bound until it did.**
+  One report showed the application holding 266 GB before macOS stopped it.
+  Those three modules accumulated their history into an image taken with
+  `toImageSync`, which retains the display list that drew it for as long as the
+  image lives — so every frame's image pinned the frame before it, back to the
+  first one, and disposing the handle released none of it. The application then
+  died on the raster thread when that chain was finally dropped and its
+  destructors recursed once per retained frame, 3,286 deep in the report that
+  found this. All three now keep their history as data and redraw it, which
+  costs memory proportional to the module's size rather than to how long Open
+  Audio Analyzer has been open.
 - **A spectrogram opened before any audio arrived began with a column of full
   scale, and the stereo cloud with a bright line down its centre.** Both were
   reading the zeroed arrays of a source that has not published yet, which as
@@ -822,31 +873,32 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the edge at every width.
 
 - **The remote display panel could not be opened.** Pressing `REMOTE` in the
-  status bar threw "No BelTheme in scope" and left the panel unbuilt, in
+  status bar threw "No OaaTheme in scope" and left the panel unbuilt, in
   release as well as debug — it was pushed with `showDialog`, so the
   `Navigator` built it above the palette the application provides. It is now
-  pushed with `showBelPanel` like the other five, and a test opens it through
+  pushed with `showOaaPanel` like the other five, and a test opens it through
   the button.
 
-- **Bel could not be built for iPadOS at all.** The engine was compiled as C on
-  every platform, but miniaudio's Core Audio backend is Objective-C on iOS —
-  it configures an `AVAudioSession`, which has no C interface — so the build
-  ended in several hundred errors inside Apple's `Foundation` headers, none of
-  which named a file in Bel. The iOS build now compiles as Objective-C and
-  links the frameworks miniaudio needs there. The tablet build is the remote
-  display, and it now runs on an iPad.
+- **Open Audio Analyzer could not be built for iPadOS at all.** The engine was
+  compiled as C on every platform, but miniaudio's Core Audio backend is
+  Objective-C on iOS — it configures an `AVAudioSession`, which has no C
+  interface — so the build ended in several hundred errors inside Apple's
+  `Foundation` headers, none of which named a file in Open Audio Analyzer. The
+  iOS build now compiles as Objective-C and links the frameworks miniaudio needs
+  there. The tablet build is the remote display, and it now runs on an iPad.
 - **The iPad build would have been terminated by iOS the first time an input
   was chosen.** `NSMicrophoneUsageDescription` was missing from the app's
   `Info.plist`, which is not an error the app can catch — the system kills a
   process that touches the microphone without one.
 
 - **An iPad remembered nothing between launches** and opened with "no
-  configuration directory". Bel resolved its configuration from `HOME`, which
-  iOS does not set — so every layout, skin and connection was lost when the app
-  was closed. iPadOS now keeps its configuration in `Library/Application
-  Support/Bel` inside the app's own container, which Bel locates through the
-  temporary directory rather than the environment. An Android tablet still
-  persists nothing, and still says so at launch.
+  configuration directory". Open Audio Analyzer resolved its configuration from
+  `HOME`, which iOS does not set — so every layout, skin and connection was lost
+  when the app was closed. iPadOS now keeps its configuration in
+  `Library/Application Support/Open Audio Analyzer` inside the app's own
+  container, which Open Audio Analyzer locates through the temporary directory
+  rather than the environment. An Android tablet still persists nothing, and
+  still says so at launch.
 
 - **A module's resize grip was drawn outside the module.** Both ticks ran to
   the corner of the module's slot, which is past the frame's rounded border —
@@ -858,13 +910,13 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   border, so it printed the dim hairline colour over the bright selection
   border at each end. The rule now stops at the border's inner edge.
 
-- **Nothing in a panel could be reached from the keyboard.** Every control Bel
-  paints itself — buttons, toggles, segmented controls, list rows, icon targets
-  — was a bare gesture detector, so none of them took focus, none responded to
-  Enter or Space, none drew a focus ring, and none was visible to a screen
-  reader. Settings, presets and the delivery-target editor were mouse-only with
-  nothing on screen to say so. All of them are now focusable, keyboard
-  operable, and announced.
+- **Nothing in a panel could be reached from the keyboard.** Every control Open
+  Audio Analyzer paints itself — buttons, toggles, segmented controls, list
+  rows, icon targets — was a bare gesture detector, so none of them took focus,
+  none responded to Enter or Space, none drew a focus ring, and none was visible
+  to a screen reader. Settings, presets and the delivery-target editor were
+  mouse-only with nothing on screen to say so. All of them are now focusable,
+  keyboard operable, and announced.
 
 - **Opening the host picker a second time searched a browse that had already
   been shut down.** A tablet's search runs over one channel, and a channel keeps
@@ -936,6 +988,23 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### 🚧 Internal
 
+- Every identifier follows the name. The public C ABI is `oaa_*` and `OAA_*` in
+  `engine/include/oaa/oaa.h`, the packages are `oaa_core`, `oaa_ui`,
+  `oaa_engine` and `oaa_wire`, and the plugin's classes are `Oaa*`.
+  `OAA_ABI_VERSION` stays at 4: the header's shape did not move, only its
+  spelling.
+- The release workflow reads `OAA_SIGNING_IDENTITY`, `OAA_NOTARY_PROFILE`,
+  `OAA_WINDOWS_CERT`, `OAA_WINDOWS_CERT_PASS` and `OAA_WINDOWS_PUBLISHER`. The
+  repository secrets have to be renamed to match, or every signed artefact
+  quietly stops being signed.
+- The repository, the documentation site and every download link moved to
+  `open_audio_analyzer`.
+- The cross-implementation wire golden is now `plugin/test/golden/wire_v2.bin`,
+  regenerated from `oaa_wire_fixture`.
+- The released sections below describe the application under its former name.
+  They were renamed with the rest of the repository rather than left to
+  contradict it; nothing else about them was rewritten.
+
 - **Stopping the engine decides whether to join on the flag that tracks the
   thread.** It tested `should_run` — the flag stop itself clears — so anything
   that ever cleared it elsewhere would have turned destroying an engine into a
@@ -946,17 +1015,17 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   are drawn in, so a display of thirty thousand of them is a few dozen calls
   rather than thirty thousand. `test/history_modules_test.dart` fails if any of
   the three modules creates an image between frames again.
-- **`packages/bel_wire`** — the wire protocol, pure Dart and MIT, specified
+- **`packages/oaa_wire`** — the wire protocol, pure Dart and MIT, specified
   byte for byte in `docs/WIRE.md`. Three implementations speak it and none of
   them was written against another: the app's host, the app's display, and the
-  plugin's C++ sender. `plugin/test/golden/wire_v1.bin` holds the Dart codec
+  plugin's C++ sender. `plugin/test/golden/wire_v2.bin` holds the Dart codec
   against bytes the C++ actually produced, which is the only test that would
   catch the two drifting apart — and the drift is silent, because every frame is
   a fixed length, so a field written into the wrong slot still parses.
 - **`MeterSource`** — the interface a meter module reads a measurement out of,
-  in `bel_core`. `BelEngine` implements it and so does the remote display's
+  in `oaa_core`. `OaaEngine` implements it and so does the remote display's
   decoder, which is what lets the twelve modules run unchanged on a tablet with
-  no engine in it. `bel_engine` now depends on `bel_core` for that one
+  no engine in it. `oaa_engine` now depends on `oaa_core` for that one
   interface; the arrow still points away from `dart:ffi`.
 - **`MeterClock` decides what is new by comparing generations** rather than by
   trusting what `refresh()` returned. With the remote host refreshing on its own
@@ -965,13 +1034,14 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   on the machines where somebody was using both screens at once.
 - **`plugin/` is AGPL-3.0-or-later, not GPL-3.0.** JUCE 7 and 8 are
   AGPLv3-or-commercial; only JUCE 6 offered GPLv3, which is what the plan was
-  written against. Bel takes the AGPLv3 option, which changes the licence of the
-  plugin binary alone: the engine stays MIT, and the app stays GPL-3.0-or-later
-  because it never links JUCE — it talks to the plugin over a socket. GPLv3
-  section 13 expressly permits the combination. One piece of good news the plan
-  did not anticipate: Steinberg has relicensed the VST3 SDK to MIT, so JUCE is
-  the only copyleft dependency and no separate SDK checkout is needed.
-- `engine/CMakeLists.txt` builds `libbel` as a static library for consumers that
+  written against. Open Audio Analyzer takes the AGPLv3 option, which changes
+  the licence of the plugin binary alone: the engine stays MIT, and the app
+  stays GPL-3.0-or-later because it never links JUCE — it talks to the plugin
+  over a socket. GPLv3 section 13 expressly permits the combination. One piece
+  of good news the plan did not anticipate: Steinberg has relicensed the VST3
+  SDK to MIT, so JUCE is the only copyleft dependency and no separate SDK
+  checkout is needed.
+- `engine/CMakeLists.txt` builds `liboaa` as a static library for consumers that
   are not Dart. There are now two descriptions of the same compile, because a
   plugin CI runner has no Flutter SDK and a build hook cannot be handed to JUCE;
   `plugin/test/sources_match.sh` fails the build if they drift apart.
@@ -989,7 +1059,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - dr_wav 0.14.6, dr_flac 0.13.4 and dr_mp3 0.7.4 vendored under
   `engine/third_party/dr_libs/` (public domain / MIT-0), compiled in one
   translation unit separate from the device layer. `MA_NO_DECODING` in
-  `bel_device.c` is what stops miniaudio compiling its own bundled copies of
+  `oaa_device.c` is what stops miniaudio compiling its own bundled copies of
   the same three and colliding with them at link time — it was already
   load-bearing for measurement correctness and is now load-bearing for the
   build as well.
@@ -997,8 +1067,8 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   recognises a file by scanning for something that parses as a frame, and
   arbitrary binary data contains such sequences often enough that, given first
   refusal, it will open a FLAC file and decode noise from it.
-- `BEL_ABI_VERSION` is 4. The change is additive — `bel_snapshot` is byte for
-  byte what it was at 3 — and adds only the `bel_file_*` decoding calls.
+- `OAA_ABI_VERSION` is 4. The change is additive — `oaa_snapshot` is byte for
+  byte what it was at 3 — and adds only the `oaa_file_*` decoding calls.
 - File paths reach the decoder as UTF-8 and are widened to UTF-16 on Windows.
   dr_libs' plain `_init_file` calls go through `fopen`, which reads the path in
   the process's ANSI code page; an umlaut in a user name is enough to make a
@@ -1029,7 +1099,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   on every paint, so a resize or a theme change cannot scroll a spectrogram
   through time that no audio passed through.
 - The canvas placement rules — overlap, clamping, id allocation — are pure
-  functions over `TabSpec` in `bel_core`, so they are covered by tests that need
+  functions over `TabSpec` in `oaa_core`, so they are covered by tests that need
   no window, and so the remote display cannot come to a different conclusion
   about where a module goes than the app did.
 - The canvas and workspace tests build their own sparse layouts instead of
@@ -1043,7 +1113,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   chrome is painted rather than decorated. `CustomPainter.hitTest` and
   `BoxDecoration` both absorb pointer events by default, which left every
   meter's face unclickable with nothing reported anywhere.
-- `.github/workflows/ci.yml` now runs `dart test packages/bel_wire` and
+- `.github/workflows/ci.yml` now runs `dart test packages/oaa_wire` and
   `plugin/test/sources_match.sh`. Both were named as gates in `CLAUDE.md` and
   `README.md` for a phase before either was wired in, which is the worst state
   for a gate to be in: everybody believes it is running.
@@ -1059,6 +1129,17 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `packaging/icon/make_icons.dart` describes the mark once as geometry and
   renders every size the installers want. Exported by hand, thirty-odd files
   across four containers drift.
+- The project has a logo, in `assets/brand/`: the icon's four bars with the
+  tile taken away, and the name set beside them over two lines. It is the same
+  mark as the application icon rather than a second one, and the wordmark is
+  Inter SemiBold converted to outlines so the file needs no font installed.
+  Three files — the lockup for dark backgrounds, the lockup for light ones, and
+  the mark on its own. Nothing bundles them; they are for the README, the site
+  and anywhere else the project is shown.
+- `make_icons.dart` draws the mark in three shapes rather than one, because the
+  desktops, iOS and Android each mask it differently, and writes iOS without an
+  alpha channel — an icon that has one is refused by the App Store on upload
+  rather than at build time.
 - The canvas's refusal toast is a provider rather than private widget state, so
   the shortcut layer above the canvas reports "no room for that" through the
   same channel a refused drop does instead of growing a second one.
@@ -1075,12 +1156,12 @@ meters do not exist yet. See the [roadmap](README.md#roadmap).
   smoothed with a 300 ms time constant.
 - **Every loudness quantity is unmeasured and reads as a dash** — LUFS-M,
   LUFS-S, LUFS-I, LRA, true peak, TP max, DR-S, DR-I, PLR and PSR. They are
-  `NaN` behind `BEL_FLAG_LOUDNESS_UNAVAILABLE`, never a zero that looks like a
+  `NaN` behind `OAA_FLAG_LOUDNESS_UNAVAILABLE`, never a zero that looks like a
   reading. K-weighting, R128 gating, LRA and true-peak oversampling arrive in
   the same release as the EBU conformance vectors that prove them.
-- Bel does not implement Decibel's proprietary `TrueDyn` and will not
-  approximate it. `DR-S` and `DR-I` are defined in [docs/METRICS.md](docs/METRICS.md)
-  instead, reproducibly.
+- Open Audio Analyzer does not implement Decibel's proprietary `TrueDyn` and
+  will not approximate it. `DR-S` and `DR-I` are defined in
+  [docs/METRICS.md](docs/METRICS.md) instead, reproducibly.
 - All dB readings clamp to a −144.0 floor rather than negative infinity, so that
   differences between them stay finite.
 
@@ -1116,8 +1197,8 @@ meters do not exist yet. See the [roadmap](README.md#roadmap).
   development machine and failed on both POSIX CI runners.
 - CI runs analysis, formatting, and the domain, widget and engine suites, with
   the engine built on Linux, macOS and Windows.
-- Licensing is split: MIT for `engine/`, `bel_engine` and `bel_core`;
+- Licensing is split: MIT for `engine/`, `oaa_engine` and `oaa_core`;
   GPL-3.0-or-later for the application, UI, CLI and plugin.
 
-[unreleased]: https://github.com/JonasGrunau/open_music_analyzer/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/JonasGrunau/open_music_analyzer/releases/tag/v0.1.0
+[unreleased]: https://github.com/JonasGrunau/open_audio_analyzer/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/JonasGrunau/open_audio_analyzer/releases/tag/v0.1.0

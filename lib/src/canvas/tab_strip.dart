@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import 'package:bel_ui/bel_ui.dart';
+import 'package:oaa_ui/oaa_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -9,10 +9,10 @@ import 'workspace.dart';
 
 /// The tab strip, and the canvas-wide actions that belong next to it.
 ///
-/// Add, undo and redo are here as buttons as well as keyboard shortcuts. Bel
-/// runs on tablets, where there is no Cmd+Z and no right mouse button, so a
-/// canvas whose only affordances are a chord and a secondary click is a canvas
-/// that cannot be edited on half its target platforms.
+/// Add, undo and redo are here as buttons as well as keyboard shortcuts. Open
+/// Audio Analyzer runs on tablets, where there is no Cmd+Z and no right mouse
+/// button, so a canvas whose only affordances are a chord and a secondary click
+/// is a canvas that cannot be edited on half its target platforms.
 class TabStrip extends ConsumerStatefulWidget {
   const TabStrip({super.key});
 
@@ -77,16 +77,16 @@ class _TabStripState extends ConsumerState<TabStrip> {
   Future<void> _tabMenu(int index, Offset globalPosition) async {
     final controller = ref.read(workspaceProvider.notifier);
     final tabs = ref.read(workspaceProvider).preset.tabs;
-    final colors = BelTheme.of(context);
+    final colors = OaaTheme.of(context);
 
     final action = await showMenu<_TabAction>(
       context: context,
       color: colors.panelRaised,
       position: menuPositionAt(context, globalPosition),
       items: [
-        belMenuItem(context, _TabAction.rename, 'Rename'),
-        belMenuItem(context, _TabAction.duplicate, 'Duplicate'),
-        belMenuItem(
+        oaaMenuItem(context, _TabAction.rename, 'Rename'),
+        oaaMenuItem(context, _TabAction.duplicate, 'Duplicate'),
+        oaaMenuItem(
           context,
           _TabAction.delete,
           'Delete',
@@ -120,7 +120,7 @@ class _TabStripState extends ConsumerState<TabStrip> {
 
   @override
   Widget build(BuildContext context) {
-    final colors = BelTheme.of(context);
+    final colors = OaaTheme.of(context);
     final workspace = ref.watch(workspaceProvider);
     final controller = ref.watch(workspaceProvider.notifier);
     final tabs = workspace.preset.tabs;
@@ -131,7 +131,7 @@ class _TabStripState extends ConsumerState<TabStrip> {
         decoration: BoxDecoration(
           color: colors.background,
           border: Border(
-            bottom: BorderSide(color: colors.hairline, width: BelStroke.hairline),
+            bottom: BorderSide(color: colors.hairline, width: OaaStroke.hairline),
           ),
         ),
         child: Padding(
@@ -206,7 +206,7 @@ class _TabStripState extends ConsumerState<TabStrip> {
                   children: [
                     _Plus(color: color, size: _Plus.attached),
                     const SizedBox(width: Space.xs),
-                    Text('MODULE', style: BelType.label.copyWith(color: color)),
+                    Text('MODULE', style: OaaType.label.copyWith(color: color)),
                   ],
                 ),
               ),
@@ -230,7 +230,7 @@ class _Tab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = BelTheme.of(context);
+    final colors = OaaTheme.of(context);
 
     // **Long press, not double tap.** Renaming used to be a double click here,
     // which armed a `DoubleTapGestureRecognizer` over the tab — and that
@@ -265,10 +265,10 @@ class _Tab extends StatelessWidget {
           // textFaint when not — so the rule is confirming, not carrying.
           decoration: BoxDecoration(
             border: Border(
-              bottom: BorderSide(color: active ? colors.textPrimary : Colors.transparent, width: BelStroke.emphasis),
+              bottom: BorderSide(color: active ? colors.textPrimary : Colors.transparent, width: OaaStroke.emphasis),
             ),
           ),
-          child: Text(label.toUpperCase(), style: BelType.label.copyWith(color: active ? colors.textPrimary : colors.textFaint)),
+          child: Text(label.toUpperCase(), style: OaaType.label.copyWith(color: active ? colors.textPrimary : colors.textFaint)),
         ),
       ),
     );
@@ -284,7 +284,7 @@ class _RenameField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = BelTheme.of(context);
+    final colors = OaaTheme.of(context);
     return SizedBox(
       width: 120,
       child: Padding(
@@ -294,9 +294,9 @@ class _RenameField extends StatelessWidget {
             controller: controller,
             focusNode: focusNode,
             autofocus: true,
-            style: BelType.label.copyWith(color: colors.textPrimary),
+            style: OaaType.label.copyWith(color: colors.textPrimary),
             cursorColor: colors.textPrimary,
-            cursorWidth: BelStroke.hairline,
+            cursorWidth: OaaStroke.hairline,
             decoration: const InputDecoration(isDense: true, border: InputBorder.none, contentPadding: EdgeInsets.zero),
             textCapitalization: TextCapitalization.words,
             onSubmitted: (_) => onCommit(),
@@ -329,17 +329,17 @@ class _StripRule extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = BelTheme.of(context);
+    final colors = OaaTheme.of(context);
     // The strip's height on the outside and the insets within it, rather than a
     // height plus padding: the row gives its children a *loose* 32 px, so a
     // padded 32 px rule is a 42 px child and a striped overflow warning.
     return SizedBox(
       height: TabStrip.height,
       child: Padding(
-        padding: const EdgeInsets.only(left: Space.xs, right: Space.xs, top: _inset, bottom: _inset + BelStroke.emphasis),
+        padding: const EdgeInsets.only(left: Space.xs, right: Space.xs, top: _inset, bottom: _inset + OaaStroke.emphasis),
         child: ColoredBox(
           color: colors.hairline,
-          child: const SizedBox(width: BelStroke.hairline, height: double.infinity),
+          child: const SizedBox(width: OaaStroke.hairline, height: double.infinity),
         ),
       ),
     );
@@ -374,7 +374,7 @@ class _StripAction extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = BelTheme.of(context);
+    final colors = OaaTheme.of(context);
 
     return Tooltip(
       message: tooltip,
@@ -392,14 +392,14 @@ class _StripAction extends StatelessWidget {
             child: Container(
               height: TabStrip.height,
               // **The active tab's rule is reserved here as well.** A `_Tab`
-              // draws a bottom border of `BelStroke.emphasis` whether or not it
+              // draws a bottom border of `OaaStroke.emphasis` whether or not it
               // is the active one, and a border insets the child — so a tab's
               // label is centred in the strip *minus* the rule, while a button
               // with no border is centred in the whole of it. Every action in
               // this row sat a pixel below the tab labels because of that, and
               // the `+` sits directly beside the last tab where a pixel is
               // impossible to miss.
-              padding: const EdgeInsets.only(left: Space.sm, right: Space.sm, bottom: BelStroke.emphasis),
+              padding: const EdgeInsets.only(left: Space.sm, right: Space.sm, bottom: OaaStroke.emphasis),
               alignment: Alignment.center,
               child: builder(enabled ? colors.textMuted : colors.textFaint),
             ),
@@ -413,7 +413,7 @@ class _StripAction extends StatelessWidget {
 /// The `+` that opens something new.
 ///
 /// Larger than the words beside it, at one of two sizes. A word is found by its
-/// shape, which is why [BelType.label] is sized for one; a symbol has no shape
+/// shape, which is why [OaaType.label] is sized for one; a symbol has no shape
 /// to be found by, so how far above the words it is set depends on how much of
 /// the action it is carrying — see [lone] and [attached]. It stays in
 /// `textMuted` at either size, so it is louder in size and no louder in tone
@@ -459,7 +459,7 @@ class _Plus extends StatelessWidget {
     offset: Offset(0, _drop),
     child: Text(
       '+',
-      style: BelType.label.copyWith(
+      style: OaaType.label.copyWith(
         fontSize: size,
         // The label style tracks its words out by 0.8; on a single glyph that
         // is trailing air the centring has to fight.
@@ -472,7 +472,7 @@ class _Plus extends StatelessWidget {
 
 /// `UNDO` or `REDO`, with the u-turn that says which way it runs.
 ///
-/// The mark is `BelMark.undo` and `BelMark.redo` — drawn by `bel_ui`, like every
+/// The mark is `OaaMark.undo` and `OaaMark.redo` — drawn by `oaa_ui`, like every
 /// other mark in the application, rather than set from a font. **Neither bundled
 /// face has the glyph**: `↶` U+21B6 and `↷` U+21B7 are absent from Inter *and*
 /// from Google Sans Code, as are `⟲` U+27F2 and `⟳` U+27F3, and the mono face
@@ -496,7 +496,7 @@ class _HistoryAction extends StatelessWidget {
 
   /// The mark's box.
   ///
-  /// Larger than [_Plus.attached] and drawing less ink than it: `BelGlyph`
+  /// Larger than [_Plus.attached] and drawing less ink than it: `OaaGlyph`
   /// squares its box and the u-turn is a wide mark, so it fills the width and
   /// takes about two thirds of the height. At `Space.md`, the box every mark
   /// beside *body* text uses, it stood a third taller than the cap band of the
@@ -507,11 +507,11 @@ class _HistoryAction extends StatelessWidget {
   /// of the word rather than on the line box the `Row` centres it against.
   ///
   /// **Measured off an 8× rendering, not derived** — the same rule as
-  /// [_Plus._drop], and re-measure it if [_size] or [BelType.label] moves. The
+  /// [_Plus._drop], and re-measure it if [_size] or [OaaType.label] moves. The
   /// target is the one the attached plus already meets: the mark's ink centre
   /// on the cap band's centre, which at 8× is the two bounding boxes sharing a
   /// midpoint to the device pixel. The mark needs less correction than a glyph
-  /// does, because `BelGlyph` already centres its ink in its own bounds — all
+  /// does, because `OaaGlyph` already centres its ink in its own bounds — all
   /// that is left is the word's own offset from the middle of its line box.
   static const double _drop = 0.31;
 
@@ -521,10 +521,10 @@ class _HistoryAction extends StatelessWidget {
     children: [
       Transform.translate(
         offset: const Offset(0, _drop),
-        child: BelGlyph(forward ? BelMark.redo : BelMark.undo, color: color, size: _size),
+        child: OaaGlyph(forward ? OaaMark.redo : OaaMark.undo, color: color, size: _size),
       ),
       const SizedBox(width: Space.xs),
-      Text(label, style: BelType.label.copyWith(color: color)),
+      Text(label, style: OaaType.label.copyWith(color: color)),
     ],
   );
 }

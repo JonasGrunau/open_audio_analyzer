@@ -1,4 +1,4 @@
-# Bel — agent notes
+# Open Audio Analyzer — agent notes
 
 The rules for this repository live in **[CLAUDE.md](CLAUDE.md)**, and the design
 reasoning lives in **[README.md](README.md)**. They are not duplicated here,

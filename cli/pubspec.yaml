@@ -1,5 +1,5 @@
-name: bel_cli
-description: "The `bel` command-line loudness analyser."
+name: oaa_cli
+description: "The `oaa` command-line loudness analyser."
 publish_to: 'none'
 version: 0.1.0
 
@@ -14,17 +14,17 @@ dependencies:
 
   # The report model and its three export formats. Pure Dart, so the CLI needs
   # no Flutter binding of any kind.
-  bel_core:
-    path: ../packages/bel_core
+  oaa_core:
+    path: ../packages/oaa_core
 
   # The engine and its build hook. `dart run` and `dart compile exe` both drive
   # hook/build.dart, so there is no separate native build step for the CLI.
-  bel_engine:
-    path: ../packages/bel_engine
+  oaa_engine:
+    path: ../packages/oaa_engine
 
 dev_dependencies:
   lints: ^6.0.0
   test: ^1.25.0
 
 executables:
-  bel: bel
+  oaa: oaa

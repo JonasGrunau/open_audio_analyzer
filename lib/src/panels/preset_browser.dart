@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import 'package:bel_core/bel_core.dart';
-import 'package:bel_ui/bel_ui.dart';
+import 'package:oaa_core/oaa_core.dart';
+import 'package:oaa_ui/oaa_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -9,7 +9,7 @@ import '../canvas/workspace.dart';
 import '../data/providers.dart';
 
 /// Opens the preset browser.
-Future<void> showPresetBrowser(BuildContext context) => showBelPanel<void>(
+Future<void> showPresetBrowser(BuildContext context) => showOaaPanel<void>(
   context: context,
   builder: (context) => const PresetBrowser(),
 );
@@ -49,7 +49,7 @@ class _PresetBrowserState extends ConsumerState<PresetBrowser> {
 
   @override
   Widget build(BuildContext context) {
-    final colors = BelTheme.of(context);
+    final colors = OaaTheme.of(context);
     final presets = ref.watch(presetLibraryProvider);
     final store = ref.watch(configStoreProvider);
 
@@ -62,12 +62,12 @@ class _PresetBrowserState extends ConsumerState<PresetBrowser> {
             Expanded(
               child: Text(
                 _status!,
-                style: BelType.caption.copyWith(color: colors.textFaint),
+                style: OaaType.caption.copyWith(color: colors.textFaint),
               ),
             )
           else
             const Spacer(),
-          BelButton(
+          OaaButton(
             label: 'Open',
             emphasis: ButtonEmphasis.primary,
             onPressed: _selected == null ? null : _open,
@@ -81,9 +81,9 @@ class _PresetBrowserState extends ConsumerState<PresetBrowser> {
             Padding(
               padding: const EdgeInsets.only(bottom: Space.md),
               child: Text(
-                'Presets cannot be saved this session — Bel has nowhere to '
+                'Presets cannot be saved this session — Open Audio Analyzer has nowhere to '
                 'write. ${store.lastError ?? ''}',
-                style: BelType.caption.copyWith(color: colors.warn),
+                style: OaaType.caption.copyWith(color: colors.warn),
               ),
             ),
           PanelSection(
@@ -95,14 +95,14 @@ class _PresetBrowserState extends ConsumerState<PresetBrowser> {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    BelTextField(
+                    OaaTextField(
                       controller: _name,
                       width: 220,
                       hintText: 'Mastering',
                       onSubmitted: (_) => _save(),
                     ),
                     const SizedBox(width: Space.sm),
-                    BelButton(
+                    OaaButton(
                       label: 'Save',
                       onPressed: store.isAvailable ? _save : null,
                     ),
@@ -114,7 +114,7 @@ class _PresetBrowserState extends ConsumerState<PresetBrowser> {
                 note:
                     'Opening the preset switches to that target. Off means the '
                     'preset leaves your current one alone.',
-                child: BelToggle(
+                child: OaaToggle(
                   semanticLabel: 'Store the delivery target with it',
                   value: _withCalibration,
                   onChanged: (value) =>
@@ -123,7 +123,7 @@ class _PresetBrowserState extends ConsumerState<PresetBrowser> {
               ),
               PanelRow(
                 label: 'Store the skin with it',
-                child: BelToggle(
+                child: OaaToggle(
                   semanticLabel: 'Store the skin with it',
                   value: _withSkin,
                   onChanged: (value) => setState(() => _withSkin = value),
@@ -138,14 +138,14 @@ class _PresetBrowserState extends ConsumerState<PresetBrowser> {
                 if (!store.isAvailable)
                   Text(
                     'Nothing to show.',
-                    style: BelType.caption.copyWith(color: colors.textFaint),
+                    style: OaaType.caption.copyWith(color: colors.textFaint),
                   )
                 else ...[
                   Text(
                     'Nothing saved yet. Presets are ordinary JSON files, one '
                     'per preset, kept in a "presets" folder inside — you can '
                     'send one to somebody.',
-                    style: BelType.caption.copyWith(color: colors.textFaint),
+                    style: OaaType.caption.copyWith(color: colors.textFaint),
                   ),
                   const SizedBox(height: Space.xs),
                   // Selectable for the same reason as in the settings panel:
@@ -153,7 +153,7 @@ class _PresetBrowserState extends ConsumerState<PresetBrowser> {
                   // guess or be able to retype.
                   SelectableText(
                     store.root!.path,
-                    style: BelType.readingSmall.copyWith(
+                    style: OaaType.readingSmall.copyWith(
                       color: colors.textMuted,
                     ),
                   ),
@@ -170,12 +170,12 @@ class _PresetBrowserState extends ConsumerState<PresetBrowser> {
                       _name.text = stored.preset.name;
                     }),
                     trailing: _confirmingDelete == stored.fileName
-                        ? BelButton(
+                        ? OaaButton(
                             label: 'Delete?',
                             emphasis: ButtonEmphasis.destructive,
                             onPressed: () => _delete(stored.fileName),
                           )
-                        : BelButton(
+                        : OaaButton(
                             label: 'Delete',
                             onPressed: () => setState(
                               () => _confirmingDelete = stored.fileName,

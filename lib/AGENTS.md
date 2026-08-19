@@ -35,9 +35,9 @@ The application. GPL-3.0-or-later.
   lands on the meter — and the canvas's drag and selection layers sit behind the
   module. The symptom is a meter that cannot be selected or dragged by its own
   face, with nothing reported anywhere.
-- **`metric_reader.dart` is the only place `bel_core` meets `bel_engine`.**
+- **`metric_reader.dart` is the only place `oaa_core` meets `oaa_engine`.**
   There is now a second implementation of the same signature backed by the wire
-  protocol — `WireSnapshot`, in `bel_wire` — and every module works unchanged
+  protocol — `WireSnapshot`, in `oaa_wire` — and every module works unchanged
   against either. That is what lets a tablet with no engine draw the desktop's
   meters with the desktop's painters. Keep the seam narrow: a module reads
   `MeterSource`, never a concrete engine, and if something cannot be drawn from

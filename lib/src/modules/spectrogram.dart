@@ -3,9 +3,9 @@
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
-import 'package:bel_core/bel_core.dart';
-import 'package:bel_engine/bel_engine.dart';
-import 'package:bel_ui/bel_ui.dart';
+import 'package:oaa_core/oaa_core.dart';
+import 'package:oaa_engine/oaa_engine.dart';
+import 'package:oaa_ui/oaa_ui.dart';
 import 'package:flutter/widgets.dart';
 
 import '../clock/meter_clock.dart';
@@ -28,10 +28,10 @@ import '../clock/meter_clock.dart';
 /// yet, and it holds that display list for its whole life — so the image of
 /// frame *n* retains the picture that drew it, which retains the image of frame
 /// *n−1*, back to the first frame. Disposing the Dart handle releases nothing;
-/// the chain owns it. Bel leaked one full-size image per published frame this
-/// way and died after about seventy seconds, when the chain was finally dropped
-/// and the engine recursed 3,286 destructors deep through it and overflowed the
-/// raster thread's stack.
+/// the chain owns it. Open Audio Analyzer leaked one full-size image per
+/// published frame this way and died after about seventy seconds, when the
+/// chain was finally dropped and the engine recursed 3,286 destructors deep
+/// through it and overflowed the raster thread's stack.
 ///
 /// So the past is kept as data. Not as levels — re-deriving a column's runs
 /// every frame is width × height work per frame — but as the **run-length
@@ -88,7 +88,7 @@ class _SpectrogramModuleState extends State<SpectrogramModule> {
 
   @override
   Widget build(BuildContext context) {
-    final colors = BelTheme.of(context);
+    final colors = OaaTheme.of(context);
 
     if (_builtFor != colors.accent) {
       _builtFor = colors.accent;
@@ -126,7 +126,7 @@ const int _steps = 48;
 /// stops working entirely for the eight percent of men who cannot separate red
 /// from green. Brightness within the palette's own colours is monotonic, which
 /// is the property that makes a spectrogram legible.
-Color _rampColor(double level, BelColors colors) {
+Color _rampColor(double level, OaaColors colors) {
   if (level < 0.55) {
     return Color.lerp(colors.panel, colors.accent, level / 0.55)!;
   }
@@ -227,7 +227,7 @@ class _SpectrogramPainter extends MeterPainter {
        super(repaint: repaint);
 
   final MeterSource engine;
-  final BelColors colors;
+  final OaaColors colors;
   final _ColumnHistory history;
   final PointBuckets marks;
   final _SpectrogramModuleState state;
@@ -279,9 +279,9 @@ class _SpectrogramPainter extends MeterPainter {
   int _stepAt(int row) {
     final rows = history.rows;
     final band = (rows > 1)
-        ? ((rows - 1 - row) / (rows - 1) * (kBelSpectrumBands - 1))
+        ? ((rows - 1 - row) / (rows - 1) * (kOaaSpectrumBands - 1))
               .round()
-              .clamp(0, kBelSpectrumBands - 1)
+              .clamp(0, kOaaSpectrumBands - 1)
         : 0;
     final db = engine.spectrum[band];
     if (db <= _floorDb) return 0;
