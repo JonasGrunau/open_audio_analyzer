@@ -8,13 +8,13 @@
 
 <p>
   <a href="https://github.com/JonasGrunau/open_audio_analyzer/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/JonasGrunau/open_audio_analyzer/ci.yml?branch=main&label=CI&style=flat-square"></a>
-  <a href="https://jonasgrunau.github.io/open_audio_analyzer/index.html"><img alt="Documentation" src="https://img.shields.io/badge/%F0%9F%93%96_docs-open%20audio%20analyzer-35E0C4?style=flat-square"></a>
-  <a href="#-the-correctness-gate"><img alt="EBU R128 verified in CI" src="https://img.shields.io/badge/EBU_R128-verified_in_CI-35E0C4?style=flat-square"></a>
+  <a href="https://jonasgrunau.github.io/open_audio_analyzer/index.html"><img alt="Documentation" src="https://img.shields.io/badge/%F0%9F%93%96_docs-open%20audio%20analyzer-1F2328?style=flat-square"></a>
+  <a href="#-the-correctness-gate"><img alt="EBU R128 verified in CI" src="https://img.shields.io/badge/EBU_R128-verified_in_CI-1F2328?style=flat-square"></a>
 </p>
 
 <p>
   <img alt="Platforms" src="https://img.shields.io/badge/platforms-macOS%20%7C%20Windows%20%7C%20Linux%20%7C%20iPadOS%20%7C%20Android-1F2328?style=flat-square">
-  <a href="#-licensing"><img alt="App licence" src="https://img.shields.io/badge/app-GPL--3.0--or--later-1F2328?style=flat-square"></a>
+  <a href="#-licensing"><img alt="Licence" src="https://img.shields.io/badge/licence-GPL--3.0--or--later-1F2328?style=flat-square"></a>
 </p>
 
 <p>
@@ -873,7 +873,6 @@ GPL-3.0-or-later for the application; MIT for the engine and domain model. See
 
 <img src="packaging/icon/oaa.svg" alt="" width="44" height="44">
 
-<p><sub><strong>Correctness is the entire product.</strong><br>
-📖 <a href="https://jonasgrunau.github.io/open_audio_analyzer/index.html">jonasgrunau.github.io/open_audio_analyzer</a></sub></p>
+<p><sub>📖 <a href="https://jonasgrunau.github.io/open_audio_analyzer/index.html">jonasgrunau.github.io/open_audio_analyzer</a></sub></p>
 
 </div>
