@@ -323,7 +323,7 @@ claim something about it:
 | A test gate, or `.github/workflows/ci.yml` | `CLAUDE.md` Testing Requirements, `README.md` Tests, `.github/AGENTS.md`. **A gate named in a document and absent from `ci.yml` is a lie the whole team believes** |
 | A keyboard shortcut | Nothing by hand — regenerate with `UPDATE_DOCS=1 flutter test test/shortcuts_test.dart` and commit `docs/site/keyboard.md` in the same change. `README.md`'s Layout → Keyboard names a handful of them and is prose, not a list |
 | A page the documentation site publishes, or its filename | The page list in `tool/docs.dart`. It is written out rather than globbed, so a renamed document fails the docs job instead of silently vanishing from the site |
-| A phase reaching done | `README.md` Roadmap **and** its status banner, `CLAUDE.md`'s status line, `docs/PLAN.md` |
+| A phase reaching done | `README.md` Roadmap, `CLAUDE.md`'s status line, `docs/PLAN.md` |
 | Anything a user sees or configures | `README.md`, and `CHANGELOG.md` under ✨ or ⚡ |
 
 Two rules that are not obvious:
