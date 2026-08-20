@@ -38,7 +38,7 @@
       build. What Open Audio Analyzer has not measured it does not draw: an unavailable quantity
       is a dash, never a zero.
     </p>
-    <p>Twelve modules:</p>
+    <p>Thirteen modules:</p>
     <ul>
       <li>Number Box, LUFS Meter, Digital Meter and Super Meter</li>
       <li>Alert Meter, Validator and Histogram</li>
@@ -67,7 +67,7 @@
     <control>touch</control>
   </supports>
 
-  <!-- A canvas of twelve meters does not fit on a phone. -->
+  <!-- A canvas of thirteen meters does not fit on a phone. -->
   <requires>
     <display_length compare="ge">768</display_length>
   </requires>

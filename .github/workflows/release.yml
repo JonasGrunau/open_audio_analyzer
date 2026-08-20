@@ -140,7 +140,7 @@ jobs:
           sudo apt-get install -y \
             clang cmake ninja-build pkg-config \
             libgtk-3-dev liblzma-dev libstdc++-12-dev libasound2-dev \
-            flatpak flatpak-builder
+            flatpak flatpak-builder appstream
           flatpak remote-add --if-not-exists --user \
             flathub https://flathub.org/repo/flathub.flatpakrepo
           # Fully qualified, and --noninteractive as well as -y. A partial ref
@@ -153,8 +153,39 @@ jobs:
             runtime/org.freedesktop.Platform/x86_64/24.08 \
             runtime/org.freedesktop.Sdk/x86_64/24.08
 
+      # Before the Flutter build, not after it. flatpak-builder ends with
+      # `appstreamcli compose`, so a broken metainfo file is a failure that
+      # arrives ten minutes into the job and reports a component id and an
+      # error tag with no filename. This is the same check, in two seconds,
+      # with an explanation.
+      - name: Validate metainfo
+        run: |
+          appstreamcli validate --explain \
+            packaging/linux/dev.openaudioanalyzer.oaa.metainfo.xml
+
       - name: Build and package
         run: sh packaging/linux/make_flatpak.sh
+
+      # `appstreamcli compose` prints "Refer to the generated issue report
+      # data" and then discards it, so a compose failure says which component
+      # and which tag and never which file. This prints the report, and the
+      # composed output if there is any. Diagnosing it by re-reading the
+      # manifest and guessing cost a release cycle.
+      - name: AppStream report
+        if: failure()
+        run: |
+          tree=build/packaging/flatpak-build/files
+          if [ -d "$tree" ]; then
+            appstreamcli compose --print-report=full --no-net \
+              --components=dev.openaudioanalyzer.oaa \
+              --prefix=/ --origin=oaa \
+              --result-root=/tmp/asc-result --data-dir=/tmp/asc-data \
+              --icons-dir=/tmp/asc-icons "$tree" || true
+            find "$tree/share" -name '*.desktop' -o -name '*.metainfo.xml' \
+              -o -path '*icons*' -name '*.png' -o -name '*.svg' | sort
+          else
+            echo "no build tree at $tree"
+          fi
 
       - uses: actions/upload-artifact@v4
         with:

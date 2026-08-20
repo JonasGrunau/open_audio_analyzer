@@ -6,9 +6,10 @@
   too square for the name: an avatar, a favicon source, a tab.
 
   The same four bars as the application icon (`_Mark` in
-  `packaging/icon/make_icons.dart`) with the tile taken away, and the same
-  geometry as `oaa-logo.svg`. That file's header is where the numbers come
-  from and what may not be changed here alone; read it before touching this.
+  `packaging/icon/make_icons.dart`) with the tile taken away. That file is
+  where the numbers come from and what may not be changed here alone; read its
+  header before touching this. There is no logo lockup to agree with yet — see
+  `assets/AGENTS.md`.
   In particular the tallest bar is the second one on purpose, because four
   bars that climb in order are the cellular signal glyph.
 

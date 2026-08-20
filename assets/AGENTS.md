@@ -13,9 +13,7 @@ publishes. GPL-3.0-or-later, except the two font families, which are SIL OFL
 | `fonts/GoogleSansCode-Regular.ttf` | Scale ticks and secondary numbers. |
 | `fonts/GoogleSansCode-Medium.ttf` | The one big reading in a module. |
 | `fonts/GoogleSansCode-LICENSE.txt` | SIL OFL 1.1. Ships with any binary that bundles the family. |
-| `brand/oaa-logo.svg` | The logo: mark and name, for dark backgrounds. The primary artwork. |
-| `brand/oaa-logo-light.svg` | The same lockup with the name in `background`, for light backgrounds. |
-| `brand/oaa-mark.svg` | The mark alone, for anything too small or too square for the name. Read at build time by `tool/docs.dart`, which inlines it as the site's header mark and favicon. |
+| `brand/oaa-mark.svg` | The mark alone, for anything too small or too square for the name. Read at build time by `tool/docs.dart`, which inlines it as the site's header mark and favicon. The only file in `brand/`. |
 
 ## Rules
 
@@ -42,18 +40,29 @@ publishes. GPL-3.0-or-later, except the two font families, which are SIL OFL
   icon that disagree about the shape are two identities, and the one people see
   first is whichever they happen to meet first.
 
-- **The wordmark is outlines, not a `<text>` element.** Inter is not installed
-  on the machines that will see the logo, so `<text>` would render in Helvetica
-  or DejaVu everywhere except here and the tracking — which is the whole of the
-  typography — would be lost. It therefore cannot be edited as text: change the
-  name, the face or the tracking and the paths are regenerated, not nudged.
+- **There is no logo lockup yet, and this file used to say there were two.**
+  `oaa-logo.svg` and `oaa-logo-light.svg` were listed here, and referenced from
+  `oaa-mark.svg`'s header as the file its geometry came from, and neither has
+  ever existed in this repository. The table is read as an inventory, so a row
+  for a file nobody wrote is worse than no row: it sends the next reader
+  looking for artwork, and it made the mark's own header cite a source that is
+  not there. When the lockup is drawn, the three rules below are what it has to
+  satisfy — they are requirements, not a description of something that exists.
 
-- **There are two colour variants because CSS in an SVG does not survive an
+- **The wordmark must be outlines, not a `<text>` element.** Inter is not
+  installed on the machines that will see the logo, so `<text>` would render in
+  Helvetica or DejaVu everywhere except here and the tracking — which is the
+  whole of the typography — would be lost. It therefore cannot be edited as
+  text: change the name, the face or the tracking and the paths are
+  regenerated, not nudged.
+
+- **It needs two colour variants, because CSS in an SVG does not survive an
   `<img>` element.** `prefers-color-scheme` inside the file is ignored when it
   is loaded as an image, which is how both GitHub and the documentation site
   load it, so a single self-switching file would be a file that renders in one
-  theme and is invisible in the other. Pick by background: `oaa-logo.svg` on
-  the application's own graphite, `oaa-logo-light.svg` on white or a pale page.
+  theme and is invisible in the other. Pick by background: one on the
+  application's own graphite, one on white or a pale page. The mark itself
+  needs neither, because it carries no background and its bars read on both.
 
 - **Never put two hyphens in a row inside these files' comments.** It ends an
   XML comment, the parser rejects the whole document, and every renderer that

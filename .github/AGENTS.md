@@ -58,6 +58,15 @@ The `ci.yml` jobs are split by what they need, and the split is deliberate:
   Requirements and `README.md`'s Tests list are the two places that must agree
   with this file. `dart test packages/oaa_wire` and `sources_match.sh` were both
   documented as gates for a phase before either was actually wired in.
+- **The flatpak job validates the metainfo before it builds, and prints the
+  compose report when it fails.** `flatpak-builder` finishes with
+  `appstreamcli compose`, which reports a component id and an error tag, says
+  "refer to the generated issue report data", and then discards that report —
+  so a metainfo defect surfaces ten minutes into the job as three lines naming
+  no file. `appstreamcli validate --explain` is the same check in two seconds
+  and runs first. Keep both: the second one is what makes a failure the log can
+  answer rather than a guessing exercise against the manifest.
+
 - **A release's notes are its own changelog section, found by version.** The
   publish step reads `## [<tag without the v>]` out of `CHANGELOG.md` and fails
   when that section is missing or blank. It used to take the *first* section
