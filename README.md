@@ -583,7 +583,7 @@ site](https://jonasgrunau.github.io/open_audio_analyzer/install.html).
 > build will be standing.
 
 The scripts that build these live in [`packaging/`](packaging/AGENTS.md), one
-per platform, and `.github/workflows/release.yml` runs all four on a tag and on
+per platform, and `ci.yml`'s packaging jobs run all four on a tag and on
 demand. Each produces an unsigned artefact and says so rather than failing when
 the signing secrets are absent — a fork has none, and a build that stopped there
 would be useless to it.
@@ -630,6 +630,9 @@ cd packages/oaa_engine && dart test   # engine, through FFI
 cd cli && dart test                   # the `oaa` binary, as a subprocess
 cd cli && dart build cli -o build     # and it still builds the way a release does
 sh plugin/test/sources_match.sh       # the engine's two build lists agree
+cmake -B plugin/build -S plugin -DCMAKE_BUILD_TYPE=Release && \
+  cmake --build plugin/build && \
+  ctest --test-dir plugin/build       # the VST3 and AU compile, and the C++ wire golden
 dart run tool/docs.dart               # the documentation site still builds
 ```
 

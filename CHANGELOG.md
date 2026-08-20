@@ -9,6 +9,35 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### ✨ Added
+- The VST3 and the Audio Unit are published with each release, as one archive
+  per platform holding the plugin bundles. They are not bundled inside the
+  desktop installers yet.
+- The plugin is compiled on Linux, macOS and Windows on every push. Nothing
+  built it before: the only plugin check in CI compared two text files and never
+  invoked CMake, so a JUCE dependency fetched by tag, a C++ wire producer that
+  has to agree with the Dart one byte for byte, and a version that moves every
+  release were all held together by whoever last built it by hand. The plugin's
+  own `ctest` run — the producing half of the wire golden — now runs there too.
+
+### ⚡ Changed
+- The plugin's bundle identifier is `dev.openaudioanalyzer.oaa.plugin`. It was
+  `io.github.jonasgrunau.bel`: the rename to Open Audio Analyzer moved every
+  other identifier and missed this one, because nothing built the plugin to
+  notice. A host caches a plugin by that string, so it moves before the first
+  published build rather than after.
+
+### 🚧 Internal
+- One workflow instead of three. `ci.yml` runs the tests, the documentation
+  site, the installers and the release as jobs gated by event, so a push
+  produces one run rather than two and a tag no longer produces a third that
+  names neither. The reason it was split — that packaging must not slow the
+  signal everybody waits on — is kept by not running those jobs on a push,
+  which is a condition rather than a file. Two things the split had made
+  impossible: a release can now depend on the test jobs, so a tag cannot
+  publish from a red commit, and `workflow_dispatch` builds every installer
+  without publishing anything.
+
 ## [0.2.0] — 2026-08-19
 
 ### 📐 Measurement

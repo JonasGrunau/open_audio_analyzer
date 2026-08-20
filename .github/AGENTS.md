@@ -1,20 +1,37 @@
 # .github/
 
-| Workflow | What it answers |
-|------|---------|
-| `ci.yml` | Is this correct? Runs on every push and pull request. **The gate — nothing merges red.** |
-| `docs.yml` | Does the documentation site still build? Publishes it from `main`. |
-| `release.yml` | Can somebody install it? Builds the four installers and the CLI on a tag. |
+**`ci.yml` is the only workflow.** One run answers all three questions a push
+can raise — is this correct, does the site still build, can somebody install it
+— and what runs is decided by the event rather than by which file a job lives
+in:
 
-**`docs.yml` and `release.yml` are deliberately not part of `ci.yml`.** Both are
-an order of magnitude slower — four release builds, a notarisation round trip to
-Apple, a flatpak runtime download — and both answer a question nobody asked on
-the commit being pushed. Making the signal everybody waits on slower for them
-would be the wrong trade. `release.yml` also runs on demand, because an
-installer that is only ever built at release time is one whose script has been
-broken for six weeks by the time anybody finds out.
+| Event | Jobs |
+|---|---|
+| pull request | `checks`, `engine`, `plugin`, `docs` |
+| push to `main` | the same, plus `pages` |
+| `workflow_dispatch` | the same, plus every installer — the packaging check |
+| tag `v*` | the same, plus the installers, plus `publish` |
 
-The `ci.yml` jobs are split by what they need, and the split is deliberate:
+It was three files — `ci.yml`, `docs.yml`, `release.yml` — split on the argument
+that packaging is an order of magnitude slower than testing and must not slow
+the signal everybody waits on. **That argument was right about the cost and
+wrong about the remedy.** What keeps a push fast is not running the packaging
+jobs, which is an `if:` condition; the file boundary contributed nothing to it
+and took away two things worth more.
+
+It took away the gate. A tag could publish a release from a commit whose tests
+were red, because a job in `release.yml` had no way to depend on a job in
+`ci.yml`. `publish` now names every test job in `needs`, and the installers name
+`checks`.
+
+And it took away any coverage of the packaging paths. `release.yml` ran for the
+first time on the v0.2.0 tag, long after it was written, and four of its six
+jobs failed on that first execution. Every failure was a command that had never
+run in CI. Keep `workflow_dispatch` for that reason: it builds every installer
+without publishing, and it is the only thing standing between a packaging script
+and six weeks of quiet rot.
+
+The jobs are split by what they need, and that split is deliberate:
 
 - **`checks`** runs `flutter analyze`, `dart format`, the `oaa_core` domain
   tests, the `oaa_wire` protocol tests, `plugin/test/sources_match.sh` and then
@@ -23,6 +40,14 @@ The `ci.yml` jobs are split by what they need, and the split is deliberate:
   they run first and a regression in any of them is diagnosed without waiting on
   a native build. The widget tests do compile the engine, because the app
   depends on `oaa_engine`.
+- **`plugin`** is the only thing that compiles `plugin/`. `sources_match.sh` in
+  `checks` compares two text files and never invokes CMake, so before this job
+  the VST3 and the AU were built by whoever last did it by hand — with a JUCE
+  dependency fetched by tag and a C++ wire producer that must agree with
+  `packages/oaa_wire` byte for byte. Its `ctest` run is the producing half of
+  that agreement; `checks` tests the consuming half. AU is macOS-only and
+  `plugin/CMakeLists.txt` decides that, not this workflow.
+
 - **`engine`** compiles the C through the build hook and runs the meters, the
   EBU Tech 3341/3342 conformance cases and then the `oaa` CLI on Linux, macOS
   and Windows. It needs no audio hardware — that is what the built-in test tone
@@ -33,7 +58,7 @@ The `ci.yml` jobs are split by what they need, and the split is deliberate:
   so nothing here would have noticed that the release's build command had
   stopped working — and nothing did: `dart compile exe` refuses a package whose
   dependencies have build hooks, and all three CLI jobs failed on the first tag
-  that ever ran `release.yml`.
+  that ever ran the packaging jobs.
 
 ## Rules
 

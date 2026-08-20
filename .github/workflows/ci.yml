@@ -1,33 +1,63 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# Two jobs, split by what they actually need.
+# One workflow: is this correct, does the site build, can somebody install it.
 #
-# `checks` runs the cheap, broad signals first. The domain tests genuinely need
-# no C toolchain — `oaa_core` depends on nothing — so they run before anything
-# that compiles, and a domain regression is diagnosed without waiting on a
-# native build. The widget tests come after and *do* build the engine, because
-# the app depends on `oaa_engine`; there is no way around that and no reason to
-# want one.
+# ---------------------------------------------------------------------------
+# Why this is one file and not three
 #
-# `engine` compiles the C through the build hook and runs the meters against
-# arithmetic on all three desktop platforms. It needs no audio hardware: the
-# built-in test tone is what makes the engine testable on a headless runner.
-# Running all three matters — the POSIX feature-test macro bug that broke the
-# first CI run was invisible on Windows and on the development machine.
+# It was three — `ci.yml`, `docs.yml`, `release.yml` — split on the argument
+# that packaging is an order of magnitude slower than testing and must not slow
+# the signal everybody waits on. That argument was right about the cost and
+# wrong about the remedy: what keeps the common push fast is *not running* the
+# packaging jobs, and that is an `if:` condition, not a separate file. Splitting
+# by file bought nothing and cost three things.
 #
-# From Phase 1 this file also runs the EBU R128 conformance vectors, and a red
-# conformance run blocks the release. See docs/METRICS.md.
+# It cost clarity. A push produced two runs and a tag produced a third, none of
+# which named the others, so "did this commit pass" meant reading two pages.
 #
-# Two other workflows sit beside this one and are deliberately not part of it:
-# `docs.yml` builds and publishes the documentation site, and `release.yml`
-# builds the four installers. Both are an order of magnitude slower than this
-# file and answer a question nobody asked on the commit being pushed.
+# It cost the gate that matters most. A tag could publish a release from a
+# commit whose tests were red, because `release.yml` had no way to depend on a
+# job in `ci.yml`. It cannot now: `publish` needs every test job by name.
+#
+# And it cost the packaging paths any coverage at all. `release.yml` ran for the
+# first time on the v0.2.0 tag, months after it was written, and four of its six
+# jobs failed — `dart compile exe` had stopped supporting build hooks, the msix
+# manifest had a display name where an identifier goes, and `flatpak install`
+# was waiting for an answer to a question nobody could hear. Every one of those
+# was a first execution. They are gated here rather than absent, and
+# `workflow_dispatch` runs the whole thing on demand for exactly that reason.
+#
+# What runs when:
+#
+#   pull request        checks, engine, plugin, docs
+#   push to main        the same, plus the Pages deployment
+#   workflow_dispatch   the same, plus every installer — the packaging check
+#   tag v*              the same, plus the installers, plus publish
+#
+# ---------------------------------------------------------------------------
+# The AppImage runner is deliberately old
+#
+# glibc is forward-compatible and not backward-compatible, so an AppImage built
+# against a newer one refuses to start on an older distribution — with a loader
+# error and nothing else. `ubuntu-22.04` is therefore pinned rather than
+# `ubuntu-latest`, and moving it forward silently narrows who can run Open Audio
+# Analyzer. The flatpak has no such constraint because its runtime carries its
+# own libc, which is most of the reason to have both.
+#
+# ---------------------------------------------------------------------------
+# Unsigned artefacts are published, and labelled
+#
+# Signing needs secrets a fork does not have. Rather than fail, each script
+# produces an unsigned package and says so on stdout; the release notes repeat
+# it. A build that quietly published something a user cannot install would be
+# worse than one that failed.
 
 name: CI
 
 on:
   push:
     branches: [main]
+    tags: ['v*']
   pull_request:
   workflow_dispatch:
 
@@ -37,7 +67,14 @@ on:
 env:
   FLUTTER_VERSION: 3.44.5
 
+permissions:
+  contents: read
+
 jobs:
+  # -------------------------------------------------------------------------
+  # Correctness. Everything here runs on every event.
+  # -------------------------------------------------------------------------
+
   checks:
     name: Analyze and test
     runs-on: ubuntu-latest
@@ -69,7 +106,7 @@ jobs:
       # implementation against the C++ producer byte for byte. Pure Dart, so it
       # runs beside the domain tests and needs no toolchain — three
       # implementations of docs/WIRE.md agreeing is the entire point of having
-      # written it down.
+      # written it down. The C++ end of that agreement is checked in `plugin`.
       - name: Wire protocol tests
         working-directory: packages/oaa_wire
         run: |
@@ -145,3 +182,472 @@ jobs:
         if: runner.os == 'Windows'
         working-directory: cli
         run: .\build\bundle\bin\oaa.exe --version
+
+  # -------------------------------------------------------------------------
+  # The plugin
+  #
+  # Nothing compiled `plugin/` until this job existed. CI ran
+  # `plugin/test/sources_match.sh`, which compares two text files and never
+  # invokes CMake, so the VST3 and the AU were built by whoever last did it by
+  # hand — with a JUCE dependency fetched by tag, a C++ producer that must
+  # agree with `packages/oaa_wire` byte for byte, and a `VERSION` that moves
+  # every release. `ctest` runs the wire golden here, which is the other half
+  # of the agreement `checks` tests from the Dart side.
+  #
+  # AU is macOS-only and JUCE decides that, not this file: `plugin/CMakeLists.txt`
+  # appends it to OAA_FORMATS `if(APPLE)`. VST3 builds on all three.
+  #
+  # The artefacts are uploaded on every run, not only on a tag. A plugin you
+  # can download from the commit that built it is worth the storage, and it is
+  # what `publish` attaches to a release.
+  # -------------------------------------------------------------------------
+
+  plugin:
+    name: Plugin (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # JUCE's Linux build wants X11, Xrandr, Xinerama, Xcursor, freetype and
+      # GL even for a plugin that draws almost nothing, and libasound for the
+      # audio device layer. JUCE_WEB_BROWSER=0 and JUCE_USE_CURL=0 in
+      # CMakeLists.txt are what keep webkit2gtk and libcurl off this list.
+      - name: Toolchain
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            clang cmake pkg-config libasound2-dev \
+            libx11-dev libxext-dev libxinerama-dev libxrandr-dev \
+            libxcursor-dev libxcomposite-dev \
+            libfreetype6-dev libfontconfig1-dev libgl1-mesa-dev
+
+      # Keyed on the file that pins the tag rather than on the tag copied into
+      # this workflow. `OAA_JUCE_TAG` lives in plugin/CMakeLists.txt and there
+      # is no second place for it to disagree with; the cost is re-cloning JUCE
+      # when something unrelated in that file changes, which is a shallow clone.
+      - name: Cache JUCE
+        uses: actions/cache@v4
+        with:
+          path: plugin/build/_deps
+          key: juce-${{ runner.os }}-${{ hashFiles('plugin/CMakeLists.txt') }}
+
+      - name: Configure
+        run: cmake -B plugin/build -S plugin -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        if: runner.os != 'Windows'
+        run: cmake --build plugin/build
+
+      - name: Build
+        if: runner.os == 'Windows'
+        run: cmake --build plugin/build --config Release
+
+      # The wire golden, from the producing side. `packages/oaa_wire` asserts
+      # that the committed `wire_v2.bin` decodes; this asserts that the C++ in
+      # `plugin/src/OaaWire.cpp` still writes it. Neither test is worth much
+      # without the other, and only one of them was running.
+      - name: Tests
+        run: ctest --test-dir plugin/build --output-on-failure -C Release
+
+      # VST3 everywhere, AU where JUCE built one. Standalone is deliberately
+      # left out: it is a window around a plugin whose whole purpose is to
+      # stream to an application that is already running.
+      - name: Archive
+        if: runner.os != 'Windows'
+        run: |
+          cd plugin/build/OaaPlugin_artefacts/Release
+          formats=VST3
+          [ -d AU ] && formats="$formats AU"
+          echo "archiving: $formats"
+          tar -czf "$GITHUB_WORKSPACE/oaa-plugin-${{ runner.os }}.tar.gz" $formats
+
+      - name: Archive
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Compress-Archive -Path plugin\build\OaaPlugin_artefacts\Release\VST3 `
+            -DestinationPath oaa-plugin-Windows.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: oaa-plugin-${{ matrix.os }}
+          path: |
+            oaa-plugin-*.tar.gz
+            oaa-plugin-*.zip
+          if-no-files-found: error
+
+  # -------------------------------------------------------------------------
+  # The documentation site
+  #
+  # It builds on every event and publishes only from main. The pages are
+  # generated from Markdown that lives beside the code — docs/METRICS.md and
+  # docs/WIRE.md are normative documents held by tests — so a change that
+  # breaks the site is a change to the repository's documentation, and the
+  # place to find out is the pull request rather than after the merge.
+  # `tool/docs.dart` exits non-zero when a page it is asked to publish does not
+  # exist, which is the failure that actually happens: somebody renames a
+  # document and the site loses a page silently.
+  #
+  # There is no Flutter here. `tool/docs.dart` imports nothing but `dart:io`
+  # and `dart:convert` on purpose, so this job is a Dart SDK and forty seconds.
+  # -------------------------------------------------------------------------
+
+  docs:
+    name: Docs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+
+      - name: Generate
+        run: dart run tool/docs.dart --out build/docs
+
+      # The keyboard page is generated from the shortcut table in the
+      # application, and `flutter test` is what proves it is not stale. Saying
+      # so here means somebody reading this file knows the check exists and is
+      # somewhere else, rather than assuming this job covers it.
+      - name: Check every page was written
+        run: |
+          test -s build/docs/index.html
+          test -s build/docs/keyboard.html
+          test -s build/docs/metrics.html
+          test -s build/docs/wire.html
+          test -s build/docs/style.css
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: build/docs
+
+  pages:
+    name: Publish docs
+    needs: docs
+    # Separate from the build so that a fork's pull request, which has no Pages
+    # permission, builds the site and does not try to deploy it. A tag is not a
+    # branch, so tagging does not redeploy either.
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    # On the job rather than the workflow: a second push while the first is
+    # deploying should win, and the first should be cancelled rather than
+    # racing it to the same bucket. At workflow level this would cancel the
+    # tests as well, which is the opposite of what anybody wants.
+    concurrency:
+      group: pages
+      cancel-in-progress: true
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4
+
+  # -------------------------------------------------------------------------
+  # Installers. A tag, or a manual run.
+  #
+  # `needs: checks` on all of them: twenty minutes of packaging behind a commit
+  # that does not analyse is twenty minutes nobody wanted. It is the fast job,
+  # so the wait is small and the ordering is honest — an installer built from
+  # code that fails its own tests is not a release candidate.
+  # -------------------------------------------------------------------------
+
+  dmg:
+    name: dmg
+    needs: checks
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Build and package
+        env:
+          OAA_SIGNING_IDENTITY: ${{ secrets.OAA_SIGNING_IDENTITY }}
+          OAA_NOTARY_PROFILE: ${{ secrets.OAA_NOTARY_PROFILE }}
+        run: sh packaging/macos/make_dmg.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: oaa-macos-dmg
+          path: build/packaging/*.dmg
+          if-no-files-found: error
+
+  msix:
+    name: msix
+    needs: checks
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Build and package
+        shell: pwsh
+        env:
+          OAA_WINDOWS_CERT: ${{ secrets.OAA_WINDOWS_CERT }}
+          OAA_WINDOWS_CERT_PASS: ${{ secrets.OAA_WINDOWS_CERT_PASS }}
+          OAA_WINDOWS_PUBLISHER: ${{ secrets.OAA_WINDOWS_PUBLISHER }}
+        run: pwsh packaging/windows/make_msix.ps1
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: oaa-windows-msix
+          path: build/packaging/*.msix
+          if-no-files-found: error
+
+  appimage:
+    name: AppImage
+    needs: checks
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    # Pinned, and not to latest. See the header.
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      # Flutter's Linux embedder is GTK on GL; libasound is what miniaudio opens
+      # a capture device through. Both are build-time as well as run-time.
+      - name: Toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            clang cmake ninja-build pkg-config \
+            libgtk-3-dev liblzma-dev libstdc++-12-dev libasound2-dev \
+            fuse libfuse2
+
+      - name: Build and package
+        run: sh packaging/linux/make_appimage.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: oaa-linux-appimage
+          path: build/packaging/*.AppImage
+          if-no-files-found: error
+
+  flatpak:
+    name: flatpak
+    needs: checks
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            clang cmake ninja-build pkg-config \
+            libgtk-3-dev liblzma-dev libstdc++-12-dev libasound2-dev \
+            flatpak flatpak-builder appstream
+          flatpak remote-add --if-not-exists --user \
+            flathub https://flathub.org/repo/flathub.flatpakrepo
+          # Fully qualified, and --noninteractive as well as -y. A partial ref
+          # that matches more than one thing makes flatpak ask which one is
+          # meant, and -y does not answer that question — it answers "is this
+          # ok?". On a runner there is nobody to ask, so the step does not fail:
+          # it waits. The 0.2.0 tag sat here for four hours before it was
+          # cancelled, with every other installer already built.
+          flatpak install -y --noninteractive --user flathub \
+            runtime/org.freedesktop.Platform/x86_64/24.08 \
+            runtime/org.freedesktop.Sdk/x86_64/24.08
+
+      # Before the Flutter build, not after it. flatpak-builder ends with
+      # `appstreamcli compose`, so a broken metainfo file is a failure that
+      # arrives ten minutes into the job and reports a component id and an
+      # error tag with no filename. This is the same check, in two seconds,
+      # with an explanation.
+      - name: Validate metainfo
+        run: |
+          appstreamcli validate --explain \
+            packaging/linux/dev.openaudioanalyzer.oaa.metainfo.xml
+
+      - name: Build and package
+        run: sh packaging/linux/make_flatpak.sh
+
+      # `appstreamcli compose` prints "Refer to the generated issue report
+      # data" and then discards it, so a compose failure says which component
+      # and which tag and never which file. This prints the report, and the
+      # composed output if there is any. Diagnosing it by re-reading the
+      # manifest and guessing cost a release cycle.
+      - name: AppStream report
+        if: failure()
+        run: |
+          tree=build/packaging/flatpak-build/files
+          if [ -d "$tree" ]; then
+            appstreamcli compose --print-report=full --no-net \
+              --components=dev.openaudioanalyzer.oaa \
+              --prefix=/ --origin=oaa \
+              --result-root=/tmp/asc-result --data-dir=/tmp/asc-data \
+              --icons-dir=/tmp/asc-icons "$tree" || true
+            find "$tree/share" -name '*.desktop' -o -name '*.metainfo.xml' \
+              -o -path '*icons*' -name '*.png' -o -name '*.svg' | sort
+          else
+            echo "no build tree at $tree"
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: oaa-linux-flatpak
+          path: build/packaging/*.flatpak
+          if-no-files-found: error
+
+  # -------------------------------------------------------------------------
+  # `dart build cli`, not `dart compile exe`
+  #
+  # `dart compile` refuses a package whose dependencies have build hooks —
+  # "'dart compile' does not support build hooks, use 'dart build' instead" —
+  # and `oaa_engine` is exactly that. It refused on all three platforms the
+  # first time the release workflow ever ran, which was the tag for 0.2.0,
+  # because nothing else in the repository compiled the CLI: `cli/test` runs it
+  # with `dart run`. The `engine` job builds it now for that reason.
+  #
+  # The product is therefore a directory rather than a file — `bin/oaa` beside
+  # `lib/liboaa_engine.*` — and it is archived, because a release asset is a
+  # flat list of files and an executable published next to its library as two
+  # separate downloads is an executable that does not start.
+  # -------------------------------------------------------------------------
+
+  cli:
+    name: oaa CLI
+    needs: checks
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Build
+        working-directory: cli
+        run: |
+          dart pub get
+          dart build cli -o build
+
+      # Run what is about to be published, rather than trusting that a build
+      # that exited 0 produced something that starts. It loads the engine
+      # through the library beside it, so this also proves the bundle's own
+      # layout.
+      - name: Smoke
+        if: runner.os != 'Windows'
+        working-directory: cli
+        run: ./build/bundle/bin/oaa --version
+
+      - name: Smoke
+        if: runner.os == 'Windows'
+        working-directory: cli
+        run: .\build\bundle\bin\oaa.exe --version
+
+      # tar on Linux and macOS, zip on Windows, because a Windows user given a
+      # .tar.gz has to know that tar has been in the OS since 2018.
+      - name: Archive
+        if: runner.os != 'Windows'
+        working-directory: cli
+        run: tar -czf "oaa-cli-${{ runner.os }}.tar.gz" -C build/bundle .
+
+      - name: Archive
+        if: runner.os == 'Windows'
+        working-directory: cli
+        shell: pwsh
+        run: Compress-Archive -Path build\bundle\* -DestinationPath oaa-cli-Windows.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: oaa-cli-${{ matrix.os }}
+          path: |
+            cli/oaa-cli-*.tar.gz
+            cli/oaa-cli-*.zip
+          if-no-files-found: error
+
+  # -------------------------------------------------------------------------
+  # The release
+  #
+  # `needs` names the test jobs as well as the packaging ones, which is the
+  # thing three separate workflows could not express: a tag cannot publish a
+  # release from a commit whose tests are red.
+  # -------------------------------------------------------------------------
+
+  publish:
+    name: Publish
+    needs: [checks, engine, plugin, dmg, msix, appimage, flatpak, cli]
+    runs-on: ubuntu-latest
+    # Only a tag becomes a release. A manual run is a check that the scripts
+    # still work, and it leaves its artefacts on the run rather than publishing
+    # a release nobody asked for.
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      # The notes are this tag's own changelog section, found by version rather
+      # than by position. Taking the first section instead would take
+      # `## [Unreleased]`, which is empty on a release commit by construction —
+      # so the release would have published no notes at all and nothing would
+      # have failed. An empty extraction is an error here for the same reason.
+      - name: Notes
+        run: |
+          awk -v v="${GITHUB_REF_NAME#v}" '
+            $0 == "## [" v "]" || index($0, "## [" v "] ") == 1 { inside = 1; next }
+            inside && /^## \[/ { exit }
+            inside { print }
+          ' CHANGELOG.md > notes.md
+          if ! grep -q '[^[:space:]]' notes.md; then
+            echo "CHANGELOG.md has no section for ${GITHUB_REF_NAME#v}" >&2
+            exit 1
+          fi
+
+      # The asset list is NUL-delimited into an array, not interpolated. Every
+      # installer is named "Open Audio Analyzer-<version>-...", and
+      # `$(find ...)` splits that on the spaces: the first tag to reach this
+      # step died on `no matches found for artifacts/oaa-linux-appimage/Open`,
+      # with all seven builds green and nothing else left to do.
+      - name: Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          assets=()
+          while IFS= read -r -d '' file; do
+            assets+=("$file")
+            echo "attaching $file"
+          done < <(find artifacts -type f -print0 | sort -z)
+          [ "${#assets[@]}" -gt 0 ] || { echo 'no artefacts to attach' >&2; exit 1; }
+          gh release create "${GITHUB_REF_NAME}" \
+            --title "Open Audio Analyzer ${GITHUB_REF_NAME}" \
+            --notes-file notes.md \
+            "${assets[@]}"

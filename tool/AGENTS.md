@@ -14,10 +14,10 @@ Repository scripts. Nothing here ships. GPL-3.0-or-later.
   `docs/WIRE.md` — are normative and held by tests, so a site that can break on
   a machine where the code is fine is a site that will. `docs.dart` imports
   `dart:io` and `dart:convert` and nothing else, which is why
-  `.github/workflows/docs.yml` is a Dart SDK and forty seconds with no Flutter
+  `ci.yml`'s `docs` job is a Dart SDK and forty seconds with no Flutter
   anywhere in it. That constraint belongs to `docs.dart` rather than to this
   directory — `bench_spectrogram.dart` needs `dart:ui`, and therefore an engine
-  — and it survives as long as `docs.yml` runs `docs.dart` and nothing else.
+  — and it survives as long as the `docs` job runs `docs.dart` and nothing else.
 
 - **`bench_spectrogram.dart` is run by hand, and is not a gate.** It is written
   as a `flutter test` file because `dart:ui` needs an engine, not because it

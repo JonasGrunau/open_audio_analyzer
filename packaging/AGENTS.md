@@ -19,7 +19,7 @@ GPL-3.0-or-later.
 | `linux/make_flatpak.sh` | Build, stage, `flatpak-builder`, bundle. |
 | `linux/flatpak/dev.openaudioanalyzer.oaa.yml` | The flatpak manifest. Packages a bundle that was already built. |
 
-Output always lands in `build/packaging/`. `.github/workflows/release.yml` runs
+Output always lands in `build/packaging/`. `ci.yml`'s packaging jobs run
 all four on a tag and on demand.
 
 ## Rules
@@ -89,7 +89,7 @@ all four on a tag and on demand.
 - **The AppImage is built on the oldest supported runner.** glibc is
   forward-compatible and not backward-compatible: one built on a newer
   distribution refuses to start on an older one, with a loader error and nothing
-  else. `release.yml` pins `ubuntu-22.04` for that job, and moving it forward
+  else. `ci.yml` pins `ubuntu-22.04` for that job, and moving it forward
   silently narrows who can run Open Audio Analyzer.
 
 - **The flatpak does not build Flutter.** `flatpak-builder` runs with no

@@ -104,6 +104,14 @@ cmake --build plugin/build
 ctest --test-dir plugin/build --output-on-failure
 ```
 
+`ci.yml`'s `plugin` job runs exactly that on Linux, macOS and Windows, on every
+push — VST3 on all three, AU where JUCE builds one. It is the only thing in CI
+that compiles this directory: `test/sources_match.sh` compares two text files
+and never invokes CMake, so until that job existed the plugin was built by
+whoever last did it by hand, and the `ctest` run below — the producing half of
+the wire golden — was not running anywhere. The release attaches the bundles as
+one archive per platform. They are not inside the desktop installers yet.
+
 Products land in `plugin/build/OaaPlugin_artefacts/Release/`. Nothing is
 installed into a system plugin folder: a build that silently writes into
 `~/Library/Audio/Plug-Ins` means the DAW you have open is now running a binary

@@ -126,7 +126,13 @@ juce_add_plugin(OaaPlugin
   PRODUCT_NAME              "Open Audio Analyzer"
   COMPANY_NAME              "Open Audio Analyzer"
   COMPANY_WEBSITE           "https://github.com/JonasGrunau/open_audio_analyzer"
-  BUNDLE_ID                 "io.github.jonasgrunau.bel"
+  # The application is `dev.openaudioanalyzer.oaa`; this is that identity
+  # with the format bundles hanging off it. It said
+  # `io.github.jonasgrunau.bel` until the plugin was first published —
+  # the rename to Open Audio Analyzer moved every other identifier and
+  # missed this one, because nothing built the plugin to notice. A host
+  # caches a plugin by this string, so it moves now or it never moves.
+  BUNDLE_ID                 "dev.openaudioanalyzer.oaa.plugin"
 
   # Four characters each, at least one uppercase — an Audio Unit requirement,
   # not a JUCE one, and a lowercase-only code fails validation at load time in

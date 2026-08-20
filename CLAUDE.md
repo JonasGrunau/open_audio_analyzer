@@ -56,7 +56,7 @@ is still not built, and `docs/PLAN.md` for what was planned.
 | `cli/bin/oaa.dart` | The `oaa` analyser. Its exit code is the product — see `cli/AGENTS.md`. |
 | `lib/src/app/shortcuts.dart` | Every keyboard shortcut, as one table. The bindings, the `?` sheet and `docs/site/keyboard.md` are all derived from it; `test/shortcuts_test.dart` fails when the page has drifted. |
 | `lib/src/app/launch_options.dart` | `--config-dir` and `--open-panel`. Both exist to make something else testable — see the file. |
-| `tool/docs.dart` | The documentation site. No dependencies, so `docs.yml` needs a Dart SDK and nothing else. The page list is written out, never globbed, and the mark is read from `assets/brand/oaa-mark.svg` rather than held — it was held once and went stale. |
+| `tool/docs.dart` | The documentation site. No dependencies, so the `docs` job needs a Dart SDK and nothing else. The page list is written out, never globbed, and the mark is read from `assets/brand/oaa-mark.svg` rather than held — it was held once and went stale. |
 | `packaging/icon/make_icons.dart` | The app mark as geometry, rendered into every container the six platforms want — a rounded tile for the desktops, two layers on a 108dp canvas for Android, and a layered `AppIcon.icon` for macOS and iOS that the system lights itself. `oaa.svg` and `assets/brand/` are its vector twins and follow it, never the reverse. |
 | `.tool-versions` | Pins Flutter `3.44.5-stable`. CI pins the same; keep them in step. |
 
@@ -320,7 +320,7 @@ claim something about it:
 | A file added to or removed from any package | That directory's `AGENTS.md` file table. They are enumerations, not samples; a missing row reads as "this file does not exist" |
 | A new directory | Its own `AGENTS.md`, plus the parent's table and `CLAUDE.md`'s Subdirectories table |
 | A new dependency | `CLAUDE.md` Dependencies, `README.md`, and the licence column if it is not permissive |
-| A test gate, or `.github/workflows/ci.yml` | `CLAUDE.md` Testing Requirements, `README.md` Tests, `.github/AGENTS.md`. **A gate named in a document and absent from `ci.yml` is a lie the whole team believes** |
+| A test gate, or `.github/workflows/ci.yml` | `CLAUDE.md` Testing Requirements, `README.md` Tests, `.github/AGENTS.md`. **A gate named in a document and absent from `ci.yml` is a lie the whole team believes.** `ci.yml` is the only workflow — tests, docs, installers and the release are jobs in it, gated by event |
 | A keyboard shortcut | Nothing by hand — regenerate with `UPDATE_DOCS=1 flutter test test/shortcuts_test.dart` and commit `docs/site/keyboard.md` in the same change. `README.md`'s Layout → Keyboard names a handful of them and is prose, not a list |
 | A page the documentation site publishes, or its filename | The page list in `tool/docs.dart`. It is written out rather than globbed, so a renamed document fails the docs job instead of silently vanishing from the site |
 | A phase reaching done | `README.md` Roadmap, `CLAUDE.md`'s status line, `docs/PLAN.md` |
@@ -420,14 +420,18 @@ cd packages/oaa_engine && dart test   # engine, through FFI
 cd cli && dart test                   # the `oaa` binary, as a subprocess
 cd cli && dart build cli -o build     # the CLI builds the way a release builds it
 sh plugin/test/sources_match.sh       # the engine's two build lists agree
+cmake -B plugin/build -S plugin -DCMAKE_BUILD_TYPE=Release && \
+  cmake --build plugin/build && \
+  ctest --test-dir plugin/build       # the VST3 and AU compile, and the C++ wire golden
 dart run tool/docs.dart               # the documentation site still builds
 ```
 
-All nine are the CI gate — the first seven and `sources_match.sh` in
-`ci.yml`, the site in `docs.yml`. `dart build cli` is there because nothing
-else builds the CLI the way a release does: `cli/test` runs it with `dart run`,
-so `dart compile exe` was broken for an unknown length of time and was found by
-tagging a release. The engine tests hold the meters against arithmetic: a
+All ten are jobs in `ci.yml`, which is the only workflow. `dart build cli` is
+there because nothing else builds the CLI the way a release does: `cli/test`
+runs it with `dart run`, so `dart compile exe` was broken for an unknown length
+of time and was found by tagging a release. The plugin build is there for the
+same reason — `sources_match.sh` compares two text files and never invokes
+CMake, so nothing compiled the VST3 or the AU. The engine tests hold the meters against arithmetic: a
 sine of amplitude *A* peaks at *A* and has an RMS of *A*/√2, exactly 3.0103 dB
 lower. If those drift, the meters are wrong — not the tone.
 
