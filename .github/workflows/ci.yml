@@ -29,10 +29,14 @@
 #
 # What runs when:
 #
-#   pull request        checks, engine, plugin, docs
+#   pull request        checks, engine, docs
 #   push to main        the same, plus the Pages deployment
-#   workflow_dispatch   the same, plus every installer — the packaging check
-#   tag v*              the same, plus the installers, plus publish
+#   workflow_dispatch   the same, plus the plugin and every installer
+#   tag v*              the same, plus publish
+#
+# The plugin is on the release side of that line with the installers: three
+# parallel JUCE builds is the most expensive thing here by an order of
+# magnitude. What that costs is written above the job.
 #
 # ---------------------------------------------------------------------------
 # The AppImage runner is deliberately old
@@ -106,7 +110,8 @@ jobs:
       # implementation against the C++ producer byte for byte. Pure Dart, so it
       # runs beside the domain tests and needs no toolchain — three
       # implementations of docs/WIRE.md agreeing is the entire point of having
-      # written it down. The C++ end of that agreement is checked in `plugin`.
+      # written it down. The C++ end of that agreement is checked in `plugin`,
+      # which only runs on a release — so between releases this is one-sided.
       - name: Wire protocol tests
         working-directory: packages/oaa_wire
         run: |
@@ -184,26 +189,34 @@ jobs:
         run: .\build\bundle\bin\oaa.exe --version
 
   # -------------------------------------------------------------------------
-  # The plugin
+  # The plugin — a release, or a manual run
   #
   # Nothing compiled `plugin/` until this job existed. CI ran
   # `plugin/test/sources_match.sh`, which compares two text files and never
   # invokes CMake, so the VST3 and the AU were built by whoever last did it by
   # hand — with a JUCE dependency fetched by tag, a C++ producer that must
   # agree with `packages/oaa_wire` byte for byte, and a `VERSION` that moves
-  # every release. `ctest` runs the wire golden here, which is the other half
-  # of the agreement `checks` tests from the Dart side.
+  # every release.
+  #
+  # It is gated with the installers rather than run on every push, because
+  # three parallel JUCE builds is the most expensive thing in this file by an
+  # order of magnitude and a push does not ask the question. **The cost is that
+  # `ctest` moves with it,** and that run is the producing half of the wire
+  # golden: `checks` asserts that the committed `wire_v2.bin` decodes, and only
+  # this job asserts that `plugin/src/OaaWire.cpp` still writes it. Between
+  # releases, that agreement is checked from one side. Building only the
+  # `oaa_wire_fixture` target would restore it cheaply — it needs the engine
+  # and one translation unit, not JUCE — and would need CMakeLists.txt to make
+  # the JUCE fetch conditional, which it does not today.
   #
   # AU is macOS-only and JUCE decides that, not this file: `plugin/CMakeLists.txt`
   # appends it to OAA_FORMATS `if(APPLE)`. VST3 builds on all three.
-  #
-  # The artefacts are uploaded on every run, not only on a tag. A plugin you
-  # can download from the commit that built it is worth the storage, and it is
-  # what `publish` attaches to a release.
   # -------------------------------------------------------------------------
 
   plugin:
     name: Plugin (${{ matrix.os }})
+    needs: checks
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false

@@ -7,10 +7,10 @@ in:
 
 | Event | Jobs |
 |---|---|
-| pull request | `checks`, `engine`, `plugin`, `docs` |
+| pull request | `checks`, `engine`, `docs` |
 | push to `main` | the same, plus `pages` |
-| `workflow_dispatch` | the same, plus every installer — the packaging check |
-| tag `v*` | the same, plus the installers, plus `publish` |
+| `workflow_dispatch` | the same, plus `plugin` and every installer |
+| tag `v*` | the same, plus `publish` |
 
 It was three files — `ci.yml`, `docs.yml`, `release.yml` — split on the argument
 that packaging is an order of magnitude slower than testing and must not slow
@@ -40,13 +40,22 @@ The jobs are split by what they need, and that split is deliberate:
   they run first and a regression in any of them is diagnosed without waiting on
   a native build. The widget tests do compile the engine, because the app
   depends on `oaa_engine`.
-- **`plugin`** is the only thing that compiles `plugin/`. `sources_match.sh` in
-  `checks` compares two text files and never invokes CMake, so before this job
-  the VST3 and the AU were built by whoever last did it by hand — with a JUCE
-  dependency fetched by tag and a C++ wire producer that must agree with
-  `packages/oaa_wire` byte for byte. Its `ctest` run is the producing half of
-  that agreement; `checks` tests the consuming half. AU is macOS-only and
+- **`plugin`** is the only thing that compiles `plugin/`, and it runs on a
+  release or a manual run, not on a push — three parallel JUCE builds is the
+  most expensive thing in the file by an order of magnitude. `sources_match.sh`
+  in `checks` compares two text files and never invokes CMake, so before this
+  job the VST3 and the AU were built by whoever last did it by hand, with a
+  JUCE dependency fetched by tag. AU is macOS-only and
   `plugin/CMakeLists.txt` decides that, not this workflow.
+
+  **Know what the gating costs.** `ctest` moves with the job, and that run is
+  the producing half of the wire golden: `checks` asserts the committed
+  `wire_v2.bin` decodes, and only this job asserts that
+  `plugin/src/OaaWire.cpp` still writes it. Between releases the byte-for-byte
+  agreement `docs/WIRE.md` exists to guarantee is checked from one side. The
+  cheap repair is to build only the `oaa_wire_fixture` target on pushes — it
+  needs the engine and one translation unit, not JUCE — which needs the JUCE
+  fetch in `plugin/CMakeLists.txt` to become conditional. It is not today.
 
 - **`engine`** compiles the C through the build hook and runs the meters, the
   EBU Tech 3341/3342 conformance cases and then the `oaa` CLI on Linux, macOS

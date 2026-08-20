@@ -426,12 +426,15 @@ cmake -B plugin/build -S plugin -DCMAKE_BUILD_TYPE=Release && \
 dart run tool/docs.dart               # the documentation site still builds
 ```
 
-All ten are jobs in `ci.yml`, which is the only workflow. `dart build cli` is
-there because nothing else builds the CLI the way a release does: `cli/test`
-runs it with `dart run`, so `dart compile exe` was broken for an unknown length
-of time and was found by tagging a release. The plugin build is there for the
-same reason — `sources_match.sh` compares two text files and never invokes
-CMake, so nothing compiled the VST3 or the AU. The engine tests hold the meters against arithmetic: a
+All ten are jobs in `ci.yml`, which is the only workflow — but two of them do
+not run on a push. `dart build cli` does, and is there because nothing else
+builds the CLI the way a release does: `cli/test` runs it with `dart run`, so
+`dart compile exe` was broken for an unknown length of time and was found by
+tagging a release. **The plugin build runs only on a release or a manual run**,
+because three parallel JUCE builds cost more than a push asks for — so run it
+by hand when you touch `plugin/` or `engine/`. It is the only thing that
+compiles the VST3 and the AU, and the only thing that runs the C++ side of the
+wire golden. The engine tests hold the meters against arithmetic: a
 sine of amplitude *A* peaks at *A* and has an RMS of *A*/√2, exactly 3.0103 dB
 lower. If those drift, the meters are wrong — not the tone.
 

@@ -13,12 +13,13 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The VST3 and the Audio Unit are published with each release, as one archive
   per platform holding the plugin bundles. They are not bundled inside the
   desktop installers yet.
-- The plugin is compiled on Linux, macOS and Windows on every push. Nothing
-  built it before: the only plugin check in CI compared two text files and never
-  invoked CMake, so a JUCE dependency fetched by tag, a C++ wire producer that
-  has to agree with the Dart one byte for byte, and a version that moves every
-  release were all held together by whoever last built it by hand. The plugin's
-  own `ctest` run — the producing half of the wire golden — now runs there too.
+- The plugin is compiled on Linux, macOS and Windows as part of a release, and
+  on demand. Nothing built it before: the only plugin check in CI compared two
+  text files and never invoked CMake, so a JUCE dependency fetched by tag, a C++
+  wire producer that has to agree with the Dart one byte for byte, and a version
+  that moves every release were all held together by whoever last built it by
+  hand. It is not built on every push, because three parallel JUCE builds cost
+  more than a push asks for.
 
 ### ⚡ Changed
 - The plugin's bundle identifier is `dev.openaudioanalyzer.oaa.plugin`. It was
