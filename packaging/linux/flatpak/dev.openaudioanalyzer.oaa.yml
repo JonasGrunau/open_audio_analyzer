@@ -74,8 +74,16 @@ modules:
           install -Dm644 "icons/${size}x${size}/dev.openaudioanalyzer.oaa.png" \
             "/app/share/icons/hicolor/${size}x${size}/apps/dev.openaudioanalyzer.oaa.png"
         done
-      - install -Dm644 oaa.svg
-        /app/share/icons/hicolor/scalable/apps/dev.openaudioanalyzer.oaa.svg
+      # **No scalable icon here, deliberately.** `flatpak-builder` finishes
+      # with `appstreamcli compose`, which loads every icon it finds through
+      # gdk-pixbuf — and gdk-pixbuf can only read an SVG when librsvg has
+      # registered a loader, which is not something this build controls. Where
+      # it has not, the file is not "a broken SVG", it is "Unrecognized image
+      # file format", and compose turns that into a failed build with the whole
+      # flatpak already assembled. The seven PNGs above are what a launcher
+      # actually uses and what AppStream wants — a PNG of 64px or more is
+      # sufficient, and there is one at 64, 128, 256 and 512. The vector still
+      # ships everywhere it can be read as a vector.
 
       # Both bundled font families are SIL OFL 1.1; their licences must ship
       # with anything they are embedded in.

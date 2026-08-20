@@ -6,7 +6,7 @@ GPL-3.0-or-later.
 | Path | Purpose |
 |------|---------|
 | `icon/make_icons.dart` | The mark, as geometry, rendered into every container the six platforms ask for — flat PNGs for the desktops, Android's adaptive icon, and one layered `AppIcon.icon` document per Apple platform. Writes into the platform directories as well as this one. |
-| `icon/oaa.svg` | The same mark as a vector, for Linux's `scalable` hicolor directory. **The one deliberate duplicate here** — its numbers are derived from `make_icons.dart` and are annotated as such. |
+| `icon/oaa.svg` | The same mark as a vector, with the tile and the gradient, for `README.md`. **The one deliberate duplicate here** — its numbers are derived from `make_icons.dart` and are annotated as such. It is *not* installed into Linux's `scalable` hicolor directory: see the comment in the flatpak manifest. |
 | `android/play_store_icon.png` | Generated. 512 px, full bleed, no alpha. The Play Console asks for it by hand at upload; it is not built into the aab. |
 | `macos/make_dmg.sh` | Build, sign, notarise, disk image. |
 | `windows/AppxManifest.xml` | The msix manifest, with two placeholders. |

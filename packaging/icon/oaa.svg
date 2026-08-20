@@ -2,10 +2,16 @@
 <!--
   SPDX-License-Identifier: GPL-3.0-or-later
 
-  Open Audio Analyzer's mark, as a vector, for the one consumer that wants
-  one: Linux's `scalable` hicolor directory. The same geometry as `_Mark` in
-  make_icons.dart, and the only place in this repository where the same shape
-  is described twice.
+  Open Audio Analyzer's mark, as a vector, with the tile and the gradient.
+  The same geometry as `_Mark` in make_icons.dart, and the only place in this
+  repository where the same shape is described twice.
+
+  Its consumer is `README.md`, which shows it twice. It used to be installed
+  into Linux's `scalable` hicolor directory as well, and is not any more:
+  `appstreamcli compose` loads every icon in that tree through gdk-pixbuf,
+  which cannot read an SVG unless librsvg has registered a loader, and where
+  it has not the flatpak build fails on "Unrecognized image file format" with
+  the package already assembled. The PNGs cover the launcher.
 
   It was not generated because there was no SVG emitter and writing one to
   save twenty lines of path data would have been the more expensive duplicate.

@@ -1010,10 +1010,15 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   rename from Bel introduced and which fails validation with a line number and
   no mention of the name; the identifier is `Oaa` and the display name is
   unchanged.
-- The Linux flatpak builds. Installing the runtime used a partial reference,
-  which makes flatpak ask which of the matching ones is meant — a question
-  `-y` does not answer and a CI runner cannot — so the job waited instead of
-  failing.
+- The Linux flatpak builds. Two things stopped it. Installing the runtime used
+  a partial reference, which makes flatpak ask which of the matching ones is
+  meant — a question `-y` does not answer and a CI runner cannot — so the job
+  waited instead of failing. And the scalable icon was read through gdk-pixbuf
+  by the AppStream step, which cannot decode an SVG unless librsvg has
+  registered a loader; where it has not, a valid file is reported as an
+  unrecognised format and the build fails with the package already assembled.
+  The flatpak now ships the seven PNG sizes and no scalable icon, which is what
+  a launcher uses either way.
 
 ### 🚧 Internal
 
