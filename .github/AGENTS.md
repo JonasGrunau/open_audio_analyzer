@@ -67,6 +67,14 @@ The `ci.yml` jobs are split by what they need, and the split is deliberate:
   and runs first. Keep both: the second one is what makes a failure the log can
   answer rather than a guessing exercise against the manifest.
 
+- **Every installer this repository builds has spaces in its name, so no
+  filename may be word-split.** The publish step collects assets NUL-delimited
+  into an array; `$(find ...)` unquoted turns
+  `Open Audio Analyzer-0.2.0-x86_64.AppImage` into three arguments and the job
+  dies on `no matches found for .../Open` with all seven builds green. The
+  documentation's shell examples quote the names for the same reason — they did
+  not, and neither command worked as printed.
+
 - **A release's notes are its own changelog section, found by version.** The
   publish step reads `## [<tag without the v>]` out of `CHANGELOG.md` and fails
   when that section is missing or blank. It used to take the *first* section

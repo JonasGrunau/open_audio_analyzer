@@ -1022,6 +1022,9 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### 🚧 Internal
 
+- The AppImage and flatpak install commands on the documentation site are
+  quoted. Every installer's filename contains spaces, so both were printed as
+  commands that cannot run as written.
 - Every identifier follows the name. The public C ABI is `oaa_*` and `OAA_*` in
   `engine/include/oaa/oaa.h`, the packages are `oaa_core`, `oaa_ui`,
   `oaa_engine` and `oaa_wire`, and the plugin's classes are `Oaa*`.

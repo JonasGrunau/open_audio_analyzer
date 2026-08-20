@@ -296,11 +296,22 @@ jobs:
             exit 1
           fi
 
+      # The asset list is NUL-delimited into an array, not interpolated. Every
+      # installer is named "Open Audio Analyzer-<version>-...", and
+      # `$(find ...)` splits that on the spaces: the first tag to reach this
+      # step died on `no matches found for artifacts/oaa-linux-appimage/Open`,
+      # with all seven builds green and nothing else left to do.
       - name: Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          assets=()
+          while IFS= read -r -d '' file; do
+            assets+=("$file")
+            echo "attaching $file"
+          done < <(find artifacts -type f -print0 | sort -z)
+          [ "${#assets[@]}" -gt 0 ] || { echo 'no artefacts to attach' >&2; exit 1; }
           gh release create "${GITHUB_REF_NAME}" \
             --title "Open Audio Analyzer ${GITHUB_REF_NAME}" \
             --notes-file notes.md \
-            $(find artifacts -type f | sort)
+            "${assets[@]}"
