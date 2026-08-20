@@ -280,11 +280,17 @@ jobs:
           echo "archiving: $formats"
           tar -czf "$GITHUB_WORKSPACE/oaa-plugin-${{ runner.os }}.tar.gz" $formats
 
+      # The bundle, not the directory holding it. MSVC leaves an import library
+      # and an export file beside the .vst3 — `Open Audio Analyzer.lib` and
+      # `.exp` — and archiving the parent shipped both to anyone who downloaded
+      # the plugin. A DAW ignores them; a person copying `VST3\*` into their
+      # plugin folder does not know that.
       - name: Archive
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          Compress-Archive -Path plugin\build\OaaPlugin_artefacts\Release\VST3 `
+          Compress-Archive `
+            -Path 'plugin\build\OaaPlugin_artefacts\Release\VST3\*.vst3' `
             -DestinationPath oaa-plugin-Windows.zip
 
       - uses: actions/upload-artifact@v4
