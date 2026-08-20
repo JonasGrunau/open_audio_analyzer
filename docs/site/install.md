@@ -5,14 +5,19 @@ for your machine; there is nothing else to set up.
 
 | Platform | Download | Notes |
 | --- | --- | --- |
-| macOS 11+ | `Open Audio Analyzer-<version>-macos-<arch>.dmg` | Universal — Apple silicon and Intel. |
-| Windows 10 1809+ | `Open Audio Analyzer-<version>-windows-x64.msix` | |
-| Linux | `Open Audio Analyzer-<version>-<arch>.AppImage` | One file, no root. |
-| Linux | `Open Audio Analyzer-<version>-<arch>.flatpak` | Sandboxed, updates in place. |
+| macOS 11+ | `Open.Audio.Analyzer-<version>-macos-<arch>.dmg` | Universal — Apple silicon and Intel. |
+| Windows 10 1809+ | `Open.Audio.Analyzer-<version>-windows-x64.msix` | |
+| Linux | `Open.Audio.Analyzer-<version>-<arch>.AppImage` | One file, no root. |
+| Linux | `Open.Audio.Analyzer-<version>-<arch>.flatpak` | Sandboxed, updates in place. |
 | Any | `oaa-cli-<platform>.tar.gz` / `.zip` | The command-line analyser. No Flutter runtime. |
 
 Releases are on the
 [releases page](https://github.com/JonasGrunau/open_audio_analyzer/releases).
+
+The periods in those names are GitHub's: the build calls the file
+`Open Audio Analyzer-<version>-…` and GitHub replaces the spaces when it
+publishes it, so a file you download is dot-separated and one you build
+yourself is not.
 
 ## macOS
 
@@ -67,8 +72,8 @@ as [VB-Audio Cable](https://vb-audio.com/Cable/).
 ### AppImage
 
 ```sh
-chmod +x "Open Audio Analyzer-0.2.0-x86_64.AppImage"
-"./Open Audio Analyzer-0.2.0-x86_64.AppImage"
+chmod +x Open.Audio.Analyzer-0.2.0-x86_64.AppImage
+./Open.Audio.Analyzer-0.2.0-x86_64.AppImage
 ```
 
 GTK 3 is expected from the host — every desktop Linux that can run a Flutter
@@ -80,7 +85,7 @@ distribution simply refuses to start on an older one.
 ### Flatpak
 
 ```sh
-flatpak install --user "Open Audio Analyzer-0.2.0-x86_64.flatpak"
+flatpak install --user Open.Audio.Analyzer-0.2.0-x86_64.flatpak
 flatpak run dev.openaudioanalyzer.oaa
 ```
 

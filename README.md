@@ -566,11 +566,11 @@ site](https://jonasgrunau.github.io/open_audio_analyzer/install.html).
 
 | | Platform | Artefact | |
 |:-:|---|---|---|
-| 🍎 | macOS 11+ | `Open Audio Analyzer-<version>-macos-<arch>.dmg` | Universal — Apple silicon and Intel. |
-| 🪟 | Windows 10 1809+ | `Open Audio Analyzer-<version>-windows-x64.msix` | |
-| 🐧 | Linux | `Open Audio Analyzer-<version>-<arch>.AppImage` | One file, no root, GTK from the host. |
-| 🐧 | Linux | `Open Audio Analyzer-<version>-<arch>.flatpak` | Sandboxed, carries its own runtime. |
-| ⌨️ | Any | `oaa` / `oaa.exe` | The analyser. No Flutter runtime. |
+| 🍎 | macOS 11+ | `Open.Audio.Analyzer-<version>-macos-<arch>.dmg` | Universal — Apple silicon and Intel. |
+| 🪟 | Windows 10 1809+ | `Open.Audio.Analyzer-<version>-windows-x64.msix` | |
+| 🐧 | Linux | `Open.Audio.Analyzer-<version>-<arch>.AppImage` | One file, no root, GTK from the host. |
+| 🐧 | Linux | `Open.Audio.Analyzer-<version>-<arch>.flatpak` | Sandboxed, carries its own runtime. |
+| ⌨️ | Any | `oaa-cli-<platform>.tar.gz` / `.zip` | The analyser. No Flutter runtime. |
 
 > [!NOTE]
 > **There is no Mac App Store build and there will not be one.** The store

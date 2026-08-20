@@ -1022,9 +1022,12 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### 🚧 Internal
 
-- The AppImage and flatpak install commands on the documentation site are
-  quoted. Every installer's filename contains spaces, so both were printed as
-  commands that cannot run as written.
+- The install pages name the files a release actually publishes. Every
+  installer is built as `Open Audio Analyzer-<version>-…` and GitHub replaces
+  the spaces with periods when it attaches it, so the documented names — and
+  the two shell commands printed for a reader to paste — matched nothing on the
+  releases page. They are dot-separated now, and the difference is explained
+  where it appears.
 - Every identifier follows the name. The public C ABI is `oaa_*` and `OAA_*` in
   `engine/include/oaa/oaa.h`, the packages are `oaa_core`, `oaa_ui`,
   `oaa_engine` and `oaa_wire`, and the plugin's classes are `Oaa*`.
