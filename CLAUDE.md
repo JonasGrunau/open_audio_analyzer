@@ -418,12 +418,16 @@ dart test packages/oaa_core           # domain, no toolchain needed
 dart test packages/oaa_wire           # the wire protocol, including the C++ golden
 cd packages/oaa_engine && dart test   # engine, through FFI
 cd cli && dart test                   # the `oaa` binary, as a subprocess
+cd cli && dart build cli -o build     # the CLI builds the way a release builds it
 sh plugin/test/sources_match.sh       # the engine's two build lists agree
 dart run tool/docs.dart               # the documentation site still builds
 ```
 
-All eight are the CI gate — the first six and `sources_match.sh` in `ci.yml`,
-the site in `docs.yml`. The engine tests hold the meters against arithmetic: a
+All nine are the CI gate — the first seven and `sources_match.sh` in
+`ci.yml`, the site in `docs.yml`. `dart build cli` is there because nothing
+else builds the CLI the way a release does: `cli/test` runs it with `dart run`,
+so `dart compile exe` was broken for an unknown length of time and was found by
+tagging a release. The engine tests hold the meters against arithmetic: a
 sine of amplitude *A* peaks at *A* and has an RMS of *A*/√2, exactly 3.0103 dB
 lower. If those drift, the meters are wrong — not the tone.
 
@@ -471,7 +475,9 @@ remote display has no native library at all.
   this short: anything else that wants to be a dependency should be weighed
   against writing it, and nothing on the frame path may acquire one at all.
 - **CLI:** `args`, plus `oaa_core` and `oaa_engine`. **No Flutter binding** —
-  that is what keeps `dart compile exe` working and the CLI usable in CI.
+  that is what keeps `dart build cli` working and the CLI usable in CI. Not
+  `dart compile exe` — that refuses a package whose dependencies have build
+  hooks, and `oaa_engine` has one.
 - **Engine:** `miniaudio` (capture), `pffft` (FFT) and `dr_libs` — `dr_wav`,
   `dr_flac`, `dr_mp3` (file decoding). All vendored under
   `engine/third_party/`, all permissive, all single-header.

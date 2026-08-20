@@ -58,7 +58,14 @@
   </Capabilities>
 
   <Applications>
-    <Application Id="Open Audio Analyzer" Executable="oaa.exe" EntryPoint="Windows.FullTrustApplication">
+    <!-- Id is an identifier, not a name: MakeAppx holds it to
+         ([A-Za-z][A-Za-z0-9]*)(\.[A-Za-z][A-Za-z0-9]*)* and a space fails
+         validation with the manifest's line and column and no hint that the
+         name is the problem. It said "Open Audio Analyzer" after the rename
+         from Bel, which was a valid identifier by luck, and that is what broke
+         the first release build. The display name lives in VisualElements
+         below, where spaces belong. -->
+    <Application Id="Oaa" Executable="oaa.exe" EntryPoint="Windows.FullTrustApplication">
       <uap:VisualElements
         DisplayName="Open Audio Analyzer"
         Description="Loudness and spectrum metering for mixing, mastering and delivery"

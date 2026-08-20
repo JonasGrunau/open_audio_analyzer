@@ -28,7 +28,12 @@ The `ci.yml` jobs are split by what they need, and the split is deliberate:
   and Windows. It needs no audio hardware — that is what the built-in test tone
   is for. The CLI runs on all three because **file decoding is where the
   platforms differ most**: Windows takes a UTF-16 path, so a filename with an
-  umlaut in it fails there and nowhere else.
+  umlaut in it fails there and nowhere else. It then **builds** the CLI with
+  `dart build cli` and runs what it built. The tests invoke it with `dart run`,
+  so nothing here would have noticed that the release's build command had
+  stopped working — and nothing did: `dart compile exe` refuses a package whose
+  dependencies have build hooks, and all three CLI jobs failed on the first tag
+  that ever ran `release.yml`.
 
 ## Rules
 

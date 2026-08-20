@@ -47,8 +47,16 @@ stderr: stdout has to stay clean enough to pipe into `jq`.
 
 - **No Flutter binding, ever.** This package depends on `oaa_core` and
   `oaa_engine` only. Both are pure Dart plus FFI, so `dart run` and
-  `dart compile exe` drive `hook/build.dart` themselves and there is no
-  separate native build step. Reaching for anything from the app — a config
+  `dart build cli` drive `hook/build.dart` themselves and there is no separate
+  native build step.
+
+- **`dart build cli`, not `dart compile exe`.** `dart compile` refuses a
+  package whose dependencies have build hooks, and `oaa_engine` is one — it
+  says so and exits non-zero. The product is a bundle: `bundle/bin/oaa` beside
+  `bundle/lib/liboaa_engine.*`, which is why a release publishes an archive and
+  not a file. Nothing here noticed for as long as it took to cut a release,
+  because the tests below run the CLI with `dart run`; `ci.yml` builds it on
+  all three platforms now and runs what it built. Reaching for anything from the app — a config
   path resolver, a provider, a widget — makes the CLI unrunnable outside a
   Flutter checkout.
 

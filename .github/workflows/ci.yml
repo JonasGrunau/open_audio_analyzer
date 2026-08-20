@@ -124,3 +124,24 @@ jobs:
         run: |
           dart pub get
           dart test
+
+      # `cli/test` runs the CLI with `dart run`, so nothing here built it the
+      # way a release does until this step existed — and `dart compile exe`
+      # had stopped working entirely, because it refuses a package with build
+      # hooks and `oaa_engine` has one. That was found by tagging 0.2.0 and
+      # watching all three CLI jobs fail. The build is the gate; running the
+      # result is what proves the bundle's layout, since the executable loads
+      # the engine from the library beside it.
+      - name: CLI builds and starts
+        working-directory: cli
+        run: dart build cli -o build
+
+      - name: CLI builds and starts (run)
+        if: runner.os != 'Windows'
+        working-directory: cli
+        run: ./build/bundle/bin/oaa --version
+
+      - name: CLI builds and starts (run)
+        if: runner.os == 'Windows'
+        working-directory: cli
+        run: .\build\bundle\bin\oaa.exe --version

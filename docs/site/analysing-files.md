@@ -41,8 +41,9 @@ oaa --format csv -o loudness.csv master.wav    # the loudness timeline
 oaa --list-targets                             # what you can measure against
 ```
 
-`oaa` is a standalone binary with no Flutter runtime, which is what makes it
-usable inside somebody else's CI.
+`oaa` carries no Flutter runtime — it is the executable and the engine as a
+shared library beside it, and nothing else has to be installed — which is what
+makes it usable inside somebody else's CI.
 
 ### The exit code is the point
 

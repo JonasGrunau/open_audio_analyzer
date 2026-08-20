@@ -556,8 +556,10 @@ MIT is one-way compatible with GPL, so the combination composes cleanly.
 
 ## 📥 Installing
 
-Every release publishes four installers and a standalone CLI binary on the
-[releases page](https://github.com/JonasGrunau/open_audio_analyzer/releases).
+Every release publishes four installers and the CLI on the [releases
+page](https://github.com/JonasGrunau/open_audio_analyzer/releases). The CLI is
+an archive rather than one file — `bin/oaa` beside the engine as a shared
+library — and needs no Flutter runtime either way.
 Full instructions, including the loopback-device workaround for system audio,
 are on the [documentation
 site](https://jonasgrunau.github.io/open_audio_analyzer/install.html).
@@ -626,6 +628,7 @@ dart test packages/oaa_core           # domain layer, no toolchain needed
 dart test packages/oaa_wire           # the wire protocol, incl. the C++ golden
 cd packages/oaa_engine && dart test   # engine, through FFI
 cd cli && dart test                   # the `oaa` binary, as a subprocess
+cd cli && dart build cli -o build     # and it still builds the way a release does
 sh plugin/test/sources_match.sh       # the engine's two build lists agree
 dart run tool/docs.dart               # the documentation site still builds
 ```

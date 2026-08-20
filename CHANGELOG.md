@@ -999,6 +999,21 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   when the mark was redrawn they kept publishing the previous one on every
   page. The generator now reads `assets/brand/oaa-mark.svg` and fails when it
   is missing, so the site cannot hold a mark of its own again.
+- The `oaa` CLI is published again. It was built with `dart compile exe`,
+  which refuses a package whose dependencies have build hooks — `oaa_engine`
+  has one — so no CLI reached a release at all. It is built with `dart build
+  cli` now and ships as an archive of the executable and the engine beside it
+  rather than as a single file; keep the two together. CI builds it the same
+  way and runs the result, which nothing did before.
+- The Windows package builds. Its manifest named the application
+  `Open Audio Analyzer` where a package identifier is required, which the
+  rename from Bel introduced and which fails validation with a line number and
+  no mention of the name; the identifier is `Oaa` and the display name is
+  unchanged.
+- The Linux flatpak builds. Installing the runtime used a partial reference,
+  which makes flatpak ask which of the matching ones is meant — a question
+  `-y` does not answer and a CI runner cannot — so the job waited instead of
+  failing.
 
 ### 🚧 Internal
 

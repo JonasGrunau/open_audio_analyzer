@@ -9,7 +9,7 @@ for your machine; there is nothing else to set up.
 | Windows 10 1809+ | `Open Audio Analyzer-<version>-windows-x64.msix` | |
 | Linux | `Open Audio Analyzer-<version>-<arch>.AppImage` | One file, no root. |
 | Linux | `Open Audio Analyzer-<version>-<arch>.flatpak` | Sandboxed, updates in place. |
-| Any | `oaa` / `oaa.exe` | The command-line analyser, standalone. |
+| Any | `oaa-cli-<platform>.tar.gz` / `.zip` | The command-line analyser. No Flutter runtime. |
 
 Releases are on the
 [releases page](https://github.com/JonasGrunau/open_audio_analyzer/releases).
@@ -93,12 +93,14 @@ module-null-sink` gives you a monitor source Open Audio Analyzer can open.
 
 ## The command-line analyser
 
-`oaa` is a single standalone binary with no Flutter runtime and no shared
-libraries to install. Put it on your `PATH`:
+`oaa` needs no Flutter runtime and nothing installed. It is an archive of two
+files — the executable and the engine as a shared library beside it — and the
+executable finds the library by its own location, so keep them together and
+link to the executable rather than copying it out:
 
 ```sh
-chmod +x oaa
-sudo mv oaa /usr/local/bin/
+tar -xzf oaa-cli-Linux.tar.gz -C ~/.local/opt/oaa
+sudo ln -s ~/.local/opt/oaa/bin/oaa /usr/local/bin/oaa
 ```
 
 It is the same measurement code the application runs. See

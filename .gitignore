@@ -48,6 +48,10 @@ app.*.map.json
 packages/*/build/
 packages/*/.dart_tool/
 
+# `dart build cli` writes the CLI's bundle here — bin/oaa beside the engine as
+# a shared library. `/build/` above only covers the application's.
+cli/build/
+
 # The engine's out-of-tree CMake build (C tests, Phase 1).
 engine/build/
 
