@@ -264,7 +264,12 @@ enum oaa_source_kind {
   /// A hardware or loopback capture device. Phase 1.
   OAA_SOURCE_DEVICE(2),
 
-  /// Decoded from a file, driven as fast as the CPU allows. Phase 5.
+  /// Reserved, and refused by oaa_engine_create. File analysis does not use a
+  /// source of its own: the caller opens an oaa_file, creates an
+  /// OAA_SOURCE_PUSH engine to match it, and pushes the blocks it decodes. That
+  /// is what makes offline analysis the same `oaa_analyse` over the same buffers
+  /// as realtime rather than a second path. The value stays allocated so that
+  /// nothing else claims 3.
   OAA_SOURCE_FILE(3),
 
   /// The caller supplies the audio, synchronously, via oaa_engine_push().
@@ -379,7 +384,11 @@ final class oaa_snapshot extends ffi.Struct {
   @ffi.Float()
   external double dr_integrated;
 
-  /// sample peak - RMS,           dB
+  /// Crest factor in dB: sample peak minus RMS, both taken over the block just
+  /// measured — not the held peak and the smoothed RMS the meters draw. Those
+  /// settle at different rates, so their difference drifts on its own: it read
+  /// 11.6 dB for a block of DC, where the answer is 0. A sine is 3.0103 dB.
+  /// Multichannel reports the peakiest channel.
   @ffi.Float()
   external double crest;
 
@@ -414,7 +423,12 @@ final class oaa_snapshot extends ffi.Struct {
   @ffi.Array.multi([8])
   external ffi.Array<ffi.Float> vu;
 
-  /// consecutive full-scale samples seen
+  /// The longest run of consecutive full-scale samples since the last reset —
+  /// latched, not live. A live run is zeroed by the next sample below full
+  /// scale, so a publish would carry whatever it happened to be at the block
+  /// boundary and every clip that ended mid-block would read zero. Non-zero
+  /// here means "this channel clipped, and the worst run was this long"; it
+  /// stays non-zero until oaa_engine_reset.
   @ffi.Array.multi([8])
   external ffi.Array<ffi.Uint32> clip;
 

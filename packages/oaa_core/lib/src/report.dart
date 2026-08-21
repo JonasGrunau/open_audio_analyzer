@@ -101,8 +101,11 @@ class ReportTimelinePoint {
 /// The measured result of analysing one file, and what it means for a target.
 ///
 /// This is the object every export writes and the report panel draws. It holds
-/// no engine handle and no platform type, so it round-trips through JSON, rides
-/// the wire to a tablet, and is constructed in a test from literals.
+/// no engine handle and no platform type, so it serialises to JSON, rides the
+/// wire to a tablet, and is constructed in a test from literals. There is
+/// deliberately no `fromJson`: nothing reads a report back, and a parser
+/// written for symmetry is a parser nobody exercises. [ReportTimelinePoint] has
+/// one because the graph needs it.
 ///
 /// **A quantity the engine did not measure is NaN here**, exactly as it is in
 /// the snapshot, and every export renders NaN as an em dash or a null rather
@@ -303,8 +306,15 @@ class AnalysisReport {
   /// The programme-wide measurements, in report order, as metric/value pairs.
   ///
   /// Exists so the three exports and the panel iterate one list rather than
-  /// each naming the same fourteen fields in the same order and drifting apart
-  /// the first time one is added.
+  /// each naming the same fields in the same order and drifting apart the first
+  /// time one is added.
+  ///
+  /// **Each value appears once.** `PLR` and `DR-I` are the same subtraction —
+  /// true peak max minus integrated loudness — and this list used to carry
+  /// both, so a report printed one number twice under two names with nothing
+  /// saying they were the same measurement. `PLR` is the spelling in wider use
+  /// outside this project, so it is the one that stays; `docs/METRICS.md`
+  /// documents the identity for anybody looking for the other.
   List<(Metric, double)> get summary => [
     (Metric.lufsIntegrated, lufsIntegrated),
     (Metric.loudnessRange, loudnessRange),
@@ -313,7 +323,6 @@ class AnalysisReport {
     (Metric.lufsMomentary, momentaryMax),
     (Metric.lufsShort, shortTermMax),
     (Metric.peakToLoudnessRatio, peakToLoudnessRatio),
-    (Metric.dynamicRangeIntegrated, dynamicRangeIntegrated),
     (Metric.correlation, correlationMean),
   ];
 

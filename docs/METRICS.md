@@ -62,6 +62,7 @@ should replace the inference.
 | `Peak` | dBFS | Highest sample magnitude, with the meter's hold and fall applied. Default hold 1.5 s, fall 20 dB/s. | **now** |
 | `Peak Max` | dBFS | Highest sample magnitude since reset, unheld. | **now** |
 | `RMS` | dBFS | Root mean square, smoothed in the mean-square domain with a 300 ms one-pole. | **now** |
+| `Clip` | samples | Longest run of consecutive samples at or above 0.999 since the last reset, per channel. **Latched**: non-zero means this channel clipped and stays non-zero until Reset. Drawn as the Digital Meter's clip lamp. | **now** |
 
 Sample peak and true peak differ, and the difference is the point: a signal can
 sit at −0.1 dBFS and still reconstruct above 0 dBTP after conversion. Only true
@@ -80,11 +81,16 @@ defined here instead, and anyone can check them.
 
 | Metric | Unit | Definition | Availability |
 |---|---|---|---|
-| `Crest` | dB | Sample peak minus RMS, both over the same block. For a sine this is exactly 3.0103 dB, which is what the engine's test suite asserts. | **now** |
+| `Crest` | dB | Sample peak minus RMS, both over the same block — the block's own values, *not* the held peak and smoothed RMS the meters draw. For a sine this is exactly 3.0103 dB and for DC it is 0. Multichannel reports the peakiest channel rather than the loudest peak minus the loudest RMS, which could describe no channel at all. | **now** |
 | `DR-S` | LU | `TruePeak − LUFS-S`. Short-term dynamic headroom. | **now** |
 | `DR-I` | LU | `TruePeakMax − LUFS-I`. Programme dynamic headroom. | **now** |
-| `PLR` | LU | Peak to loudness ratio: `TruePeakMax − LUFS-I`. Identical to `DR-I`; both names are in common use, so both are offered. | **now** |
-| `PSR` | LU | Peak to short-term ratio: `TruePeak − LUFS-S` over the same 3 s window. | **now** |
+| `PLR` | LU | Peak to loudness ratio: `TruePeakMax − LUFS-I`. **Identical to `DR-I`** — both names are in common use, so both are offered. | **now** |
+| `PSR` | LU | Peak to short-term ratio: `TruePeak − LUFS-S` over the same 3 s window. **Identical to `DR-S`**, for the same reason. | **now** |
+
+Those are four names for two numbers, and the engine computes each pair once so
+they cannot drift apart. A report prints each value once — under `PLR`, the
+spelling in wider use outside this project — rather than listing the same
+measurement twice under two headings with nothing saying they are the same.
 
 None of these is the "DR" of the offline TT Dynamic Range meter, which is a
 different measurement with a different algorithm. Open Audio Analyzer does not
@@ -158,8 +164,10 @@ modules cannot disagree about where a peak is.
   here — crest is peak minus RMS — and `-inf − -inf` is `NaN`, which would turn
   a silent passage into "no data".
 - **Reset** clears every integrating quantity (`LUFS-I`, `LRA`, all `Max`
-  values, clip counters) and restarts the elapsed clock. Momentary values are
-  left alone; they describe the signal, not the session.
+  values, the latched clip runs) and restarts the elapsed clock. Momentary
+  values are left alone; they describe the signal, not the session. For `Clip`
+  this is the *only* thing that clears it: a clip lamp that goes out on its own
+  is a clip lamp you can miss by looking away.
 - **Elapsed time is counted in samples, never in wall clock.** A file analysed
   at 200× real time must produce exactly the same numbers as the same file
   played back live — that identity is how offline analysis is verified.

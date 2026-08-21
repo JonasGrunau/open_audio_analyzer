@@ -320,9 +320,13 @@ oaa_engine *oaa_engine_create(const oaa_config *cfg) {
   if (resolved.channels > OAA_MAX_CHANNELS || resolved.sample_rate < 8000u) {
     return NULL;
   }
-  /* Device and file sources are declared in the ABI but not implemented yet.
+  /* OAA_SOURCE_FILE is declared in the ABI and deliberately not accepted: a
+   * file is decoded by the caller and pushed, so that offline analysis runs the
+   * same `oaa_analyse` over the same buffers as realtime rather than acquiring
+   * a path of its own. See the enum in oaa.h.
+   *
    * Failing loudly beats silently substituting the test tone and letting
-   * somebody believe they are metering their soundcard. */
+   * somebody believe they are metering something they are not. */
   if (resolved.source != OAA_SOURCE_SILENCE &&
       resolved.source != OAA_SOURCE_TEST_TONE &&
       resolved.source != OAA_SOURCE_PUSH &&
@@ -465,16 +469,19 @@ int32_t oaa_engine_stop(oaa_engine *engine) {
   if (engine == NULL) {
     return OAA_ERR_INVALID_ARGUMENT;
   }
-  /* The only safe predicate: is there a thread we started and have not
-   * joined. See the field's note in oaa_internal.h for why neither of the two
-   * atomic flags can answer that. */
-  if (!engine->thread_started) {
-    return OAA_OK;
+  /* The only safe predicate for *joining*: is there a thread we started and
+   * have not joined. See the field's note in oaa_internal.h for why neither of
+   * the two atomic flags can answer that.
+   *
+   * It is not the predicate for the whole function, which it used to be. A
+   * pushed source never starts a thread, so an early return here left
+   * OAA_FLAG_RUNNING set by start() and a stopped engine reporting itself
+   * running for the rest of its life. */
+  if (engine->thread_started) {
+    oaa_atomic_store_release(&engine->should_run, 0);
+    oaa_thread_join(engine->thread);
+    engine->thread_started = 0;
   }
-
-  oaa_atomic_store_release(&engine->should_run, 0);
-  oaa_thread_join(engine->thread);
-  engine->thread_started = 0;
 
   engine->staging.flags &= ~(uint32_t)OAA_FLAG_RUNNING;
   oaa_snapshot_publish(engine);

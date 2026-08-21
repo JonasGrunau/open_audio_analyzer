@@ -15,6 +15,7 @@
 // fails loudly rather than substituting something plausible.
 
 import 'dart:math' as math;
+import 'dart:typed_data';
 
 import 'package:oaa_engine/oaa_engine.dart';
 import 'package:test/test.dart';
@@ -212,13 +213,187 @@ void main() {
     expect(cleared, isTrue, reason: 'reset did not clear the elapsed clock');
   });
 
-  test('an unimplemented source fails loudly', () {
-    // File decoding is Phase 5. Silently substituting the test tone would let
-    // somebody believe they had analysed their master.
+  test('a reserved source fails loudly', () {
+    // A file is decoded by the caller and pushed, so that offline analysis is
+    // the same `oaa_analyse` over the same buffers as realtime. Silently
+    // substituting the test tone for a source the ABI declares but does not
+    // accept would let somebody believe they had analysed their master.
     expect(
       () => OaaEngine.start(source: OaaSource.file),
       throwsA(isA<OaaEngineException>()),
     );
+  });
+
+  // --- Clip -----------------------------------------------------------------
+  //
+  // The published counter is the longest run since the reset, not the run that
+  // happened to be alive at the block boundary. The distinction is the whole
+  // measurement: a run is zeroed by the next sample below full scale, so the
+  // boundary value is zero for every clip that ended inside the block — which
+  // is nearly all of them — and the Digital Meter's clip lamp is fed from it.
+  group('clip', () {
+    /// One block of [frames] frames, quiet apart from [runLength] consecutive
+    /// full-scale samples starting at [runStart].
+    Float32List block({
+      int frames = 1024,
+      int channels = 2,
+      required int runStart,
+      required int runLength,
+    }) {
+      final data = Float32List(frames * channels);
+      for (var i = 0; i < frames; i++) {
+        final clipped = i >= runStart && i < runStart + runLength;
+        for (var c = 0; c < channels; c++) {
+          data[i * channels + c] = clipped ? 1.0 : 0.1;
+        }
+      }
+      return data;
+    }
+
+    test('a run that ends inside the block is still reported', () {
+      final engine = OaaEngine.start(source: OaaSource.push, blockFrames: 1024);
+      addTearDown(engine.dispose);
+
+      engine.push(block(runStart: 400, runLength: 40));
+
+      // Before the latch this read 0: the run was over by sample 440 and the
+      // publish carried the counter's value at sample 1023.
+      expect(engine.clip[0], 40);
+      expect(engine.clip[1], 40);
+    });
+
+    test(
+      'the worst run is kept, and a later quiet block does not clear it',
+      () {
+        final engine = OaaEngine.start(
+          source: OaaSource.push,
+          blockFrames: 1024,
+        );
+        addTearDown(engine.dispose);
+
+        engine.push(block(runStart: 10, runLength: 12));
+        engine.push(block(runStart: 500, runLength: 3));
+        expect(engine.clip[0], 12, reason: 'a shorter run must not replace it');
+
+        engine.push(Float32List(1024 * 2));
+        expect(
+          engine.clip[0],
+          12,
+          reason:
+              'a clip lamp you can miss by looking away does not do its job',
+        );
+      },
+    );
+
+    test('reset clears it', () {
+      final engine = OaaEngine.start(source: OaaSource.push, blockFrames: 1024);
+      addTearDown(engine.dispose);
+
+      engine.push(block(runStart: 0, runLength: 8));
+      expect(engine.clip[0], 8);
+
+      // No thread on a pushed source, so the reset happens in place and the
+      // next push is measured against a clean counter.
+      engine.reset();
+      engine.push(Float32List(1024 * 2));
+      expect(engine.clip[0], 0);
+    });
+
+    test('silence never reports a clip', () {
+      final engine = OaaEngine.start(source: OaaSource.push, blockFrames: 1024);
+      addTearDown(engine.dispose);
+
+      engine.push(Float32List(1024 * 2));
+      expect(engine.clip[0], 0);
+    });
+  });
+
+  // --- Crest ----------------------------------------------------------------
+  //
+  // Sample peak minus RMS over the same block. Both operands were once the
+  // *displayed* values, which carry a 1.5 s hold and a 300 ms averager, so the
+  // figure described the ballistics rather than the audio. The steady-state
+  // sine is 3.0103 dB either way, which is why the sine case above never
+  // caught it — these are the cases that do.
+  group('crest', () {
+    Float32List constant(double value, {int frames = 1024, int channels = 2}) {
+      final data = Float32List(frames * channels);
+      for (var i = 0; i < data.length; i++) {
+        data[i] = value;
+      }
+      return data;
+    }
+
+    test('DC has no crest', () {
+      final engine = OaaEngine.start(source: OaaSource.push, blockFrames: 1024);
+      addTearDown(engine.dispose);
+
+      // Peak and RMS of a constant are the same number, so the answer is 0.
+      // With the held peak and the smoothed RMS this read 11.63 dB on the
+      // first block, because the averager had not caught up with the step.
+      engine.push(constant(0.9));
+      expect(engine.crestFactor, closeTo(0.0, 0.01));
+    });
+
+    test('a transient does not leave it inflated', () {
+      final engine = OaaEngine.start(source: OaaSource.push, blockFrames: 1024);
+      addTearDown(engine.dispose);
+
+      engine.push(constant(0.9));
+      for (var block = 0; block < 20; block++) {
+        engine.push(constant(0.001));
+      }
+
+      // 0.43 s after the transient this read 17.81 dB and was still climbing:
+      // the peak was still held near full scale while the RMS decayed under
+      // it. The blocks being measured are DC, so the answer is still 0.
+      expect(engine.crestFactor, closeTo(0.0, 0.01));
+    });
+
+    test('a sine is 3.0103 dB', () {
+      final engine = OaaEngine.start(
+        source: OaaSource.push,
+        sampleRate: 48000,
+        blockFrames: 4800,
+      );
+      addTearDown(engine.dispose);
+
+      // A whole number of cycles, so the block's own RMS is exactly A/sqrt(2)
+      // and the expected value is arithmetic rather than a tolerance.
+      const frames = 4800;
+      final data = Float32List(frames * 2);
+      for (var i = 0; i < frames; i++) {
+        final sample = 0.5 * math.sin(2 * math.pi * 1000 * i / 48000);
+        data[i * 2] = sample;
+        data[i * 2 + 1] = sample;
+      }
+      engine.push(data);
+
+      expect(engine.crestFactor, closeTo(3.0103, 0.01));
+    });
+
+    test('the peakiest channel is the one reported', () {
+      final engine = OaaEngine.start(source: OaaSource.push, blockFrames: 1024);
+      addTearDown(engine.dispose);
+
+      // Left is DC, so no crest at all. Right is one full-scale sample in a
+      // block of near-silence, so a very large one. Reporting the loudest peak
+      // minus the loudest RMS mixed the two channels and described neither.
+      const frames = 1024;
+      final data = Float32List(frames * 2);
+      for (var i = 0; i < frames; i++) {
+        data[i * 2] = 0.5;
+        data[i * 2 + 1] = i == 500 ? 1.0 : 0.001;
+      }
+      engine.push(data);
+
+      final right = 20 * math.log(1.0) / math.ln10;
+      final rightRms =
+          10 *
+          math.log((1.0 + (frames - 1) * 0.001 * 0.001) / frames) /
+          math.ln10;
+      expect(engine.crestFactor, closeTo(right - rightRms, 0.05));
+    });
   });
 
   test('an unknown device id fails rather than falling back', () {

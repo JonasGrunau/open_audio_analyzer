@@ -228,12 +228,23 @@ OfflineResult analyseFile(
     );
   }
 
-  final engine = OaaEngine.start(
-    source: OaaSource.push,
-    sampleRate: file.info.sampleRate,
-    channels: file.info.channels,
-    blockFrames: blockFrames,
-  );
+  // The engine is started inside a guard, because it can refuse: a stale native
+  // library fails the ABI check, and a file can name a rate the engine will not
+  // take. Without this the open decoder and its native read buffer were lost on
+  // exactly those paths — the ones a caller is most likely to hit repeatedly,
+  // since neither is transient.
+  final OaaEngine engine;
+  try {
+    engine = OaaEngine.start(
+      source: OaaSource.push,
+      sampleRate: file.info.sampleRate,
+      channels: file.info.channels,
+      blockFrames: blockFrames,
+    );
+  } on Object {
+    file.close();
+    rethrow;
+  }
 
   try {
     return _run(

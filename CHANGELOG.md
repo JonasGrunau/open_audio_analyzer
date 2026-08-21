@@ -9,6 +9,27 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### 📐 Measurement
+- The clip indicator now catches clipping. `clip` is the longest run of
+  consecutive full-scale samples since the last reset, latched until Reset; it
+  was the run still in progress at the block boundary, which is zero for every
+  clip that ended inside the block — almost all of them. A run of 40 full-scale
+  samples in the middle of a 1024-frame block published 0. The Digital Meter's
+  clip lamp is drawn from this, so it was dark for real clipping, which reads as
+  proof that nothing clipped. No other reading changes; nothing that was
+  reported as clipped is now reported as clean.
+- Crest is now taken over the block being measured rather than from the values
+  the meters draw. Both operands were the displayed peak and RMS, which carry a
+  1.5 s hold and a 300 ms averager, so the figure described the ballistics: a
+  single block of DC at 0.9 read 11.6 dB where the answer is 0, and 0.43 s after
+  a transient it read 17.8 dB and was still climbing. A steady sine reads
+  3.0103 dB either way, which is why the test suite never caught it.
+  **Re-measure anything whose crest you recorded from a moving signal** —
+  readings on transient material fall, typically by several dB, and were
+  previously too high. Multichannel now reports the peakiest channel rather than
+  the loudest peak minus the loudest RMS, which could describe no channel at
+  all.
+
 ### ✨ Added
 - The VST3 and the Audio Unit are published with each release, as one archive
   per platform holding the plugin bundles. They are not bundled inside the
@@ -39,6 +60,18 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   published build rather than after.
 
 ### 🐛 Fixed
+- A disposed engine reports itself unavailable instead of reading freed memory.
+  Every scalar reading returns NaN, false or zero and `refresh` returns false, so
+  a holder that keeps one a frame too long draws em dashes rather than plausible
+  numbers. The array views cannot be guarded and are documented as invalid the
+  moment `dispose` returns.
+- A file analysis that cannot start no longer leaks its open decoder.
+- Stopping a pushed engine clears its running flag. It never started a thread,
+  so `oaa_engine_stop` returned early and the snapshot reported a stopped engine
+  as running for the rest of its life.
+- A capture device's id is no longer truncated to an odd number of hex digits
+  with its terminator landing by luck. Trailing zero bytes are dropped before
+  encoding, which keeps every id a real backend produces well inside the field.
 - The plugin drops a wrong-length frame rather than sending it. The check was an
   `assert`, and the plugin is built `Release` everywhere including CI, so
   `NDEBUG` removed it from the only build that exercises the C++ producer.

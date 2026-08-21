@@ -188,6 +188,17 @@ void oaa_analyse(oaa_engine *engine, const float *interleaved,
 
   double energy[OAA_MAX_CHANNELS] = {0};
   double rectified[OAA_MAX_CHANNELS] = {0};
+
+  /* This block's own highest sample, per channel, held apart from the meter's
+   * peak. The displayed peak carries a 1.5 s hold and a 20 dB/s fall, which is
+   * right for a bar somebody is watching and wrong as the operand of a
+   * measurement — see the crest calculation below. */
+  float block_peak[OAA_MAX_CHANNELS] = {0};
+
+  /* Peak minus RMS for each channel over this block. Reduced to one number
+   * below. */
+  float channel_crest[OAA_MAX_CHANNELS] = {0};
+
   double sum_lr = 0.0, sum_ll = 0.0, sum_rr = 0.0;
 
   for (uint32_t i = 0; i < frames; i++) {
@@ -201,13 +212,31 @@ void oaa_analyse(oaa_engine *engine, const float *interleaved,
       energy[c] += (double)sample * (double)sample;
       rectified[c] += magnitude;
 
+      if (magnitude > block_peak[c]) {
+        block_peak[c] = magnitude;
+      }
+
       if (magnitude > state->peak_linear) {
         state->peak_linear = magnitude;
         state->peak_hold_left = OAA_PEAK_HOLD_SECONDS;
       }
 
+      /* The live run, and the longest one since the reset.
+       *
+       * Only the second is published, and the difference is the whole point.
+       * The run itself is zeroed by the first sample below full scale, and what
+       * a publish carries is whatever it happened to be at the block boundary —
+       * so a clip that began and ended inside the block published zero, which
+       * is every clip that does not straddle a boundary. A clip lamp fed from
+       * that is dark for real clipping, and a dark lamp is read as proof that
+       * nothing clipped. Latching the worst run until the reset is what the
+       * lamp needs and what "consecutive full-scale samples seen" already
+       * says. */
       if (magnitude >= OAA_CLIP_THRESHOLD) {
         state->clip_run++;
+        if (state->clip_run > state->clip_worst) {
+          state->clip_worst = state->clip_run;
+        }
       } else {
         state->clip_run = 0;
       }
@@ -252,7 +281,20 @@ void oaa_analyse(oaa_engine *engine, const float *interleaved,
     out->peak[c] = oaa_db_from_linear(state->peak_linear);
     out->rms[c] = oaa_db_from_linear(sqrtf(state->rms_mean_square));
     out->vu[c] = oaa_db_from_linear(state->vu_position);
-    out->clip[c] = state->clip_run;
+    out->clip[c] = state->clip_worst;
+
+    /* Crest, per channel, from this block and nothing else.
+     *
+     * Both operands used to be the *displayed* values, and that made crest a
+     * measurement of the ballistics rather than of the audio: the peak carries
+     * a 1.5 s hold, the RMS a 300 ms averager, and the difference of two
+     * quantities settling at different rates drifts on its own. A single block
+     * of DC at 0.9 read 11.6 dB where the answer is 0, and half a second after
+     * a transient it read 17.8 dB and climbing. The steady-state sine is
+     * 3.0103 dB either way, which is why the suite never caught it. */
+    channel_crest[c] =
+        oaa_db_from_linear(block_peak[c]) -
+        oaa_db_from_linear(sqrtf(mean_square));
   }
 
   for (uint32_t c = channels; c < OAA_MAX_CHANNELS; c++) {
@@ -265,17 +307,18 @@ void oaa_analyse(oaa_engine *engine, const float *interleaved,
   /* --- Programme-wide --------------------------------------------------- */
   out->sample_peak_max = oaa_db_from_linear(engine->sample_peak_max_linear);
 
-  float loudest_peak = OAA_DB_FLOOR;
-  float loudest_rms = OAA_DB_FLOOR;
-  for (uint32_t c = 0; c < channels; c++) {
-    if (out->peak[c] > loudest_peak) {
-      loudest_peak = out->peak[c];
-    }
-    if (out->rms[c] > loudest_rms) {
-      loudest_rms = out->rms[c];
+  /* The peakiest channel, rather than the loudest peak minus the loudest RMS —
+   * which were allowed to come from *different* channels, so the figure could
+   * describe no channel at all. A per-channel crest reduced by worst case is
+   * the same rule the Number Boxes apply to every other per-channel quantity:
+   * an average hides the one channel worth seeing. */
+  float worst_crest = channel_crest[0];
+  for (uint32_t c = 1; c < channels; c++) {
+    if (channel_crest[c] > worst_crest) {
+      worst_crest = channel_crest[c];
     }
   }
-  out->crest = loudest_peak - loudest_rms;
+  out->crest = worst_crest;
 
   /* --- Stereo field ----------------------------------------------------- */
   if (channels >= 2) {
@@ -325,11 +368,19 @@ void oaa_analyse(oaa_engine *engine, const float *interleaved,
    * arithmetic propagates NaN on its own; the point of writing it out is that
    * nobody later "fixes" a dash by clamping one of these to zero. See
    * docs/METRICS.md for the definitions — none of these is Decibel's TrueDyn,
-   * and none of them pretends to be. */
+   * and none of them pretends to be.
+   *
+   * **Two of these four are the same number twice, deliberately.** DR-S and PSR
+   * are both true peak minus short-term loudness; DR-I and PLR are both true
+   * peak max minus integrated loudness. Both names are in common use and
+   * neither is ours to retire, so both are carried — but they are carried as
+   * one expression each rather than as two, so they cannot drift apart, and a
+   * report prints each value once. Anything that offers all four as a menu of
+   * distinct measurements is offering two of them twice. */
   out->dr_short = out->true_peak - out->lufs_short;
   out->dr_integrated = out->true_peak_max - out->lufs_integrated;
-  out->plr = out->true_peak_max - out->lufs_integrated;
-  out->psr = out->true_peak - out->lufs_short;
+  out->plr = out->dr_integrated; /* the same quantity under its other name */
+  out->psr = out->dr_short;      /* likewise */
 
   /* --- Frequency content and the scope ------------------------------------ */
   oaa_spectrum_read(&engine->spectrum, out->spectrum, out->spectrum_peak,

@@ -195,6 +195,8 @@ spec rather than to intuition.
 | **True peak** | BS.1770-4 Annex 2, 4× oversampling with the specified 48-tap polyphase FIR, at every sample rate |
 | **Spectrum** | 4096-point Hann window at a 1024-sample hop, zero-padded to a 16384-point transform and mapped onto 512 log-spaced bands with **peak-per-bin** so narrow peaks survive; bands too narrow to hold a bin read between two. Window-compensated: a full-scale sine reads 0.0 dBFS on a bin centre and within 0.3 dB off it |
 | **Correlation** | Running Pearson over a sliding window |
+| **Crest** | Sample peak minus RMS over the same block — the block's own values, not the held peak and smoothed RMS the meters draw, which settle at different rates and whose difference drifts on its own. Exactly 3.0103 dB for a sine, 0 for DC |
+| **Clip** | Longest run of consecutive samples at or above 0.999 since the reset, per channel. Latched, so a clip that lasted three samples is still visible when you look back |
 
 Every one of these is measured today and checked in CI, the spectrum included:
 a full-scale sine on a bin centre reads 0.0 dBFS on every push.
@@ -211,7 +213,10 @@ measurement. Open Audio Analyzer does not implement it.
 Instead Open Audio Analyzer reports `DR-S` and `DR-I`, defined as `TruePeak −
 LUFS-S` and `TruePeakMax − LUFS-I`, published in
 [docs/METRICS.md](docs/METRICS.md) and reproducible from the definition by
-anybody who wants to check.
+anybody who wants to check. `PSR` and `PLR` are the same two quantities under
+the names in wider use, and are offered as well — four names for two numbers,
+each computed once so the pair cannot drift, and printed once in a report rather
+than twice under different headings.
 
 The same principle runs through the code. A quantity this build does not
 measure is **NaN**, never zero — zero is a legitimate reading for correlation,

@@ -129,18 +129,42 @@ oaa_device_list *oaa_devices_enumerate(void) {
 
     /* The id is an opaque platform union. Storing its bytes as hex keeps it
      * printable, comparable and safe to put in a preset, without this file
-     * having to know what any backend's id actually contains. */
+     * having to know what any backend's id actually contains.
+     *
+     * The byte count is derived from the space available rather than the other
+     * way round, and the two hex digits of a byte are always written together.
+     * The previous form clamped the *digit* count to OAA_DEVICE_ID_MAX - 1,
+     * which is odd, so it wrote an odd number of digits, left the last one
+     * unwritten and terminated one byte past where the digits stopped — it only
+     * produced a valid string because the list was calloc'd. It also halved the
+     * id: 127 of miniaudio's 256 bytes. That round-trips today because the tail
+     * a real backend leaves is zeros, which is luck rather than a design, and
+     * an id long enough to reach the cut would fail to reopen its device with
+     * nothing anywhere saying why.
+     *
+     * Trailing zero bytes are dropped before encoding, which is what keeps
+     * every id a real backend produces well inside the field. `ma_device_id` is
+     * a 256-byte union and almost every member is far smaller than that — a
+     * NUL-terminated ALSA, PulseAudio or Core Audio name, a 4-byte integer, a
+     * UTF-16 WASAPI path — so what is significant is tens of bytes, not 256.
+     * `parse_device_id` zeroes the union before filling it, so dropping the
+     * zeros and restoring them is exact. The residual bound is 127 significant
+     * bytes; reaching it needs a device name of over 127 characters, and
+     * raising OAA_DEVICE_ID_MAX past it is an ABI bump that would make every
+     * consumer recompile for a case no backend has yet produced. */
     const unsigned char *raw = (const unsigned char *)&capture_infos[i].id;
-    const size_t raw_size = sizeof(capture_infos[i].id);
-    const size_t hex_size = raw_size * 2 < (OAA_DEVICE_ID_MAX - 1)
-                                ? raw_size * 2
-                                : (OAA_DEVICE_ID_MAX - 1);
+    size_t raw_size = sizeof(capture_infos[i].id);
+    while (raw_size > 0 && raw[raw_size - 1] == 0) {
+      raw_size--;
+    }
+    const size_t room_bytes = (OAA_DEVICE_ID_MAX - 1) / 2;
+    const size_t bytes = raw_size < room_bytes ? raw_size : room_bytes;
     static const char kHex[] = "0123456789abcdef";
-    for (size_t b = 0; b * 2 + 1 < hex_size; b++) {
+    for (size_t b = 0; b < bytes; b++) {
       out->id[b * 2] = kHex[(raw[b] >> 4) & 0xF];
       out->id[b * 2 + 1] = kHex[raw[b] & 0xF];
     }
-    out->id[hex_size] = '\0';
+    out->id[bytes * 2] = '\0';
 
     /* Native format, where the backend will tell us. Best effort: several
      * backends only report it after the device is opened, and reporting zero

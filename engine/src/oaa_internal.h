@@ -50,7 +50,13 @@ typedef struct {
   float peak_linear;     /* current held peak, linear */
   float peak_hold_left;  /* seconds remaining before the hold releases */
   float rms_mean_square; /* smoothed mean square, linear */
-  uint32_t clip_run;     /* consecutive samples at or above full scale */
+
+  /* The run in progress, and the longest one since the reset. Only the second
+   * is published: the first is zeroed by the next sample below full scale, so
+   * sampling it at a block boundary misses every clip that ended inside the
+   * block. See the note at the clip test in oaa_analysis.c. */
+  uint32_t clip_run;
+  uint32_t clip_worst;
 
   /* The VU needle, as a position and a velocity, because a VU meter is a
    * second-order system and its overshoot is most of what it feels like. See

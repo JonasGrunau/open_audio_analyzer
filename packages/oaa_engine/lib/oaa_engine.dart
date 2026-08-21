@@ -414,6 +414,15 @@ class OaaEngine implements MeterSource {
   /// skipping those is free.
   @override
   bool refresh() {
+    // A disposed engine publishes nothing and reads as unavailable. It is not
+    // defensive tidying: the handle is freed, so acquiring through it is a read
+    // of returned heap that would land plausible wrong numbers on screen rather
+    // than crashing. Somebody *will* hold this object one frame too long — the
+    // remote display's publish timer did, across a device change — and the
+    // difference between em dashes and 15 kB of reused memory is worth one
+    // comparison per frame.
+    if (_disposed) return false;
+
     final generation = oaaSnapshotAcquireLeaf(_handle);
     if (generation == _generation) {
       return false;
@@ -443,6 +452,9 @@ class OaaEngine implements MeterSource {
   /// 512-frame chunks produce identical numbers; the conformance suite pushes
   /// in one-second chunks purely to keep peak memory down.
   void push(Float32List interleaved) {
+    if (_disposed) {
+      throw const OaaEngineException('this engine has been disposed');
+    }
     if (interleaved.isEmpty) return;
 
     // Grown rather than allocated per call. A conformance run pushes a few
@@ -477,7 +489,10 @@ class OaaEngine implements MeterSource {
   final int _channels;
 
   /// Clear every integrating measurement and restart the elapsed clock.
-  void reset() => native.oaa_engine_reset(_handle);
+  void reset() {
+    if (_disposed) return;
+    native.oaa_engine_reset(_handle);
+  }
 
   // --- Readings ------------------------------------------------------------
   //
@@ -486,14 +501,14 @@ class OaaEngine implements MeterSource {
   // and several dB quantities, so it cannot double as "no data".
 
   @override
-  int get sampleRate => _snapshot.sample_rate;
+  int get sampleRate => _disposed ? 0 : _snapshot.sample_rate;
   @override
-  int get channels => _snapshot.channels;
+  int get channels => _disposed ? 0 : _snapshot.channels;
   @override
-  double get elapsedSeconds => _snapshot.elapsed_seconds;
+  double get elapsedSeconds => _disposed ? 0 : _snapshot.elapsed_seconds;
 
   @override
-  bool get isRunning => _snapshot.flags & 1 != 0;
+  bool get isRunning => !_disposed && _snapshot.flags & 1 != 0;
 
   /// Frames the capture callback had to discard because analysis fell behind.
   ///
@@ -502,11 +517,11 @@ class OaaEngine implements MeterSource {
   /// average of a different programme than the one that played. Non-zero means
   /// the integrated reading cannot be trusted, and the UI has to say so.
   @override
-  int get droppedFrames => _snapshot.dropped_frames;
+  int get droppedFrames => _disposed ? 0 : _snapshot.dropped_frames;
 
   /// Whether any audio has been lost since the last reset. Sticky until reset.
   @override
-  bool get hasOverrun => _snapshot.flags & (1 << 3) != 0;
+  bool get hasOverrun => !_disposed && _snapshot.flags & (1 << 3) != 0;
 
   /// Whether the loudness readings are measured in this build.
   ///
@@ -515,23 +530,24 @@ class OaaEngine implements MeterSource {
   /// NaN when it is not yet *defined* — momentary loudness needs 400 ms of
   /// signal before it means anything.
   @override
-  bool get hasLoudness => _snapshot.flags & (1 << 1) == 0;
+  bool get hasLoudness => !_disposed && _snapshot.flags & (1 << 1) == 0;
 
   /// Whether [spectrum] holds measured data.
   ///
   /// False for the first full transform window — about 85 ms — during which
   /// the bands sit at the floor and are indistinguishable from silence.
   @override
-  bool get hasSpectrum => _snapshot.flags & (1 << 2) == 0;
+  bool get hasSpectrum => !_disposed && _snapshot.flags & (1 << 2) == 0;
 
   @override
-  double get lufsMomentary => _snapshot.lufs_momentary;
+  double get lufsMomentary => _disposed ? double.nan : _snapshot.lufs_momentary;
   @override
-  double get lufsShort => _snapshot.lufs_short;
+  double get lufsShort => _disposed ? double.nan : _snapshot.lufs_short;
   @override
-  double get lufsIntegrated => _snapshot.lufs_integrated;
+  double get lufsIntegrated =>
+      _disposed ? double.nan : _snapshot.lufs_integrated;
   @override
-  double get loudnessRange => _snapshot.lra;
+  double get loudnessRange => _disposed ? double.nan : _snapshot.lra;
 
   /// The 10th and 95th percentiles [loudnessRange] is the difference of, and
   /// the relative gate they were taken above. All three are NaN exactly when
@@ -540,43 +556,57 @@ class OaaEngine implements MeterSource {
   /// A histogram of the distribution without these is a picture rather than a
   /// measurement: the question anybody asks of an LRA of 9 LU is *which* 9 LU.
   @override
-  double get loudnessRangeLow => _snapshot.lra_low;
+  double get loudnessRangeLow => _disposed ? double.nan : _snapshot.lra_low;
   @override
-  double get loudnessRangeHigh => _snapshot.lra_high;
+  double get loudnessRangeHigh => _disposed ? double.nan : _snapshot.lra_high;
   @override
-  double get loudnessRangeGate => _snapshot.lra_gate;
+  double get loudnessRangeGate => _disposed ? double.nan : _snapshot.lra_gate;
 
   @override
-  double get truePeak => _snapshot.true_peak;
+  double get truePeak => _disposed ? double.nan : _snapshot.true_peak;
   @override
-  double get truePeakMax => _snapshot.true_peak_max;
+  double get truePeakMax => _disposed ? double.nan : _snapshot.true_peak_max;
   @override
-  double get samplePeakMax => _snapshot.sample_peak_max;
+  double get samplePeakMax =>
+      _disposed ? double.nan : _snapshot.sample_peak_max;
 
   @override
-  double get dynamicRangeShort => _snapshot.dr_short;
+  double get dynamicRangeShort => _disposed ? double.nan : _snapshot.dr_short;
   @override
-  double get dynamicRangeIntegrated => _snapshot.dr_integrated;
+  double get dynamicRangeIntegrated =>
+      _disposed ? double.nan : _snapshot.dr_integrated;
   @override
-  double get crestFactor => _snapshot.crest;
+  double get crestFactor => _disposed ? double.nan : _snapshot.crest;
   @override
-  double get peakToLoudnessRatio => _snapshot.plr;
+  double get peakToLoudnessRatio => _disposed ? double.nan : _snapshot.plr;
   @override
-  double get peakToShortTermRatio => _snapshot.psr;
+  double get peakToShortTermRatio => _disposed ? double.nan : _snapshot.psr;
 
   /// −1 fully out of phase, +1 mono.
   @override
-  double get correlation => _snapshot.correlation;
+  double get correlation => _disposed ? double.nan : _snapshot.correlation;
 
   /// −1 hard left, +1 hard right.
   @override
-  double get balance => _snapshot.balance;
+  double get balance => _disposed ? double.nan : _snapshot.balance;
 
   /// Stop the analysis thread and release the engine.
   ///
-  /// Idempotent. After this the typed list views point at freed memory, so
-  /// nothing may read them — that is the reason [_disposed] is checked rather
-  /// than trusted.
+  /// Idempotent. Afterwards every scalar reading reports itself unavailable —
+  /// NaN, false, zero — and [refresh] returns false forever, so a holder that
+  /// keeps this object one frame too long draws em dashes instead of numbers
+  /// taken from freed memory. That guard is one comparison per read and it is
+  /// there because the mistake is easy: an engine is replaced whenever the
+  /// source changes, and anything still pointing at the old one is pointing at
+  /// returned heap.
+  ///
+  /// **The array views cannot be guarded and are invalid the instant this
+  /// returns.** [peak], [spectrum], [scope] and the rest are windows onto the
+  /// snapshot inside the native allocation, and a `Float32List` has no way to
+  /// revoke itself; the contract that their identity never changes is what
+  /// makes them free to read on the paint path, and it is also what stops them
+  /// being swapped for something inert here. So a disposed engine must not be
+  /// held at all. Drop the reference in the same frame that disposes it.
   void dispose() {
     if (_disposed) {
       return;

@@ -67,11 +67,18 @@ static double oaa_truepeak_channel(const oaa_truepeak *tp, uint32_t channel) {
     const double *taps = kPhase[phase];
     double sum = 0.0;
 
+    /* Walk the delay line backwards from the newest sample, wrapping.
+     *
+     * The wrap is a compare rather than a modulo, and at this position in the
+     * engine that is not micro-optimisation. OAA_TRUEPEAK_TAPS is 12, so the
+     * modulo this replaces was a real integer division — four phases by twelve
+     * taps of them, per sample, per channel: 4.6 million divisions a second at
+     * 48 kHz stereo, in the tightest loop the engine has. The arithmetic the
+     * standard specifies is untouched; only the index walk changed. */
+    uint32_t index = tp->pos;
     for (uint32_t tap = 0; tap < OAA_TRUEPEAK_TAPS; tap++) {
-      /* Walk the delay line backwards from the newest sample, wrapping. */
-      const uint32_t index =
-          (tp->pos + OAA_TRUEPEAK_TAPS - tap) % OAA_TRUEPEAK_TAPS;
       sum += taps[tap] * (double)delay[index];
+      index = index == 0 ? OAA_TRUEPEAK_TAPS - 1 : index - 1;
     }
 
     const double magnitude = fabs(sum);

@@ -138,7 +138,12 @@ typedef enum {
   /* A hardware or loopback capture device. Phase 1. */
   OAA_SOURCE_DEVICE = 2,
 
-  /* Decoded from a file, driven as fast as the CPU allows. Phase 5. */
+  /* Reserved, and refused by oaa_engine_create. File analysis does not use a
+   * source of its own: the caller opens an oaa_file, creates an
+   * OAA_SOURCE_PUSH engine to match it, and pushes the blocks it decodes. That
+   * is what makes offline analysis the same `oaa_analyse` over the same buffers
+   * as realtime rather than a second path. The value stays allocated so that
+   * nothing else claims 3. */
   OAA_SOURCE_FILE = 3,
 
   /* The caller supplies the audio, synchronously, via oaa_engine_push().
@@ -246,7 +251,18 @@ typedef struct oaa_snapshot {
    * the definition. */
   float dr_short;       /* true_peak - lufs_short,      LU */
   float dr_integrated;  /* true_peak_max - lufs_integrated, LU */
-  float crest;          /* sample peak - RMS,           dB */
+
+  /* Crest factor in dB: sample peak minus RMS, both taken over the block just
+   * measured — not the held peak and the smoothed RMS the meters draw. Those
+   * settle at different rates, so their difference drifts on its own: it read
+   * 11.6 dB for a block of DC, where the answer is 0. A sine is 3.0103 dB.
+   * Multichannel reports the peakiest channel. */
+  float crest;
+
+  /* plr equals dr_integrated and psr equals dr_short, exactly, always. Both
+   * spellings are in common use, so both are published, from one expression
+   * each so they cannot drift. Do not offer all four to a user as distinct
+   * measurements. */
   float plr;            /* peak to loudness ratio,      LU */
   float psr;            /* peak to short-term ratio,    LU */
   float reserved2;
@@ -259,7 +275,14 @@ typedef struct oaa_snapshot {
   float peak[OAA_MAX_CHANNELS];    /* dBFS, with the meter's hold applied */
   float rms[OAA_MAX_CHANNELS];     /* dBFS, with the meter's decay applied */
   float vu[OAA_MAX_CHANNELS];      /* VU, 300 ms ballistics, 0 VU = calibration */
-  uint32_t clip[OAA_MAX_CHANNELS]; /* consecutive full-scale samples seen */
+
+  /* The longest run of consecutive full-scale samples since the last reset —
+   * latched, not live. A live run is zeroed by the next sample below full
+   * scale, so a publish would carry whatever it happened to be at the block
+   * boundary and every clip that ended mid-block would read zero. Non-zero
+   * here means "this channel clipped, and the worst run was this long"; it
+   * stays non-zero until oaa_engine_reset. */
+  uint32_t clip[OAA_MAX_CHANNELS];
 
   /* --- Spectrum, dBFS per log-spaced band ------------------------------- */
   /* The most recent FFT frame. Instantaneous, so it is a measurement of a
