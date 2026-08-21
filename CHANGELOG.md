@@ -167,6 +167,13 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   and 512 frames.
 
 ### 🚧 Internal
+- The plugin's framework-free C++ tests run on every push. `plugin/`'s JUCE fetch
+  is conditional now, so `-DOAA_BUILD_PLUGIN=OFF` configures the directory in
+  under a second and builds liboaa, the wire fixture and the transport box test
+  in three — where the full job takes about ten minutes and, being gated to
+  releases and manual runs, had been the only place any of it ran. It closes a
+  real hole as well as a slow one: the wire golden is only worth having from both
+  ends, and only the decoding half had been checked between releases.
 - The fake DAW no longer invents relocates on a slow machine. An offline run
   handed the transport a read-ahead thread, and when that thread falls behind,
   JUCE's buffering source returns silence while the reported playhead stops

@@ -159,11 +159,15 @@ push**, because three parallel JUCE builds is the most expensive thing in that
 workflow by an order of magnitude. The release attaches the bundles as one
 archive per platform. They are not inside the desktop installers yet.
 
-It is the only thing in CI that compiles this directory: `test/sources_match.sh`
-compares two text files and never invokes CMake. So **run the block above by
-hand before pushing anything in here** — between releases nothing else will
-tell you that this directory still builds, and nothing else runs the `ctest`
-below, which is the producing half of the wire golden.
+It is the only thing in CI that compiles the *plugin*. Every push does now
+configure this directory with `-DOAA_BUILD_PLUGIN=OFF` — no JUCE, no fetch, no
+framework compile — and run the part of `ctest` that needs none: the transport
+box's delivered-exactly-once test, the wire fixture against the golden, and the
+source lists. Five seconds.
+
+So **run the block above by hand before pushing anything that touches JUCE** —
+the plugin target, the formats, `host/`. Between releases nothing else will tell
+you that *those* still build, and nothing else drives the plugin end to end.
 
 Products land in `plugin/build/OaaPlugin_artefacts/Release/`. Nothing is
 installed into a system plugin folder: a build that silently writes into

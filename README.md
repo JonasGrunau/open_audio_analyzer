@@ -636,6 +636,9 @@ cd packages/oaa_engine && dart test   # engine, through FFI
 cd cli && dart test                   # the `oaa` binary, as a subprocess
 cd cli && dart build cli -o build     # and it still builds the way a release does
 sh plugin/test/sources_match.sh       # the engine's two build lists agree
+cmake -B plugin/build-nojuce -S plugin -DOAA_BUILD_PLUGIN=OFF && \
+  cmake --build plugin/build-nojuce && \
+  ctest --test-dir plugin/build-nojuce  # the plugin's C++ that needs no JUCE
 cmake -B plugin/build -S plugin -DCMAKE_BUILD_TYPE=Release && \
   cmake --build plugin/build && \
   ctest --test-dir plugin/build       # the VST3, the AU and the fake DAW compile
@@ -653,7 +656,13 @@ plugin sends over a real socket; without a build they skip, so the second run is
 where they actually happen. Nothing there downloads anything — the test writes
 its own signal.
 
-The line after it is the same run with the application in the middle: the app's
+`-DOAA_BUILD_PLUGIN=OFF` is the framework-free configure: no JUCE fetch, no
+plugin, no fake DAW, and five seconds for the C++ tests that need none of them —
+the transport box's delivered-exactly-once test and the wire golden's producing
+half. It runs on every push; the full plugin build does not.
+
+The line after the second `oaa_wire` run is the same run with the application in
+the middle: the app's
 plugin ingest accepts the plugin, its display host publishes what arrives, and a
 display client reads it back the way a tablet does — so a DAW's meters are shown
 to reach a second screen, field by field, rather than each half being shown to

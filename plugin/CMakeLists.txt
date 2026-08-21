@@ -65,6 +65,28 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # ---------------------------------------------------------------------------
+# JUCE, and the one build that does without it
+#
+# **`-DOAA_BUILD_PLUGIN=OFF` configures this directory with no JUCE at all**: no
+# fetch, no framework compile, no plugin, no fake DAW. What is left is `liboaa`
+# and the two test executables beside it, which link neither — about a second of
+# work from a cold build directory against roughly ten minutes for the framework.
+#
+# That difference is the whole point of the switch, and it is a correctness
+# argument rather than a convenience one. The full plugin job runs only on a
+# release or a manual dispatch, because three parallel JUCE builds cost more than
+# a push asks for — so for a day, two C++ tests that need no framework were also
+# only running then. One of them existed *because* a defect had reached CI
+# unnoticed. A gate that only runs when you remember to ask for it is a gate that
+# finds things late: with the plugin off, every push runs `ctest` here.
+#
+# What it cannot recover is the part that genuinely needs the framework — the
+# VST3, the AU, the fake DAW, and every end-to-end case that drives them. Those
+# stay on the release side of the line, and `.github/AGENTS.md` says what that
+# costs.
+option(OAA_BUILD_PLUGIN "Build the VST3/AU plugin, and fetch JUCE for it." ON)
+
+# ---------------------------------------------------------------------------
 # JUCE
 #
 # Pinned, not floating. A framework this large moving underneath a build is a
@@ -80,18 +102,26 @@ set(OAA_JUCE_TAG "8.0.15" CACHE STRING "JUCE release tag to build against.")
 # A checkout at plugin/third_party/JUCE wins if it is there, so that a working
 # tree that already paid the ~110 MB download does not pay it again, and so
 # that an offline build is possible at all. Otherwise fetch it.
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/JUCE/CMakeLists.txt")
-  message(STATUS "Open Audio Analyzer: using vendored JUCE at third_party/JUCE")
-  add_subdirectory(third_party/JUCE EXCLUDE_FROM_ALL)
+#
+# Inside the guard, not outside it: `FetchContent_MakeAvailable` is the ten
+# minutes and the 110 MB, so a build that wants neither must not reach this at
+# all. Nothing below the plugin section refers to a JUCE target.
+if(OAA_BUILD_PLUGIN)
+  if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/JUCE/CMakeLists.txt")
+    message(STATUS "Open Audio Analyzer: using vendored JUCE at third_party/JUCE")
+    add_subdirectory(third_party/JUCE EXCLUDE_FROM_ALL)
+  else()
+    message(STATUS "Open Audio Analyzer: fetching JUCE ${OAA_JUCE_TAG}")
+    include(FetchContent)
+    FetchContent_Declare(JUCE
+      GIT_REPOSITORY https://github.com/juce-framework/JUCE.git
+      GIT_TAG        ${OAA_JUCE_TAG}
+      GIT_SHALLOW    TRUE
+    )
+    FetchContent_MakeAvailable(JUCE)
+  endif()
 else()
-  message(STATUS "Open Audio Analyzer: fetching JUCE ${OAA_JUCE_TAG}")
-  include(FetchContent)
-  FetchContent_Declare(JUCE
-    GIT_REPOSITORY https://github.com/juce-framework/JUCE.git
-    GIT_TAG        ${OAA_JUCE_TAG}
-    GIT_SHALLOW    TRUE
-  )
-  FetchContent_MakeAvailable(JUCE)
+  message(STATUS "Open Audio Analyzer: no JUCE — building liboaa and its tests only")
 endif()
 
 # ---------------------------------------------------------------------------
@@ -109,6 +139,14 @@ endif()
 # into every plugin bundle to do nothing.
 set(OAA_BUILD_DECODE OFF CACHE BOOL "" FORCE)
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../engine ${CMAKE_CURRENT_BINARY_DIR}/engine)
+
+# ---------------------------------------------------------------------------
+# The plugin itself, and everything that needs the framework
+#
+# One `if` around the lot rather than one per target: every line between here and
+# the wire fixture below touches a `juce::` target, and a build with
+# `-DOAA_BUILD_PLUGIN=OFF` has none of them defined.
+if(OAA_BUILD_PLUGIN)
 
 # ---------------------------------------------------------------------------
 # Formats
@@ -218,6 +256,8 @@ option(OAA_BUILD_HOST "Build the fake DAW that hosts this plugin." ON)
 if(OAA_BUILD_HOST)
   add_subdirectory(host)
 endif()
+
+endif()  # OAA_BUILD_PLUGIN
 
 # ---------------------------------------------------------------------------
 # The wire fixture

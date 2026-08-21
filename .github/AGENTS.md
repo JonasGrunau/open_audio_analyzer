@@ -34,12 +34,18 @@ and six weeks of quiet rot.
 The jobs are split by what they need, and that split is deliberate:
 
 - **`checks`** runs `flutter analyze`, `dart format`, the `oaa_core` domain
-  tests, the `oaa_wire` protocol tests, `plugin/test/sources_match.sh` and then
-  the widget tests. The first four need **no C toolchain** — `oaa_core` and
-  `oaa_wire` depend on nothing, and the source-list check is a shell script — so
-  they run first and a regression in any of them is diagnosed without waiting on
-  a native build. The widget tests do compile the engine, because the app
-  depends on `oaa_engine`.
+  tests, the `oaa_wire` protocol tests, `plugin/test/sources_match.sh`, the
+  framework-free half of `plugin/`'s own `ctest`, and then the widget tests. The
+  first four need **no C toolchain** — `oaa_core` and `oaa_wire` depend on
+  nothing, and the source-list check is a shell script — so they run first and a
+  regression in any of them is diagnosed without waiting on a native build. The
+  widget tests do compile the engine, because the app depends on `oaa_engine`.
+
+  The `plugin/` step is `-DOAA_BUILD_PLUGIN=OFF`, which configures that
+  directory with no JUCE: liboaa, the wire fixture and the transport box test,
+  five seconds all told. It is here rather than in `plugin` because none of it
+  needs the framework, and the thing it pins had already reached a release
+  unnoticed once.
 - **`plugin`** is the only thing that compiles `plugin/`, and it runs on a
   release or a manual run, not on a push — three parallel JUCE builds is the
   most expensive thing in the file by an order of magnitude. `sources_match.sh`
@@ -68,24 +74,27 @@ The jobs are split by what they need, and that split is deliberate:
   Dart over loopback and the same everywhere; it needs Flutter, which the rest
   of this job does not, and it skips in `checks` for want of a built plugin.
 
-  **Know what the gating costs.** `ctest` moves with the job, and that run is
-  the producing half of the wire golden and the transport box's
-  delivered-exactly-once test: `checks` asserts the committed `wire_v2.bin`
-  decodes, and only this job asserts that `plugin/src/OaaWire.cpp` still writes
-  it. The cost is not hypothetical — the first dispatch after `plugin/host/`
-  landed failed on macOS, on cases that had never run there, and there were two
-  defects under it: an edge delivered twice by the plugin when two frames leave
-  inside one audio block, and the fake DAW freezing its own playhead whenever its
-  read-ahead thread fell behind, which made it report relocates that never
-  happened. Neither is visible to a push-gated job, and neither is visible on an
-  unloaded workstation — the second one needed a machine slow enough that the
-  instrument itself stopped keeping time. The end-to-end run moves with it
-  too, so between releases the byte-for-byte agreement `docs/WIRE.md` exists to
-  guarantee is checked from one side and the live path is not checked at all.
-  The cheap repair is to build only the `oaa_wire_fixture` target on pushes — it
-  needs the engine and one translation unit, not JUCE — which needs the JUCE
-  fetch in `plugin/CMakeLists.txt` to become conditional. It is not today, and
-  it would not recover the end-to-end run, which needs the whole plugin.
+  **Know what the gating costs, and what it no longer costs.** The JUCE fetch in
+  `plugin/CMakeLists.txt` is conditional, so `checks` configures this directory
+  with `-DOAA_BUILD_PLUGIN=OFF` on every push and runs everything in its `ctest`
+  that needs no framework: the transport box's delivered-exactly-once test, the
+  source lists, and — the one worth naming — `oaa_wire_fixture` against
+  `wire_v2.bin`. That last one closes a real hole. The golden is only worth
+  anything from both ends, `checks` had been asserting that the committed bytes
+  *decode* while nothing between releases asserted that `plugin/src/OaaWire.cpp`
+  still *writes* them, and both halves now run on a push in five seconds.
+
+  What stays gated is what genuinely needs the framework: the VST3, the AU, the
+  fake DAW, and every end-to-end case that drives them — so between releases the
+  live path is not exercised at all. The cost of that is not hypothetical. The
+  first dispatch after `plugin/host/` landed failed on macOS, on cases that had
+  never run there, and there were two defects under it: an edge delivered twice
+  by the plugin when two frames leave inside one audio block, and the fake DAW
+  freezing its own playhead whenever its read-ahead thread fell behind, which
+  made it report relocates that never happened. The first is pinned by the box
+  test and therefore now runs on every push; the second needed a machine slow
+  enough that the instrument stopped keeping time, and nothing in this workflow
+  will find its like on a push.
 
 - **`engine`** compiles the C through the build hook and runs the meters, the
   EBU Tech 3341/3342 conformance cases and then the `oaa` CLI on Linux, macOS

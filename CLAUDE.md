@@ -436,6 +436,9 @@ cd packages/oaa_engine && dart test   # engine, through FFI
 cd cli && dart test                   # the `oaa` binary, as a subprocess
 cd cli && dart build cli -o build     # the CLI builds the way a release builds it
 sh plugin/test/sources_match.sh       # the engine's two build lists agree
+cmake -B plugin/build-nojuce -S plugin -DOAA_BUILD_PLUGIN=OFF && \
+  cmake --build plugin/build-nojuce && \
+  ctest --test-dir plugin/build-nojuce  # the plugin's C++ that needs no JUCE
 cmake -B plugin/build -S plugin -DCMAKE_BUILD_TYPE=Release && \
   cmake --build plugin/build && \
   ctest --test-dir plugin/build       # the VST3, the AU and the fake DAW compile
@@ -447,22 +450,26 @@ flutter test test/plugin_to_display_e2e_test.dart
 dart run tool/docs.dart               # the documentation site still builds
 ```
 
-All ten gates are jobs in `ci.yml`, which is the only workflow. The repeated
-`dart test packages/oaa_wire` is not an eleventh: it is the same suite, run
-again where a built plugin turns its end-to-end cases from skipped into real.
+All eleven gates are jobs in `ci.yml`, which is the only workflow. The repeated
+`dart test packages/oaa_wire` is not a twelfth: it is the same suite, run again
+where a built plugin turns its end-to-end cases from skipped into real.
 The line after it is one file of the `flutter test` suite for the same reason —
 `test/plugin_to_display_e2e_test.dart` skips without a built plugin, and it is
 the only thing anywhere that runs a DAW's audio through the plugin, the app and
 out to a display.
 
-Two of the ten do not run on a push. `dart build cli` does, and is there because
-nothing else builds the CLI the way a release does: `cli/test` runs it with
+Two of the eleven do not run on a push. `dart build cli` does, and is there
+because nothing else builds the CLI the way a release does: `cli/test` runs it with
 `dart run`, so `dart compile exe` was broken for an unknown length of time and
-was found by tagging a release. **The plugin build runs only on a release or a manual run**,
-because three parallel JUCE builds cost more than a push asks for — so run it
-by hand when you touch `plugin/` or `engine/`. It is the only thing that
-compiles the VST3, the AU and the fake DAW, the only thing that runs the C++
-side of the wire golden, and the only thing that drives the plugin end to end.
+was found by tagging a release. **The full plugin build runs only on a release or a manual
+run**, because three parallel JUCE builds cost more than a push asks for — so
+run it by hand when you touch anything that faces JUCE: the plugin target, the
+formats, `plugin/host/`. The framework-free half of that directory does run on
+every push, which is the `ctest` line above: the transport box's
+delivered-exactly-once test, the wire fixture against its golden, and the source
+lists, in five seconds with no JUCE fetched. What the gated job still owns is
+the VST3, the AU, the fake DAW, and the only runs that drive the plugin end to
+end.
 Two suites do that driving, both spawning `plugin/host/`'s `oaa-fake-daw
 --headless` and both skipping when it is not built:
 `packages/oaa_wire/test/plugin_e2e_test.dart` decodes what the plugin sends, and

@@ -126,6 +126,31 @@ jobs:
       - name: Engine source lists agree
         run: sh plugin/test/sources_match.sh
 
+      # The C++ that needs no framework, on every push.
+      #
+      # `-DOAA_BUILD_PLUGIN=OFF` configures `plugin/` with no JUCE at all: no
+      # fetch, no framework compile, no plugin, no fake DAW. What is left is
+      # liboaa, the wire fixture and the transport box's
+      # delivered-exactly-once test — a second to configure, three to build and
+      # under one to run, against roughly ten minutes for a plugin build. That
+      # ratio is why the `plugin` job stays gated to a release while this does
+      # not.
+      #
+      # It exists because of a defect it would have caught: the transport box
+      # was delivering one relocate twice, and the test that now pins it could
+      # only run on a release or a manual dispatch — behind a JUCE build it does
+      # not need.
+      #
+      # `engine_sources_match` is registered in this `ctest` as well as in the
+      # step above. The overlap is deliberate: that step needs no CMake, and
+      # this one needs no second invocation.
+      - name: Plugin C++ tests, without JUCE
+        run: |
+          cmake -B plugin/build-nojuce -S plugin \
+            -DCMAKE_BUILD_TYPE=Release -DOAA_BUILD_PLUGIN=OFF
+          cmake --build plugin/build-nojuce
+          ctest --test-dir plugin/build-nojuce --output-on-failure
+
       - name: Widget tests
         run: flutter test
 

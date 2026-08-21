@@ -55,8 +55,13 @@ cli/build/
 # The engine's out-of-tree CMake build (C tests, Phase 1).
 engine/build/
 
-# The plugin's CMake build tree.
+# The plugin's CMake build trees. Two, because they are not interchangeable:
+# `build` has JUCE in it and `build-nojuce` is the framework-free configure that
+# every push runs (-DOAA_BUILD_PLUGIN=OFF). Written out rather than globbed, so
+# that a directory somebody adds under plugin/ with a name starting "build" is a
+# decision rather than an accident.
 plugin/build/
+plugin/build-nojuce/
 
 # JUCE, fetched rather than vendored. It is ~110 MB of framework that belongs
 # to somebody else and is pinned by tag in plugin/CMakeLists.txt, so committing
