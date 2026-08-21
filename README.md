@@ -915,7 +915,7 @@ so a release built from a fork is unsigned and every script says so. See
   the LAN and stays read-only until somebody designs authentication for it.
   Silently restarting an integration mid-programme is wrong in a way nothing on
   screen reveals, which is not a capability to put on an unauthenticated port.
-- 🔊 **Capturing your own system's output needs macOS 14.4 or older to be
+- 🔊 **Capturing your own system's output needs macOS below 14.2 to be
   worked around.** Everywhere else it now takes no setup at all, and there is
   no driver to install on any platform.
   - **Windows** — nothing to do. WASAPI loopback captures whatever is playing.

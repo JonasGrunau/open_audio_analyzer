@@ -9,6 +9,8 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-08-21
+
 ### ✨ Added
 - An Android tablet now finds hosts on the network by itself, like every other
   platform. It held a multicast socket that never received an answer, because
@@ -1570,7 +1572,8 @@ meters do not exist yet. See the [roadmap](README.md#roadmap).
 - Licensing is split: MIT for `engine/`, `oaa_engine` and `oaa_core`;
   GPL-3.0-or-later for the application, UI, CLI and plugin.
 
-[unreleased]: https://github.com/JonasGrunau/open_audio_analyzer/compare/v0.3.0...HEAD
+[unreleased]: https://github.com/JonasGrunau/open_audio_analyzer/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/JonasGrunau/open_audio_analyzer/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/JonasGrunau/open_audio_analyzer/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/JonasGrunau/open_audio_analyzer/compare/5f8ef44...v0.2.0
 [0.1.0]: https://github.com/JonasGrunau/open_audio_analyzer/commit/5f8ef44

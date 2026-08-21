@@ -75,6 +75,20 @@
   <content_rating type="oars-1.1"/>
 
   <releases>
+    <release version="0.4.0" date="2026-08-21">
+      <description>
+        <p>
+          Metering your Mac's own output no longer needs a loopback driver: on
+          macOS 14.2 and later, System Output is a Core Audio process tap with
+          nothing to install and nothing to reroute. An Android tablet finds
+          hosts on the network by itself and remembers its layout, its skin and
+          the host it was last attached to. The wire protocol is at version 3,
+          and a display now accepts any version it knows rather than only its
+          own, so a plugin left in a DAW's folder keeps working across an
+          upgrade.
+        </p>
+      </description>
+    </release>
     <release version="0.3.0" date="2026-08-21">
       <description>
         <p>
