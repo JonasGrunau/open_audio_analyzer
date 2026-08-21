@@ -46,6 +46,29 @@ const _engineSources = <String>[
   '../../engine/third_party/pffft/pffft.c',
 ];
 
+/// Sources built for macOS and nowhere else.
+///
+/// The engine's only Objective-C. A Core Audio process tap is created from a
+/// `CATapDescription`, which is an Objective-C class, and the SDK wraps
+/// `AudioHardwareTapping.h` in `#ifdef __OBJC__` — so there is no C spelling of
+/// this and there will not be. macOS only because Apple made it so: the tapping
+/// header is `API_UNAVAILABLE(ios)`.
+///
+/// **The comment inside the list is load-bearing.** `plugin/test/sources_match.sh`
+/// reads both build descriptions with a regex that expects one quoted source per
+/// line, and `dart format` collapses a short list onto a single line — a
+/// trailing comma does not stop it. A comment inside the literal does, and it
+/// is the only thing keeping this file inside the check that exists to catch a
+/// source reaching one of the two builds and not the other.
+const _macosSources = <String>[
+  // Compiled with `-x objective-c` like everything else on macOS; see
+  // [_language].
+  '../../engine/src/oaa_tap_macos.m',
+];
+
+List<String> _platformSources(OS targetOS) =>
+    targetOS == OS.macOS ? _macosSources : const [];
+
 /// Feature-test macros, which must be defined before any system header is
 /// included — which is why they are compiler defines rather than `#define`s at
 /// the top of one `.c` file. Every translation unit needs them, and
@@ -83,36 +106,50 @@ List<String> _libraries(OS targetOS) => switch (targetOS) {
   _ => const [],
 };
 
-/// On Apple's mobile SDK the engine is Objective-C, because miniaudio is.
+/// On both Apple platforms the engine is Objective-C, for two unrelated
+/// reasons that happen to want the same flag.
 ///
-/// `miniaudio.h` includes `<AVFoundation/AVFoundation.h>` under
-/// `MA_APPLE_MOBILE`: the Core Audio backend configures an `AVAudioSession`
-/// there, and iOS offers no C way to do it. Handing that header tree to a C
-/// compiler produces several hundred errors inside `NSObjCRuntime.h`,
-/// `NSZone.h` and `NSObject.h` — "unknown type name 'NSString'", "expected
-/// identifier or '('" — and not one of them names a file in this repository.
-/// The failure reads as a broken Xcode installation rather than as a missing
-/// compiler flag, which is what makes it expensive.
+/// **iOS, because miniaudio is.** `miniaudio.h` includes
+/// `<AVFoundation/AVFoundation.h>` under `MA_APPLE_MOBILE`: the Core Audio
+/// backend configures an `AVAudioSession` there, and iOS offers no C way to do
+/// it. Handing that header tree to a C compiler produces several hundred errors
+/// inside `NSObjCRuntime.h`, `NSZone.h` and `NSObject.h` — "unknown type name
+/// 'NSString'", "expected identifier or '('" — and not one of them names a file
+/// in this repository. The failure reads as a broken Xcode installation rather
+/// than as a missing compiler flag, which is what makes it expensive.
+///
+/// **macOS, because `oaa_tap_macos.m` is.** A Core Audio process tap is created
+/// from a `CATapDescription`, which is an Objective-C object, so system-output
+/// capture cannot be written in C. See [_platformSources].
 ///
 /// Objective-C is a superset of C11 and `-std=c11` still selects the C dialect,
-/// so `-x objective-c` (see [_flags]) leaves the other eleven translation units
-/// and pffft compiling exactly as they do on every other platform.
-Language _language(OS targetOS) =>
-    targetOS == OS.iOS ? Language.objectiveC : Language.c;
+/// so `-x objective-c` (see [_flags]) leaves the other twelve translation units
+/// and pffft compiling exactly as they do on every other platform. Verified for
+/// vendored miniaudio specifically: it contains no `__OBJC__` conditional at
+/// all, so nothing about its desktop build changes.
+Language _language(OS targetOS) => targetOS == OS.iOS || targetOS == OS.macOS
+    ? Language.objectiveC
+    : Language.c;
 
 /// The frameworks the linker needs — **which `CBuilder` emits only when
-/// [_language] is [Language.objectiveC]**, so this list is a no-op on macOS.
+/// [_language] is [Language.objectiveC]**, which since the process tap landed
+/// is both Apple platforms rather than only iOS.
 ///
-/// That is not an oversight kept for symmetry. On desktop Apple, miniaudio
-/// resolves Core Audio through `dlopen` at runtime and the dylib genuinely
-/// links nothing but libSystem; `MA_APPLE_MOBILE` switches that off, and iOS
-/// has to be linked against the frameworks or the code asset fails to build
-/// with undefined symbols. Listing macOS's three states what the engine uses,
-/// and is what a `-DMA_NO_RUNTIME_LINKING` build would need — miniaudio warns
-/// that runtime linking can fail Apple's notarization, which is a decision for
-/// whoever signs the dmg and not one this hook makes on its own.
+/// macOS used to list these as documentation with no effect: miniaudio resolved
+/// Core Audio through `dlopen` at runtime and the dylib genuinely linked
+/// nothing but libSystem. `oaa_tap_macos.m` calls `AudioHardwareCreateProcessTap`
+/// and `AudioObjectGetPropertyData` directly, so they are now load-bearing —
+/// and the change is in the direction miniaudio itself recommends, since it
+/// warns that runtime linking can fail Apple's notarization.
 List<String> _frameworks(OS targetOS) => switch (targetOS) {
-  OS.macOS => const ['CoreFoundation', 'CoreAudio', 'AudioToolbox'],
+  OS.macOS => const [
+    // Foundation for NSUUID/NSDictionary in the tap description; CoreAudio for
+    // the tap itself.
+    'Foundation',
+    'CoreFoundation',
+    'CoreAudio',
+    'AudioToolbox',
+  ],
   OS.iOS => const [
     'Foundation',
     'CoreFoundation',
@@ -129,12 +166,13 @@ List<String> _frameworks(OS targetOS) => switch (targetOS) {
 ///
 /// `-x objective-c` governs every source that *follows* it on the command line,
 /// and `CBuilder` emits flags ahead of the source list, so it reaches all of
-/// them. Only `oaa_device.c` needs it; there is no per-source flag to give it
-/// alone, and none is wanted — twelve files compiled two different ways is a
-/// difference somebody would eventually have to debug.
+/// them. On iOS only `oaa_device.c` needs it and on macOS only
+/// `oaa_tap_macos.m` does; there is no per-source flag to give it alone, and
+/// none is wanted — thirteen files compiled two different ways is a difference
+/// somebody would eventually have to debug.
 List<String> _flags(OS targetOS) => switch (targetOS) {
   OS.windows => const <String>[],
-  OS.iOS => const <String>['-Wall', '-Wextra', '-x', 'objective-c'],
+  OS.iOS || OS.macOS => const <String>['-Wall', '-Wextra', '-x', 'objective-c'],
   _ => const <String>['-Wall', '-Wextra'],
 };
 
@@ -161,7 +199,10 @@ void main(List<String> args) async {
       // explicitly — see lib/src/oaa_ffi.dart.
       assetName: '${input.packageName}_bindings_generated.dart',
 
-      sources: _engineSources,
+      sources: [
+        ..._engineSources,
+        ..._platformSources(input.config.code.targetOS),
+      ],
       includes: [
         '../../engine/include',
         '../../engine/third_party/dr_libs',

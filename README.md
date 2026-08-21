@@ -90,6 +90,7 @@ approximating.
 | 🔍 | **Files are analysed offline** by the app and by the [`oaa` CLI](#-analysing-files). |
 | 📱 | **A tablet [mirrors the canvas](#-roadmap)** over Wi-Fi. |
 | 🎛️ | **A headless [VST3 / AU plugin](#-in-a-daw)** meters what your DAW is playing. |
+| 🔊 | **Your system's own output is metered with nothing to install** — WASAPI loopback on Windows, a Core Audio process tap on macOS 14.2+, a monitor source on Linux. No driver, and on macOS the audio still reaches your speakers while it is measured. |
 | 📦 | **There is a dmg, an msix, an AppImage and a flatpak** — see [Installing](#-installing) — and a [documentation site](https://jonasgrunau.github.io/open_audio_analyzer/index.html). |
 | 🚧 | **What is *not* built** is listed under [Known gaps](#-known-gaps-stated-plainly), and the list is honest rather than short. |
 
@@ -568,8 +569,8 @@ Every release publishes four installers and the CLI on the [releases
 page](https://github.com/JonasGrunau/open_audio_analyzer/releases). The CLI is
 an archive rather than one file — `bin/oaa` beside the engine as a shared
 library — and needs no Flutter runtime either way.
-Full instructions, including the loopback-device workaround for system audio,
-are on the [documentation
+Full instructions, including how to meter your own system's output on each
+platform, are on the [documentation
 site](https://jonasgrunau.github.io/open_audio_analyzer/install.html).
 
 | | Platform | Artefact | |
@@ -902,19 +903,34 @@ so a release built from a fork is unsigned and every script says so. See
   and no validity flags, so the plugin correctly reads a host parked at zero
   instead. The branch is exercised by the Standalone build, which has no
   playhead at all. Nothing is broken; it is simply not observable from a DAW.
-- 🔊 **Capturing your own system's output needs a virtual device on macOS and
-  Linux.** This is the biggest gap versus Decibel, which ships a signed
-  monitoring driver.
+- 🔊 **Capturing your own system's output needs macOS 14.4 or older to be
+  worked around.** Everywhere else it now takes no setup at all, and there is
+  no driver to install on any platform.
   - **Windows** — nothing to do. WASAPI loopback captures whatever is playing.
-  - **macOS** — install [BlackHole](https://existential.audio/blackhole/) (free)
-    or Loopback, route your output through it, and it appears in Open Audio
-    Analyzer's source menu like any other input. ScreenCaptureKit is a later
-    evaluation.
+  - **macOS 14.2 and later** — nothing to do. **System Output** is the first
+    entry in the source menu, named after the output device it is metering. It
+    is a Core Audio process tap: it reads what is being sent to your speakers
+    without rerouting it, so you keep hearing your audio, and the first time you
+    choose it macOS may ask for permission to record system audio.
+  - **macOS below 14.2** — the entry is absent, because the API is not there.
+    Install [BlackHole](https://existential.audio/blackhole/) (free) or
+    Loopback, route your output through it, and it appears in the source menu
+    like any other input.
   - **Linux** — a PulseAudio or PipeWire monitor source already appears in the
     list.
 
   Metering a hardware input needs none of this — any interface shows up
   directly.
+
+  Two rough edges on the macOS tap, both stated rather than hidden. It follows
+  the default output device when you change it — headphones in, headphones out —
+  but only when the new device has the same sample rate and channel count; the
+  engine's DSP is sized once and cannot be resized underneath a running
+  measurement, so a switch to a device with a different format stops the tap
+  instead of following it. Reselecting the source picks the new device up. And
+  if macOS denies the permission, a tap delivers silence rather than an error,
+  which is indistinguishable from genuinely silent audio — if the meters sit at
+  the floor with something obviously playing, check Privacy & Security.
 - 📁 **Offline analysis does not read Ogg Vorbis, Opus, AAC or ALAC.** WAV,
   AIFF, RF64, Wave64, FLAC and MP3 cover the formats a master is delivered *as*,
   which is what a delivery check is for. The missing ones are what a master is

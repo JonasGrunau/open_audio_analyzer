@@ -38,6 +38,7 @@ is still not built, and `docs/PLAN.md` for what was planned.
 | `packages/oaa_ui/lib/src/tokens.dart` | `Space`, `OaaControl`, `OaaRadius`, `OaaStroke`, `OaaColors`, `OaaType`. Nothing outside this file invents a spatial or colour value. |
 | `packages/oaa_ui/lib/src/scale.dart` | `MeterScale` and `ScaleGraticule`. Five modules draw a dB scale; two side by side whose ticks disagree look like a rendering bug. |
 | `packages/oaa_ui/lib/src/point_buckets.dart` | Marks sorted by the colour they are drawn in, one call per colour. What lets the spectrogram and the stereo cloud redraw their whole history every published frame instead of accumulating it into an image. |
+| `engine/src/oaa_tap.h` | Capturing the system's own output on macOS with no driver — a Core Audio process tap, offered as one reserved device id. The engine's only Objective-C lives beside it in `oaa_tap_macos.m`, and it is the only source not built on every platform. |
 | `engine/src/oaa_spectrum.h` | The Hann STFT: a 4096-point window, zero-padded into a 16384-point transform. The two lengths are not the same thing and the header says why. One set of transforms serves all three frequency modules. |
 | `lib/src/canvas/module_host.dart` | The only place that knows which `ModuleKind`s exist as code. Exhaustive switch, no default arm. |
 | `packages/oaa_core/lib/src/layout.dart` | `ModuleSpec` / `TabSpec` / `PresetSpec` — the serialised layout model. |

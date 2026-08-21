@@ -23,10 +23,12 @@ three platforms beats two suites where the second is the one nobody runs
 locally. A C-only test would need `ctest` in the loop to prove anything the
 Dart suite does not already prove.
 
-**A new `.c` file goes in two places** — `CMakeLists.txt` and
+**A new source goes in two places** — `CMakeLists.txt` and
 `packages/oaa_engine/hook/build.dart`. Sources are listed rather than globbed so
 that adding one is a decision somebody made. `plugin/test/sources_match.sh`
-fails the build when the two lists disagree.
+fails the build when the two lists disagree, and it reads `.m` as well as `.c`
+because the one source that is not built everywhere is the one most likely to
+reach a single list.
 
 ## Rules
 

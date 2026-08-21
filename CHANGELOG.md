@@ -21,6 +21,15 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   so the configuration directory is asked for over a platform channel and lives
   in the app's own `files` directory; every launch before this one started from
   the defaults.
+- Metering your Mac's own output no longer needs a loopback driver. On macOS
+  14.2 and later, **System Output** is the first entry in the source menu, named
+  after the output device it is metering. It is a Core Audio process tap, so
+  there is nothing to install, nothing to reroute and no password prompt — the
+  audio still reaches your speakers while it is being measured. macOS may ask
+  for permission to record system audio the first time. Below 14.2 the entry is
+  absent and BlackHole or Loopback is still the answer; Windows and Linux are
+  unaffected, since WASAPI loopback and a PipeWire monitor source already appear
+  in the list.
 
 ### ⚡ Changed
 - The wire protocol is at version 3, and a receiver now accepts any version it

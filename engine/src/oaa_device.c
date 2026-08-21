@@ -24,11 +24,20 @@
 #include "miniaudio.h"
 
 #include "oaa_device.h"
+#include "oaa_tap.h"
 
 #include <stdlib.h>
 #include <string.h>
 
 struct oaa_device {
+  /* Non-NULL for the one device that is not miniaudio's: the macOS process
+   * tap. When it is set, every entry point below delegates and none of the
+   * miniaudio fields are touched. Keeping the two behind one handle is what
+   * lets oaa_engine.c stay ignorant of which it opened — it negotiates a
+   * format, sizes a ring and starts, and the tap answers that sequence the
+   * same way a sound card does. */
+  oaa_tap *tap;
+
   ma_context context;
   ma_device device;
   int context_ready;
@@ -88,6 +97,40 @@ static void copy_bounded(char *destination, size_t capacity,
   destination[length] = '\0';
 }
 
+/*
+ * Adds the system-output entry, where there is one to add.
+ *
+ * It goes at the *front* of the list rather than in backend order, because it
+ * is the entry most people opening the source menu are looking for and every
+ * other entry is a piece of hardware whose position in the list is arbitrary
+ * anyway.
+ *
+ * Returns the number of entries written: one, or zero on any platform or any
+ * macOS below 14.2, which is an ordinary state and not a failure — the menu
+ * then looks exactly as it did before this existed.
+ */
+static uint32_t add_system_output(oaa_device_info *out) {
+#if OAA_TAP_SUPPORTED
+  uint32_t rate = 0;
+  uint32_t channels = 0;
+  if (oaa_tap_probe(&rate, &channels, out->name, OAA_DEVICE_NAME_MAX) !=
+      OAA_OK) {
+    return 0;
+  }
+  copy_bounded(out->id, OAA_DEVICE_ID_MAX, OAA_DEVICE_ID_SYSTEM_OUTPUT);
+  out->channels = channels;
+  out->sample_rate = rate;
+  /* Never the default *capture* device — that is a property of the hardware
+   * list and belongs to whatever the system nominated. */
+  out->is_default = 0u;
+  out->is_loopback = 1u;
+  return 1;
+#else
+  (void)out;
+  return 0;
+#endif
+}
+
 oaa_device_list *oaa_devices_enumerate(void) {
   ma_context context;
   if (ma_context_init(NULL, 0, NULL, &context) != MA_SUCCESS) {
@@ -110,15 +153,18 @@ oaa_device_list *oaa_devices_enumerate(void) {
     return NULL;
   }
 
-  if (capture_count > 0) {
-    list->items =
-        (oaa_device_info *)calloc(capture_count, sizeof(oaa_device_info));
-    if (list->items == NULL) {
-      free(list);
-      ma_context_uninit(&context);
-      return NULL;
-    }
+  /* One more than the backend offered, for the system-output entry. Allocated
+   * unconditionally — a machine with no capture hardware at all can still have
+   * an output to tap, and that is a perfectly ordinary laptop. */
+  list->items =
+      (oaa_device_info *)calloc(capture_count + 1, sizeof(oaa_device_info));
+  if (list->items == NULL) {
+    free(list);
+    ma_context_uninit(&context);
+    return NULL;
   }
+
+  list->count += add_system_output(&list->items[list->count]);
 
   for (ma_uint32 i = 0; i < capture_count; i++) {
     ma_device_info detail;
@@ -244,6 +290,30 @@ int32_t oaa_device_open(oaa_device **out, const char *device_id,
     return OAA_ERR_OUT_OF_MEMORY;
   }
 
+  /* The one id that is not a backend's. Delegated before miniaudio is even
+   * initialised, because a process tap is not a miniaudio device and never
+   * becomes one. */
+  if (device_id != NULL &&
+      strcmp(device_id, OAA_DEVICE_ID_SYSTEM_OUTPUT) == 0) {
+#if OAA_TAP_SUPPORTED
+    const int32_t status =
+        oaa_tap_open(&self->tap, sample_rate, channels);
+    if (status != OAA_OK) {
+      free(self);
+      return status;
+    }
+    *out = self;
+    return OAA_OK;
+#else
+    /* Asked for by a preset written on a Mac and opened on Windows or Linux.
+     * Refused rather than silently falling back to the default input, which
+     * would meter a microphone while the user believed they were metering
+     * their output. */
+    free(self);
+    return OAA_ERR_UNSUPPORTED;
+#endif
+  }
+
   if (ma_context_init(NULL, 0, NULL, &self->context) != MA_SUCCESS) {
     free(self);
     return OAA_ERR_UNSUPPORTED;
@@ -297,6 +367,11 @@ int32_t oaa_device_start(oaa_device *device, oaa_ring *ring) {
   if (device == NULL || ring == NULL) {
     return OAA_ERR_INVALID_ARGUMENT;
   }
+#if OAA_TAP_SUPPORTED
+  if (device->tap != NULL) {
+    return oaa_tap_start(device->tap, ring);
+  }
+#endif
   if (ring->channels != device->device.capture.channels) {
     /* The mismatch this split exists to prevent. Refusing is the only safe
      * response: the callback would read past the end of the buffer the driver
@@ -315,6 +390,13 @@ void oaa_device_close(oaa_device *device) {
   if (device == NULL) {
     return;
   }
+#if OAA_TAP_SUPPORTED
+  if (device->tap != NULL) {
+    oaa_tap_close(device->tap);
+    free(device);
+    return;
+  }
+#endif
   if (device->device_ready) {
     ma_device_uninit(&device->device);
   }

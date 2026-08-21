@@ -951,7 +951,7 @@ class _SourcePicker extends ConsumerWidget {
               ),
             )
           else
-            for (final device in devices)
+            for (final device in devices) ...[
               _item(
                 context,
                 device.isDefault ? '${device.name}  (default)' : device.name,
@@ -964,6 +964,13 @@ class _SourcePicker extends ConsumerWidget {
                   deviceName: device.name,
                 ),
               ),
+              // The system-output tap is enumerated first and is not a piece of
+              // hardware — it captures whatever is going to the speakers. A
+              // rule under it says so without a label having to, and there is
+              // never more than one, so this cannot produce two dividers in a
+              // row.
+              if (device.isSystemOutput) const PopupMenuDivider(),
+            ],
         ];
       },
       child: Row(

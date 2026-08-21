@@ -23,13 +23,19 @@
  * On Windows, WASAPI can capture the system's own output directly (loopback),
  * so metering whatever is playing works with no setup at all.
  *
- * On macOS and Linux there is no such thing: an input device is a microphone or
- * a line input. Metering system audio needs a virtual loopback device —
- * BlackHole, Loopback, or a PulseAudio/PipeWire monitor source — which then
- * simply appears in this list like any other input. That is the largest
- * usability gap between Open Audio Analyzer and Decibel, which ships its own
- * signed driver, and it is documented in the README rather than left for a user
- * to discover.
+ * On macOS 14.2 and later a Core Audio process tap does the same thing without
+ * a driver, and this file offers it as OAA_DEVICE_ID_SYSTEM_OUTPUT — one extra
+ * entry in the list that opens `oaa_tap.h` instead of miniaudio. Below 14.2
+ * the entry is simply absent.
+ *
+ * On Linux, a PulseAudio or PipeWire monitor source already appears in this
+ * list like any other input, so there is nothing to add: miniaudio's default
+ * backend order tries PulseAudio before ALSA, which is what makes the monitors
+ * visible.
+ *
+ * What remains uncovered is macOS below 14.2, where metering system audio
+ * still needs a virtual loopback device — BlackHole, Loopback — which then
+ * appears here like any other input and cannot be told apart from one.
  */
 
 #ifndef OAA_DEVICE_H

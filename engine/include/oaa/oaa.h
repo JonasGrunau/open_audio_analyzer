@@ -342,6 +342,28 @@ typedef struct oaa_snapshot {
 #define OAA_DEVICE_ID_MAX 256
 #define OAA_DEVICE_NAME_MAX 256
 
+/*
+ * The one device id that is not a backend's own.
+ *
+ * Every other id is the opaque bytes of a platform device handle, hex-encoded
+ * (see oaa_device.c). This one is a reserved word, and the hyphen is what
+ * guarantees it can never collide with one: a hex encoding has no hyphens in
+ * it. Pass it as oaa_config.device_id to meter the system's own output.
+ *
+ * Enumeration offers it **only where it can actually work** — macOS 14.2 and
+ * later, where a Core Audio process tap captures what is being sent to the
+ * default output device with no driver installed and without rerouting the
+ * audio away from the speakers. Everywhere else it is absent from the list and
+ * refused by oaa_engine_create, because on Windows WASAPI loopback already
+ * appears as an ordinary capture device, and on Linux so does a PipeWire or
+ * PulseAudio monitor source. See engine/src/oaa_tap.h.
+ *
+ * It is a stable string rather than a generated id on purpose: it is written
+ * into the user's settings file, which this project expects people to read and
+ * edit by hand.
+ */
+#define OAA_DEVICE_ID_SYSTEM_OUTPUT "system-output"
+
 typedef struct oaa_device_info {
   /* Opaque, platform-specific, and stable enough to store in a preset. Pass it
    * back in oaa_config.device_id. */
@@ -357,10 +379,15 @@ typedef struct oaa_device_info {
   uint32_t is_default;
 
   /* Non-zero when this device captures the system's own output rather than a
-   * physical input. Only WASAPI provides this natively; on macOS and Linux a
-   * virtual loopback device appears as an ordinary input and cannot be
-   * distinguished, so this stays zero there. Do not use it to decide whether
-   * loopback is *possible* — only to label a device that certainly is. */
+   * physical input.
+   *
+   * Set for WASAPI's loopback devices, which report it natively, and for the
+   * macOS process tap offered under OAA_DEVICE_ID_SYSTEM_OUTPUT, which is one
+   * by construction. It stays zero for a *virtual* loopback — BlackHole, a
+   * PipeWire monitor — because those are indistinguishable from a real input
+   * and reporting a guess would be worse than reporting nothing. So: this
+   * labels a device that certainly captures system output, and its absence
+   * says nothing about whether some other device in the list also does. */
   uint32_t is_loopback;
 } oaa_device_info;
 
@@ -387,7 +414,9 @@ typedef struct oaa_config {
   uint32_t block_frames; /* analysis block size; 0 selects a sane default */
 
   /* Which capture device, for OAA_SOURCE_DEVICE. NULL means the system
-   * default. Copied during oaa_engine_create; the caller need not keep it. */
+   * default, and OAA_DEVICE_ID_SYSTEM_OUTPUT means the system's own output
+   * where that is offered. Copied during oaa_engine_create; the caller need
+   * not keep it. */
   const char *device_id;
 } oaa_config;
 

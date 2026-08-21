@@ -144,11 +144,25 @@ class OaaDevice {
 
   final bool isDefault;
 
-  /// True only when the backend says this device captures system output.
-  /// Windows/WASAPI reports it; elsewhere a virtual loopback is
-  /// indistinguishable from a real input, so this stays false and must not be
-  /// read as "loopback is impossible here".
+  /// True only when this device certainly captures the system's own output.
+  ///
+  /// Set for WASAPI's loopback devices, which report it natively, and for the
+  /// macOS process tap. It stays false for a *virtual* loopback — BlackHole, a
+  /// PipeWire monitor — which is indistinguishable from a real input, so a
+  /// false here says nothing about whether some other device in the list also
+  /// captures system output.
   final bool isLoopback;
+
+  /// True for the macOS Core Audio process tap, which is not a piece of
+  /// hardware: it captures whatever is being sent to the default output device,
+  /// with no driver installed and without rerouting the audio away from the
+  /// speakers.
+  ///
+  /// Present only on macOS 14.2 and later. Everywhere else the entry is simply
+  /// absent from [OaaEngine.devices] — on Windows because WASAPI loopback
+  /// already appears as an ordinary capture device, and on Linux because a
+  /// PipeWire or PulseAudio monitor source does.
+  bool get isSystemOutput => id == kOaaSystemOutputDeviceId;
 
   @override
   String toString() => 'OaaDevice($name, $channels ch @ $sampleRate Hz)';
@@ -185,6 +199,14 @@ const int kOaaDeviceIdMax = 256;
 
 /// Mirrors `OAA_DEVICE_NAME_MAX`.
 const int kOaaDeviceNameMax = 256;
+
+/// Mirrors `OAA_DEVICE_ID_SYSTEM_OUTPUT` — the one device id that is a reserved
+/// word rather than a hex-encoded platform handle.
+///
+/// Pass it as `deviceId` to meter the system's own output. [OaaEngine.devices]
+/// offers it only where it works, so callers should look for it in the list
+/// rather than hard-coding it into a source menu; see [OaaDevice.isSystemOutput].
+const String kOaaSystemOutputDeviceId = 'system-output';
 
 /// Thrown when the engine cannot be created or started.
 class OaaEngineException implements Exception {
@@ -385,11 +407,16 @@ class OaaEngine implements MeterSource {
   /// Returns empty when there is no audio backend at all, which is an ordinary
   /// state on a headless machine and not an error.
   ///
-  /// On Windows, WASAPI can capture the system's own output, so metering
-  /// whatever is playing needs no setup. On macOS and Linux an input is a
-  /// microphone or line input, and metering system audio needs a virtual
-  /// loopback device (BlackHole, Loopback, a PulseAudio/PipeWire monitor) which
-  /// then appears here like any other input.
+  /// Metering the system's own output needs no setup on any current desktop,
+  /// and the entry to look for differs by platform. On Windows, WASAPI's
+  /// loopback devices appear here directly. On macOS 14.2 and later a Core
+  /// Audio process tap appears as [OaaDevice.isSystemOutput], first in the
+  /// list. On Linux a PulseAudio or PipeWire monitor source appears like any
+  /// other input.
+  ///
+  /// What is left uncovered is macOS below 14.2, where it still takes a virtual
+  /// loopback device — BlackHole, Loopback — which then appears here like any
+  /// other input and cannot be told apart from one.
   static List<OaaDevice> devices() {
     final list = native.oaa_devices_enumerate();
     if (list == nullptr) return const [];

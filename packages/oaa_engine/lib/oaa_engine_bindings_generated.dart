@@ -535,10 +535,15 @@ final class oaa_device_info extends ffi.Struct {
   external int is_default;
 
   /// Non-zero when this device captures the system's own output rather than a
-  /// physical input. Only WASAPI provides this natively; on macOS and Linux a
-  /// virtual loopback device appears as an ordinary input and cannot be
-  /// distinguished, so this stays zero there. Do not use it to decide whether
-  /// loopback is *possible* — only to label a device that certainly is.
+  /// physical input.
+  ///
+  /// Set for WASAPI's loopback devices, which report it natively, and for the
+  /// macOS process tap offered under OAA_DEVICE_ID_SYSTEM_OUTPUT, which is one
+  /// by construction. It stays zero for a *virtual* loopback — BlackHole, a
+  /// PipeWire monitor — because those are indistinguishable from a real input
+  /// and reporting a guess would be worse than reporting nothing. So: this
+  /// labels a device that certainly captures system output, and its absence
+  /// says nothing about whether some other device in the list also does.
   @ffi.Uint32()
   external int is_loopback;
 }
@@ -563,7 +568,9 @@ final class oaa_config extends ffi.Struct {
   external int block_frames;
 
   /// Which capture device, for OAA_SOURCE_DEVICE. NULL means the system
-  /// default. Copied during oaa_engine_create; the caller need not keep it.
+  /// default, and OAA_DEVICE_ID_SYSTEM_OUTPUT means the system's own output
+  /// where that is offered. Copied during oaa_engine_create; the caller need
+  /// not keep it.
   external ffi.Pointer<ffi.Char> device_id;
 }
 
@@ -684,6 +691,8 @@ const int OAA_FLAG_OVERRUN = 8;
 const int OAA_DEVICE_ID_MAX = 256;
 
 const int OAA_DEVICE_NAME_MAX = 256;
+
+const String OAA_DEVICE_ID_SYSTEM_OUTPUT = 'system-output';
 
 const double OAA_SILENCE_FLOOR = 0.0010000000474974513;
 

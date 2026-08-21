@@ -283,10 +283,15 @@ Each phase is independently shippable.
 
 ## Risks, stated honestly
 
-1. **macOS system-audio capture is the biggest gap vs Decibel.** Decibel ships its own signed
+1. ~~**macOS system-audio capture is the biggest gap vs Decibel.** Decibel ships its own signed
    monitoring driver; we realistically cannot early on. v1 documents BlackHole/loopback devices;
-   ScreenCaptureKit (macOS 13+) is evaluated in a later phase. This should be stated plainly in
-   the README rather than discovered by users.
+   ScreenCaptureKit (macOS 13+) is evaluated in a later phase.~~ **Closed, and not the way this
+   predicted.** No driver was written and ScreenCaptureKit was not used. Core Audio process taps
+   (macOS 14.2, `AudioHardwareCreateProcessTap`) capture what is being sent to an output device in
+   that device's own format, with no driver, no installer, no root and no rerouting — so the
+   speakers keep working while the meters read. It ships as one extra entry in the device list,
+   `OAA_DEVICE_ID_SYSTEM_OUTPUT`; see `engine/src/oaa_tap.h`. What is left is macOS below 14.2,
+   where BlackHole is still the answer and the README says so.
 2. **Native assets (`hook/build.dart`) are young.** Recommended since Flutter 3.38, but verify on
    all three desktop targets in Phase 0 before anything is built on top.
 3. **Tablets are display-first.** FFI works fine on iPadOS/Android, but audio *input* selection

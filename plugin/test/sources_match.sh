@@ -42,15 +42,22 @@ done
 
 # Paths are normalised to be relative to engine/, so that CMake's `src/x.c` and
 # build.dart's `../../engine/src/x.c` compare as the same file.
+#
+# `.m` as well as `.c`, and that is not a formality. `oaa_tap_macos.m` is
+# conditional in both descriptions — `if(APPLE AND NOT IOS)` here,
+# `_platformSources` there — so it is exactly the kind of source that reaches
+# one list and not the other. Matching only `.c` would have let it, and this
+# check would have gone on reporting OK while the plugin failed to link on
+# macOS.
 cmake_sources=$(
-  sed -n 's|^[[:space:]]*\(src/[A-Za-z0-9_/]*\.c\)[[:space:]]*$|\1|p;
-          s|^[[:space:]]*\(third_party/[A-Za-z0-9_/]*\.c\)[[:space:]]*$|\1|p;
-          s|^.*list(APPEND OAA_SOURCES \(src/[A-Za-z0-9_/]*\.c\)).*$|\1|p' \
+  sed -n 's|^[[:space:]]*\(src/[A-Za-z0-9_/]*\.[cm]\)[[:space:]]*$|\1|p;
+          s|^[[:space:]]*\(third_party/[A-Za-z0-9_/]*\.[cm]\)[[:space:]]*$|\1|p;
+          s|^.*list(APPEND OAA_SOURCES \(src/[A-Za-z0-9_/]*\.[cm]\)).*$|\1|p' \
     "$cmake_file" | sort -u
 )
 
 hook_sources=$(
-  sed -n "s|^[[:space:]]*'\.\./\.\./engine/\([A-Za-z0-9_/]*\.c\)',[[:space:]]*$|\1|p" \
+  sed -n "s|^[[:space:]]*'\.\./\.\./engine/\([A-Za-z0-9_/]*\.[cm]\)',[[:space:]]*$|\1|p" \
     "$hook_file" | sort -u
 )
 

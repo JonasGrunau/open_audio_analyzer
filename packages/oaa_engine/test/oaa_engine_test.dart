@@ -14,6 +14,7 @@
 // instead of freezing, reset clears the integrators, and an unavailable source
 // fails loudly rather than substituting something plausible.
 
+import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
@@ -424,6 +425,80 @@ void main() {
       expect(device.channels, lessThanOrEqualTo(kOaaMaxChannels));
     }
     expect(devices.where((d) => d.isDefault).length, lessThanOrEqualTo(1));
+  });
+
+  group('system output', () {
+    // The macOS Core Audio process tap, which appears in the device list as an
+    // ordinary entry so that nothing above the engine has to know it is not a
+    // sound card.
+    //
+    // Every assertion here is conditional on the entry existing, and that is
+    // deliberate rather than lazy: it is offered only on macOS 14.2 and later,
+    // and only when there is a default output device to tap. A Linux runner, a
+    // Windows runner and a Mac with no output all legitimately have none, so a
+    // test that demanded one would fail on three machines where the code is
+    // behaving correctly.
+
+    OaaDevice? systemOutput() {
+      final matches = OaaEngine.devices().where((d) => d.isSystemOutput);
+      return matches.isEmpty ? null : matches.first;
+    }
+
+    test('is offered on macOS only, and at most once', () {
+      final devices = OaaEngine.devices();
+      final taps = devices.where((d) => d.isSystemOutput).toList();
+      expect(taps.length, lessThanOrEqualTo(1));
+      if (!Platform.isMacOS) {
+        // Windows already exposes WASAPI loopback as a real device and Linux a
+        // monitor source, so an entry here would be a second way to do the
+        // same thing — and on those platforms oaa_device_open refuses the id
+        // outright rather than falling back to an input.
+        expect(taps, isEmpty);
+        expect(
+          () => OaaEngine.start(
+            source: OaaSource.device,
+            deviceId: kOaaSystemOutputDeviceId,
+          ),
+          throwsA(isA<OaaEngineException>()),
+        );
+      }
+    });
+
+    test('advertises a format a preset can hold', () {
+      final tap = systemOutput();
+      if (tap == null) return;
+
+      expect(tap.id, kOaaSystemOutputDeviceId);
+      expect(tap.name, isNotEmpty);
+      // It captures system output by construction, which is the one case where
+      // the flag can be set without a backend reporting it.
+      expect(tap.isLoopback, isTrue);
+      // Never the default *capture* device — that belongs to whatever the
+      // system nominated out of the real hardware.
+      expect(tap.isDefault, isFalse);
+      expect(tap.channels, inInclusiveRange(1, kOaaMaxChannels));
+      expect(tap.sampleRate, greaterThan(0));
+    });
+
+    test('opens at the format enumeration advertised', () {
+      final tap = systemOutput();
+      if (tap == null) return;
+
+      // Probe and open ask two different Core Audio objects the same question —
+      // enumeration reads the output stream's virtual format, open reads the
+      // created tap's. They are supposed to be the same number, and if they
+      // ever drift the ring is sized for one format while the callback writes
+      // the other. Nothing about that is visible on screen; it is a buffer
+      // overread.
+      final engine = OaaEngine.start(
+        source: OaaSource.device,
+        deviceId: kOaaSystemOutputDeviceId,
+      );
+      addTearDown(engine.dispose);
+
+      expect(engine.channels, tap.channels);
+      expect(engine.sampleRate, tap.sampleRate);
+    });
   });
 }
 

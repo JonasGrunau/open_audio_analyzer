@@ -4,6 +4,12 @@
 <dict>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Open Audio Analyzer measures the loudness of audio you route into it. Audio is analysed on this device and never recorded, stored or sent anywhere.</string>
+	<!-- Required before a Core Audio process tap may be created: choosing the
+	     System Output source captures what is being sent to the output device.
+	     A missing string here is not a silent denial — TCC terminates an
+	     application that triggers a prompt it has no reason for. -->
+	<key>NSAudioCaptureUsageDescription</key>
+	<string>Open Audio Analyzer measures the loudness of your system's own audio output. Audio is analysed on this device and never recorded, stored or sent anywhere.</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleExecutable</key>

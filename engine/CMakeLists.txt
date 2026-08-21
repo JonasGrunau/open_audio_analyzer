@@ -71,6 +71,25 @@ if(OAA_BUILD_DECODE)
   list(APPEND OAA_SOURCES src/oaa_decode.c)
 endif()
 
+# The engine's only Objective-C, and the only source that is not built
+# everywhere. A Core Audio process tap is created from a `CATapDescription`,
+# which is an Objective-C object — the SDK wraps AudioHardwareTapping.h in
+# `#ifdef __OBJC__`, so there is no C spelling of this. Apple restricts it to
+# macOS (the tapping header is API_UNAVAILABLE(ios)), which is why the guard is
+# not a plain `if(APPLE)`.
+#
+# `enable_language(OBJC)` is what makes CMake compile a `.m` at all; without it
+# the file is handed to the C compiler and fails inside <Foundation/Foundation.h>
+# with several hundred errors that name no file in this repository.
+#
+# build.dart reaches the same place differently — it has no per-source language,
+# so it compiles the whole macOS engine with `-x objective-c`. Both produce the
+# same object; see the comment on `_language` there.
+if(APPLE AND NOT IOS)
+  enable_language(OBJC)
+  list(APPEND OAA_SOURCES src/oaa_tap_macos.m)
+endif()
+
 add_library(oaa STATIC ${OAA_SOURCES})
 add_library(oaa::oaa ALIAS oaa)
 
@@ -104,6 +123,14 @@ set_target_properties(oaa PROPERTIES
   C_STANDARD_REQUIRED ON
   C_EXTENSIONS OFF
 
+  # Objective-C is a superset of C, and oaa_tap_macos.m is the one source that
+  # uses it. Saying c11 here too keeps it the same dialect as its twelve
+  # neighbours rather than whatever the toolchain defaults to. Ignored on every
+  # platform where OBJC was never enabled.
+  OBJC_STANDARD 11
+  OBJC_STANDARD_REQUIRED ON
+  OBJC_EXTENSIONS OFF
+
   # The one genuine difference from build.dart.
   #
   # A VST3 or an Audio Unit is a shared object, and this static library is
@@ -136,9 +163,13 @@ endif()
 # threading libraries everywhere POSIX. On Apple platforms it talks to
 # CoreAudio directly and will not tell you the frameworks are missing until the
 # link step. These are PUBLIC because the consumer does the final link.
+#
+# Foundation is not miniaudio's: oaa_tap_macos.m builds the tap and aggregate
+# descriptions out of NSUUID, NSString, NSArray and NSDictionary.
 
 if(APPLE)
   target_link_libraries(oaa PUBLIC
+    "-framework Foundation"
     "-framework CoreFoundation"
     "-framework CoreAudio"
     "-framework AudioToolbox"

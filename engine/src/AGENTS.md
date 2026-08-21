@@ -11,7 +11,9 @@
 | `oaa_truepeak.h/.c` | The BS.1770-4 Annex 2 4x polyphase oversampler. |
 | `oaa_spectrum.h/.c` | The Hann STFT behind the analyser, the spectrogram and the stereo cloud — a 4096-point window zero-padded into a 16384-point transform. One set of transforms serves all three. |
 | `oaa_ring.h/.c` | The SPSC ring between the audio callback and analysis. Drops are **counted and published**, never silently overwritten. |
-| `oaa_device.h/.c` | miniaudio, cut down to enumeration and capture. The only file that includes miniaudio.h. |
+| `oaa_device.h/.c` | miniaudio, cut down to enumeration and capture. The only file that includes miniaudio.h. Also the dispatcher: one reserved device id opens a process tap instead. |
+| `oaa_tap.h` | The system-output tap's C interface, and the only place the policy for a changing output device is written down. Declares its handle everywhere, its functions on macOS only. |
+| `oaa_tap_macos.m` | Core Audio process taps, macOS 14.2+. **The engine's only Objective-C**, and its only source not built on every platform — `CATapDescription` is an Objective-C class and the SDK hides the tapping API behind `#ifdef __OBJC__`. |
 | `oaa_decode.c` | dr_libs, as `oaa_file_open/read/seek/close`. The only file that does I/O, and the only one that includes dr_wav/dr_flac/dr_mp3. No analysis: the caller pushes what it reads. |
 | `oaa_analysis.c` | One pass over a block: the simple meters inline, the two standards-defined ones driven. |
 | `oaa_engine.c` | Lifecycle, the analysis thread, and the OS shims. |
@@ -45,6 +47,18 @@
 - **The engine adopts the device's format; it never converts to its own.** A
   resampler in front of the measurement moves inter-sample peaks and shifts the
   K-weighted energy. MA_NO_DECODING is set partly to make that impossible.
+- **The system-output tap obeys that rule too, and it is why it is bound to a
+  device rather than global.** `CATapDescription` offers global variants that
+  are far simpler to use, and every one of them mixes down to mono or stereo —
+  a 7.1 output metered as stereo is a measurement of a programme nobody played.
+  `initExcludingProcesses:andDeviceUID:withStream:` produces the stream's own
+  format instead. The cost is that the tap is then tied to one device, which is
+  what the default-output listener in `oaa_tap_start` exists to handle: it
+  rebuilds on the new device when the format matches and stops when it does
+  not. **It must never follow by resampling.** A tap left bound to a device
+  nobody is listening to reads digital black, which is exactly the invented
+  measurement this engine refuses to produce — so "stop" is the honest answer
+  and "convert" is not.
 - **`MA_NO_DECODING` is now load-bearing twice.** As well as forbidding format
   conversion on the capture path, it is what stops miniaudio compiling its own
   bundled copies of dr_wav, dr_flac and dr_mp3 — which would collide at link

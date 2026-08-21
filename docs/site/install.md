@@ -38,10 +38,35 @@ notarised.
 
 ### System audio
 
-This is the one place Open Audio Analyzer is honestly behind Decibel, which
-ships its own signed monitoring driver. Open Audio Analyzer does not, so to
-meter *what your Mac is playing* rather than what an input is hearing you need a
-loopback device:
+**On macOS 14.2 and later there is nothing to install.** Pick **System Output**
+from the source menu in the status bar — it is the first entry, and it is named
+after the output device it is metering, so you can see what you are listening
+to. Open Audio Analyzer measures what is being sent to that device without
+rerouting anything, so your audio keeps coming out of the speakers while it is
+being metered.
+
+This is a Core Audio process tap rather than a driver, which is why there is no
+installer, no password prompt and no reboot. Decibel ships a signed monitoring
+driver to do the same job; the tap did not exist when it was written.
+
+Three things worth knowing:
+
+- **macOS may ask for permission to record system audio** the first time you
+  choose it. If you decline, the tap delivers silence rather than an error, so
+  the meters sit at the floor — which looks exactly like genuinely quiet audio.
+  If that happens with something obviously playing, look under **System Settings
+  → Privacy & Security**.
+- **It follows your output device** when you change it, as long as the new one
+  has the same sample rate and channel count. Swapping between two stereo
+  devices at 48 kHz — speakers and headphones, say — just works. A device with a
+  different format stops the tap instead, because the meters are built around
+  one format and cannot be rebuilt mid-measurement; choose the source again to
+  pick the new device up.
+- **It captures every application at once,** mixed as your output device
+  receives it. There is no per-application selection.
+
+**Below macOS 14.2** the entry is absent, because the API is not there. Use a
+loopback device instead:
 
 - [BlackHole](https://existential.audio/blackhole/) — free, and the usual
   answer. Create a Multi-Output Device in Audio MIDI Setup containing both your
