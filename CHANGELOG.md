@@ -167,6 +167,14 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   and 512 frames.
 
 ### 🚧 Internal
+- The fake DAW no longer invents relocates on a slow machine. An offline run
+  handed the transport a read-ahead thread, and when that thread falls behind,
+  JUCE's buffering source returns silence while the reported playhead stops
+  advancing — a host claiming to play with a position that sits still, which is
+  a discontinuity by any definition, and the plugin flagged it. The plugin was
+  right; the instrument was wrong. Offline runs read the file synchronously now,
+  which is what makes their timeline independent of the scheduler; the device
+  path keeps its buffer, where a stall is a click rather than a wrong number.
 - `resolveConfigRoot`, `ConfigDir`, `ConfigFile` and `slugify` moved from the app
   into `oaa_core`, which is what lets the CLI read the same delivery targets the
   app writes. They are pure functions, so the package keeps its "no I/O" rule.

@@ -106,6 +106,18 @@ none of the modules that need real material.
   the thing CI exercises and the thing you listen to are different code, and the
   difference is where the bug will be.
 
+- **An offline run reads the file synchronously, and a device run reads ahead.**
+  `prepare` gives the transport a `BufferingAudioSource` and a read-ahead thread
+  only when a device is driving it. Offline there is no deadline, so the buffer
+  buys nothing — and it costs the one property a test host has to have. When the
+  read-ahead thread falls behind, `BufferingAudioSource` hands out silence and
+  the position `AudioTransportSource` reports **stops advancing**, so this host
+  claims to be playing while its playhead sits still. That is a genuine
+  discontinuity as far as any plugin can tell, and Open Audio Analyzer's raises
+  the relocate flag on every stalled block — correctly. A host whose timeline
+  depends on whether a background thread was scheduled cannot be used to test
+  anybody's playhead handling. See **What it found**.
+
 - **Nothing that the render path can see is mutated without detaching the
   callback.** `AudioDeviceManager::removeAudioCallback` does not return while
   the callback is running, so on the far side of it there is provably nobody in
@@ -128,8 +140,10 @@ none of the modules that need real material.
 
 ## What it found
 
-Five things, all of which had been unobservable. Four were defects in code that
-had shipped, and all four are fixed.
+Six things, all of which had been unobservable. Five were defects in code that
+had shipped, and all five are fixed. The last of them is in this directory
+rather than in the plugin: the instrument was inventing the very thing it exists
+to measure.
 
 - **A parked transport was reported as a relocate, continuously.** *Fixed.*
   A stopped DAW still runs its graph and reports the position it sits at,
@@ -176,6 +190,31 @@ had shipped, and all four are fixed.
   `sticky_` is the one place an edge lives.
   `../test/transport_box_test.cpp` reduces the whole thing to two reads with no
   publish in between, which is the loaded runner with the timing taken out.
+
+- **And this host was fabricating relocates all by itself.** *Fixed, here.* The
+  same two macOS failures survived the fix above, with different numbers: the
+  second flagged frame had moved a whole second away from the first. A second is
+  `kReadAheadFrames`.
+
+  An offline run was still handing the transport a `BufferingAudioSource` and a
+  read-ahead thread. When that thread falls behind — a slow, virtualised, cold
+  runner, a second after a seek emptied the buffer — the source returns silence
+  and `AudioTransportSource::getCurrentPosition` stops advancing. This host then
+  reports a playhead that sits still while `isPlaying` is true, which is a
+  discontinuity by any definition, and the plugin flagged it. **The plugin was
+  right every time.** The instrument was wrong.
+
+  Confirmed rather than argued: shrinking `kReadAheadFrames` to 1024 freezes the
+  playhead at one position for *dozens* of consecutive frames and flags every one
+  of them, on this machine, every run. With the read-ahead removed from the
+  offline path the same experiment at 16 frames produces exactly one flagged
+  frame, because the constant is no longer reachable from a run without a
+  device.
+
+  Two lessons, and the second is the uncomfortable one. A test host's timeline
+  must not depend on the scheduler. And a suite that had been green on three
+  platforms for a day was measuring a tool that invented the thing it was
+  measuring — on any machine slow enough, which was never this one.
 
 - **The producer name reached the app as mojibake.** *Fixed.* This one needed
   the fake DAW and the application running as a pair, which is a check neither

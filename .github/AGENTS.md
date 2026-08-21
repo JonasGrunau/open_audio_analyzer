@@ -73,10 +73,13 @@ The jobs are split by what they need, and that split is deliberate:
   delivered-exactly-once test: `checks` asserts the committed `wire_v2.bin`
   decodes, and only this job asserts that `plugin/src/OaaWire.cpp` still writes
   it. The cost is not hypothetical — the first dispatch after `plugin/host/`
-  landed failed on macOS, on cases that had never run there, and the defect
-  underneath was a relocate delivered twice on a runner busy enough for two
-  frames to leave inside one audio block. A push-gated job could not have seen
-  it, and neither could an unloaded laptop. The end-to-end run moves with it
+  landed failed on macOS, on cases that had never run there, and there were two
+  defects under it: an edge delivered twice by the plugin when two frames leave
+  inside one audio block, and the fake DAW freezing its own playhead whenever its
+  read-ahead thread fell behind, which made it report relocates that never
+  happened. Neither is visible to a push-gated job, and neither is visible on an
+  unloaded workstation — the second one needed a machine slow enough that the
+  instrument itself stopped keeping time. The end-to-end run moves with it
   too, so between releases the byte-for-byte agreement `docs/WIRE.md` exists to
   guarantee is checked from one side and the live path is not checked at all.
   The cheap repair is to build only the `oaa_wire_fixture` target on pushes — it

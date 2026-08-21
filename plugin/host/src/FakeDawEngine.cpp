@@ -12,8 +12,12 @@ namespace oaa::host {
 
 namespace {
 
-/* Frames of read-ahead. Large enough that a spinning disk cannot make the
- * render path wait, small enough that a seek is not audibly late. */
+/* Frames of read-ahead, for the *device* driver only. Large enough that a
+ * spinning disk cannot make the audio callback wait, small enough that a seek is
+ * not audibly late.
+ *
+ * **An offline run gets none, and that is not a tuning decision.** See
+ * `readAheadFrames` below. */
 constexpr int kReadAheadFrames = 48000;
 
 /* Open Audio Analyzer's Audio Unit, addressed by the four-character codes
@@ -139,9 +143,34 @@ void FakeDawEngine::prepare(double sampleRate, int blockFrames) {
   scratchChannels_ = juce::jlimit(1, kMaxChannels, juce::jmax(pluginChannels_, trackChannels_));
   scratch_.setSize(scratchChannels_, juce::jmax(1, blockFrames), false, true, false);
 
+  /* **No read-ahead offline, and this is a correctness requirement rather than
+   * an optimisation.**
+   *
+   * `BufferingAudioSource` hands out silence when the read-ahead thread has not
+   * kept up — and `AudioTransportSource::getCurrentPosition`, which is the
+   * playhead this host gives the plugin, *stops advancing* while that lasts. A
+   * host reporting a frozen position while it claims to be playing is a host
+   * whose playhead did not arrive where the previous block left it, so the
+   * plugin raises `kDiscontinuity` — correctly — on every stalled block.
+   *
+   * On a workstation the thread always keeps up and none of this is visible. On
+   * a CI runner it does not: the first manual dispatch after this directory
+   * landed failed on macOS with a relocate reported twice, the second one about
+   * a second into playback — one `kReadAheadFrames` after the seek that had
+   * emptied the buffer. Reproduced by shrinking this constant to 1024, which
+   * freezes the playhead for dozens of consecutive frames and flags every one.
+   *
+   * An offline render has no deadline, so the whole mechanism buys nothing here
+   * and costs the one property a test host must have: a timeline that does not
+   * depend on whether a background thread was scheduled. Zero means
+   * `AudioFormatReaderSource` is read synchronously on this thread, and the
+   * position advances by exactly one block per block, on any machine, under any
+   * load. The device path keeps its buffer — there, a stall is a click. */
+  const bool buffered = readerSource_ != nullptr && !offline_;
+
   transport_.setSource(readerSource_.get(),
-                       readerSource_ != nullptr ? kReadAheadFrames : 0,
-                       readerSource_ != nullptr ? &readAhead_ : nullptr,
+                       buffered ? kReadAheadFrames : 0,
+                       buffered ? &readAhead_ : nullptr,
                        trackSampleRate_,
                        scratchChannels_);
   transport_.prepareToPlay(blockFrames, sampleRate);
@@ -313,6 +342,11 @@ void FakeDawEngine::runOffline(const OfflineRun& run, const std::atomic<bool>& s
                           ? run.sampleRate
                           : (trackSampleRate_ > 0.0 ? trackSampleRate_ : 48000.0);
   const int frames = juce::jlimit(16, 8192, run.blockFrames);
+
+  /* Set before `prepare`, which reads it to decide whether the source chain gets
+   * a read-ahead thread. Never cleared: an offline run owns this engine for its
+   * whole life, and the process exits when it returns. */
+  offline_ = true;
 
   prepare(rate, frames);
 

@@ -237,6 +237,13 @@ private:
    * transport's source chain, and the plugin's preparation. Both drivers call
    * it, and nothing else may. */
   void prepare(double sampleRate, int blockFrames);
+
+  /* Which driver is running, and the only thing that reads it is the read-ahead
+   * decision in `prepare` — where the reason it exists is written out in full.
+   * The short version: a read-ahead thread that falls behind freezes the
+   * playhead this host reports, and a test host may not have a timeline that
+   * depends on the scheduler. */
+  bool offline_ = false;
   void unprepare();
 
   /* One block of audio into `scratch_`, through the plugin, with the playhead
