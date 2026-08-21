@@ -43,7 +43,7 @@ is still not built, and `docs/PLAN.md` for what was planned.
 | `packages/oaa_core/lib/src/layout.dart` | `ModuleSpec` / `TabSpec` / `PresetSpec` — the serialised layout model. |
 | `packages/oaa_core/lib/src/meter_source.dart` | `MeterSource` — everything a module is allowed to read. `OaaEngine` implements it; so does the remote display's decoder. |
 | `docs/WIRE.md` | The wire protocol, normative. Three implementations, none written against another. |
-| `ios/Runner/OaaBonjour.swift` | The only platform channel in the application. iOS refuses an app the multicast socket every other platform browses with, so a tablet searches through the system's Bonjour responder instead; `lib/src/remote/mdns/host_discovery.dart` is where the two meet. |
+| `ios/Runner/OaaBonjour.swift` | One of the application's two platform channels — the other is `lib/src/app/window_chrome.dart` over `oaa/window_chrome`, which is what removes the macOS title bar. iOS refuses an app the multicast socket every other platform browses with, so a tablet searches through the system's Bonjour responder instead; `lib/src/remote/mdns/host_discovery.dart` is where the two meet. |
 | `packages/oaa_core/lib/src/grid.dart` | Every rule about where a module may go, as pure functions. No pixels. |
 | `lib/src/canvas/grid_canvas.dart` | The canvas: drag, resize, selection, the preview overlay. |
 | `lib/src/canvas/workspace.dart` | The one path every layout edit takes, and the undo history. |

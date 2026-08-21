@@ -210,12 +210,14 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the app decoded off the plugin's socket, so a field dropped in the middle left
   both halves' suites green and the tablet showing a dash. It skips without a
   built plugin, and CI runs it on the Linux leg of the plugin job.
-- Two defects the fake DAW found on its first run are written down rather than
-  patched quietly, both under Known gaps in `README.md`: the discontinuity flag
-  usually does not survive the trip to the app, and the plugin's
-  "host supplies no transport" branch cannot be reached through VST3 at all.
-  The first moves a value `docs/WIRE.md` describes, so it is a decision rather
-  than a fix.
+- One thing the fake DAW found is written down rather than patched, under Known
+  gaps in `README.md`: the plugin's "host supplies no transport" branch cannot be
+  reached through VST3 at all, because the format has no way to say it. That is a
+  property of VST3 rather than a defect, and the branch is reached by the
+  Standalone build. The other finding recorded that way on the first run — that
+  the discontinuity flag usually did not survive the trip to the app — was
+  fixed inside this release instead, and is under Fixed above; it moved a value
+  `docs/WIRE.md` describes, which is why it was a decision before it was a fix.
 - `tool/fetch_test_audio.dart` downloads the Creative Commons music the
   application is looked at with — a tone produces a spectrogram that is one
   bright line and a stereo cloud that is a dot, both correct and neither

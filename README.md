@@ -834,11 +834,15 @@ drives, and it is the only test that covers the live path — `prepareToPlay`, t
 FIFO, the playhead, the engine, the streaming thread and the socket — rather
 than the codec alone.
 
-It earned its keep immediately: three defects in shipped code that nothing else
-could see, all now fixed and listed under **What it found** in
-[`plugin/host/AGENTS.md`](plugin/host/AGENTS.md). Two were in the plugin's
-transport handling; the third only became visible when the fake DAW and the
-application were run as a pair, which is a check neither test suite can be.
+It earned its keep immediately: **six** findings that nothing else could see,
+listed under **What it found** in
+[`plugin/host/AGENTS.md`](plugin/host/AGENTS.md). Five were defects and all five
+are fixed — three in the plugin's transport handling, one that only became
+visible with the fake DAW and the application running as a pair (a check neither
+test suite can be), and one in the fake DAW itself, which was inventing the very
+thing it exists to measure. The sixth is not a defect: the plugin's "host
+supplies no position" branch cannot be reached through VST3 at all, which is
+[below](#-known-gaps-stated-plainly).
 
 ---
 
