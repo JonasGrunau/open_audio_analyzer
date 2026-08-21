@@ -75,6 +75,18 @@
   <content_rating type="oars-1.1"/>
 
   <releases>
+    <release version="0.3.0" date="2026-08-21">
+      <description>
+        <p>
+          A DAW's playhead now reaches a tablet, and both screens show the
+          host's transport. The desktop accepts the plugin's connection at
+          last, so inserting a VST3 or an AU meters what the DAW is playing.
+          Two readings are corrected and warrant a re-measure: the clip
+          indicator catches clipping it was missing, and crest is taken over
+          the audio rather than off the meters' ballistics.
+        </p>
+      </description>
+    </release>
     <release version="0.2.0" date="2026-08-19">
       <description>
         <p>

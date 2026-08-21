@@ -1,7 +1,7 @@
 name: oaa_cli
 description: "The `oaa` command-line loudness analyser."
 publish_to: 'none'
-version: 0.2.0
+version: 0.3.0
 
 # GPL-3.0-or-later, like the app. The engine it calls is MIT and stays that
 # way — see the licensing split in README.md.
