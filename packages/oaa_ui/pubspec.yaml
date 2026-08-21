@@ -2,7 +2,7 @@ name: oaa_ui
 description: >-
   The Open Audio Analyzer design system: spacing, colour and type tokens, and the widget
   primitives every meter module is assembled from.
-version: 0.4.0
+version: 0.4.1
 publish_to: 'none'
 
 environment:

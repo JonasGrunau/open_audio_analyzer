@@ -56,7 +56,7 @@
 cmake_minimum_required(VERSION 3.22)
 
 project(oaa_plugin
-  VERSION 0.4.0
+  VERSION 0.4.1
   DESCRIPTION "Open Audio Analyzer — headless metering plugin"
   LANGUAGES C CXX
 )
