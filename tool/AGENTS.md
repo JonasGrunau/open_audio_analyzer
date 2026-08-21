@@ -6,8 +6,29 @@ Repository scripts. Nothing here ships. GPL-3.0-or-later.
 |------|---------|
 | `docs.dart` | Builds the documentation site from the Markdown in this repository, and the mark from `assets/brand/oaa-mark.svg`. `dart run tool/docs.dart --out build/docs`. |
 | `bench_spectrogram.dart` | The measurement behind the recording figures in `lib/src/modules/spectrogram.dart`. `flutter test tool/bench_spectrogram.dart`. |
+| `fetch_test_audio.dart` | Downloads the Creative Commons music the application is looked at with. `dart run tool/fetch_test_audio.dart`. Writes to `test_audio/`, which is gitignored. |
 
 ## Rules
+
+- **`fetch_test_audio.dart` downloads what a *person* looks at, and no test
+  depends on it.** Nothing in `ci.yml` runs it: a gate that fetches 32 MB of
+  music from a public archive to prove a socket carries frames is a gate that
+  fails for reasons unrelated to this repository — and does, regularly, because
+  the archive answers 503 under load. The end-to-end test in
+  `packages/oaa_wire/` generates its own signal for that reason and takes
+  `OAA_TEST_TRACK` when somebody wants the real thing. What the download is for
+  is the judgement a tone cannot support: a spectrogram fed a sine is one bright
+  line, and a stereo cloud fed one is a dot.
+
+- **It sets `exitCode` rather than returning one.** `Future<int> main()`
+  compiles and the value is discarded, so the script exited 0 after a failed
+  download. That was the first version, and it is the shape of bug that makes a
+  CI step green for a year.
+
+- **The licence travels with the files.** The audio is CC BY, the files are
+  gitignored, so nothing in the repository would record where they came from —
+  the script writes `ATTRIBUTION.md` beside them, for the tracks it actually
+  produced rather than the ones it was asked for.
 
 - **`docs.dart` has no dependencies, and that is the reason it is here rather
   than a `mkdocs.yml`.** The documents the site publishes — `docs/METRICS.md`,

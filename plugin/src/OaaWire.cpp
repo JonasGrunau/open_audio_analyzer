@@ -108,8 +108,22 @@ void writeSnapshotFrame(std::vector<uint8_t>& out, const oaa_snapshot& s,
    * transcribed in the wrong order still totals correctly, but a field *missed*
    * or duplicated does not. Serialising a frame of the wrong length is worse
    * than not sending it, because the consumer resynchronises on the next magic
-   * and draws whatever it managed to parse. */
-  assert(out.size() == kHeaderBytes + kSnapshotBytes);
+   * and draws whatever it managed to parse.
+   *
+   * **This has to survive NDEBUG**, which a bare `assert` does not. The plugin
+   * is configured `-DCMAKE_BUILD_TYPE=Release` everywhere it is built —
+   * including in CI, which is the only place the C++ producer is exercised at
+   * all — so the assert alone was compiled out of precisely the build it was
+   * written to guard. Clearing the buffer is the action the comment above
+   * argues for: `sendAll` on an empty vector writes nothing, so a
+   * wrong-length frame is dropped rather than put on the socket, and the
+   * consumer sees a missing frame instead of a plausible wrong one. The assert
+   * stays as well, so a debug build stops at the cause. */
+  if (out.size() != kHeaderBytes + kSnapshotBytes) {
+    assert(false && "snapshot frame is the wrong length — a field is missing "
+                    "or duplicated in writeSnapshotFrame");
+    out.clear();
+  }
 }
 
 void writeTransportFrame(std::vector<uint8_t>& out, const Transport& t) {
@@ -133,7 +147,12 @@ void writeTransportFrame(std::vector<uint8_t>& out, const Transport& t) {
   w.u32(t.hostFrames);
   w.u32(t.reserved);
 
-  assert(out.size() == kHeaderBytes + kTransportBytes);
+  /* Dropped rather than sent short — see the note in writeSnapshotFrame for
+   * why this is not an `assert` alone. */
+  if (out.size() != kHeaderBytes + kTransportBytes) {
+    assert(false && "transport frame is the wrong length");
+    out.clear();
+  }
 }
 
 void writeHelloFrame(std::vector<uint8_t>& out, const char* producerName,
@@ -176,7 +195,10 @@ void writeHelloFrame(std::vector<uint8_t>& out, const char* producerName,
   for (size_t i = 0; i < nameLength; ++i)
     w.u8(static_cast<uint8_t>(producerName[i]));
 
-  assert(out.size() == kHeaderBytes + payload);
+  if (out.size() != kHeaderBytes + payload) {
+    assert(false && "hello frame is the wrong length");
+    out.clear();
+  }
 }
 
 }  // namespace oaa::wire

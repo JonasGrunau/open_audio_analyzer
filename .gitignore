@@ -65,6 +65,12 @@ plugin/build/
 # absent, so a fresh clone builds without doing anything special.
 plugin/third_party/JUCE/
 
+# The Creative Commons music `tool/fetch_test_audio.dart` downloads, and the
+# attribution it writes beside it. Thirty megabytes of somebody else's audio
+# that a one-line URL already records, and nothing in CI needs it — the
+# end-to-end test generates its own signal.
+test_audio/
+
 # The plan and design docs are committed; scratch notes are not.
 docs/scratch/
 

@@ -48,14 +48,26 @@ The jobs are split by what they need, and that split is deliberate:
   JUCE dependency fetched by tag. AU is macOS-only and
   `plugin/CMakeLists.txt` decides that, not this workflow.
 
+  It also builds `plugin/host/`, the fake DAW, and then runs
+  `dart test` in `packages/oaa_wire` a second time — the same suite `checks`
+  runs, where the end-to-end cases skip for want of a built binary. Here they
+  do not: the host plays a generated signal through the VST3 with no window and
+  no sound card, and the Dart codec decodes what arrives on the socket. That is
+  the only coverage anywhere of `prepareToPlay`, the FIFO, the playhead, the
+  streaming thread and the socket. Linux needs `xvfb-run` because JUCE's
+  initialisation wants a display even when the application never opens a
+  window; nothing needs audio hardware.
+
   **Know what the gating costs.** `ctest` moves with the job, and that run is
   the producing half of the wire golden: `checks` asserts the committed
   `wire_v2.bin` decodes, and only this job asserts that
-  `plugin/src/OaaWire.cpp` still writes it. Between releases the byte-for-byte
-  agreement `docs/WIRE.md` exists to guarantee is checked from one side. The
-  cheap repair is to build only the `oaa_wire_fixture` target on pushes — it
+  `plugin/src/OaaWire.cpp` still writes it. The end-to-end run moves with it
+  too, so between releases the byte-for-byte agreement `docs/WIRE.md` exists to
+  guarantee is checked from one side and the live path is not checked at all.
+  The cheap repair is to build only the `oaa_wire_fixture` target on pushes — it
   needs the engine and one translation unit, not JUCE — which needs the JUCE
-  fetch in `plugin/CMakeLists.txt` to become conditional. It is not today.
+  fetch in `plugin/CMakeLists.txt` to become conditional. It is not today, and
+  it would not recover the end-to-end run, which needs the whole plugin.
 
 - **`engine`** compiles the C through the build hook and runs the meters, the
   EBU Tech 3341/3342 conformance cases and then the `oaa` CLI on Linux, macOS

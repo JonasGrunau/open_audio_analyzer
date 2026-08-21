@@ -49,6 +49,7 @@ by people who are not writing free software.
 | `src/OaaPluginProcessor.h/.cpp` | The `AudioProcessor`. Real-time path and playhead capture. |
 | `src/OaaPluginEditor.h/.cpp` | A status panel. Not a meter, and must not become one. |
 | `test/wire_fixture.cpp` | Writes the golden the Dart codec is held against. |
+| `host/` | The fake DAW: a host that plays a file through this plugin and gives it a transport. Its own `AGENTS.md`. Nothing there ships. |
 
 ## Working in here
 
@@ -69,6 +70,22 @@ by people who are not writing free software.
   integrated measurement mid-pass. Connection settings live in
   `getStateInformation` instead, which no host will ever automate.
 
+- **`juce::String("…")` mangles a non-ASCII literal; `juce::String::fromUTF8("…")`
+  does not.** The `const char*` constructor reads its argument through
+  `CharPointer_ASCII` — one byte, one codepoint — while `operator+=` on the same
+  type reads UTF-8. So appending a literal with an em dash in it is correct and
+  constructing from one is not, which is a difference nothing in the code makes
+  visible. JUCE asserts on bytes above 127 in that constructor, and the plugin
+  is built with NDEBUG, so the check is compiled out of every build anybody
+  runs. It reached a user: the HELLO frame's producer name arrived at the app as
+  `Open Audio Analyzer plugin â<80><94>`, and `docs/WIRE.md` says that field is
+  UTF-8, so it was a protocol defect rather than a typographical one.
+
+  What made it *visible* was the consumer decoding those bytes faithfully rather
+  than refusing them — see the note on `allowMalformed` in
+  `packages/oaa_wire/lib/src/hello.dart`. A decoder hardened to reject the frame
+  would have hidden this for as long as nobody read the bytes.
+
 - **`docs/WIRE.md` is the protocol's specification; this is one implementation.**
   The Dart implementation in `packages/oaa_wire/` is another, written against
   the same page without having seen this code. If they disagree, the document is
@@ -85,6 +102,14 @@ by people who are not writing free software.
   field has a presence bit; a bit clear means the display shows an em dash.
   "Bar 1, beat 1, 00:00:00:00" is a plausible-looking readout to show somebody
   while the host is parked at bar 57.
+
+  **Drive it with `host/` rather than reasoning about it.** The fake DAW can be
+  told to withhold the transport, to report a frame rate the wire has no code
+  for, to loop a one-second region, to sit parked, and to play-stop-relocate-play
+  on cue. Running those the first time found two defects in `captureTransport`
+  and the streaming thread that had shipped — see **What it found** in
+  `host/AGENTS.md`. The lesson is the one in that file: the transport path is
+  cheap to reason about wrongly and cheap to measure.
 
 - **NaN and −∞ go on the wire unchanged.** NaN means nobody measured it, −∞
   means digital silence. Both have bit patterns a careless serialiser normalises
@@ -103,6 +128,11 @@ cmake -B plugin/build -S plugin -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build plugin/build
 ctest --test-dir plugin/build --output-on-failure
 ```
+
+That also builds `host/`, the fake DAW, and `dart test packages/oaa_wire` then
+drives the whole path through it — file, plugin, socket, decoder — with no
+window and no sound card. Between releases nothing else does; see
+`host/AGENTS.md`.
 
 `ci.yml`'s `plugin` job runs exactly that on Linux, macOS and Windows — VST3 on
 all three, AU where JUCE builds one — **on a tag or a manual run, not on every

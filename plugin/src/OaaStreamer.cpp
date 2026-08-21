@@ -278,7 +278,21 @@ bool Streamer::ensureConnected() {
    * which this thread discovers on the next write and treats as any other
    * disconnect — v1 is a one-directional display stream, so there is no reply
    * to wait for and nothing this end could usefully do with one. */
-  const juce::String name = juce::String("Open Audio Analyzer plugin — ")
+  /* `fromUTF8`, not the `String(const char*)` constructor.
+   *
+   * That constructor reads its argument through `CharPointer_ASCII` — one byte,
+   * one codepoint — so the em dash's three UTF-8 bytes became three Latin-1
+   * characters and `toRawUTF8()` re-encoded them as six. The app decoded those
+   * faithfully and put "Open Audio Analyzer plugin â<80><94>" in its title bar.
+   * JUCE does assert on bytes above 127 here, but the plugin is built with
+   * NDEBUG, so the one thing that would have caught it is compiled out of every
+   * build anybody runs.
+   *
+   * The trap is that `operator+=` on the same type uses `CharPointer_UTF8`, so
+   * appending a UTF-8 literal is correct and constructing from one is not.
+   * `docs/WIRE.md` says this field is UTF-8; that is what makes this a protocol
+   * defect and not a typographical one. */
+  const juce::String name = juce::String::fromUTF8("Open Audio Analyzer plugin — ")
       + juce::PluginHostType().getHostDescription();
   wire::writeHelloFrame(frameBytes_, name.toRawUTF8());
   if (!sendAll(frameBytes_))
@@ -376,6 +390,25 @@ void Streamer::run() {
     wire::writeTransportFrame(frameBytes_, lastTransport_);
     if (!sendAll(frameBytes_))
       continue;
+
+    /* An edge is delivered once, and keeping `lastTransport_` across a lost
+     * seqlock race is what makes that need saying: right for a position, wrong
+     * for a flag that marks a single moment, because the frame after next would
+     * assert a relocate that has already gone out. Cleared here rather than
+     * before the send so that a frame which never left is not counted as
+     * delivered — if the send failed the link is gone, and the app re-handshakes
+     * from scratch when it comes back.
+     *
+     * The emptiness check is for the other way a frame can fail to leave: a
+     * writer that produced the wrong length clears the buffer rather than
+     * sending a malformed frame, and `sendAll` reports an empty buffer as sent
+     * because its loop is never entered. Nothing but a producer bug reaches
+     * that, and a producer that cannot write a transport frame will never
+     * deliver an edge anyway — but "sent" and "consumed" should mean the same
+     * thing here, or the next reader of this line has to work out that they
+     * do not. */
+    if (!frameBytes_.empty())
+      lastTransport_.flags &= ~TransportBox::kStickyFlags;
 
     wire::writeSnapshotFrame(frameBytes_, *snapshot_,
                              droppedFrames_.load(std::memory_order_relaxed));

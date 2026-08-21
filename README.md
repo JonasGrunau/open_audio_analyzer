@@ -514,6 +514,7 @@ lib/               The application.                                          GPL
 assets/fonts/      Inter and Google Sans Code, with their licences.      SIL OFL
 cli/               The `oaa` command-line analyser.                          GPL
 plugin/            Headless VST3 + AU plugin.                              AGPL
+  host/            A fake DAW that plays a file through it. Ships nowhere.  AGPL
 docs/              PLAN.md, METRICS.md, WIRE.md.
 ```
 
@@ -632,9 +633,17 @@ cd cli && dart build cli -o build     # and it still builds the way a release do
 sh plugin/test/sources_match.sh       # the engine's two build lists agree
 cmake -B plugin/build -S plugin -DCMAKE_BUILD_TYPE=Release && \
   cmake --build plugin/build && \
-  ctest --test-dir plugin/build       # the VST3 and AU compile, and the C++ wire golden
+  ctest --test-dir plugin/build       # the VST3, the AU and the fake DAW compile
+dart test packages/oaa_wire           # again: with a built fake DAW the
+                                      # end-to-end cases run instead of skipping
 dart run tool/docs.dart               # the documentation site still builds
 ```
+
+`dart test packages/oaa_wire` appears twice on purpose. Its end-to-end cases
+spawn the [fake DAW](#-testing-the-plugin-without-a-daw) and decode what the
+plugin sends over a real socket; without a build they skip, so the second run is
+where they actually happen. Nothing there downloads anything — the test writes
+its own signal.
 
 The engine tests are worth a look even if you never touch the C. A sine of
 amplitude *A* has a peak of *A* and an RMS of *A*/√2 — exactly 3.0103 dB lower.
@@ -736,6 +745,34 @@ arrives as zero is indistinguishable from a real one, and "bar 1, beat 1,
 00:00:00:00" is a perfectly plausible thing to show somebody while their session
 is parked at bar 57.
 
+### 🧪 Testing the plugin without a DAW
+
+`plugin/host/` builds a **fake DAW**: a host that plays an audio file through
+the plugin and gives it a transport. It is built by the same CMake run.
+
+```sh
+open plugin/build/host/OaaFakeDaw_artefacts/Release/oaa-fake-daw.app  # macOS
+plugin/build/host/OaaFakeDaw_artefacts/Release/oaa-fake-daw           # Linux
+```
+
+It finds the VST3 in the build tree beside it, so with the app already running
+the only thing left is to open a track and press space. Tempo, time signature,
+timecode frame rate, a loop region, the record flag and the playhead itself are
+all controllable — including switching the playhead *off*, which is how a host
+that reports nothing gets tested on purpose. The plugin's own status panel opens
+in a second window.
+
+`dart run tool/fetch_test_audio.dart` downloads a Creative Commons track to play
+through it. A sine tells you nothing about a spectrogram.
+
+The same binary runs with `--headless`: no window, no sound card, blocks pushed
+from a background thread. That is what
+[`packages/oaa_wire/test/plugin_e2e_test.dart`](packages/oaa_wire/test/plugin_e2e_test.dart)
+drives, and it is the only test that covers the live path — `prepareToPlay`, the
+FIFO, the playhead, the engine, the streaming thread and the socket — rather
+than the codec alone. It found two things on its first run, both listed under
+[Known gaps](#-known-gaps-stated-plainly).
+
 ---
 
 ## 🧭 Roadmap
@@ -777,6 +814,12 @@ so a release built from a fork is unsigned and every script says so. See
   authentication. Silently restarting an integration mid-programme is wrong in a
   way nothing on screen reveals, which is not a capability to put on an
   unauthenticated port.
+- 🎬 **"The host supplies no transport" cannot be reached through VST3.** The
+  plugin handles it — an empty transport, and dashes on screen — and the format
+  has no way to say it: JUCE fills a process context with a zeroed project time
+  and no validity flags, so the plugin correctly reads a host parked at zero
+  instead. The branch is exercised by the Standalone build, which has no
+  playhead at all. Nothing is broken; it is simply not observable from a DAW.
 - 🔊 **Capturing your own system's output needs a virtual device on macOS and
   Linux.** This is the biggest gap versus Decibel, which ships a signed
   monitoring driver.

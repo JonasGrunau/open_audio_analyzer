@@ -34,6 +34,7 @@ is still not built, and `docs/PLAN.md` for what was planned.
 | `packages/oaa_engine/hook/build.dart` | Compiles `engine/` and bundles it as a code asset. The app's only native build description. |
 | `engine/CMakeLists.txt` | The same compile, for consumers that are not Dart. A plugin CI runner has no Flutter SDK. **Add a new engine source to both, or `plugin/test/sources_match.sh` fails the build.** |
 | `plugin/src/OaaWire.h` | The wire protocol, producer side. `docs/WIRE.md` is the specification; this and `packages/oaa_wire/` are two implementations of it that must agree byte for byte. |
+| `plugin/host/src/FakeDawEngine.cpp` | The fake DAW: file → transport → plugin → monitor, driven either by an audio device or by a loop with no device at all. The second one is what makes the plugin's whole path testable without a DAW or a person. |
 | `packages/oaa_ui/lib/src/tokens.dart` | `Space`, `OaaControl`, `OaaRadius`, `OaaStroke`, `OaaColors`, `OaaType`. Nothing outside this file invents a spatial or colour value. |
 | `packages/oaa_ui/lib/src/scale.dart` | `MeterScale` and `ScaleGraticule`. Five modules draw a dB scale; two side by side whose ticks disagree look like a rendering bug. |
 | `packages/oaa_ui/lib/src/point_buckets.dart` | Marks sorted by the colour they are drawn in, one call per colour. What lets the spectrogram and the stereo cloud redraw their whole history every published frame instead of accumulating it into an image. |
@@ -71,7 +72,7 @@ is still not built, and `docs/PLAN.md` for what was planned.
 | `packages/oaa_ui/` | Design tokens and shared primitives. | GPL-3.0-or-later |
 | `lib/` | The application. | GPL-3.0-or-later |
 | `cli/` | The `oaa` command-line analyser. No Flutter binding. | GPL-3.0-or-later |
-| `plugin/` | Headless VST3 / AU. Measures the DAW's audio, streams it to the app. | **AGPL-3.0-or-later** |
+| `plugin/` | Headless VST3 / AU. Measures the DAW's audio, streams it to the app. Contains `host/`, the fake DAW that drives it. | **AGPL-3.0-or-later** |
 | `docs/` | `PLAN.md`, `METRICS.md`, `WIRE.md`, and `site/` — the pages with no other home. | |
 | `tool/` | Repository scripts. Nothing here ships. | GPL-3.0-or-later |
 | `packaging/` | dmg, msix, AppImage, flatpak, and the app icon they all need. | GPL-3.0-or-later |
@@ -255,6 +256,13 @@ is unaffected: it never links JUCE — it talks to the plugin over a socket.
   a crowded VU face, and two labels printed in the same place. Tests do not
   catch layout that is merely wrong to look at.
 
+  **The plugin has its own version of this, and it is `plugin/host/`.** A
+  metering plugin cannot be judged from a unit test either — it has to be fed
+  real music by something that moves a playhead. The fake DAW does that with a
+  window and a Play button, and with `--headless` it does it in a test. Two
+  defects were found the first time it ran, both in code that had shipped: see
+  **What it found** in `plugin/host/AGENTS.md`.
+
   **`--open-panel=<name>` opens one of the five panels at startup**, in a debug
   build, which is how a panel gets looked at without clicking through to it:
   `open "build/macos/Build/Products/Debug/Open Audio Analyzer.app" --args --open-panel=settings`.
@@ -426,19 +434,26 @@ cd cli && dart build cli -o build     # the CLI builds the way a release builds 
 sh plugin/test/sources_match.sh       # the engine's two build lists agree
 cmake -B plugin/build -S plugin -DCMAKE_BUILD_TYPE=Release && \
   cmake --build plugin/build && \
-  ctest --test-dir plugin/build       # the VST3 and AU compile, and the C++ wire golden
+  ctest --test-dir plugin/build       # the VST3, the AU and the fake DAW compile
+dart test packages/oaa_wire           # again, now that a built fake DAW makes
+                                      # the end-to-end cases run instead of skip
 dart run tool/docs.dart               # the documentation site still builds
 ```
 
-All ten are jobs in `ci.yml`, which is the only workflow — but two of them do
-not run on a push. `dart build cli` does, and is there because nothing else
+All ten gates are jobs in `ci.yml`, which is the only workflow. The repeated
+`dart test packages/oaa_wire` is not an eleventh: it is the same suite, run
+again where a built plugin turns its end-to-end cases from skipped into real.
+Two of the ten do not run on a push. `dart build cli` does, and is there because nothing else
 builds the CLI the way a release does: `cli/test` runs it with `dart run`, so
 `dart compile exe` was broken for an unknown length of time and was found by
 tagging a release. **The plugin build runs only on a release or a manual run**,
 because three parallel JUCE builds cost more than a push asks for — so run it
 by hand when you touch `plugin/` or `engine/`. It is the only thing that
-compiles the VST3 and the AU, and the only thing that runs the C++ side of the
-wire golden. The engine tests hold the meters against arithmetic: a
+compiles the VST3, the AU and the fake DAW, the only thing that runs the C++
+side of the wire golden, and the only thing that drives the plugin end to end —
+`packages/oaa_wire/test/plugin_e2e_test.dart` spawns
+`plugin/host/`'s `oaa-fake-daw --headless` and decodes what the plugin sends, and
+skips when that binary is not built. The engine tests hold the meters against arithmetic: a
 sine of amplitude *A* peaks at *A* and has an RMS of *A*/√2, exactly 3.0103 dB
 lower. If those drift, the meters are wrong — not the tone.
 

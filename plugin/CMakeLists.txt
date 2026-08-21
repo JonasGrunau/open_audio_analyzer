@@ -203,6 +203,23 @@ target_link_libraries(OaaPlugin PUBLIC
   $<$<CONFIG:Release>:juce::juce_recommended_lto_flags>)
 
 # ---------------------------------------------------------------------------
+# The fake DAW
+#
+# A host that plays a file through this plugin and gives it a transport, so that
+# the playhead handling in OaaPluginProcessor.cpp can be exercised — by a person
+# with a window, and by a test with `--headless`. See host/CMakeLists.txt for
+# why it is on by default, and host/AGENTS.md for how to drive it.
+#
+# It is the only other thing in this repository that builds against JUCE, and it
+# roughly doubles the framework compile in this directory. -DOAA_BUILD_HOST=OFF
+# when you want the plugin alone.
+option(OAA_BUILD_HOST "Build the fake DAW that hosts this plugin." ON)
+
+if(OAA_BUILD_HOST)
+  add_subdirectory(host)
+endif()
+
+# ---------------------------------------------------------------------------
 # The wire fixture
 #
 # Writes a frame pair with known values so that the C++ and Dart implementations

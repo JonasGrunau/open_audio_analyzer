@@ -304,6 +304,30 @@ and never in `oaa_snapshot`: the engine must not learn what a DAW is.
 left it — a relocate, a loop wrapping, a scrub — detected with a half-block
 tolerance so ordinary playback never sets it.
 
+Two things about it are producer behaviour rather than layout, and a consumer
+depends on both.
+
+It is only evaluated **while the transport is rolling**. A stopped host still
+runs its graph and reports the position it is parked at, unchanged, on every
+block; against a prediction of one block further on that is a mismatch of
+exactly one block, so a producer that tested it unconditionally would raise a
+relocate continuously for as long as the transport sat still. The prediction is
+carried across the stop rather than rebuilt from the parked position, which is
+what makes the bars 1–16 case below detectable at all.
+
+It is an **edge, delivered once**, not a state to be sampled. The producer knows
+about the jump for a single audio block, and frames go out far less often than
+blocks arrive, so it must accumulate the bit between frames rather than copy
+whatever the block in front of it happens to say. Set it on the first frame at or
+after the block where the jump happened, alongside the position the playhead
+landed on rather than the one it left; clear it on the next frame unless another
+jump has happened since.
+
+A consumer may therefore count relocations by counting the frames that carry the
+bit, for as long as the link holds — an edge raised while a frame cannot be sent
+is lost with the connection, and a consumer that has just reconnected knows
+nothing about what happened while it was away regardless.
+
 It is the only bit in this frame that is about the *measurement* rather than
 about the host, and it belongs to the same family as `dropped_frames`. Play bars
 1–16, stop, drag back to bar 1, play again: the engine has been fed both passes

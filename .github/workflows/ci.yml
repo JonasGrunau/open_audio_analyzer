@@ -268,6 +268,35 @@ jobs:
       - name: Tests
         run: ctest --test-dir plugin/build --output-on-failure -C Release
 
+      # Xvfb, because the fake DAW is a JUCE GUI application even when it is
+      # asked not to open a window, and JUCE's initialisation on Linux wants a
+      # display. `--headless` needs no sound card, which is the part a runner
+      # genuinely cannot provide.
+      - name: Display
+        if: runner.os == 'Linux'
+        run: sudo apt-get install -y xvfb
+
+      - uses: dart-lang/setup-dart@v1
+
+      # The end to end, and the only place it runs.
+      #
+      # `checks` runs this same suite and the end-to-end cases skip there,
+      # because they need a built plugin and a built fake DAW and that job has
+      # neither. Here both exist, so `plugin/host/`'s `oaa-fake-daw --headless`
+      # plays a generated signal through the VST3 and the Dart codec decodes
+      # what comes back off the socket. Everything between `prepareToPlay` and
+      # the socket is covered by this and by nothing else — the byte-for-byte
+      # golden above is produced by a fixture that links no JUCE at all.
+      #
+      # No Flutter, and no downloaded audio: the test writes its own WAV. A gate
+      # that fetches music from a public archive fails for reasons that have
+      # nothing to do with this repository.
+      - name: End to end
+        working-directory: packages/oaa_wire
+        run: |
+          dart pub get
+          ${{ runner.os == 'Linux' && 'xvfb-run -a' || '' }} dart test
+
       # VST3 everywhere, AU where JUCE built one. Standalone is deliberately
       # left out: it is a window around a plugin whose whole purpose is to
       # stream to an application that is already running.

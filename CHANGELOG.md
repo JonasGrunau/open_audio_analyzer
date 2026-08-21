@@ -38,7 +38,63 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   notice. A host caches a plugin by that string, so it moves before the first
   published build rather than after.
 
+### 🐛 Fixed
+- The plugin drops a wrong-length frame rather than sending it. The check was an
+  `assert`, and the plugin is built `Release` everywhere including CI, so
+  `NDEBUG` removed it from the only build that exercises the C++ producer.
+- The plugin no longer tells the app the playhead relocated while the transport
+  is parked. A stopped DAW still runs its graph and reports the position it sits
+  at, unchanged, every block; the plugin compared that against "one block
+  further on" and raised its discontinuity flag on every published frame for as
+  long as the transport was stopped — measured at 140 frames out of 140. It is
+  now only evaluated while the transport is rolling. Nothing in the application
+  consumes the flag yet, so no reading changes today; the Elapsed and Timecode
+  LUFS modes are what would have been affected.
+- The plugin's name arrives at the app as text rather than as mojibake. The
+  HELLO frame's producer name was built with `juce::String`'s `const char*`
+  constructor, which reads its argument one byte to one codepoint, so the em
+  dash in "Open Audio Analyzer plugin — " was mangled on the way in and
+  re-encoded on the way out: the app's title bar read
+  `Open Audio Analyzer plugin â<80><94>`. `docs/WIRE.md` specifies that field as
+  UTF-8, which makes it a protocol defect rather than a typographical one. JUCE
+  asserts on this and the assert is compiled out of the Release build, which is
+  why nothing caught it.
+- A relocate now reaches the app instead of usually being missed. The flag marks
+  the single audio block on which the playhead jumped, and the streaming thread
+  samples the transport once per published frame — every second block at a
+  512-frame buffer, one in sixteen at 64 — so it was set on one publish and read
+  from another: three loop laps in a row delivered it zero times out of 186
+  frames. Edge flags now accumulate outside the seqlock and are delivered once
+  each, which makes the count independent of buffer size. Verified at 64, 128
+  and 512 frames.
+
 ### 🚧 Internal
+- A fake DAW, in `plugin/host/`. It plays an audio file through the VST3 or the
+  Audio Unit and hands it a transport — tempo, time signature, timecode frame
+  rate, loop points, the record flag, and the playhead itself, which can be
+  switched off. None of the plugin's playhead handling had ever been run before:
+  the only host that could reach it was a real DAW driven by a person. It is
+  built by the same CMake run as the plugin and shipped nowhere.
+- The plugin is driven end to end by a test. `plugin/host/` also runs headless —
+  no window, no sound card — and
+  `packages/oaa_wire/test/plugin_e2e_test.dart` spawns it, listens on the port
+  the app listens on, and decodes what arrives. It is the only coverage of
+  `prepareToPlay`, the FIFO, the playhead, the engine, the streaming thread and
+  the socket at once; the byte-for-byte golden beside it is produced by a
+  fixture that links no JUCE. It generates its own audio, so nothing in CI
+  downloads anything, and it skips rather than fails without a built plugin.
+- Two defects the fake DAW found on its first run are written down rather than
+  patched quietly, both under Known gaps in `README.md`: the discontinuity flag
+  usually does not survive the trip to the app, and the plugin's
+  "host supplies no transport" branch cannot be reached through VST3 at all.
+  The first moves a value `docs/WIRE.md` describes, so it is a decision rather
+  than a fix.
+- `tool/fetch_test_audio.dart` downloads the Creative Commons music the
+  application is looked at with — a tone produces a spectrogram that is one
+  bright line and a stereo cloud that is a dot, both correct and neither
+  informative. It resumes a partial download, verifies the length, writes the
+  attribution the licence asks for beside the audio, and is run by hand. No test
+  depends on it.
 - One workflow instead of three. `ci.yml` runs the tests, the documentation
   site, the installers and the release as jobs gated by event, so a push
   produces one run rather than two and a tag no longer produces a third that

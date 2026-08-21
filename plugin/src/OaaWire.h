@@ -96,7 +96,7 @@ enum class FrameType : uint16_t {
 inline constexpr size_t kHeaderBytes = 12;
 
 /* --------------------------------------------------------------------- */
-/* Payload sizes, frozen at protocol version 1                            */
+/* Payload sizes, frozen at protocol version 1 and unchanged in version 2 */
 /* --------------------------------------------------------------------- */
 
 inline constexpr size_t kSnapshotBytes  = 15056;
@@ -169,7 +169,7 @@ enum TransportFlags : uint32_t {
    * lives in the app. Continuous is supposed to span the whole session.
    *
    * Acting on this needs the app→plugin control channel (frame types
-   * 0x0020–0x002F), which does not exist in protocol version 1. Until it does,
+   * 0x0020–0x002F), which does not exist in protocol version 2. Until it does,
    * a consumer can report that the integrated reading spans a discontinuity,
    * which is considerably better than quietly averaging two takes.
    */

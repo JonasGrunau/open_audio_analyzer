@@ -169,22 +169,42 @@ void OaaAudioProcessor::captureTransport(int numFrames) noexcept {
    * position at block start with their own rounding, and a strict comparison
    * would raise this flag on every callback of a perfectly normal playback.
    * A relocate worth noticing moves considerably further than that.
+   *
+   * **Only while the transport is rolling.** A stopped DAW still runs its graph
+   * — it is the state a session spends most of its time in — and it reports the
+   * position it is parked at, unchanged, every block. Against a prediction of
+   * "one block further on" that is a mismatch of exactly one block, which
+   * clears the half-block tolerance, so this raised a relocate on *every*
+   * callback for as long as the transport sat still: measured at 140 published
+   * frames out of 140. Nothing relocated, and nothing about the audio was
+   * discontinuous either — real time kept running and the plugin kept being
+   * handed whatever the host was monitoring.
+   *
+   * The prediction is also carried *across* a stop rather than being rebuilt
+   * from the parked position, because the case `docs/WIRE.md` names is somebody
+   * who "plays bars 1–16, stops, drags back to bar 1, plays again". Comparing
+   * the first rolling block against the last rolling one is what catches that;
+   * comparing it against wherever the playhead was left sitting would not.
    */
+  const bool rolling = (t.flags & wire::kPlaying) != 0;
+
   if (t.flags & wire::kHasTimeSeconds) {
-    const double blockSeconds = getSampleRate() > 0.0
-        ? numFrames / getSampleRate()
-        : 0.0;
+    if (rolling) {
+      const double blockSeconds = getSampleRate() > 0.0
+          ? numFrames / getSampleRate()
+          : 0.0;
 
-    if (havePreviousPosition_) {
-      const double expected = previousTimeSeconds_ + previousBlockSeconds_;
-      const double tolerance = juce::jmax(blockSeconds, previousBlockSeconds_) * 0.5;
-      if (std::abs(t.timeSeconds - expected) > tolerance)
-        t.flags |= wire::kDiscontinuity;
+      if (havePreviousPosition_) {
+        const double expected = previousTimeSeconds_ + previousBlockSeconds_;
+        const double tolerance = juce::jmax(blockSeconds, previousBlockSeconds_) * 0.5;
+        if (std::abs(t.timeSeconds - expected) > tolerance)
+          t.flags |= wire::kDiscontinuity;
+      }
+
+      previousTimeSeconds_  = t.timeSeconds;
+      previousBlockSeconds_ = blockSeconds;
+      havePreviousPosition_ = true;
     }
-
-    previousTimeSeconds_  = t.timeSeconds;
-    previousBlockSeconds_ = blockSeconds;
-    havePreviousPosition_ = true;
   } else {
     // A host that stops reporting a position has not moved the playhead — it
     // has stopped saying. Forgetting the last one keeps the next report from

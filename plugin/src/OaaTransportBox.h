@@ -29,6 +29,28 @@
  * afford to try again. When the reader loses the race it simply keeps the
  * previous transport for one frame — at fifty frames a second, over values
  * that move continuously, that is not observable.
+ *
+ * ---------------------------------------------------------------------------
+ * Why one flag is not carried in the payload at all
+ *
+ * "Not observable" is true of a *position*, and false of an *edge*.
+ *
+ * The writer publishes once per audio block. The reader reads once per
+ * published measurement, which is one push of the engine's block size — every
+ * second block at a 512-frame host buffer, one in sixteen at 64. So a value
+ * that is true for exactly one block is a value the reader will usually miss:
+ * `kDiscontinuity` marks the single block where the playhead jumped, and a
+ * measured run of three loop laps delivered it to the app zero times out of
+ * 186 published frames.
+ *
+ * Losing it is not cosmetic. It is the whole point of the flag — an integrated
+ * reading that silently spans two passes of the same music, which is what
+ * `docs/WIRE.md` says this bit exists to prevent.
+ *
+ * So edge flags do not ride in the seqlock payload. They accumulate in an
+ * atomic beside it and are handed to the reader whole, once, on the next
+ * successful read. Sampling rate stops mattering: the reader cannot miss an
+ * edge, only learn about it up to one frame late.
  */
 
 #pragma once
@@ -39,8 +61,29 @@
 
 namespace oaa {
 
+/*
+ * Both atomics here are read and written from `processBlock`, and the whole
+ * argument for a seqlock over `atomic<Transport>` is that a lock on the audio
+ * thread fails occasionally, under load, as a click. That argument is only
+ * sound if these are genuinely lock-free, which is an assumption worth being a
+ * build failure rather than a sentence in a comment.
+ */
+static_assert(std::atomic<uint32_t>::is_always_lock_free,
+              "This design puts two 32-bit atomics on the audio thread. If they "
+              "are not lock-free on this target, a seqlock is no safer here than "
+              "the mutex it exists to avoid.");
+
 class TransportBox {
 public:
+  /*
+   * Flags that describe a moment rather than a state, and so must not be
+   * sampled. Set for one block by the writer, delivered exactly once to the
+   * reader. Anything added here must be something a consumer counts or reacts
+   * to, not something it displays — a *state* belongs in the payload, where the
+   * most recent value is the right answer.
+   */
+  static constexpr uint32_t kStickyFlags = wire::kDiscontinuity;
+
   /*
    * Audio thread. Real-time safe: no allocation, no lock, no syscall, no
    * unbounded loop.
@@ -50,6 +93,13 @@ public:
    * transports"; the reader sees that and retries rather than believing it.
    */
   void publish(const wire::Transport& t) noexcept {
+    /* Before the payload, and by OR rather than by assignment: two relocates
+     * between two reads must both survive, and a `store` would drop the first.
+     * `fetch_or` on a 32-bit atomic is lock-free everywhere this builds, which
+     * is what makes it legal here at all. */
+    if (const uint32_t edges = t.flags & kStickyFlags)
+      sticky_.fetch_or(edges, std::memory_order_relaxed);
+
     const uint32_t start = sequence_.load(std::memory_order_relaxed);
     sequence_.store(start + 1, std::memory_order_relaxed);
 
@@ -75,7 +125,17 @@ public:
    * chase the last of them would mean a stall on this thread is unbounded in
    * exactly the situation where the audio thread is already struggling.
    */
-  bool read(wire::Transport& out) const noexcept {
+  bool read(wire::Transport& out) noexcept {
+    /* Taken before the payload, and the order is the point: it means the flag
+     * arrives beside a position at or after the jump — where the playhead
+     * landed — rather than the one it left. Read the payload first and an edge
+     * published in between would be delivered with the previous position, and a
+     * consumer reading the pair together would place the relocate a frame too
+     * early. Put back below if the payload read loses its race, because an edge
+     * dropped on the floor is the defect this whole mechanism exists to
+     * remove. */
+    const uint32_t edges = sticky_.exchange(0, std::memory_order_relaxed);
+
     for (int attempt = 0; attempt < 4; ++attempt) {
       const uint32_t before = sequence_.load(std::memory_order_relaxed);
       if ((before & 1u) != 0u)
@@ -87,9 +147,14 @@ public:
 
       if (sequence_.load(std::memory_order_relaxed) == before) {
         out = candidate;
+        out.flags |= edges;
         return true;
       }
     }
+
+    if (edges != 0)
+      sticky_.fetch_or(edges, std::memory_order_relaxed);
+
     return false;
   }
 
@@ -103,6 +168,11 @@ public:
 private:
   std::atomic<uint32_t> sequence_{0};
   wire::Transport value_{};
+
+  /* Edges seen since the last successful read. Not part of the seqlock: the
+   * whole reason it is out here is that the payload is sampled and this must
+   * not be. */
+  std::atomic<uint32_t> sticky_{0};
 };
 
 }  // namespace oaa

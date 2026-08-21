@@ -1,0 +1,192 @@
+# plugin/host/ — the fake DAW
+
+## What this is
+
+A plugin host. It plays an audio file through Open Audio Analyzer's VST3 or
+Audio Unit, hands it a transport once per block, and either shows you the
+controls or renders offline for a test.
+
+It exists because the plugin's playhead handling could not be exercised. Look at
+`OaaPluginProcessor::captureTransport`: fourteen separately-optional values, a
+presence bit each, a frame-rate table with an "unknown" code, and a
+discontinuity test with a half-block tolerance. All of it was written against
+`docs/WIRE.md` and the JUCE documentation, and none of it had ever run — the
+only host that could reach it was a real DAW, driven by a person, and a person
+does not remember to loop a bar to see whether a relocate is noticed.
+
+**Nothing here ships.** No installer contains it, no release attaches it, and it
+is not in the licence table users read.
+
+## Licensing
+
+AGPL-3.0-or-later, like everything in `plugin/`, and for the same reason: it
+links JUCE. It links no part of the plugin — it loads it through the format's
+own entry point, exactly as a DAW does.
+
+## Files
+
+| File | Purpose |
+|------|---------|
+| `CMakeLists.txt` | One `juce_add_gui_app`, VST3 hosting on every platform and AU on macOS. Why it is on by default is in the header. |
+| `src/FakeDawPlayHead.h` | The `AudioPlayHead` the plugin reads, and the two functions that turn seconds into bars. |
+| `src/FakeDawEngine.h/.cpp` | file → transport → plugin → monitor, and the two drivers that run it. |
+| `src/FakeDawOptions.h` | The command line. Every switch exists so something can be automated. |
+| `src/FakeDawComponent.h/.cpp` | The window. Draws no meters, and must not start. |
+| `src/FakeDawMain.cpp` | Both lifetimes: with a window, and headless. |
+
+## Building and running
+
+```sh
+cmake -B plugin/build -S plugin -DCMAKE_BUILD_TYPE=Release
+cmake --build plugin/build
+```
+
+The executable is `oaa-fake-daw`, under
+`plugin/build/host/OaaFakeDaw_artefacts/Release/` — inside an `.app` bundle on
+macOS. `-DOAA_BUILD_HOST=OFF` skips it.
+
+```sh
+open plugin/build/host/OaaFakeDaw_artefacts/Release/oaa-fake-daw.app
+```
+
+With no arguments it finds the VST3 in the build tree above itself, so the only
+thing left to do is open a track and press Play (or space). `--help` lists the
+rest.
+
+Three of the switches exist because a person cannot perform the gesture on cue:
+
+| | |
+|---|---|
+| `--no-playhead` | Report no transport at all. |
+| `--parked` | Headless: render with the transport stopped, which is the state a session spends most of its time in. |
+| `--relocate-at=<s>` | Headless: play, stop, park, jump to the start, play again — the gesture `docs/WIRE.md` names as the reason the discontinuity bit exists. |
+
+`dart run tool/fetch_test_audio.dart` downloads a Creative Commons track worth
+looking at. A tone tells you nothing about a spectrogram.
+
+## Rules
+
+- **Start the app first.** The plugin streams to `127.0.0.1:47822` and the app
+  listens there. Without it the plugin's status panel says "not connected",
+  which is correct and is not a bug in this host.
+
+- **There is no `--port`, and that is a decision.** A DAW passes a plugin its
+  settings through `setStateInformation`, and it looks like the obvious way to
+  aim the plugin at another listener. It does not work: JUCE's VST3 host wraps
+  plugin state in an XML envelope of its own — base64 inside
+  `<VST3PluginState><IComponent>` — so the plugin's raw `ValueTree` is
+  *silently discarded*, and the Audio Unit host wraps state differently again.
+  Writing those envelopes here would put a private copy of two of JUCE's
+  internal formats in a test tool, where the failure mode is a plugin connecting
+  to the wrong port without saying so. The plugin's own editor has host and port
+  fields, and this host puts that editor in a window.
+
+- **An Audio Unit cannot be loaded from the build tree.** macOS serves
+  components from a registry populated by scanning the plug-in folders, so
+  `AudioComponentFindNext` cannot see a bundle that is not in one — no matter
+  what path it is handed. It presents as "the file is right there and the host
+  says it does not exist". Install it once, then use **Find installed**:
+
+  ```sh
+  mkdir -p ~/Library/Audio/Plug-Ins/Components
+  ln -sfn "$PWD/plugin/build/OaaPlugin_artefacts/Release/AU/Open Audio Analyzer.component" \
+    ~/Library/Audio/Plug-Ins/Components/
+  ```
+
+  A symlink keeps pointing at whatever the last build produced. The VST3 needs
+  none of this. `plugin/CMakeLists.txt` deliberately refuses to install
+  anything itself — see `COPY_PLUGIN_AFTER_BUILD` there for why.
+
+- **The two drivers must stay one render function.** `renderBlock` is called by
+  the audio device and by a loop on a background thread. If they ever diverge,
+  the thing CI exercises and the thing you listen to are different code, and the
+  difference is where the bug will be.
+
+- **Nothing that the render path can see is mutated without detaching the
+  callback.** `AudioDeviceManager::removeAudioCallback` does not return while
+  the callback is running, so on the far side of it there is provably nobody in
+  `renderBlock` — which is why this host has no lock on the audio thread. A
+  mutex in the tool whose job is to tell you whether the plugin's audio thread
+  is well behaved would be a poor joke.
+
+- **The audio thread cannot stop the transport.**
+  `AudioTransportSource::stop` sleeps until the source acknowledges, and the
+  source is us: calling it from `renderBlock` parks the audio thread for a
+  second and then gives up without stopping anything. End of track is published
+  as a flag and the message thread acts on it.
+
+- **This window draws no meters and must not start.** It shows the peak of what
+  it sent, and only so that "the plugin is not receiving audio" can be told
+  apart from "the plugin is receiving audio and not reporting it" — the one
+  thing the application cannot tell you. Everything else is the app's job. A
+  second implementation of a measurement's presentation is the outcome the whole
+  socket architecture exists to avoid.
+
+## What it found
+
+Three things on its first run, all of which had been unobservable. Two were
+defects in code that had shipped, and both are fixed.
+
+- **A parked transport was reported as a relocate, continuously.** *Fixed.*
+  A stopped DAW still runs its graph and reports the position it sits at,
+  unchanged, on every block. `captureTransport` compared that against a
+  prediction of one block further on, which is a mismatch of exactly one block
+  and clears the half-block tolerance — so `kDiscontinuity` was raised on every
+  published frame for as long as the transport sat still: **140 frames out of
+  140**. Nothing had relocated, and the audio was not discontinuous either.
+  The continuity test is now only evaluated while the transport is rolling, and
+  the prediction is carried *across* a stop rather than rebuilt from the parked
+  position — which is what makes the case `docs/WIRE.md` names ("plays bars
+  1–16, stops, drags back to bar 1, plays again") detectable at all.
+
+- **A relocate usually never reached the app.** *Fixed.* The flag marks the one
+  block on which the playhead jumped, and the streaming thread reads the
+  transport once per published frame — every second block at a 512-frame buffer,
+  one in sixteen at 64. So it was set on one publish and read from another:
+  **three loop laps delivered it zero times out of 186 frames**. `TransportBox`
+  now accumulates edge flags in an atomic outside the seqlock and hands them
+  over once each, and `Streamer` clears them after a successful send. Measured
+  after: exactly one flagged frame per lap, at 64, 128 and 512 frames.
+
+  The consequence of missing it was the exact failure the flag exists to
+  prevent: an integrated reading that silently spans two passes of the same
+  music.
+
+- **The plugin's "host supplies no position" branch is unreachable through
+  VST3.** *Not a defect, and nothing to fix.* `--no-playhead` makes this host's
+  `getPosition()` return nothing, which is the case `captureTransport` answers
+  with an empty transport. VST3 has no way to express it: JUCE's host fills a
+  `ProcessContext` with a zeroed project time and no validity flags, and JUCE's
+  wrapper on the far side reports `timeInSamples` and `timeInSeconds`
+  unconditionally. The plugin therefore sees a host parked at zero rather than a
+  host that is not saying — which is the correct reading of what the format
+  delivered. The branch is reached by the Standalone build, which has no
+  playhead at all.
+
+All three are held by `packages/oaa_wire/test/plugin_e2e_test.dart`, which
+asserts one flagged frame per observed lap rather than a constant: the flag marks
+a relocate, so a flagged frame and a lap are the same event counted two ways.
+
+## The automated end to end
+
+`packages/oaa_wire/test/plugin_e2e_test.dart` spawns this host with
+`--headless`, listens on 47822, and decodes what arrives with the Dart half of
+the protocol. It is the only test that covers `prepareToPlay`, the FIFO, the
+playhead, the engine, the streaming thread and the socket at once —
+`plugin_golden_test.dart` covers the codec against bytes on disk and nothing
+else.
+
+It generates its own audio rather than using the download: a CI runner fetching
+32 MB of music from a public archive to prove that a socket carries frames is a
+gate that fails for reasons unrelated to this repository. `OAA_TEST_TRACK` runs
+the same cases against a real file.
+
+It needs port 47822, so **the application cannot be running while it does**. The
+test skips with that explanation rather than failing on a bind error.
+
+```sh
+dart test packages/oaa_wire          # skips the e2e cases without a build
+```
+
+`ci.yml`'s `plugin` job runs it, which means on a release or a manual dispatch —
+so **run it by hand after touching `plugin/` or this directory**.
