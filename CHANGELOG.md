@@ -9,6 +9,36 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### 🐛 Fixed
+- The macOS plugin bundles now carry a valid code signature. All three — the
+  VST3, the Audio Unit and the Standalone — shipped with an invalid one in every
+  release up to 0.4.0: the VST3's resource seal was computed before JUCE wrote
+  `moduleinfo.json` into the bundle, and the other two were never bundle-signed
+  at all. On Apple Silicon that is enough for a DAW to leave the plugin out of
+  its browser without logging anything, and for `auval` to refuse the Audio
+  Unit. Each bundle is now signed after everything that writes into it and
+  verified on the spot, so the build fails rather than producing a bundle it
+  cannot verify. `auval -v aufx OaaM OaaA` passes. **If the plugin never
+  appeared in your DAW, this is why** — and on macOS also strip
+  `com.apple.quarantine` from a copy you downloaded, which no build can do for
+  you.
+
+### ✨ Added
+- The documentation site's [Install](https://jonasgrunau.github.io/open_audio_analyzer/install.html)
+  page now has an **In a DAW** section: which folder the VST3 and the Audio Unit
+  have to be copied into on each platform, the `xattr` line that a downloaded
+  copy needs on macOS, and the Ableton Live preference that has to be on before
+  Live looks in the folder at all. The page had linked to that section since the
+  site was first published, and the section did not exist.
+
+### 🚧 Internal
+- `OAA_CODESIGN_IDENTITY` signs the macOS plugin bundles with a Developer ID
+  instead of ad-hoc. Releases stay ad-hoc.
+- Signing runs from a target that depends on the format target rather than from
+  `POST_BUILD`, which is not last: a `MACOSX_PACKAGE_LOCATION` resource is
+  copied by a sibling rule that make may run after the link, and on a
+  from-scratch build it does. Only visible with the bundle deleted first.
+
 ## [0.4.0] — 2026-08-21
 
 ### ✨ Added

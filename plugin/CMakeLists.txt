@@ -241,6 +241,96 @@ target_link_libraries(OaaPlugin PUBLIC
   $<$<CONFIG:Release>:juce::juce_recommended_lto_flags>)
 
 # ---------------------------------------------------------------------------
+# Signing the macOS bundles, after everything that writes into them
+#
+# Every macOS bundle this directory has ever produced shipped with an invalid
+# code signature, and neither the build nor CI said a word. `codesign --verify`
+# on the v0.2.0 release asset, and on a Release build made the day before this
+# was written:
+#
+#   Open Audio Analyzer.vst3: a sealed resource is missing or invalid
+#   file added: Contents/Resources/moduleinfo.json
+#
+#   Open Audio Analyzer.component: code has no resources but signature
+#   indicates they must be present
+#
+# Two different causes, one fix.
+#
+# **The VST3 is signed and then modified.** JUCE's post-build order is: link,
+# copy PkgInfo, run `checkBundleSigning.cmake` — which ad-hoc signs the bundle,
+# because the next step has to *load* it — and then run `vst3_helper` to write
+# `Contents/Resources/moduleinfo.json`. That file lands inside a bundle whose
+# resource seal was computed without it, so the seal cannot match what ships.
+# JUCE's step is not wrong; it just cannot be the last one, and nothing was
+# after it.
+#
+# **The AU and the Standalone are not bundle-signed at all.** `checkBundleSigning`
+# runs only for the VST3, since only the VST3 is loaded during the build. What
+# the other two carry is the ad-hoc signature the linker applies to the Mach-O
+# on arm64, whose CodeDirectory declares a resource seal that no `_CodeSignature`
+# directory exists to satisfy — hence the second message, from a `.component`
+# whose `Contents` holds nothing but `Info.plist`, `MacOS` and `PkgInfo`.
+#
+# On Apple Silicon none of this is cosmetic. An invalid signature is what
+# `auval` and Logic refuse an Audio Unit for, and a bundle extracted from a
+# downloaded archive also carries `com.apple.quarantine`, which is Gatekeeper's
+# cue to consult a signature that does not verify. It is one half of "the plugin
+# does not appear in my DAW"; the other half is which folder it was copied into,
+# and `README.md`'s **In a DAW** now says.
+#
+# `--verify --strict` on the line after the signing is the part that keeps this
+# fixed. Signing a bundle that a later step invalidates is precisely the failure
+# above, and it is invisible unless something asks — so the build asks on every
+# build, and fails rather than producing a bundle it cannot verify. That check
+# is the gate; there is no ctest for it, because a test can only run after a
+# build that has already succeeded at shipping the broken thing.
+#
+# **`POST_BUILD` is not last, and finding that out is why this is a target.**
+# The first version of this signed each bundle from `add_custom_command(TARGET
+# ... POST_BUILD)`, which is genuinely after everything JUCE does — and the
+# Standalone still failed its own verify, but only on a build where the bundle
+# did not already exist:
+#
+#   Open Audio Analyzer.app: a sealed resource is missing or invalid
+#   file added: Contents/Resources/RecentFilesMenuTemplate.nib
+#
+# A `MACOSX_PACKAGE_LOCATION` source is copied by its *own* Makefile rule, and
+# that rule is a sibling of the link rule under the target's `build`
+# dependency — not something the link rule contains. POST_BUILD hangs off the
+# link, so make is free to copy the nib afterwards, and on a from-scratch build
+# it does. The only ordering CMake guarantees across the whole of a target is a
+# target-level dependency, so signing is a target that depends on the format
+# rather than a command bolted to its link. It cost one deleted build directory
+# to see, which is the argument for deleting one.
+#
+# The consequence to know: `cmake --build . --target OaaPlugin_VST3` builds the
+# bundle without signing it, because the signing target is a separate one. The
+# documented build — `cmake --build <dir>`, which is also what CI runs — builds
+# `all` and therefore signs.
+#
+# Ad-hoc is the default because it is what an unnotarised free plugin can
+# honestly claim. `-DOAA_CODESIGN_IDENTITY=<identity>` signs with a Developer ID
+# instead; the release does not, and `README.md` says so rather than letting
+# somebody discover it from Gatekeeper.
+if(APPLE)
+  set(OAA_CODESIGN_IDENTITY "-" CACHE STRING
+    "codesign identity for the macOS bundles. \"-\" is ad-hoc.")
+
+  foreach(oaa_format IN LISTS OAA_FORMATS)
+    if(TARGET OaaPlugin_${oaa_format})
+      add_custom_target(OaaPlugin_${oaa_format}_signed ALL
+        COMMAND codesign --force --sign "${OAA_CODESIGN_IDENTITY}"
+                "$<TARGET_BUNDLE_DIR:OaaPlugin_${oaa_format}>"
+        COMMAND codesign --verify --strict
+                "$<TARGET_BUNDLE_DIR:OaaPlugin_${oaa_format}>"
+        VERBATIM
+        COMMENT "Signing and verifying the ${oaa_format} bundle")
+      add_dependencies(OaaPlugin_${oaa_format}_signed OaaPlugin_${oaa_format})
+    endif()
+  endforeach()
+endif()
+
+# ---------------------------------------------------------------------------
 # The fake DAW
 #
 # A host that plays a file through this plugin and gives it a transport, so that

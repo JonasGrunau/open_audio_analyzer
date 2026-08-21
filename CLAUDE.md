@@ -311,6 +311,30 @@ is unaffected: it never links JUCE — it talks to the plugin over a socket.
   `OaaFilesDir.kt` is what answers. It resolved to null there for eight phases
   and the tablet forgot everything at every launch, green suite throughout.
 
+- **A macOS plugin bundle is signed last, and the build verifies it on the spot.**
+  Every bundle this repository produced up to 0.4.0 shipped with an invalid code
+  signature and nothing said so. JUCE signs the VST3 in the middle of its
+  post-build — it has to, because `vst3_helper` then *loads* the bundle — and
+  writes `Contents/Resources/moduleinfo.json` afterwards, so the resource seal
+  never covered what shipped; and it signs the VST3 only, leaving the AU and the
+  Standalone carrying nothing but the linker's Mach-O signature, whose
+  CodeDirectory promises a resource seal no `_CodeSignature` directory exists to
+  satisfy. On Apple Silicon that is what `auval` refuses an Audio Unit for and
+  what makes a plugin absent from a DAW's browser with nothing logged anywhere —
+  indistinguishable from having copied it to the wrong folder, which is how it
+  stood for four releases. `plugin/CMakeLists.txt` signs each bundle from an
+  `OaaPlugin_<format>_signed` target that depends on the format target, then runs
+  `codesign --verify --strict`. That verify is the gate and a `ctest` cannot be:
+  a test only runs after a build that has already succeeded at producing the
+  broken bundle. **`POST_BUILD` is not late enough** — it hangs off the link
+  rule, and a `MACOSX_PACKAGE_LOCATION` resource (the Standalone's
+  `RecentFilesMenuTemplate.nib`) is copied by a sibling rule that make may run
+  afterwards; a target-level dependency is the only ordering CMake guarantees
+  across the whole of a target. **Delete `OaaPlugin_artefacts/Release/` and
+  rebuild before believing a signing change**: an incremental build hides this
+  entire class of failure, because the file that invalidates the seal is already
+  present when the seal is computed.
+
 - **Bump `OAA_ABI_VERSION` when `oaa.h` changes shape,** and regenerate the
   bindings (`cd packages/oaa_engine && dart run ffigen --config ffigen.yaml`).
   The Dart side asserts the version at startup, because a stale library does not
@@ -452,8 +476,9 @@ cmake -B plugin/build-nojuce -S plugin -DOAA_BUILD_PLUGIN=OFF && \
 cmake -B plugin/build -S plugin -DCMAKE_BUILD_TYPE=Release && \
   cmake --build plugin/build && \
   ctest --test-dir plugin/build       # the VST3, the AU and the fake DAW compile,
-                                      # and the plugin answers a host that says
-                                      # nothing
+                                      # each macOS bundle verifies against its
+                                      # own signature, and the plugin answers a
+                                      # host that says nothing
 dart test packages/oaa_wire           # again, now that a built fake DAW makes
                                       # the end-to-end cases run instead of skip
 flutter test test/plugin_to_display_e2e_test.dart

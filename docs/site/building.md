@@ -87,8 +87,15 @@ cmake --build plugin/build
 Products land in `plugin/build/OaaPlugin_artefacts/Release/`. Nothing is copied
 into a system plugin folder unless you copy it — a build that installed itself
 would mean the DAW you have open is now running a binary you did not knowingly
-install. JUCE is fetched and pinned, not vendored, so a fresh clone builds
+install. [Install](install.html#in-a-daw) says which folder that is on each
+platform. JUCE is fetched and pinned, not vendored, so a fresh clone builds
 without checking out a framework by hand.
+
+On macOS each bundle is signed once it is fully built, then verified with
+`codesign --verify --strict`, which fails the build rather than producing a
+bundle a DAW would refuse. Signing is ad-hoc; `-DOAA_CODESIGN_IDENTITY=<id>`
+uses a Developer ID instead. A bundle you built yourself carries no quarantine
+flag, so nothing has to be stripped from it.
 
 `plugin/` is the one **AGPL-3.0-or-later** directory, because JUCE 7 and 8 are
 AGPL-or-commercial. Nothing there may move into `engine/` or `oaa_core/`, which

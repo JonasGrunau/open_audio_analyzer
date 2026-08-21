@@ -213,6 +213,42 @@ on the audio thread.
 JUCE is fetched, not vendored. A checkout at `third_party/JUCE` is used if
 present; otherwise CMake clones the pinned tag. Either way it is gitignored.
 
+**Anything that writes into a macOS bundle must run before the signing step, and
+the signing step is last on purpose.** Every bundle this directory produced up
+to 0.4.0 shipped with an invalid code signature and nothing said so. Two causes:
+JUCE ad-hoc signs the VST3 mid-post-build — it has to, because `vst3_helper`
+then *loads* the bundle — and writes `Contents/Resources/moduleinfo.json`
+afterwards, so the resource seal never covered what shipped; and
+`checkBundleSigning.cmake` runs for the VST3 only, so the AU and the Standalone
+carried nothing but the linker's Mach-O signature, whose CodeDirectory promises a
+resource seal that no `_CodeSignature` directory exists to satisfy. On Apple
+Silicon that is what `auval` rejects an Audio Unit for and what makes a plugin
+absent from a DAW's browser with nothing logged. `plugin/CMakeLists.txt` now
+signs each bundle from an `OaaPlugin_<format>_signed` target that *depends* on
+the format target, and runs `codesign --verify --strict` on the line after —
+**that verify is the gate, not a ctest**, because a test can only run after a
+build that has already succeeded at producing the broken bundle.
+
+**A target, not `POST_BUILD`.** The first attempt used `POST_BUILD`, which is
+after everything JUCE does, and the Standalone still failed — but only once the
+bundle was deleted first, because a `MACOSX_PACKAGE_LOCATION` source
+(`RecentFilesMenuTemplate.nib`) is copied by its own rule, a *sibling* of the
+link rule rather than something the link rule contains, so make is free to run
+it after the link's POST_BUILD and on a from-scratch build it does. A
+target-level dependency is the only ordering CMake guarantees across the whole
+of a target. **Delete `OaaPlugin_artefacts/Release/` and rebuild before
+believing a signing change** — an incremental build hides this entire class of
+failure, because the file that invalidates the seal is already there when the
+seal is computed.
+
+One consequence: `cmake --build . --target OaaPlugin_VST3` produces an unsigned
+bundle, since the signing target is a different one. `cmake --build <dir>` —
+the documented command, and what CI runs — builds `all` and signs.
+
+Signing is ad-hoc (`OAA_CODESIGN_IDENTITY`, default `-`). A copy extracted from a
+downloaded archive additionally carries `com.apple.quarantine`, which no build
+can remove; `README.md`'s **In a DAW** tells a user to strip it.
+
 The Dart half of the protocol test is
 `packages/oaa_wire/test/plugin_golden_test.dart`, and the app-side ingest is
 covered by `test/plugin_link_test.dart`. Both read the same golden this

@@ -1,7 +1,7 @@
 # Install
 
-Every release publishes four installers and a command-line binary. Pick the one
-for your machine; there is nothing else to set up.
+Every release publishes four installers, a command-line binary and the DAW
+plugin. Pick the one for your machine; there is nothing else to set up.
 
 | Platform | Download | Notes |
 | --- | --- | --- |
@@ -10,6 +10,7 @@ for your machine; there is nothing else to set up.
 | Linux | `Open.Audio.Analyzer-<version>-<arch>.AppImage` | One file, no root. |
 | Linux | `Open.Audio.Analyzer-<version>-<arch>.flatpak` | Sandboxed, updates in place. |
 | Any | `oaa-cli-<platform>.tar.gz` / `.zip` | The command-line analyser. No Flutter runtime. |
+| Any | `oaa-plugin-<platform>.tar.gz` / `.zip` | The VST3 and Audio Unit. Not an installer — see [In a DAW](#in-a-daw). |
 
 Releases are on the
 [releases page](https://github.com/JonasGrunau/open_audio_analyzer/releases).
@@ -120,6 +121,57 @@ each](https://github.com/JonasGrunau/open_audio_analyzer/blob/main/packaging/lin
 
 For system audio on either, PipeWire's own loopback or `pactl load-module
 module-null-sink` gives you a monitor source Open Audio Analyzer can open.
+
+## In a DAW
+
+The plugin is a **VST3** and an **Audio Unit** that draw nothing. They measure
+the buffer your DAW gives them and stream it to the desktop application, which
+displays it — so the app has to be running, and the plugin finds it by itself on
+`127.0.0.1:47822` whichever of the two you start first.
+
+`oaa-plugin-<platform>` is an archive, not an installer. Copy the *bundle* — the
+`.vst3` or `.component` itself, not the directory holding it — into the folder
+your DAW scans. On a machine that has never had a plugin installed, that folder
+does not exist yet:
+
+| Platform | VST3 | Audio Unit |
+| --- | --- | --- |
+| macOS | `~/Library/Audio/Plug-Ins/VST3` | `~/Library/Audio/Plug-Ins/Components` |
+| Windows | `%CommonProgramFiles%\VST3` | — |
+| Linux | `~/.vst3` | — |
+
+```sh
+# macOS
+mkdir -p ~/Library/Audio/Plug-Ins/VST3 ~/Library/Audio/Plug-Ins/Components
+cp -R "VST3/Open Audio Analyzer.vst3"    ~/Library/Audio/Plug-Ins/VST3/
+cp -R "AU/Open Audio Analyzer.component" ~/Library/Audio/Plug-Ins/Components/
+xattr -dr com.apple.quarantine \
+  ~/Library/Audio/Plug-Ins/VST3/"Open Audio Analyzer.vst3" \
+  ~/Library/Audio/Plug-Ins/Components/"Open Audio Analyzer.component"
+```
+
+**The `xattr` line is not optional on macOS.** Your browser marks every file it
+downloads, the mark survives being unpacked, and Gatekeeper then refuses to load
+the bundle — silently. The plugin is simply absent from the DAW's browser, with
+nothing logged and no message anywhere, which is indistinguishable from having
+copied it to the wrong place. The bundles are signed, but ad-hoc rather than
+notarised: enough for macOS to load them, not enough to clear the flag for you.
+A plugin you built yourself has no flag to remove.
+
+**Ableton Live also has to be told to look there** — Preferences → Plug-Ins →
+*Use VST3 Plug-In System Folders*. It then appears under **Open Audio
+Analyzer**. Live rescans on launch; a plugin copied in while it is open needs a
+restart.
+
+Insert it on a track, a bus or the master. Its own window is a status panel —
+connected or not, sample rate, channel count, and whether the host is giving it
+a playhead — and nothing else; the meters are in the app. Several inserts can be
+connected at once and the most recently added is the one on screen, because
+adding it is the act of choosing it.
+
+The host's transport comes across with the audio, so the app's status bar reads
+back the DAW's position, tempo and time signature, and relays them to an
+attached tablet.
 
 ## The command-line analyser
 

@@ -645,8 +645,9 @@ cmake -B plugin/build-nojuce -S plugin -DOAA_BUILD_PLUGIN=OFF && \
 cmake -B plugin/build -S plugin -DCMAKE_BUILD_TYPE=Release && \
   cmake --build plugin/build && \
   ctest --test-dir plugin/build       # the VST3, the AU and the fake DAW compile,
-                                      # and the plugin answers a host that says
-                                      # nothing
+                                      # each macOS bundle verifies against its
+                                      # own signature, and the plugin answers a
+                                      # host that says nothing
 dart test packages/oaa_wire           # again: with a built fake DAW the
                                       # end-to-end cases run instead of skipping
 flutter test test/plugin_to_display_e2e_test.dart
@@ -760,6 +761,43 @@ into a system plugin folder unless you copy it — a build that installed itself
 would mean the DAW you have open is now running a binary you did not knowingly
 install. JUCE is fetched and pinned, not vendored, so a fresh clone builds
 without checking out a framework by hand.
+
+**Installing it.** Copy the *bundle*, not the directory holding it, into the
+folder your DAW scans. On a machine that has never had a plugin installed, that
+folder does not exist yet:
+
+```sh
+# macOS
+mkdir -p ~/Library/Audio/Plug-Ins/VST3 ~/Library/Audio/Plug-Ins/Components
+cp -R "plugin/build/OaaPlugin_artefacts/Release/VST3/Open Audio Analyzer.vst3" \
+      ~/Library/Audio/Plug-Ins/VST3/
+cp -R "plugin/build/OaaPlugin_artefacts/Release/AU/Open Audio Analyzer.component" \
+      ~/Library/Audio/Plug-Ins/Components/
+
+# Linux
+mkdir -p ~/.vst3
+cp -R plugin/build/OaaPlugin_artefacts/Release/VST3/*.vst3 ~/.vst3/
+```
+
+On Windows the folder is `%CommonProgramFiles%\VST3`. **Ableton Live also has to
+be told to look there** — Preferences → Plug-Ins → *Use VST3 Plug-In System
+Folders*.
+
+**If you unpacked a release archive on macOS, strip the quarantine flag.**
+A browser marks every file it downloads, the mark survives extraction, and
+Gatekeeper then refuses the load — silently, so the plugin is simply absent from
+the DAW's browser with nothing logged anywhere:
+
+```sh
+xattr -dr com.apple.quarantine ~/Library/Audio/Plug-Ins/VST3/"Open Audio Analyzer.vst3"
+```
+
+The macOS bundles are **ad-hoc signed, not notarised**. The build signs each one
+*after* every step that writes into it and then verifies the result, so
+`codesign --verify --strict` and `auval` are both clean — but ad-hoc is not a
+Developer ID, and only the flag above gets a downloaded copy past Gatekeeper.
+Build it yourself and there is no flag to remove. `-DOAA_CODESIGN_IDENTITY=<id>`
+signs with a real identity instead.
 
 The plugin connects to the app on `127.0.0.1:47822` and keeps retrying, so it
 does not matter which of the two you start first. Its window is a status panel —
