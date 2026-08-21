@@ -177,7 +177,7 @@ playhead, the engine, the streaming thread and the socket at once —
 else.
 
 It generates its own audio rather than using the download: a CI runner fetching
-32 MB of music from a public archive to prove that a socket carries frames is a
+35 MB of music from somebody else's CDN to prove that a socket carries frames is a
 gate that fails for reasons unrelated to this repository. `OAA_TEST_TRACK` runs
 the same cases against a real file.
 

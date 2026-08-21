@@ -22,8 +22,8 @@
 ///   cmake -B plugin/build -S plugin -DCMAKE_BUILD_TYPE=Release
 ///   cmake --build plugin/build
 ///
-/// The audio it plays is generated, not downloaded. A CI runner fetching 32 MB
-/// of music from a public archive to prove that a socket carries frames is a
+/// The audio it plays is generated, not downloaded. A CI runner fetching 35 MB
+/// of music from somebody else's CDN to prove that a socket carries frames is a
 /// gate that fails for reasons unrelated to this repository, and the assertions
 /// here are ranges rather than values, so real music buys nothing. Point
 /// `OAA_TEST_TRACK` at a file to run the same cases against one — which is what
@@ -565,7 +565,8 @@ File? _generatedTrack;
 ///
 /// Generated rather than committed and rather than downloaded. Committed audio
 /// is megabytes in every clone forever; downloaded audio makes a gate depend on
-/// a public archive that answers 503 under load. And a generated signal is
+/// a third-party CDN, which the first host this project used stopped being for
+/// hours at a time. And a generated signal is
 /// deterministic, which a test would want even if the other two were free.
 ///
 /// It is deliberately not a single sine. A pure tone gives a correlation of

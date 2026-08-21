@@ -116,7 +116,8 @@ class Track {
 
 const String _artist = 'Citizens Of The Empire';
 const String _album = 'Citizens of the Empire';
-const String _licence = 'CC BY 3.0 — https://creativecommons.org/licenses/by/3.0';
+const String _licence =
+    'CC BY 3.0 — https://creativecommons.org/licenses/by/3.0';
 const String _credit = 'https://citizensoftheempire.bandcamp.com/';
 
 const String _commons = 'https://upload.wikimedia.org/wikipedia/commons/';
@@ -195,9 +196,12 @@ Future<void> main(List<String> arguments) async {
 
   final client = HttpClient()
     ..connectionTimeout = const Duration(seconds: 30)
-    // Named so that the archive's logs say who this is. A tool that fetches
-    // 33 MB anonymously is indistinguishable from a scraper.
-    ..userAgent = 'open-audio-analyzer/fetch-test-audio';
+    // Wikimedia's user-agent policy asks for something that identifies the tool
+    // and can be traced back to a project. An anonymous fetcher of 35 MB is
+    // indistinguishable from a scraper and is treated as one.
+    ..userAgent =
+        'open-audio-analyzer/fetch-test-audio '
+        '(+https://github.com/JonasGrunau/open_audio_analyzer)';
 
   var failures = 0;
   try {
@@ -231,9 +235,9 @@ Future<void> main(List<String> arguments) async {
   if (failures > 0) {
     stderr.writeln(
       '\nfetch_test_audio: $failures of ${wanted.length} download(s) failed. '
-      'The archive answers 503 when the node it redirects to is busy; running '
-      'this again usually lands on a different one, and a partial file is '
-      'resumed rather than restarted.',
+      'A partial file is resumed rather than restarted, so running this again '
+      'continues where it stopped. Wikimedia answers 429 to a burst of '
+      'requests; the backoff handles that, and a minute handles the rest.',
     );
     exitCode = 1;
     return;
@@ -281,9 +285,9 @@ Future<bool> _download(HttpClient client, Track track, File file) async {
 
   for (var attempt = 1; attempt <= attempts; attempt++) {
     if (attempt > 1) {
-      // The archive answers 503 when the node it redirected to is loaded, and
-      // retrying straight away asks the same node again. Backing off gives it
-      // time and makes a second, different redirect likely.
+      // Wikimedia answers 429 to a burst of requests, and a loaded host answers
+      // 503. Either way, asking again immediately asks the same question of the
+      // same host.
       final pause = Duration(seconds: 1 << attempt);
       stdout.writeln('      waiting ${pause.inSeconds}s, then retrying');
       await Future<void>.delayed(pause);
@@ -306,9 +310,7 @@ Future<bool> _download(HttpClient client, Track track, File file) async {
     );
 
     try {
-      final request = await client.getUrl(
-        Uri.parse(_base + _encode(track.remoteName)),
-      );
+      final request = await client.getUrl(Uri.parse(track.url));
       if (have > 0) {
         request.headers.set(HttpHeaders.rangeHeader, 'bytes=$have-');
       }
@@ -362,11 +364,6 @@ Future<bool> _download(HttpClient client, Track track, File file) async {
   return false;
 }
 
-/// Percent-encodes a path segment. `Uri.encodeComponent` would also escape the
-/// slashes, which there are none of, but being explicit about what is being
-/// encoded is worth the sentence.
-String _encode(String segment) => Uri.encodeComponent(segment);
-
 String _mb(int bytes) => '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
 
 /// Writes the attribution beside the audio.
@@ -389,11 +386,17 @@ Future<void> _writeAttribution(Directory out, List<Track> tracks) async {
       '| `${track.localName}` | ${track.title} | $_artist | $_album |',
     '',
     '- Licence: $_licence',
-    '- Source: $_source',
+    '- Artist: $_artist — $_credit',
+    '',
+    'Where the licence is stated, per file:',
+    '',
+    for (final track in tracks) '- <${track.pageUrl}>',
     '',
     'CC BY requires credit if you publish anything that includes this audio —',
     'a demo recording, a screencast, a bug report with sound. Credit',
-    '"$_artist — ${_tracks.first.title} (CC BY 3.0)" and link the source.',
+    '"$_artist, $_album (CC BY 3.0)" and link the file page above. There is no',
+    'non-commercial and no share-alike clause, so whatever you make with it is',
+    'yours to license as you like.',
     '',
   ];
 
@@ -405,15 +408,17 @@ Future<void> _writeAttribution(Directory out, List<Track> tracks) async {
 void _printManifest() {
   stdout.writeln('$_artist — $_album');
   stdout.writeln('  $_licence');
-  stdout.writeln('  $_source');
+  stdout.writeln('  $_credit');
   stdout.writeln('');
   for (final track in _tracks) {
     stdout.writeln(
-      '  ${track.localName.padRight(16)} '
+      '  ${track.localName.padRight(26)} '
       '${_mb(track.bytes).padLeft(9)}  ${track.seconds.round()} s  '
       '${track.extra ? "--all only" : "default"}',
     );
+    stdout.writeln('    ${track.title}');
     stdout.writeln('    sha1 ${track.sha1}');
+    stdout.writeln('    ${track.url}');
   }
 }
 

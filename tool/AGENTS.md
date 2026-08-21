@@ -11,14 +11,24 @@ Repository scripts. Nothing here ships. GPL-3.0-or-later.
 ## Rules
 
 - **`fetch_test_audio.dart` downloads what a *person* looks at, and no test
-  depends on it.** Nothing in `ci.yml` runs it: a gate that fetches 32 MB of
-  music from a public archive to prove a socket carries frames is a gate that
-  fails for reasons unrelated to this repository — and does, regularly, because
-  the archive answers 503 under load. The end-to-end test in
+  depends on it.** Nothing in `ci.yml` runs it: a gate that fetches 35 MB of
+  music from somebody else's CDN to prove a socket carries frames is a gate that
+  fails for reasons unrelated to this repository. That is not hypothetical — the
+  first host this script used, archive.org, stopped serving the item for hours
+  at a stretch while the rest of the site stayed up, which is why the manifest
+  now points at `upload.wikimedia.org`. The end-to-end test in
   `packages/oaa_wire/` generates its own signal for that reason and takes
   `OAA_TEST_TRACK` when somebody wants the real thing. What the download is for
   is the judgement a tone cannot support: a spectrogram fed a sine is one bright
   line, and a stereo cloud fed one is a dot.
+
+- **The track was chosen by measuring candidates, not by reading titles.** Four
+  permissive ones were fetched and run through `oaa`; the manifest's default won
+  on numbers — a loud master at −8.6 LUFS, a real 10.3 LU range, a true peak
+  *above* its sample peak, and a correlation that moves between −0.11 and 1.00.
+  The rejected ones failed on exactly the properties a tone also lacks: one had
+  a correlation pinned at 1.00, so the stereo cloud drew a line. The header of
+  the script records the figures.
 
 - **It sets `exitCode` rather than returning one.** `Future<int> main()`
   compiles and the value is discarded, so the script exited 0 after a failed

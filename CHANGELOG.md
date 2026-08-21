@@ -163,9 +163,12 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `tool/fetch_test_audio.dart` downloads the Creative Commons music the
   application is looked at with — a tone produces a spectrogram that is one
   bright line and a stereo cloud that is a dot, both correct and neither
-  informative. It resumes a partial download, verifies the length, writes the
-  attribution the licence asks for beside the audio, and is run by hand. No test
-  depends on it.
+  informative. Two CC BY 3.0 post-rock tracks from Wikimedia Commons, chosen by
+  measuring four candidates with `oaa` rather than by reading titles: the
+  default is a loud master with a real 10.3 LU range, a true peak above its
+  sample peak, and a stereo field that moves. It resumes a partial download,
+  verifies the length and signature, writes the attribution the licence asks for
+  beside the audio, and is run by hand. No test depends on it.
 - One workflow instead of three. `ci.yml` runs the tests, the documentation
   site, the installers and the release as jobs gated by event, so a push
   produces one run rather than two and a tag no longer produces a third that
