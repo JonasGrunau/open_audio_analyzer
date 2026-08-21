@@ -16,6 +16,7 @@ published wire format is that things nobody asked for can talk to it.
 | `src/snapshot_codec.dart` | `0x0003 SNAPSHOT`. Every offset in the frozen table, as named constants. |
 | `src/wire_snapshot.dart` | `WireSnapshot` — a decoded frame presented as a `MeterSource`, so the thirteen modules cannot tell it from an engine. |
 | `src/daw_transport.dart` | `0x0010 DAW_TRANSPORT`, and the presence bits. |
+| `src/lufs_mode.dart` | `0x0020 SET_LUFS_MODE` — the one frame that travels consumer → producer, and the only one this package *encodes for sending to a producer*. Ingest port only; the reasoning is in `docs/WIRE.md` and it is the security model, not a detail. |
 | `test/plugin_golden_test.dart` | This codec against bytes the C++ actually wrote. |
 | `test/plugin_e2e_test.dart` | This codec against a *running* plugin: it spawns `plugin/host/`'s fake DAW headless and decodes what comes off the socket. Skips without a built plugin, which is every run outside `ci.yml`'s `plugin` job. |
 

@@ -236,7 +236,7 @@ class OaaEngine implements MeterSource {
           .asTypedList(kOaaHistogramBins);
 
   /// The ABI this Dart code was written against. Mirrors `OAA_ABI_VERSION`.
-  static const int expectedAbiVersion = 4;
+  static const int expectedAbiVersion = 5;
 
   final Pointer<native.oaa_engine> _handle;
 
@@ -492,6 +492,21 @@ class OaaEngine implements MeterSource {
   void reset() {
     if (_disposed) return;
     native.oaa_engine_reset(_handle);
+  }
+
+  /// Reset automatically when the signal returns after a silence.
+  ///
+  /// This is what [LufsTimeMode.system] is made of, and the engine is where it
+  /// lives so that a plugin in a DAW and a sound card get one implementation of
+  /// "when did this track begin" rather than two. The other three modes need a
+  /// playhead and are decided above the engine — see `docs/WIRE.md` `0x0020`.
+  ///
+  /// Off unless somebody asks. File analysis in particular must never have it
+  /// on: a reset partway through would report a different programme than the
+  /// one that was measured.
+  set silenceReset(bool enabled) {
+    if (_disposed) return;
+    native.oaa_engine_set_silence_reset(_handle, enabled ? 1 : 0);
   }
 
   // --- Readings ------------------------------------------------------------

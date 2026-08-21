@@ -17,7 +17,28 @@ abstract final class WireFrame {
   /// better than drawing a shifted spectrum.
   static const int magic = 0x5741414F;
 
-  static const int protocolVersion = 2;
+  /// The version this build speaks, and the one it stamps on what it sends.
+  ///
+  /// Version 3 adds `0x0020 SET_LUFS_MODE` and changes no existing table, which
+  /// is what makes [isKnownVersion] able to accept a version-2 peer instead of
+  /// refusing it.
+  static const int protocolVersion = 3;
+
+  /// The oldest version whose tables this build can still decode.
+  ///
+  /// Version 1 is excluded on purpose rather than forgotten: its magic is a
+  /// different four bytes, so a version-1 stream fails on byte zero and never
+  /// reaches a version check.
+  static const int minimumVersion = 2;
+
+  /// Whether a frame stamped [version] can be decoded by this build.
+  ///
+  /// Greater than ours is refused — a later version may have moved a table we
+  /// would then misread, and misreading a measurement table is how a meter
+  /// shows a confident wrong number. Lower is accepted, because every table a
+  /// lower version defines is one this version froze unchanged.
+  static bool isKnownVersion(int version) =>
+      version >= minimumVersion && version <= protocolVersion;
 
   static const int headerBytes = 12;
 
@@ -83,10 +104,16 @@ abstract final class WireFrameType {
   /// `0x0010`–`0x001F` — DAW transport, sent by the plugin producer.
   static const int dawTransport = 0x0010;
 
-  /// `0x0020`–`0x002F` — reserved for a client→host control channel that does
-  /// not exist in version 2, and should not be added without an authentication
-  /// story. See the note in `docs/WIRE.md`.
-  static const int reservedControlLow = 0x0020;
+  /// `0x0020` — what a LUFS integration counts from. Consumer → producer, and
+  /// **on the ingest port only**: it is loopback, where the things that can
+  /// connect are already running as this user. The display port is on the LAN
+  /// and stays read-only until somebody designs authentication for it, so this
+  /// frame must never be sent or accepted there. See `docs/WIRE.md`.
+  static const int setLufsMode = 0x0020;
+
+  /// `0x0021`–`0x002F` — the rest of the control range, still undefined and
+  /// still bound by the same argument.
+  static const int reservedControlLow = 0x0021;
   static const int reservedControlHigh = 0x002F;
 }
 
@@ -124,10 +151,20 @@ class FrameReader {
   int _filled = 0;
 
   int _type = 0;
+  int _version = 0;
   ByteData? _payload;
 
   /// The type of the frame [moveNext] last produced.
   int get type => _type;
+
+  /// The protocol version stamped on the frame [moveNext] last produced.
+  ///
+  /// Worth exposing rather than checking and discarding, because it is what
+  /// decides whether a control frame may be sent *back*: a version-2 producer
+  /// does not read its socket at all, so `0x0020` sent to one is not refused —
+  /// it is ignored, and the consumer would go on believing a mode was in force
+  /// that the producer had never heard of. Zero before the first frame.
+  int get version => _version;
 
   /// The payload of the frame [moveNext] last produced. Valid until the next
   /// call to [moveNext].
@@ -186,12 +223,13 @@ class FrameReader {
     }
 
     final version = _view.getUint16(4, Endian.little);
-    if (version != WireFrame.protocolVersion) {
+    if (!WireFrame.isKnownVersion(version)) {
       throw WireFormatException(
         'wire protocol version $version, this build speaks '
-        '${WireFrame.protocolVersion}',
+        '${WireFrame.minimumVersion}-${WireFrame.protocolVersion}',
       );
     }
+    _version = version;
 
     final length = _view.getUint32(8, Endian.little);
     if (length > WireFrame.maxPayloadBytes) {

@@ -1,14 +1,22 @@
 # The Open Audio Analyzer wire protocol
 
-**Protocol version 2.** This document is normative. Where an implementation and
+**Protocol version 3.** This document is normative. Where an implementation and
 this file disagree, this file is right and the implementation has a bug.
 
-Version 2 differs from version 1 in one field: the magic, which spells the
-application's name and moved when the name did. Every other table below is the
+Version 2 differed from version 1 in one field: the magic, which spells the
+application's name and moved when the name did. Every other table was the
 version-1 table unchanged, byte for byte. The version still had to move — a
 frozen table is frozen including its magic, and a display that read version 1
 must refuse this stream rather than hunt for a frame boundary that will never
 match.
+
+**Version 3 adds the first frame that travels from consumer to producer**:
+`0x0020 SET_LUFS_MODE`, which is what makes the Elapsed and Timecode loudness
+modes possible. Every version-2 table below is unchanged, byte for byte — v3
+adds a frame type and changes no existing one — so a version-2 frame is a valid
+version-3 frame and the compatibility rule below is what lets the two meet.
+It is permitted **on the ingest port only**, for the reasons in
+[trust boundary](#they-do-not-have-the-same-trust-boundary).
 
 There are three implementations of it and they were written by different people
 against this page, not against each other:
@@ -25,15 +33,20 @@ A Open Audio Analyzer host publishes what it is measuring so that another screen
 can draw it. That is the entire feature. The protocol carries **measurements and
 the layout to draw them in** — never audio, never control.
 
-It is deliberately one-directional. A remote display in version 2 cannot reset
-the host's integrated loudness, cannot change its device and cannot load a
-preset on it. That is not an omission to be filled in later without thought: a
-read-only stream has no attack surface beyond the measurements it already
-publishes, and adding a control channel is the change that turns "a screen in
-the live room shows the mix engineer's meters" into "anyone on the venue Wi-Fi
-can reset the mix engineer's measurement". Frame types `0x0020`–`0x002F` are
-reserved for that conversation if it is ever worth having, and it needs an
-authentication story before it is.
+**The display port is deliberately one-directional.** A remote display cannot
+reset the host's integrated loudness, cannot change its device and cannot load a
+preset on it, in version 3 exactly as in version 2. That is not an omission to
+be filled in later without thought: a read-only stream has no attack surface
+beyond the measurements it already publishes, and adding a control channel there
+is the change that turns "a screen in the live room shows the mix engineer's
+meters" into "anyone on the venue Wi-Fi can reset the mix engineer's
+measurement". It needs an authentication story before it happens, and it does
+not have one.
+
+The **ingest** port is the other case, and version 3 is where the distinction
+starts to pay. It is loopback, the peer is a plugin running as this user, and
+`0x0020` travels app → plugin over it. The frame range `0x0020`–`0x002F` remains
+closed to the display port at every version.
 
 **There is no authentication and no encryption.** Anyone who can reach the port
 can read the measurements and the layout. That is an acceptable trade for a
@@ -43,10 +56,10 @@ human turns it on.
 ## Who talks, and on which port
 
 The protocol has a **producer** — whatever is measuring — and a **consumer**,
-whatever is drawing. The producer sends `HELLO` first and then everything else;
-the consumer sends nothing at all in version 2. Which of the two opened the TCP
-connection is a separate question, and Open Audio Analyzer needs it both ways
-round:
+whatever is drawing. The producer sends `HELLO` first and then everything else.
+The consumer sends nothing at all on the display port, and on the ingest port
+sends only `0x0020`. Which of the two opened the TCP connection is a separate
+question, and Open Audio Analyzer needs it both ways round:
 
 | port | service | listener | producer |
 |---|---|---|---|
@@ -84,7 +97,13 @@ set of things that can connect is the set of things already running as this
 user, which is a boundary that a password would not improve. Control frames
 (`0x0020`–`0x002F`) are therefore permissible **on the ingest port only**, and
 still need a protocol version bump and the same frozen-table discipline as
-`0x0003`. Nothing in version 2 defines one.
+`0x0003`. Version 2 defined none; version 3 defines exactly one,
+[`0x0020`](#0x0020--set_lufs_mode).
+
+**A consumer must not send `0x0020` on the display port, and a producer must
+reject it there.** The rule is enforced at the port rather than trusted to the
+sender, because the whole argument above rests on which interface the socket is
+bound to and nothing else.
 
 A host that deliberately exposes ingest beyond loopback — a plugin on another
 machine — is opting out of that reasoning and must not enable control frames.
@@ -99,7 +118,7 @@ picture that looks slightly wrong.
 | off | type | field |
 |---|---|---|
 | 0 | `u8[4]` | magic, the ASCII bytes `O`, `A`, `A`, `W` |
-| 4 | `u16` | protocol version, currently `2` |
+| 4 | `u16` | protocol version, currently `3` |
 | 6 | `u16` | frame type |
 | 8 | `u32` | payload length in bytes |
 | 12 | … | payload |
@@ -111,8 +130,36 @@ not understand cost it a `seek` and nothing else.
 
 **A payload longer than 1 MiB is rejected and the connection is dropped.** A
 length field is an instruction to allocate, and a corrupt or hostile one that
-says four gigabytes must not be obeyed. Nothing in version 2 comes close to the
+says four gigabytes must not be obeyed. Nothing in version 3 comes close to the
 cap; the largest legitimate frame is a snapshot at 15,068 bytes.
+
+### Version compatibility
+
+**A receiver accepts any version it knows and refuses the ones it does not.**
+Concretely: a frame whose version is greater than the receiver's own is refused
+and the connection dropped, because a higher version may have moved a table the
+receiver would then misread. A frame whose version is *lower* is accepted, and
+decoded with that version's tables — which for 2 against 3 are the same tables.
+
+This replaces the equality check versions 1 and 2 used, and it is a change to
+the framing rules rather than to any byte layout. Equality was survivable while
+the app and the display shipped as one binary from one release. It stopped being
+survivable at version 3, because the **plugin does not**: it is copied into the
+DAW's own plugin folder by hand and stays there across app upgrades, so an app
+one version ahead of the plugin in somebody's VST3 directory is the normal case
+and not an edge one. Under equality, the first app to speak version 3 would
+have refused every plugin already installed — with the plugin retrying forever
+against a port that hangs up on it, which looks exactly like the bug where the
+port was never bound at all.
+
+**The peer's version is remembered, and it gates what may be sent to it.** A
+producer announces its version in `HELLO`; the consumer records it and must not
+send a frame the producer is too old to understand. A version-2 plugin never
+reads its socket, so `0x0020` sent to one would not be refused — it would be
+silently ignored, which is worse: the app would believe a mode was in force and
+the plugin would go on measuring continuously, and the reading on screen would
+be wrong with nothing anywhere saying so. So the modes that need `0x0020` are
+reported **unavailable** against a version-2 producer rather than requested.
 
 ## Frame types
 
@@ -124,7 +171,8 @@ cap; the largest legitimate frame is a snapshot at 15,068 bytes.
 | `0x0004` | `SKIN` | host → client | after `HELLO`, and whenever the skin changes |
 | `0x0005` | `CALIBRATION` | host → client | after `HELLO`, and whenever the target changes |
 | `0x0010`–`0x001F` | plugin transport | producer → app, app → client | see [DAW transport](#0x0010--daw_transport) |
-| `0x0020`–`0x002F` | *reserved* | — | a control channel that does not exist in v1 |
+| `0x0020` | `SET_LUFS_MODE` | app → producer | ingest port only; on change, and once per connection |
+| `0x0021`–`0x002F` | *reserved* | — | the rest of the control range, undefined |
 
 ### `0x0001` — HELLO
 
@@ -297,10 +345,12 @@ samples: the app publishes at the display rate, which is slower than a DAW's
 block rate, so intermediate positions do not survive the hop. The one thing that
 does is `DISCONTINUITY`, and the paragraphs below say why that is not optional.
 
-Neither direction needs a protocol version past 2. A display that predates
-transport skips the frame by length and is otherwise unaffected, and a display
-that expects one and never receives it is looking at a host with no DAW, which
-is a state it already has to draw.
+Neither direction of *this* frame needed a version past 2, and neither has
+changed in 3. A display that predates transport skips the frame by length and is
+otherwise unaffected, and a display that expects one and never receives it is
+looking at a host with no DAW, which is a state it already has to draw. What
+version 3 adds is a frame in the opposite direction, on the other port —
+`0x0020`, which consumes this one.
 
 | off | type | field | meaning |
 |---|---|---|---|
@@ -398,6 +448,75 @@ The presence bits and NaN do the same job for different kinds of field; keep
 both. (`f64` transport fields could carry NaN and do not, because a `u32` frame
 count and a `u32` time signature have no NaN to carry — one mechanism for the
 whole frame beats two.)
+
+### `0x0020` — SET_LUFS_MODE
+
+**Consumer → producer, ingest port only.** What a LUFS integration counts from.
+Payload is 24 bytes. New in protocol version 3; a producer that speaks version 2
+must never be sent one — see
+[version compatibility](#version-compatibility).
+
+| off | type | field | meaning |
+|---|---|---|---|
+| 0 | `u32` | `mode` | the enum below |
+| 4 | `u32` | `flags` | `1<<0 HAS_REGION`; other bits reserved, zero |
+| 8 | `f64` | `region_start_seconds` | timeline seconds, same origin as `time_seconds` |
+| 16 | `f64` | `region_end_seconds` | timeline seconds, exclusive |
+
+| `mode` | name | counts from |
+|---|---|---|
+| `0` | `CONTINUOUS` | the last manual reset. The only mode a producer with no transport can honour |
+| `1` | `SYSTEM` | the first audio after silence, restarting when the signal stops |
+| `2` | `ELAPSED` | the transport starting to roll, holding while it is parked |
+| `3` | `TIMECODE` | entry into `[region_start_seconds, region_end_seconds)` |
+
+The values are normative here and the `LufsTimeMode` enum in
+`packages/oaa_core/lib/src/transport.dart` is declared in this order so that its
+index is its wire value. That coupling is deliberate and load-bearing: it is
+also the reason a mode may only ever be *appended* to that enum.
+
+**A region is required for `TIMECODE` and ignored otherwise.** `HAS_REGION`
+clear with `mode == 3` is a malformed frame; the producer refuses the frame and
+keeps the mode it had, because the alternative is measuring a region nobody
+specified. `region_end_seconds` must be greater than `region_start_seconds`.
+
+**"Holding" is not a mode of the analyser — it is the producer declining to feed
+it.** A parked transport in `ELAPSED`, or a playhead outside the region in
+`TIMECODE`, means the producer stops pushing audio into its engine and goes on
+publishing snapshots of it. The integration therefore freezes at the value it
+had and stays on screen, rather than either advancing over audio outside the
+window or blanking. That is what keeps both transport-driven modes out of
+`engine/` entirely: the analyser needs no notion of a playhead to be *not fed*,
+and so it still does not know what a DAW is.
+
+`SYSTEM` is the one mode a producer hands to its engine rather than implementing
+above it, because silence is a property of audio and not of a host — one
+implementation in `engine/` serves the plugin and a local sound card both, and
+two would eventually disagree about when a track began.
+
+**Reset points, per mode.** A reset clears every integrating measurement — the
+integrated loudness, LRA, the peak maxima, the clip counters — and restarts the
+elapsed clock. `CONTINUOUS` resets only when a human asks. `SYSTEM` resets on
+the first audio after the silence hold expires. `ELAPSED` resets on the
+transport's rolling edge and on `DISCONTINUITY`, because a reading spanning a
+relocate is the average of two passes of the same music. `TIMECODE` resets when
+the playhead enters the region, from either direction.
+
+**Sent on change, and once per connection**, the second being what makes a
+plugin that reconnects mid-session come back in the mode the module is showing
+rather than in `CONTINUOUS`.
+
+**A repeated frame carrying the mode already in force does nothing.** Not "resets
+again" — nothing. A consumer is allowed to be careless about resending, and a
+producer that reset on every arrival would let a redundant send silently restart
+a measurement somebody was in the middle of taking. The comparison is over the
+whole payload, so a changed region in the same mode *is* a change and does
+re-arm.
+
+**A producer with no transport honours `CONTINUOUS` and `SYSTEM` and refuses the
+other two**, because it has no clock to tie them to. It keeps the mode it had
+and the consumer is expected to know this already from the absence of `0x0010`;
+the refusal is the backstop, not the mechanism.
 
 ## Rate and flow control
 

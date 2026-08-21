@@ -16,6 +16,8 @@ import 'package:oaa_wire/oaa_wire.dart';
 import 'package:test/test.dart';
 
 void main() {
+  _lufsModeTests();
+
   group('the frozen shape of protocol version 1', () {
     test('a snapshot payload is 15,056 bytes', () {
       // Frozen. `docs/WIRE.md` publishes this number, the plugin's C++ sender
@@ -618,4 +620,101 @@ class _FakeSource implements MeterSource {
 
   @override
   bool refresh() => true;
+}
+
+void _lufsModeTests() {
+  group('0x0020 SET_LUFS_MODE', () {
+    LufsModeRequest? roundTrip(LufsTimeMode mode, {LufsRegion? region}) {
+      final frame = LufsModeCodec.encodeFrame(mode, region: region);
+      final reader = FrameReader()..add(frame);
+      expect(reader.moveNext(), isTrue);
+      expect(reader.type, WireFrameType.setLufsMode);
+      expect(reader.version, WireFrame.protocolVersion);
+      return LufsModeCodec.decode(reader.payload);
+    }
+
+    test('the payload is the 24 bytes docs/WIRE.md freezes', () {
+      final frame = LufsModeCodec.encodeFrame(LufsTimeMode.continuous);
+      expect(frame.length, WireFrame.headerBytes + LufsModeCodec.payloadBytes);
+      expect(LufsModeCodec.payloadBytes, 24);
+    });
+
+    test('the wire value of a mode is its declaration index', () {
+      // The coupling docs/WIRE.md relies on. If somebody reorders the enum this
+      // fails here rather than in a plugin measuring the wrong window.
+      expect(LufsTimeMode.continuous.wireValue, 0);
+      expect(LufsTimeMode.system.wireValue, 1);
+      expect(LufsTimeMode.elapsed.wireValue, 2);
+      expect(LufsTimeMode.timecode.wireValue, 3);
+    });
+
+    test('every mode without a region survives the trip', () {
+      for (final mode in <LufsTimeMode>[
+        LufsTimeMode.continuous,
+        LufsTimeMode.system,
+        LufsTimeMode.elapsed,
+      ]) {
+        final decoded = roundTrip(mode);
+        expect(decoded, isNotNull, reason: mode.id);
+        expect(decoded!.mode, mode);
+        expect(decoded.region, isNull);
+      }
+    });
+
+    test('timecode carries its region', () {
+      final decoded = roundTrip(
+        LufsTimeMode.timecode,
+        region: const LufsRegion(60.0, 210.5),
+      );
+      expect(decoded, isNotNull);
+      expect(decoded!.mode, LufsTimeMode.timecode);
+      expect(decoded.region, const LufsRegion(60.0, 210.5));
+    });
+
+    test('timecode without a region is refused rather than defaulted', () {
+      // The producer must keep the mode it had. A default would measure a
+      // stretch of timeline nobody chose, and an integrated reading over the
+      // wrong window is wrong with nothing on screen to say so.
+      expect(roundTrip(LufsTimeMode.timecode), isNull);
+    });
+
+    test('an empty or reversed region is refused', () {
+      expect(
+        roundTrip(LufsTimeMode.timecode, region: const LufsRegion(30.0, 30.0)),
+        isNull,
+      );
+      expect(
+        roundTrip(LufsTimeMode.timecode, region: const LufsRegion(90.0, 30.0)),
+        isNull,
+      );
+    });
+
+    test('a mode from a newer build is refused, not clamped', () {
+      final payload = ByteData(LufsModeCodec.payloadBytes)
+        ..setUint32(0, 99, Endian.little);
+      expect(LufsModeCodec.decode(payload), isNull);
+    });
+
+    test('a short payload is refused rather than read past', () {
+      expect(LufsModeCodec.decode(ByteData(8)), isNull);
+    });
+
+    test('a resend of the same request is recognised as no change', () {
+      // What stops a careless resend silently restarting somebody's
+      // measurement.
+      const a = LufsModeRequest(LufsTimeMode.elapsed, null);
+      const b = LufsModeRequest(LufsTimeMode.elapsed, null);
+      expect(a.sameAs(b), isTrue);
+
+      const region = LufsModeRequest(
+        LufsTimeMode.timecode,
+        LufsRegion(0.0, 10.0),
+      );
+      const moved = LufsModeRequest(
+        LufsTimeMode.timecode,
+        LufsRegion(0.0, 20.0),
+      );
+      expect(region.sameAs(moved), isFalse);
+    });
+  });
 }

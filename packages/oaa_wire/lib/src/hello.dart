@@ -135,9 +135,27 @@ class WireHello {
   /// own kind of wrong answer, and the payload size below is what actually
   /// catches a layout that moved.
   String? get incompatibility {
-    if (protocolVersion != WireFrame.protocolVersion) {
+    // A version this build knows is a version it can decode, and that includes
+    // one *older* than its own: version 3 added a frame type and moved no
+    // table, so every table a version-2 producer sends is a table this build
+    // froze unchanged.
+    //
+    // Equality here was survivable while the only producer was the app itself,
+    // shipped as one binary with the display. It stopped being survivable when
+    // the producer became a plugin: a plugin lives in the DAW's own folder and
+    // stays there across app upgrades, so an app one version ahead of the
+    // plugin somebody installed months ago is the ordinary case. Under equality
+    // the first app to speak 3 would have refused every plugin already
+    // installed — and what that looks like from the plugin is a port that
+    // accepts and immediately hangs up, forever, which is indistinguishable
+    // from the defect where the port was never bound at all.
+    //
+    // What must *not* happen is the reverse: a producer newer than this build
+    // may have moved a table underneath us, and misreading a measurement table
+    // is how a meter draws a confident wrong number.
+    if (!WireFrame.isKnownVersion(protocolVersion)) {
       return 'The host speaks wire protocol $protocolVersion and this display '
-          'speaks ${WireFrame.protocolVersion}.';
+          'speaks ${WireFrame.minimumVersion}-${WireFrame.protocolVersion}.';
     }
     if (snapshotPayloadBytes != SnapshotWire.payloadBytes) {
       return 'The host sends $snapshotPayloadBytes-byte measurements and this '

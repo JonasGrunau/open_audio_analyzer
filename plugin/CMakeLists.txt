@@ -300,8 +300,8 @@ add_test(NAME transport_box_delivers_edges_once
 add_test(NAME wire_fixture_matches_golden
   COMMAND ${CMAKE_COMMAND}
     -DFIXTURE=$<TARGET_FILE:oaa_wire_fixture>
-    -DGOLDEN=${CMAKE_CURRENT_SOURCE_DIR}/test/golden/wire_v2.bin
-    -DSCRATCH=${CMAKE_CURRENT_BINARY_DIR}/wire_v2.actual.bin
+    -DGOLDEN=${CMAKE_CURRENT_SOURCE_DIR}/test/golden/wire_v3.bin
+    -DSCRATCH=${CMAKE_CURRENT_BINARY_DIR}/wire_v3.actual.bin
     -P ${CMAKE_CURRENT_SOURCE_DIR}/test/compare_golden.cmake
 )
 

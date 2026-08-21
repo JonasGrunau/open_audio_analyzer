@@ -80,7 +80,20 @@ inline constexpr uint32_t kMagic = 0x5741414Fu;
  * changes when the bytes on the socket change. An additive ABI bump that leaves
  * `oaa_snapshot` untouched — which is exactly what the file-decoding work is —
  * must not invalidate a link that would have worked perfectly. */
-inline constexpr uint16_t kProtocolVersion = 2;
+inline constexpr uint16_t kProtocolVersion = 3;
+
+/* The oldest version this build can still decode. Version 3 added a frame type
+ * and moved no table, so a version-2 peer is a peer whose every table this
+ * build froze unchanged. Version 1 is excluded because its magic differs — a
+ * version-1 stream fails on byte zero and never reaches a version check. */
+inline constexpr uint16_t kMinimumVersion = 2;
+
+/* Refuse a version above ours: a later one may have moved a table we would then
+ * misread, and misreading a measurement table is how a meter draws a confident
+ * wrong number. Accept one below, for the reason above. */
+inline constexpr bool isKnownVersion(uint16_t version) noexcept {
+  return version >= kMinimumVersion && version <= kProtocolVersion;
+}
 
 enum class FrameType : uint16_t {
   Hello        = 0x0001,
@@ -90,6 +103,12 @@ enum class FrameType : uint16_t {
 
   /* 0x0010-0x001F belongs to the plugin. */
   DawTransport = 0x0010,
+
+  /* 0x0020-0x002F is the control range, and this is the only member of it.
+   * Consumer -> producer, so the plugin *receives* this one rather than sending
+   * it, and it is the only frame that travels that way. Permitted because the
+   * ingest port binds loopback; see docs/WIRE.md on the trust boundary. */
+  SetLufsMode  = 0x0020,
 };
 
 /* magic u32 | version u16 | type u16 | payload length u32 */
@@ -101,6 +120,9 @@ inline constexpr size_t kHeaderBytes = 12;
 
 inline constexpr size_t kSnapshotBytes  = 15056;
 inline constexpr size_t kTransportBytes = 88;
+
+/* New at protocol version 3. mode u32 | flags u32 | start f64 | end f64 */
+inline constexpr size_t kLufsModeBytes  = 24;
 
 /* HELLO is the one variable-length frame: a fixed block, then a UTF-8 name. */
 inline constexpr size_t kHelloFixedBytes = 32;
@@ -168,10 +190,11 @@ enum TransportFlags : uint32_t {
    * integration is a property of the LUFS mode the user picked, and the mode
    * lives in the app. Continuous is supposed to span the whole session.
    *
-   * Acting on this needs the app→plugin control channel (frame types
-   * 0x0020–0x002F), which does not exist in protocol version 2. Until it does,
-   * a consumer can report that the integrated reading spans a discontinuity,
-   * which is considerably better than quietly averaging two takes.
+   * Acting on it arrived with protocol version 3 and `SetLufsMode`: in Elapsed
+   * the plugin now resets on this edge, because a reading spanning a relocate is
+   * the average of two passes of the same music. In Continuous it still does
+   * nothing at all — Continuous is supposed to span the whole session — and a
+   * consumer that only reports the discontinuity remains correct for that mode.
    */
   kDiscontinuity  = 1u << 11,
 };
@@ -311,6 +334,63 @@ void writeTransportFrame(std::vector<uint8_t>& out, const Transport& transport);
  * whatsoever on these bytes — cannot fail a wire test. That the two numbers can
  * be pinned apart is the point being made: they move for different reasons.
  */
+/* --------------------------------------------------------------------- */
+/* SET_LUFS_MODE — the one frame that arrives                             */
+/* --------------------------------------------------------------------- */
+
+/*
+ * What a LUFS integration counts from. New at protocol version 3.
+ *
+ * The integers are the wire values and docs/WIRE.md freezes them; the Dart
+ * `LufsTimeMode` is declared in this order so that its index matches. Append
+ * only — reordering these is a protocol change wearing the clothes of a
+ * tidy-up.
+ */
+enum class LufsTimeMode : uint32_t {
+  Continuous = 0,
+  System     = 1,
+  Elapsed    = 2,
+  Timecode   = 3,
+};
+
+inline constexpr uint32_t kLufsModeHasRegion = 1u << 0;
+
+/* A decoded SET_LUFS_MODE. */
+struct LufsModeRequest {
+  LufsTimeMode mode      = LufsTimeMode::Continuous;
+  bool         hasRegion = false;
+  double       startSeconds = 0.0;
+  double       endSeconds   = 0.0;
+
+  /* Whole-payload equality, because a producer must not reset on a frame that
+   * asks for the mode already in force — a consumer is allowed to be careless
+   * about resending, and resetting on every arrival would let a redundant send
+   * silently restart a measurement somebody was in the middle of taking. A
+   * *moved region* in the same mode is a change and does re-arm, which is why
+   * this compares the region too. */
+  bool operator==(const LufsModeRequest& other) const noexcept {
+    return mode == other.mode && hasRegion == other.hasRegion &&
+           startSeconds == other.startSeconds && endSeconds == other.endSeconds;
+  }
+  bool operator!=(const LufsModeRequest& other) const noexcept {
+    return !(*this == other);
+  }
+};
+
+/*
+ * Decodes a SET_LUFS_MODE payload. False means the frame cannot be honoured and
+ * the caller must keep the mode it already had.
+ *
+ * False rather than a default, in every failing case: an unknown mode (a
+ * consumer newer than this build), a Timecode request with no region, or a
+ * region that is empty or reversed. A default would measure a window nobody
+ * asked for, and an integrated reading over the wrong window is wrong with
+ * nothing on screen to say so — which is the failure this whole protocol is
+ * written to avoid.
+ */
+bool decodeLufsMode(const uint8_t* payload, size_t bytes,
+                    LufsModeRequest& out);
+
 void writeHelloFrame(std::vector<uint8_t>& out, const char* producerName,
                      uint32_t abiVersion = OAA_ABI_VERSION);
 

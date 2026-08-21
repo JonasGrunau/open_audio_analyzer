@@ -216,6 +216,67 @@ static void oaa_clear_measurements(oaa_engine *engine) {
 /* The analysis thread                                                       */
 /* ------------------------------------------------------------------------ */
 
+/* The silence gate. Runs on the analysing thread, immediately before the block
+ * it is judging is measured.
+ *
+ * Costs one read-only pass over the block, and only when the mode that needs it
+ * is on — which is why it is a branch here rather than a term folded into
+ * `oaa_analyse`'s existing loop. Every other caller (file analysis, and the
+ * three LUFS modes driven by a playhead instead) pays nothing at all.
+ *
+ * The reset is performed in place rather than through `reset_pending`, because
+ * that flag is honoured at the *start* of the next block — which would measure
+ * this one into the integration it is supposed to begin and then throw it away.
+ * See the note in oaa.h about material that opens on a transient. In place is
+ * safe here for the same reason the pending flag exists: this runs on the thread
+ * that owns the integrators, between blocks. */
+static void oaa_silence_gate(oaa_engine *engine, const float *interleaved,
+                             uint32_t frames) {
+  if (!engine->silence_reset) {
+    return;
+  }
+
+  const size_t samples = (size_t)frames * engine->cfg.channels;
+  float peak = 0.0f;
+  for (size_t i = 0; i < samples; i++) {
+    const float magnitude = fabsf(interleaved[i]);
+    if (magnitude > peak) {
+      peak = magnitude;
+    }
+  }
+
+  const double dt = (double)frames / (double)engine->cfg.sample_rate;
+
+  if (peak < OAA_SILENCE_FLOOR) {
+    engine->silence_seconds += dt;
+    return;
+  }
+
+  if (engine->silence_seconds >= OAA_SILENCE_HOLD_SECONDS) {
+    oaa_clear_measurements(engine);
+  }
+  engine->silence_seconds = 0.0;
+}
+
+/* The only way audio reaches the analysis. Three call sites — a push, a capture
+ * device and a generated source — and routing all of them through here is what
+ * stops the gate being wired into two of the three. */
+static void oaa_analyse_gated(oaa_engine *engine, const float *interleaved,
+                              uint32_t frames) {
+  oaa_silence_gate(engine, interleaved, frames);
+  oaa_analyse(engine, interleaved, frames);
+}
+
+void oaa_engine_set_silence_reset(oaa_engine *engine, int32_t enabled) {
+  if (engine == NULL) {
+    return;
+  }
+  engine->silence_reset = enabled ? 1 : 0;
+  if (!enabled) {
+    engine->silence_seconds = 0.0;
+  }
+}
+
 static void *oaa_analysis_thread(void *raw) {
   oaa_engine *engine = (oaa_engine *)raw;
 
@@ -241,7 +302,7 @@ static void *oaa_analysis_thread(void *raw) {
       const uint32_t got =
           oaa_ring_read(&engine->ring, engine->block, engine->cfg.block_frames);
       if (got > 0) {
-        oaa_analyse(engine, engine->block, got);
+        oaa_analyse_gated(engine, engine->block, got);
       }
 
       const uint32_t dropped = oaa_ring_dropped(&engine->ring);
@@ -251,7 +312,7 @@ static void *oaa_analysis_thread(void *raw) {
       }
     } else {
       oaa_source_render(engine, engine->cfg.block_frames);
-      oaa_analyse(engine, engine->block, engine->cfg.block_frames);
+      oaa_analyse_gated(engine, engine->block, engine->cfg.block_frames);
     }
 
     oaa_snapshot_publish(engine);
@@ -505,7 +566,7 @@ int32_t oaa_engine_push(oaa_engine *engine, const float *interleaved,
     oaa_atomic_store_release(&engine->reset_pending, 0);
   }
 
-  oaa_analyse(engine, interleaved, frames);
+  oaa_analyse_gated(engine, interleaved, frames);
   engine->staging.flags |= (uint32_t)OAA_FLAG_RUNNING;
   oaa_snapshot_publish(engine);
   return OAA_OK;

@@ -16,5 +16,6 @@ library;
 export 'src/daw_transport.dart';
 export 'src/frame.dart';
 export 'src/hello.dart';
+export 'src/lufs_mode.dart';
 export 'src/snapshot_codec.dart';
 export 'src/wire_snapshot.dart';

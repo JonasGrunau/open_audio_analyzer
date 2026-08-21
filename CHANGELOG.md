@@ -9,6 +9,44 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### ⚡ Changed
+- The wire protocol is at version 3, and a receiver now accepts any version it
+  knows rather than only its own. A plugin built against 0.3.0 keeps working
+  with a newer app, which under the old equality check it would not have: a
+  plugin lives in the DAW's plugin folder and stays there across app upgrades,
+  so the mismatch was the ordinary case, and what it looked like from the plugin
+  was a port that accepts and hangs up forever — indistinguishable from the
+  defect where the port was never bound at all. The rule is one-way on purpose:
+  a peer *newer* than this build is still refused, because a later version may
+  have moved a table and misreading a measurement table is how a meter draws a
+  confident wrong number. **A tablet still running 0.3.0 or earlier will refuse
+  a newer desktop** and say so, rather than drawing anything; update both ends.
+  Version 3 adds a frame type and moves no byte of any existing table — held by
+  a test that decodes the frozen version-2 golden and diffs it against the
+  version-3 one, where exactly four bytes differ and all four are version
+  fields.
+
+### 🚧 Internal
+- Groundwork for the Elapsed and Timecode LUFS modes, which are **not yet
+  offered by any module** — this is the protocol and the engine underneath them,
+  and the modules and their menu are the change after this one. `docs/WIRE.md`
+  gains `0x0020 SET_LUFS_MODE`, the first frame that travels from consumer to
+  producer, permitted on the ingest port only because that one binds loopback
+  where whatever connects is already running as this user; the display port
+  binds every interface and stays read-only until somebody designs
+  authentication for it. Three implementations moved together, as that file
+  requires.
+- The engine can reset itself when the signal returns after a silence
+  (`oaa_engine_set_silence_reset`, ABI 5), which is what the System mode is made
+  of. It lives in `engine/` rather than above it because silence is a property
+  of audio and not of a host — one implementation serves a plugin and a sound
+  card, where two would eventually disagree about when a track began. The gate
+  runs *before* the block it judges, so a track whose loudest sample is in its
+  first block keeps that peak rather than having it cleared by its own reset.
+  Off by default, and off for file analysis, which must measure a file whole.
+  The two transport-driven modes need no engine API at all: they are the
+  producer declining to push, so `engine/` still does not learn what a DAW is.
+
 ## [0.3.0] — 2026-08-21
 
 ### 📐 Measurement

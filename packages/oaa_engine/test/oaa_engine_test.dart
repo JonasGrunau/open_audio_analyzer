@@ -67,6 +67,8 @@ Future<void> _measure(
 const _settleSeconds = 1.6;
 
 void main() {
+  _silenceGateTests();
+
   test('bindings match the compiled ABI', () {
     expect(OaaEngine.abiVersion, OaaEngine.expectedAbiVersion);
     expect(OaaEngine.versionString, isNotEmpty);
@@ -422,5 +424,150 @@ void main() {
       expect(device.channels, lessThanOrEqualTo(kOaaMaxChannels));
     }
     expect(devices.where((d) => d.isDefault).length, lessThanOrEqualTo(1));
+  });
+}
+
+/// The engine's half of the LUFS time modes.
+///
+/// Only [LufsTimeMode.system] reaches the engine at all — the two
+/// transport-driven modes are the producer declining to push, which needs no
+/// engine API and is tested against a real host in
+/// `packages/oaa_wire/test/plugin_e2e_test.dart`.
+void _silenceGateTests() {
+  group('the silence gate', () {
+    const frames = 1024;
+    const rate = 48000;
+    const blockSeconds = frames / rate;
+
+    Float32List tone({double amplitude = 0.5, int channels = 2}) {
+      final data = Float32List(frames * channels);
+      for (var i = 0; i < frames; i++) {
+        // A quarter-cycle-per-frame sine, which is signal by any measure and
+        // nowhere near full scale.
+        final sample = amplitude * math.sin(i * 0.05);
+        for (var c = 0; c < channels; c++) {
+          data[i * channels + c] = sample;
+        }
+      }
+      return data;
+    }
+
+    Float32List quiet({int channels = 2}) => Float32List(frames * channels);
+
+    /// Pushes enough silence to outlast [OAA_SILENCE_HOLD_SECONDS].
+    void pushSilence(OaaEngine engine) {
+      final blocks = (2.0 / blockSeconds).ceil() + 1;
+      for (var i = 0; i < blocks; i++) {
+        engine.push(quiet());
+      }
+    }
+
+    test('is off unless asked, so nothing existing changes behaviour', () {
+      final engine = OaaEngine.start(
+        source: OaaSource.push,
+        blockFrames: frames,
+      );
+      addTearDown(engine.dispose);
+
+      engine.push(tone());
+      final before = engine.elapsedSeconds;
+      expect(before, greaterThan(0));
+
+      pushSilence(engine);
+      engine.push(tone());
+
+      // The clock kept running straight through the gap: no reset happened.
+      expect(engine.elapsedSeconds, greaterThan(before));
+    });
+
+    test('a return after silence restarts the measurement', () {
+      final engine = OaaEngine.start(
+        source: OaaSource.push,
+        blockFrames: frames,
+      )..silenceReset = true;
+      addTearDown(engine.dispose);
+
+      for (var i = 0; i < 20; i++) {
+        engine.push(tone());
+      }
+      final firstRun = engine.elapsedSeconds;
+      expect(firstRun, greaterThan(15 * blockSeconds));
+
+      pushSilence(engine);
+      engine.push(tone());
+
+      // One block of the new take, not the old take plus the gap plus one.
+      expect(
+        engine.elapsedSeconds,
+        lessThan(firstRun),
+        reason: 'the elapsed clock restarted with the new audio',
+      );
+      expect(engine.elapsedSeconds, closeTo(blockSeconds, blockSeconds));
+    });
+
+    test('a gap shorter than the hold is not the end of the programme', () {
+      final engine = OaaEngine.start(
+        source: OaaSource.push,
+        blockFrames: frames,
+      )..silenceReset = true;
+      addTearDown(engine.dispose);
+
+      for (var i = 0; i < 20; i++) {
+        engine.push(tone());
+      }
+      final before = engine.elapsedSeconds;
+
+      // Half a second of rest, which is a musical pause and not a stop.
+      final blocks = (0.5 / blockSeconds).floor();
+      for (var i = 0; i < blocks; i++) {
+        engine.push(quiet());
+      }
+      engine.push(tone());
+
+      expect(
+        engine.elapsedSeconds,
+        greaterThan(before),
+        reason: 'a held pause between movements must not restart the reading',
+      );
+    });
+
+    test('the peak of the returning block is kept, not cleared by its own '
+        'reset', () {
+      // The reason the gate runs before the block it judges rather than after.
+      // Material that opens on a transient is most material, and clearing the
+      // peak that arrived with the reset would under-report every one of them.
+      final engine = OaaEngine.start(
+        source: OaaSource.push,
+        blockFrames: frames,
+      )..silenceReset = true;
+      addTearDown(engine.dispose);
+
+      engine.push(tone(amplitude: 0.2));
+      pushSilence(engine);
+      engine.push(tone(amplitude: 0.9));
+
+      // dBFS, not linear: 0.9 is -0.915 dBFS. Had the reset run after the
+      // block instead of before it, this would read the -14 dBFS of the tone
+      // that follows in the *next* block, or nothing at all.
+      expect(engine.samplePeakMax, closeTo(-0.915, 0.1));
+    });
+
+    test('turning it off forgets the silence it had accumulated', () {
+      final engine = OaaEngine.start(
+        source: OaaSource.push,
+        blockFrames: frames,
+      )..silenceReset = true;
+      addTearDown(engine.dispose);
+
+      engine.push(tone());
+      pushSilence(engine);
+
+      engine.silenceReset = false;
+      final before = engine.elapsedSeconds;
+      engine.push(tone());
+
+      // No reset: the run it was in the middle of measuring continues.
+      expect(engine.elapsedSeconds, greaterThan(before));
+    });
   });
 }

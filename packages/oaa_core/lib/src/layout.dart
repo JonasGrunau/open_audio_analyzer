@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 
 import 'metric.dart';
+import 'transport.dart';
 
 /// The kinds of module a tab can contain.
 ///
@@ -392,6 +393,28 @@ class ModuleSpec {
   SpectrumResponse get spectrumResponse =>
       SpectrumResponse.fromId(options['response'] as String? ?? '') ??
       SpectrumResponse.normal;
+
+  /// What a LUFS module's integration counts from.
+  ///
+  /// Per module rather than per app, so two of them can sit side by side
+  /// showing the same signal over different windows — the whole programme and
+  /// the section you are working on — which is the comparison the modes exist
+  /// to make. Rides `options` like every other per-module choice, so no preset
+  /// written before the modes existed needs migrating: an absent value is
+  /// [LufsTimeMode.continuous], which is what those presets were measuring.
+  LufsTimeMode get lufsMode =>
+      LufsTimeMode.fromId(options['lufsMode'] as String? ?? '') ??
+      LufsTimeMode.continuous;
+
+  /// The region [LufsTimeMode.timecode] measures between.
+  ///
+  /// Null when none has been set, which makes the mode unhonourable rather than
+  /// defaulted — `docs/WIRE.md` refuses `TIMECODE` without a region, because
+  /// the alternative is measuring a stretch of timeline nobody chose.
+  LufsRegion? get lufsRegion {
+    final raw = options['lufsRegion'];
+    return raw is Map ? LufsRegion.fromJson(raw.cast<String, Object?>()) : null;
+  }
 
   /// What the title bar says.
   ///

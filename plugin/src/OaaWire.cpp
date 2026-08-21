@@ -17,6 +17,9 @@
 
 #include "OaaWire.h"
 
+#include <cmath>
+#include <cstring>
+
 namespace oaa::wire {
 
 namespace {
@@ -199,6 +202,69 @@ void writeHelloFrame(std::vector<uint8_t>& out, const char* producerName,
     assert(false && "hello frame is the wrong length");
     out.clear();
   }
+}
+
+/*
+ * The decoder. Reads little-endian by construction rather than by cast: the
+ * frame is little-endian on every platform by specification, and a memcpy of a
+ * double would be right on the two architectures this ships on and silently
+ * wrong on the one it does not.
+ */
+bool decodeLufsMode(const uint8_t* payload, size_t bytes,
+                    LufsModeRequest& out) {
+  if (payload == nullptr || bytes < kLufsModeBytes) {
+    return false;
+  }
+
+  const auto u32 = [payload](size_t offset) -> uint32_t {
+    return static_cast<uint32_t>(payload[offset]) |
+           (static_cast<uint32_t>(payload[offset + 1]) << 8) |
+           (static_cast<uint32_t>(payload[offset + 2]) << 16) |
+           (static_cast<uint32_t>(payload[offset + 3]) << 24);
+  };
+  const auto f64 = [payload](size_t offset) -> double {
+    uint64_t bits = 0;
+    for (size_t i = 0; i < 8; ++i) {
+      bits |= static_cast<uint64_t>(payload[offset + i]) << (8 * i);
+    }
+    double value = 0.0;
+    static_assert(sizeof(value) == sizeof(bits), "double is not 64 bits");
+    std::memcpy(&value, &bits, sizeof(value));
+    return value;
+  };
+
+  const uint32_t rawMode = u32(0);
+  if (rawMode > static_cast<uint32_t>(LufsTimeMode::Timecode)) {
+    /* A mode from a consumer newer than this build. Keep what we have. */
+    return false;
+  }
+
+  LufsModeRequest request;
+  request.mode = static_cast<LufsTimeMode>(rawMode);
+
+  const uint32_t flags = u32(4);
+  request.hasRegion = (flags & kLufsModeHasRegion) != 0;
+
+  if (request.hasRegion) {
+    request.startSeconds = f64(8);
+    request.endSeconds   = f64(16);
+
+    const bool finite = std::isfinite(request.startSeconds) &&
+                        std::isfinite(request.endSeconds);
+    if (!finite || request.startSeconds < 0.0 ||
+        request.endSeconds <= request.startSeconds) {
+      return false;
+    }
+  }
+
+  /* Timecode without a region is malformed rather than defaultable — there is
+   * no stretch of timeline it would be honest to substitute. */
+  if (request.mode == LufsTimeMode::Timecode && !request.hasRegion) {
+    return false;
+  }
+
+  out = request;
+  return true;
 }
 
 }  // namespace oaa::wire

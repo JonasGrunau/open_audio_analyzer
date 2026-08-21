@@ -28,6 +28,89 @@ import 'package:oaa_wire/oaa_wire.dart';
 import 'package:test/test.dart';
 
 void main() {
+  // The version-2 golden is kept rather than replaced, and it is not
+  // sentimental. Version 3 promises that it moved a frame type and no table,
+  // and the only way to hold a promise like that is to decode bytes that were
+  // produced before it was made. Regenerating this file would destroy the
+  // evidence — it is frozen, and `wire_v3.bin` is the one that tracks the
+  // current serialiser.
+  group('a version-2 producer, decoded by this version-3 build', () {
+    test('every frame is accepted, and the tables read identically', () {
+      final reader = FrameReader()..add(_goldenBytes('wire_v2.bin'));
+
+      WireHello? hello;
+      Transport? transport;
+      final snapshot = WireSnapshot();
+      var sawSnapshot = false;
+
+      while (reader.moveNext()) {
+        expect(
+          reader.version,
+          2,
+          reason: 'the frozen golden is a version-2 stream',
+        );
+        switch (reader.type) {
+          case WireFrameType.hello:
+            hello = WireHello.decode(reader.payload);
+          case WireFrameType.dawTransport:
+            transport = DawTransportCodec.decode(reader.payload);
+          case WireFrameType.snapshot:
+            snapshot.decode(reader.payload);
+            sawSnapshot = true;
+        }
+      }
+
+      // Accepted, not merely parsed. This is the assertion that would have
+      // failed under the equality check versions 1 and 2 used, and it is the
+      // one that keeps a plugin already sitting in somebody's VST3 folder
+      // working after they upgrade the app.
+      expect(hello, isNotNull);
+      expect(hello!.protocolVersion, 2);
+      expect(
+        hello.incompatibility,
+        isNull,
+        reason: 'a version-2 producer must still be drawable',
+      );
+
+      expect(transport, isNotNull);
+      expect(sawSnapshot, isTrue);
+      expect(snapshot.channels, greaterThan(0));
+    });
+
+    test('it differs from the version-3 golden only in the version field', () {
+      final v2 = _goldenBytes('wire_v2.bin');
+      final v3 = _goldenBytes('wire_v3.bin');
+
+      // Same length is the first half of "no table moved"; the byte-level diff
+      // below is the other half. If a field had been added, inserted or
+      // reordered, this is where it would show.
+      expect(v3.length, v2.length);
+
+      final differing = <int>[];
+      for (var i = 0; i < v2.length; i++) {
+        if (v2[i] != v3[i]) differing.add(i);
+      }
+
+      for (final offset in differing) {
+        expect(v2[offset], 2);
+        expect(v3[offset], 3);
+      }
+
+      // Three frames, so three headers — and a fourth because HELLO repeats the
+      // version inside its own payload, which is the only place in the protocol
+      // the number appears twice. Getting this count from "one per frame" would
+      // have been off by one and still passed, so it is spelled out: offsets 4,
+      // 12, 86 and 186, being header, hello payload, header, header.
+      expect(
+        differing,
+        <int>[4, 12, 86, 186],
+        reason:
+            'only version fields may move between 2 and 3 — anything else here '
+            'is a table that shifted',
+      );
+    });
+  });
+
   group('the C++ plugin golden', () {
     late FrameReader reader;
     late Transport transport;
@@ -287,17 +370,17 @@ void main() {
 /// be a stale copy — and the entire value of this file is that the bytes came
 /// out of a different implementation in a different language. A golden that has
 /// drifted back into agreement with the code it is checking proves nothing.
-Uint8List _goldenBytes() {
+Uint8List _goldenBytes([String name = 'wire_v3.bin']) {
   var directory = Directory.current;
   for (var depth = 0; depth < 5; depth++) {
-    final candidate = File('${directory.path}/plugin/test/golden/wire_v2.bin');
+    final candidate = File('${directory.path}/plugin/test/golden/$name');
     if (candidate.existsSync()) return candidate.readAsBytesSync();
     final parent = directory.parent;
     if (parent.path == directory.path) break;
     directory = parent;
   }
   throw StateError(
-    'plugin/test/golden/wire_v2.bin not found from ${Directory.current.path}. '
+    'plugin/test/golden/$name not found from ${Directory.current.path}. '
     'Regenerate it with the oaa_wire_fixture target in plugin/.',
   );
 }

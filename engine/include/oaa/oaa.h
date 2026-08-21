@@ -63,7 +63,7 @@ extern "C" {
  * side asserts against it at startup, because a stale prebuilt library that
  * silently reads a reordered struct produces plausible-looking wrong numbers,
  * which is the worst failure mode a measurement tool has. */
-#define OAA_ABI_VERSION 4
+#define OAA_ABI_VERSION 5
 
 /* 7.1 is the widest layout the Digital Meter renders, so it is the widest the
  * graph carries. */
@@ -415,6 +415,46 @@ OAA_API int32_t oaa_engine_stop(oaa_engine *engine);
  * "max since reset" peaks, the clip counters — and restarts the elapsed clock.
  * Momentary values are left alone; they describe the signal, not the session. */
 OAA_API void oaa_engine_reset(oaa_engine *engine);
+
+/* Reset automatically when the signal returns after a silence.
+ *
+ * This is the engine's whole contribution to the LUFS time modes, and it is
+ * here rather than above the engine because silence is a property of audio and
+ * not of a host: one implementation serves a plugin in a DAW and a sound card
+ * both, and two would eventually disagree about when a track began. The three
+ * other modes need a playhead, so they are the caller's business — `engine/`
+ * does not learn what a DAW is.
+ *
+ * With this enabled, a block whose highest magnitude is below
+ * OAA_SILENCE_FLOOR accumulates towards OAA_SILENCE_HOLD_SECONDS; the first
+ * block above the floor once that has expired resets exactly as
+ * oaa_engine_reset would, *before* that block is measured. Before rather than
+ * after, because a track whose loudest sample is in its first block would
+ * otherwise have that peak cleared by its own reset — a true-peak reading that
+ * is wrong only for material that opens on a transient, which is most of it.
+ *
+ * Off by default, and off is what every existing caller wants: file analysis
+ * measures a file whole, and a reset in the middle of one would report a
+ * different programme than the one that was asked for.
+ *
+ * Idempotent, and safe to call while running. */
+OAA_API void oaa_engine_set_silence_reset(oaa_engine *engine, int32_t enabled);
+
+/* The floor a block's peak magnitude has to stay under to count as silence,
+ * and how long it must stay there before the next signal starts a new
+ * measurement.
+ *
+ * -60 dBFS rather than true zero: a DAW that has stopped feeding a plugin
+ * sends exact zeroes, but a sound card with nothing playing sends its own noise
+ * floor, and a converter idling at -85 dBFS would never once look silent. -60
+ * is below anything anybody masters towards and above every idle input this has
+ * been run against.
+ *
+ * Two seconds because it has to outlast a musical gap. A held pause between
+ * movements is not the end of the programme, and a measurement that restarted
+ * on one would report the second half of a piece as the whole of it. */
+#define OAA_SILENCE_FLOOR 0.001f /* -60 dBFS */
+#define OAA_SILENCE_HOLD_SECONDS 2.0
 
 /* ------------------------------------------------------------------------ */
 /* The per-frame path                                                        */

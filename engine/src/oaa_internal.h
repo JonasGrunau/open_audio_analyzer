@@ -149,6 +149,17 @@ struct oaa_engine {
   double corr_sum_rr;
 
   float sample_peak_max_linear;
+
+  /* --- The silence gate, for OAA's SYSTEM loudness mode ----------------- */
+  /* Written by the owner's thread, read by whichever thread analyses. A plain
+   * int32 rather than an atomic: it is a mode the user picks, so a block
+   * either side of the change is measured under the old one, and nothing about
+   * the reading depends on which. */
+  int32_t silence_reset;
+
+  /* Seconds of consecutive sub-floor audio. Owned entirely by the analysing
+   * thread. */
+  double silence_seconds;
 };
 
 /* Fill `frames` frames of interleaved audio into engine->block. */

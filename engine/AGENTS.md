@@ -30,6 +30,16 @@ fails the build when the two lists disagree.
 
 ## Rules
 
+- **The engine has exactly one notion of a LUFS time mode, and it is not a
+  mode.** `oaa_engine_set_silence_reset` restarts the integrating measurements
+  when signal returns after a silence, which is what the app calls System. The
+  other three modes are decided above the engine — Continuous is the absence of
+  a rule, and Elapsed and Timecode are the *producer declining to push*, which
+  needs no API here at all. That asymmetry is deliberate and it is what keeps
+  the rule below true: a playhead field, or a "set the mode" call taking a
+  transport, is the moment `engine/` learns what a DAW is, and it does not get
+  to. See `docs/WIRE.md` `0x0020`.
+
 - **Bump `OAA_ABI_VERSION`** whenever the header changes shape, then regenerate
   the Dart bindings. The Dart side asserts it at startup, because a stale
   library does not crash — it reads a reordered struct and shows plausible wrong

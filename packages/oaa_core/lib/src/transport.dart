@@ -20,21 +20,110 @@ library;
 /// an integrated reading is only meaningful relative to a stated start, and
 /// four people measuring "the loudness of this mix" from four different origins
 /// get four different numbers, all correct.
+/// **Declaration order is the wire encoding.** `docs/WIRE.md` `0x0020` freezes
+/// `continuous` as 0, `system` as 1, `elapsed` as 2 and `timecode` as 3, and the
+/// index of a value here is the integer that goes on the socket. A mode may
+/// therefore only ever be *appended*, and reordering these is a protocol change
+/// wearing the clothes of a tidy-up.
 enum LufsTimeMode {
   /// Measures from the last manual reset and keeps going regardless of what the
   /// host is doing. The only mode available without a DAW.
-  continuous,
+  continuous('continuous', 'Continuous'),
 
   /// Measures from when audio started arriving, resetting when it stops.
-  system,
+  ///
+  /// Silence rather than the stream stopping, because a sound card with nothing
+  /// playing goes on delivering its own noise floor all day — so a mode keyed on
+  /// "is audio arriving" would never restart on a device and would be
+  /// indistinguishable from [continuous] there. The engine owns the threshold;
+  /// see `oaa_engine_set_silence_reset`.
+  system('system', 'System'),
 
   /// Measures from when the host's transport started rolling, and holds while
   /// it is stopped. Needs [Transport.isPlaying].
-  elapsed,
+  elapsed('elapsed', 'Elapsed'),
 
   /// Measures between two timeline positions, so the same region of a session
   /// measures the same on every pass. Needs [Transport.hasTimecode].
-  timecode,
+  timecode('timecode', 'Timecode');
+
+  const LufsTimeMode(this.id, this.label);
+
+  /// Stable identifier for presets. Never change one of these; add a new mode
+  /// instead. Distinct from [wireValue], which is the index — a preset is text
+  /// a human may have edited, and the wire is a frozen byte table.
+  final String id;
+
+  /// What the module's menu says.
+  final String label;
+
+  /// The integer `docs/WIRE.md` `0x0020` carries for this mode.
+  int get wireValue => index;
+
+  /// Whether this mode can be honoured by a producer that has no playhead.
+  bool get needsTransport =>
+      this == LufsTimeMode.elapsed || this == LufsTimeMode.timecode;
+
+  /// Whether this mode needs a region alongside it.
+  bool get needsRegion => this == LufsTimeMode.timecode;
+
+  static LufsTimeMode? fromId(String id) {
+    for (final mode in values) {
+      if (mode.id == id) return mode;
+    }
+    return null;
+  }
+
+  /// Decodes a wire value, returning null for one this build does not know —
+  /// which is what a producer newer than its consumer looks like.
+  static LufsTimeMode? fromWireValue(int value) =>
+      value >= 0 && value < values.length ? values[value] : null;
+}
+
+/// The stretch of timeline [LufsTimeMode.timecode] measures between.
+///
+/// Seconds from the timeline origin, the same origin as [Transport.timeSeconds],
+/// because that is the field a producer compares against per audio block. What
+/// the user typed as timecode is a rendering of this and not its storage — a
+/// region stored as timecode would change meaning the moment the session's frame
+/// rate did.
+class LufsRegion {
+  const LufsRegion(this.startSeconds, this.endSeconds);
+
+  final double startSeconds;
+  final double endSeconds;
+
+  /// End is exclusive, so a zero-length region measures nothing and is not
+  /// valid. `docs/WIRE.md` requires end greater than start.
+  bool get isValid =>
+      endSeconds > startSeconds &&
+      startSeconds.isFinite &&
+      endSeconds.isFinite &&
+      startSeconds >= 0;
+
+  double get durationSeconds => endSeconds - startSeconds;
+
+  Map<String, Object?> toJson() => {'from': startSeconds, 'to': endSeconds};
+
+  static LufsRegion? fromJson(Map<String, Object?> json) {
+    final from = (json['from'] as num?)?.toDouble();
+    final to = (json['to'] as num?)?.toDouble();
+    if (from == null || to == null) return null;
+    final region = LufsRegion(from, to);
+    return region.isValid ? region : null;
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is LufsRegion &&
+      other.startSeconds == startSeconds &&
+      other.endSeconds == endSeconds;
+
+  @override
+  int get hashCode => Object.hash(startSeconds, endSeconds);
+
+  @override
+  String toString() => 'LufsRegion($startSeconds, $endSeconds)';
 }
 
 /// Timecode frame rates, using the values carried on the wire verbatim.

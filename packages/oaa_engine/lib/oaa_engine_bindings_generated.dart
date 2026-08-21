@@ -60,6 +60,34 @@ external int oaa_engine_stop(ffi.Pointer<oaa_engine> engine);
 @ffi.Native<ffi.Void Function(ffi.Pointer<oaa_engine>)>()
 external void oaa_engine_reset(ffi.Pointer<oaa_engine> engine);
 
+/// Reset automatically when the signal returns after a silence.
+///
+/// This is the engine's whole contribution to the LUFS time modes, and it is
+/// here rather than above the engine because silence is a property of audio and
+/// not of a host: one implementation serves a plugin in a DAW and a sound card
+/// both, and two would eventually disagree about when a track began. The three
+/// other modes need a playhead, so they are the caller's business — `engine/`
+/// does not learn what a DAW is.
+///
+/// With this enabled, a block whose highest magnitude is below
+/// OAA_SILENCE_FLOOR accumulates towards OAA_SILENCE_HOLD_SECONDS; the first
+/// block above the floor once that has expired resets exactly as
+/// oaa_engine_reset would, *before* that block is measured. Before rather than
+/// after, because a track whose loudest sample is in its first block would
+/// otherwise have that peak cleared by its own reset — a true-peak reading that
+/// is wrong only for material that opens on a transient, which is most of it.
+///
+/// Off by default, and off is what every existing caller wants: file analysis
+/// measures a file whole, and a reset in the middle of one would report a
+/// different programme than the one that was asked for.
+///
+/// Idempotent, and safe to call while running.
+@ffi.Native<ffi.Void Function(ffi.Pointer<oaa_engine>, ffi.Int32)>()
+external void oaa_engine_set_silence_reset(
+  ffi.Pointer<oaa_engine> engine,
+  int enabled,
+);
+
 /// The stable address of this engine's snapshot. Valid from create() until
 /// destroy(), and it never moves. Call it once and keep the pointer; the
 /// contents are only meaningful after oaa_snapshot_acquire().
@@ -625,7 +653,7 @@ final class oaa_file_info extends ffi.Struct {
 
 final class oaa_file extends ffi.Opaque {}
 
-const int OAA_ABI_VERSION = 4;
+const int OAA_ABI_VERSION = 5;
 
 const int OAA_MAX_CHANNELS = 8;
 
@@ -656,3 +684,7 @@ const int OAA_FLAG_OVERRUN = 8;
 const int OAA_DEVICE_ID_MAX = 256;
 
 const int OAA_DEVICE_NAME_MAX = 256;
+
+const double OAA_SILENCE_FLOOR = 0.0010000000474974513;
+
+const double OAA_SILENCE_HOLD_SECONDS = 2.0;
