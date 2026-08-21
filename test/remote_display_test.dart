@@ -99,6 +99,61 @@ void main() {
     expect(client.snapshot.isRunning, isTrue);
   });
 
+  // --- What the host is reading can be replaced under it ------------------
+  //
+  // An engine is destroyed and rebuilt whenever the source or the device
+  // changes, and this host outlives that. Holding the source it was constructed
+  // with meant the publish timer went on acquiring through a freed handle,
+  // thirty times a second, sending 15 kB of returned heap to a tablet as a
+  // measurement — for as long as the app stayed open.
+  test('a replaced source is what gets published', () async {
+    source
+      ..generation = 1
+      ..lufsIntegrated = -14.2
+      ..isRunning = true;
+
+    await connect();
+    await _settle(milliseconds: 200);
+    expect(client.snapshot.lufsIntegrated, closeTo(-14.2, 1e-5));
+
+    // The engine the user just switched to.
+    final replacement = _FakeSource()
+      ..generation = 99
+      ..lufsIntegrated = -23.0
+      ..sampleRate = 44100
+      ..isRunning = true;
+    host.source = replacement;
+
+    await _settle(milliseconds: 200);
+    expect(client.snapshot.lufsIntegrated, closeTo(-23.0, 1e-5));
+    expect(client.snapshot.sampleRate, 44100);
+  });
+
+  test('no source publishes nothing rather than the last frame', () async {
+    source
+      ..generation = 1
+      ..lufsIntegrated = -14.2
+      ..isRunning = true;
+
+    await connect();
+    await _settle(milliseconds: 200);
+    final seen = client.snapshot.generation;
+
+    // An engine that failed to open — a declined microphone permission, an
+    // interface unplugged. There is nothing being measured, so there is nothing
+    // honest to send; the display goes stale and says so rather than holding a
+    // detailed picture of a source that no longer exists.
+    host.source = null;
+    source.generation = 2;
+
+    await _settle(milliseconds: 200);
+    expect(
+      client.snapshot.generation,
+      seen,
+      reason: 'a host with no source must not publish',
+    );
+  });
+
   test('an unmeasured quantity arrives unmeasured', () async {
     // The rule that matters most on this path. A remote display that turned a
     // NaN into a zero somewhere between two machines would show a confident

@@ -15,20 +15,19 @@ import 'remote_display_service.dart';
 
 /// The status-bar entry for the remote display, and the panels behind it.
 ///
-/// This is the whole of Phase 6's footprint in the desktop app: one widget in
-/// one row. It owns the [RemoteDisplayService] rather than putting it in a
-/// provider, because the service is not configuration — it holds a socket, an
-/// mDNS responder and a publish timer, all of which have to be torn down with
-/// the element that created them, and none of which any other widget reads.
+/// **A view onto the service, not its owner.** It used to own one, which was
+/// wrong twice over. The service holds a socket, an mDNS responder and a publish
+/// timer keyed to the engine being measured — so it has to be torn down with the
+/// *engine*, and it has to be told when the engine is replaced. This widget's
+/// lifetime is neither: it is dropped whenever the window is narrower than
+/// 620 px, because the status bar drops whole items rather than squeezing them.
+/// Publishing to a tablet therefore stopped, silently, when somebody resized the
+/// window — and survived a device change while pointing at a destroyed engine.
+/// The service now lives beside the engine, and this row reads it.
 class RemoteDisplayControl extends ConsumerStatefulWidget {
-  const RemoteDisplayControl({
-    required this.source,
-    required this.abiVersion,
-    super.key,
-  });
+  const RemoteDisplayControl({required this.service, super.key});
 
-  final MeterSource source;
-  final int abiVersion;
+  final RemoteDisplayService service;
 
   @override
   ConsumerState<RemoteDisplayControl> createState() =>
@@ -36,16 +35,7 @@ class RemoteDisplayControl extends ConsumerStatefulWidget {
 }
 
 class _RemoteDisplayControlState extends ConsumerState<RemoteDisplayControl> {
-  late final RemoteDisplayService _service = RemoteDisplayService(
-    source: widget.source,
-    abiVersion: widget.abiVersion,
-  );
-
-  @override
-  void dispose() {
-    _service.dispose();
-    super.dispose();
-  }
+  RemoteDisplayService get _service => widget.service;
 
   @override
   Widget build(BuildContext context) {

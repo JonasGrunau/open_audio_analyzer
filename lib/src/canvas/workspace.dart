@@ -315,9 +315,11 @@ class WorkspaceController extends Notifier<Workspace> {
 /// where the loudness has been, how it sits in the target, whether the stereo
 /// image survives a mono fold.
 ///
-/// Nothing persists this yet — a rearranged canvas is gone when the app closes.
-/// Preset saving is Phase 4, and saying so in the README is better than a
-/// half-implemented autosave that writes a format Phase 4 has to migrate.
+/// This is the starting point, not a preset. The canvas as it was left is
+/// autosaved to `session.json` and restored at launch — see
+/// `_WorkspaceState.initState` — and a layout only becomes a preset when
+/// somebody names it, because silently mutating the preset a user loaded is how
+/// a preset library becomes untrustworthy.
 PresetSpec defaultPreset() {
   const metrics = [
     Metric.lufsMomentary,

@@ -232,10 +232,11 @@ halves live here.
 
   **It is also how a terminal poisons a test.** macOS attributes the permission
   to the *responsible* process, so a build launched from a shell inherits the
-  shell's answer: `flutter test` and a bare `oaa.app/Contents/MacOS/oaa` are
-  denied while the same code inside `open -a oaa.app` is allowed. A discovery
-  test that opens a real socket therefore fails on a machine where the feature
-  works. `launch_options.dart` records the same trap for the microphone.
+  shell's answer: `flutter test` and a bare
+  `Open Audio Analyzer.app/Contents/MacOS/Open Audio Analyzer` are denied while
+  the same code inside `open -a "Open Audio Analyzer.app"` is allowed. A
+  discovery test that opens a real socket therefore fails on a machine where the
+  feature works. `launch_options.dart` records the same trap for the microphone.
 
 - **iOS and iPadOS cannot use the socket at all, and this is not a
   permission.** On real hardware, custom multicast requires

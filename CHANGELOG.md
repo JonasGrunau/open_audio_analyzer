@@ -31,6 +31,20 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   all.
 
 ### ✨ Added
+- The app accepts plugin connections. `PluginLink` was written, tested and never
+  constructed, so port 47822 was never bound: a VST3 or AU inserted in a DAW
+  retried against nothing forever while the README said the desktop app meters
+  what the DAW is playing. Inserting a plugin now puts it on the canvas — the
+  act of inserting it is the act of choosing it — and removing it hands the
+  canvas back to the local source. A port that cannot be bound is reported in
+  the window rather than being silent, because the usual cause is a second copy
+  of Open Audio Analyzer already running.
+- `oaa --target` reads your own delivery targets, not only the six built-in
+  ones. The app has always merged `calibrations/*.json` over the built-ins by
+  id; the CLI knew nothing about them, so a corrected `atsc-a85.json` changed
+  the verdict in the window and left the exit code — the one a release pipeline
+  believes — judging against ours. `oaa --list-targets` shows them, and
+  `--config-dir` points at a directory other than the default.
 - The VST3 and the Audio Unit are published with each release, as one archive
   per platform holding the plugin bundles. They are not bundled inside the
   desktop installers yet.
@@ -60,12 +74,33 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   published build rather than after.
 
 ### 🐛 Fixed
+- The remote display no longer reads a destroyed engine. Changing the audio
+  source or device while publishing to a tablet left the publish timer holding
+  the engine it was built with, acquiring through a freed handle thirty times a
+  second and sending 15 kB of returned heap to the tablet as a measurement. The
+  service now follows the engine, and lives beside it rather than inside the
+  status-bar button — which the status bar drops below 620 px of window width,
+  so narrowing the window silently tore down an active session.
 - A disposed engine reports itself unavailable instead of reading freed memory.
   Every scalar reading returns NaN, false or zero and `refresh` returns false, so
   a holder that keeps one a frame too long draws em dashes rather than plausible
   numbers. The array views cannot be guarded and are documented as invalid the
   moment `dispose` returns.
+- Cancelling a file analysis no longer leaves the previous one running. The
+  native cancel flag was freed while the worker isolate was still reading it, so
+  the next analysis reallocated those four bytes as zero and the old worker read
+  "not cancelled" and went on decoding its whole file — competing for the frame
+  budget the isolate exists to protect. The flag is released once the isolate has
+  actually exited.
+- Resizing a module that a stored layout had left smaller than its own minimum,
+  against the right or bottom edge, no longer throws. Rects are now pinned to
+  the canvas and to the module's minimum as they are read, whatever wrote them.
+- The remote display's advertised name can be cleared, not only replaced.
+  Emptying the field restored the previous name, so "use this machine's name"
+  was unreachable once a name had been set.
 - A file analysis that cannot start no longer leaks its open decoder.
+- A preset named `CON`, `AUX`, `NUL`, `PRN`, `COM1`–`COM9` or `LPT1`–`LPT9` can
+  be saved on Windows, where those are reserved with any extension.
 - Stopping a pushed engine clears its running flag. It never started a thread,
   so `oaa_engine_stop` returned early and the snapshot reported a stopped engine
   as running for the rest of its life.
@@ -102,6 +137,9 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   and 512 frames.
 
 ### 🚧 Internal
+- `resolveConfigRoot`, `ConfigDir`, `ConfigFile` and `slugify` moved from the app
+  into `oaa_core`, which is what lets the CLI read the same delivery targets the
+  app writes. They are pure functions, so the package keeps its "no I/O" rule.
 - A fake DAW, in `plugin/host/`. It plays an audio file through the VST3 or the
   Audio Unit and hands it a transport — tempo, time signature, timecode frame
   rate, loop points, the record flag, and the playhead itself, which can be

@@ -43,7 +43,15 @@ class DisplayHost {
 
   /// What is being measured. Read-only from here — a remote display never
   /// starts, stops or resets anything.
-  final MeterSource source;
+  ///
+  /// **Replaceable, and null when there is nothing to publish.** An engine is
+  /// destroyed and rebuilt whenever the source changes, so a host that held the
+  /// one it was given at construction went on acquiring through a freed handle
+  /// — thirty times a second, forever, reading 15 kB of returned heap and
+  /// sending it to a tablet as a measurement. Null is the honest state between
+  /// an engine failing to open and one opening: nothing is being measured, so
+  /// nothing is published.
+  MeterSource? source;
 
   /// What the tablet shows in its list. A name, never an address.
   final String hostName;
@@ -230,6 +238,9 @@ class DisplayHost {
 
   void _publish() {
     if (_clients.isEmpty) return;
+
+    final source = this.source;
+    if (source == null) return;
 
     // Our own acquire, for the reason in the class comment.
     source.refresh();

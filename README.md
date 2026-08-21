@@ -678,6 +678,12 @@ oaa --format csv -o loudness.csv master.wav    # the loudness timeline
 oaa --list-targets                             # what you can measure against
 ```
 
+**`--target` reads your own targets too.** A `calibrations/*.json` file in the
+[configuration directory](#-configuration) is available to the CLI exactly as it
+is to the app, and one whose `id` matches a built-in replaces it — so a
+correction to our reading of a published spec reaches the exit code and not only
+the window. `--config-dir` points at somewhere other than the default.
+
 **The exit code is the point.** With `--target`, a file that misses its delivery
 spec exits `2`, an unreadable file exits `1`, and all-clear exits `0` — so a
 release pipeline can fail a build on a master that is 2 LU too loud instead of
@@ -711,6 +717,14 @@ painters as a live input. The plugin measures and streams; the app displays.
 That split is not a compromise around Flutter's inability to be a plugin GUI, it
 is what stops there being two implementations of every meter drifting apart from
 each other.
+
+The app takes the connection as the choice: a plugin that connects appears on the
+canvas in place of whatever local source was there, the status bar names it, and
+removing the plugin hands the canvas back. **RESET is the one control that
+cannot follow.** The link runs one way in protocol version 2, so nothing here
+can restart an integration inside the plugin; pressing it while a plugin is on
+screen says so rather than quietly resetting a local engine nobody is looking
+at.
 
 ```sh
 cmake -B plugin/build -S plugin -G Ninja -DCMAKE_BUILD_TYPE=Release
@@ -812,7 +826,9 @@ so a release built from a fork is unsigned and every script says so. See
   transport jumps — and no module offers the modes yet. Tying an integration
   window to the transport means restarting it when somebody drags the playhead,
   and that command travels from the app *to* the plugin: it needs a control
-  frame, which needs **wire protocol 2**. Continuous and System are unaffected,
+  frame, and protocol version 2 reserves the range for one without defining it,
+  so it needs **a protocol version past 2**. The same one-way limit is why RESET
+  cannot reach a connected plugin. Continuous and System are unaffected,
   and the remote display neither needs one nor will get one — the plugin port is
   loopback, where the things that can connect are already running as you, while
   the display port is on the LAN and stays read-only until somebody designs
@@ -872,7 +888,8 @@ so a release built from a fork is unsigned and every script says so. See
   `displayTargetId` and nothing honours it yet: assigning tabs to a particular
   screen means the host has to be able to tell two displays apart, and in a
   protocol where the display says nothing at all, it cannot. Either the display
-  identifies itself — which is a client→host frame, so **wire protocol 2** — or
+  identifies itself — which is a client→host frame, so a protocol version past
+  **2** — or
   the host keys assignments by address, which breaks on DHCP. Until then the
   display shows the whole preset and the viewer picks the tab.
 - 🤖 **An Android tablet remembers nothing between launches.** Every other

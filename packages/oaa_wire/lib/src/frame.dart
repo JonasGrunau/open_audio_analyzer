@@ -4,7 +4,11 @@ import 'dart:typed_data';
 
 /// Constants of the framing layer. See `docs/WIRE.md`.
 abstract final class WireFrame {
-  /// The ASCII bytes `B`, `E`, `L`, `W`, read as a little-endian `u32`.
+  /// The ASCII bytes `O`, `A`, `A`, `W`, read as a little-endian `u32`.
+  ///
+  /// This is the one field that moved between protocol version 1 and 2: it
+  /// spells the application's name, and the name changed. Every other table in
+  /// `docs/WIRE.md` is the version-1 table unchanged.
   ///
   /// A magic number is not decoration here. The first thing a display does with
   /// a stream is decide where a frame starts, and everything downstream — the
@@ -21,9 +25,9 @@ abstract final class WireFrame {
   ///
   /// A length field is an instruction to allocate, and one that has been
   /// corrupted in transit or written by something hostile must not be obeyed.
-  /// The largest legitimate frame in version 1 is a snapshot at a little over
-  /// 15 kB, so this is three orders of magnitude of headroom and still refuses
-  /// to turn four bad bytes into a four-gigabyte allocation.
+  /// The largest legitimate frame is a snapshot at a little over 15 kB, so this
+  /// is three orders of magnitude of headroom and still refuses to turn four
+  /// bad bytes into a four-gigabyte allocation.
   static const int maxPayloadBytes = 1 << 20;
 
   static const int _offsetMagic = 0;
@@ -80,7 +84,7 @@ abstract final class WireFrameType {
   static const int dawTransport = 0x0010;
 
   /// `0x0020`–`0x002F` — reserved for a client→host control channel that does
-  /// not exist in version 1, and should not be added without an authentication
+  /// not exist in version 2, and should not be added without an authentication
   /// story. See the note in `docs/WIRE.md`.
   static const int reservedControlLow = 0x0020;
   static const int reservedControlHigh = 0x002F;

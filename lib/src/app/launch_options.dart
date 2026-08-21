@@ -7,8 +7,9 @@
 ///
 /// **`--config-dir` is not a duplicate of `OAA_CONFIG_DIR`.** Passing an
 /// environment variable to a Mac application means launching the binary inside
-/// the bundle directly — `oaa.app/Contents/MacOS/oaa` — and a bare binary
-/// launch changes how TCC attributes the microphone request, so the device
+/// the bundle directly — `Open Audio Analyzer.app/Contents/MacOS/Open Audio
+/// Analyzer` — and a bare binary launch changes how TCC attributes the
+/// microphone request, so the device
 /// silently fails to open and Open Audio Analyzer falls back to the test tone.
 /// The net effect is that the config override and device capture could not be
 /// exercised in the same launch, which has already been mis-reported once as

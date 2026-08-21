@@ -12,6 +12,7 @@
 // because the worker owns a native engine and an open decoder and killing it
 // mid-loop leaks both. The reasoning is with the token, in oaa_engine.
 
+import 'dart:async';
 import 'dart:isolate';
 
 import 'package:oaa_engine/oaa_engine.dart';
@@ -55,11 +56,20 @@ class OfflineCancelledEvent extends OfflineEvent {
 
 /// One file analysis, running on its own isolate.
 ///
-/// Listen to [events] once; the stream closes when the run finishes, fails or
-/// is cancelled. Call [dispose] afterwards — it frees the native cancel flag,
-/// which is small but is native memory all the same.
+/// Listen to [events] once. **The stream closes when the worker isolate has
+/// exited**, not when the last event arrived — those are different instants and
+/// the difference is a use-after-free. The worker reads the cancel flag out of
+/// native memory this object owns, and it only looks between decoded blocks, so
+/// for a few milliseconds after a cancel the flag is still being read. Freeing
+/// it there returned four bytes that the *next* job's token then reallocated
+/// and zeroed, so the old worker read the new job's flag, saw "not cancelled",
+/// and analysed the rest of its file at full speed against the meters the
+/// isolate exists to protect.
+///
+/// So [stop] is the way to end a run early: it asks, waits for the exit, and
+/// only then frees. [dispose] is safe once the stream has closed.
 class OfflineAnalysisJob {
-  OfflineAnalysisJob._(this._token, this._events);
+  OfflineAnalysisJob._(this._token, this._events, this._exited);
 
   /// Starts analysing [path].
   static Future<OfflineAnalysisJob> start(
@@ -88,47 +98,70 @@ class OfflineAnalysisJob {
       rethrow;
     }
 
-    return OfflineAnalysisJob._(token, _listen(receive));
+    final exited = Completer<void>();
+    final events = StreamController<OfflineEvent>();
+
+    // The port is drained here rather than by whoever listens to [events], and
+    // that is the whole mechanism. A subscriber can cancel at any moment — the
+    // panel does, when it is disposed mid-run — and if the drain were the
+    // subscriber's `await for`, cancelling it would stop the drain and nothing
+    // would ever observe the isolate's exit. The flag would then be freed while
+    // the worker was still reading it, which is the bug this shape exists to
+    // remove. So: the port is read until the isolate is gone, whatever the
+    // consumer does with the stream.
+    late final StreamSubscription<dynamic> messages;
+    messages = receive.listen((message) {
+      if (message == null) {
+        // onExit. The worker has stopped touching the cancel flag.
+        if (!exited.isCompleted) exited.complete();
+        messages.cancel();
+        receive.close();
+        events.close();
+        return;
+      }
+
+      // `onError` sends a two-element list. An isolate that died without
+      // reporting still reaches the null above, so the UI is never left on a
+      // progress bar that will not move again.
+      if (message is List && message.length == 2) {
+        if (!events.isClosed) {
+          events.add(OfflineFailedEvent('${message.first}'));
+        }
+        return;
+      }
+
+      if (message is OfflineEvent && !events.isClosed) events.add(message);
+    });
+
+    return OfflineAnalysisJob._(token, events.stream, exited.future);
   }
 
   final OaaCancelToken _token;
   final Stream<OfflineEvent> _events;
 
+  /// Completes when the worker isolate is gone and the flag can be freed.
+  final Future<void> _exited;
+
   Stream<OfflineEvent> get events => _events;
 
-  /// Asks the worker to stop. It checks between decoded blocks, so this takes
-  /// effect within a few milliseconds and unwinds cleanly rather than leaking
-  /// the engine and the open file.
+  /// Asks the worker to stop, without waiting.
+  ///
+  /// It checks between decoded blocks, so this takes effect within a few
+  /// milliseconds and unwinds cleanly rather than leaking the engine and the
+  /// open file. **The flag it reads is only safe to free once it has actually
+  /// gone** — use [stop] unless the stream is already closed.
   void cancel() => _token.cancel();
 
-  void dispose() => _token.dispose();
-
-  /// Turns the port's untyped messages into the sealed event type.
-  ///
-  /// `onExit` sends a bare null and `onError` sends a two-element list, so both
-  /// arrive on the same port as the worker's own messages and have to be told
-  /// apart here. An isolate that dies without ever reporting — an out-of-memory
-  /// kill, say — closes the stream rather than leaving the UI on a progress bar
-  /// that will never move again.
-  static Stream<OfflineEvent> _listen(ReceivePort receive) async* {
-    try {
-      await for (final message in receive) {
-        if (message == null) return; // onExit
-
-        if (message is List && message.length == 2) {
-          yield OfflineFailedEvent('${message.first}');
-          return;
-        }
-
-        if (message is OfflineEvent) {
-          yield message;
-          if (message is! OfflineProgressEvent) return;
-        }
-      }
-    } finally {
-      receive.close();
-    }
+  /// Cancels, waits for the isolate to exit, then releases the flag.
+  Future<void> stop() async {
+    _token.cancel();
+    await _exited;
+    _token.dispose();
   }
+
+  /// Releases the cancel flag. Only valid once [events] has closed, which is
+  /// the point at which the worker is known to be gone. Mid-run, use [stop].
+  void dispose() => _token.dispose();
 }
 
 class _Request {

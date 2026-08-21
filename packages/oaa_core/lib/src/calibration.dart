@@ -195,3 +195,30 @@ abstract final class BuiltInCalibrations {
     return null;
   }
 }
+
+/// The built-ins with the user's own files laid over them, by id.
+///
+/// A user file whose id matches a built-in **replaces** it rather than sitting
+/// beside it, which is what makes the built-in list correctable without a
+/// release: somebody who disagrees with our reading of ATSC A/85 writes an
+/// `atsc-a85.json` and their number wins everywhere the id appears — including
+/// in presets that already reference it.
+///
+/// One implementation, because there are two front ends. The app merged its
+/// library in a provider and the `oaa` CLI did not merge at all: it knew the six
+/// built-ins and nothing else, so the same corrected file passed in one and
+/// failed in the other, and the CLI's exit code is the one a release pipeline
+/// believes. Two answers to "what does this target require" is the one thing a
+/// delivery check cannot have.
+List<Calibration> mergeCalibrations(
+  List<Calibration> base,
+  List<Calibration> overrides,
+) {
+  final byId = <String, Calibration>{
+    for (final calibration in base) calibration.id: calibration,
+  };
+  for (final calibration in overrides) {
+    byId[calibration.id] = calibration;
+  }
+  return List.unmodifiable(byId.values);
+}

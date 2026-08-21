@@ -100,6 +100,12 @@ class AppSettings {
   final int remoteDisplayPort;
   final int remoteDisplayFps;
 
+  /// [clearDevice] and [clearRemoteDisplayName] exist because null means *keep*
+  /// everywhere else in here, and both of those fields have a null that is an
+  /// instruction rather than an absence: no device chosen, and "advertise under
+  /// this machine's own name". Without the flag, emptying the name field in the
+  /// remote panel silently restored the previous name — the one way back to the
+  /// default was unreachable once a name had ever been set.
   AppSettings copyWith({
     AudioSourceKind? sourceKind,
     String? deviceId,
@@ -110,6 +116,7 @@ class AppSettings {
     String? skinId,
     bool? restoreSession,
     String? remoteDisplayName,
+    bool clearRemoteDisplayName = false,
     int? remoteDisplayPort,
     int? remoteDisplayFps,
   }) => AppSettings(
@@ -120,7 +127,9 @@ class AppSettings {
     calibrationId: calibrationId ?? this.calibrationId,
     skinId: skinId ?? this.skinId,
     restoreSession: restoreSession ?? this.restoreSession,
-    remoteDisplayName: remoteDisplayName ?? this.remoteDisplayName,
+    remoteDisplayName: clearRemoteDisplayName
+        ? null
+        : (remoteDisplayName ?? this.remoteDisplayName),
     remoteDisplayPort: remoteDisplayPort ?? this.remoteDisplayPort,
     remoteDisplayFps: remoteDisplayFps ?? this.remoteDisplayFps,
   );

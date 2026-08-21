@@ -3,7 +3,6 @@
 import 'package:oaa_core/oaa_core.dart';
 import 'package:flutter/foundation.dart';
 
-import 'config_paths.dart';
 import 'config_store.dart';
 
 /// A preset as it exists on disk.

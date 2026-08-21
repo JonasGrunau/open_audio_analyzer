@@ -25,12 +25,33 @@ import 'package:flutter/foundation.dart';
 /// visits, no layout, no allocation — just paint. Notifying a
 /// `ValueNotifier<Snapshot>` that widgets rebuild from would undo all of it.
 class MeterClock extends ChangeNotifier {
-  MeterClock({required this.engine, required TickerProvider vsync}) {
+  MeterClock({required MeterSource engine, required TickerProvider vsync})
+    : _source = engine {
     _ticker = vsync.createTicker(_onTick)..start();
   }
 
-  /// The engine these ticks read from.
-  final MeterSource engine;
+  /// What these ticks read from.
+  ///
+  /// **Replaceable, because what is being metered can change without the clock
+  /// needing to.** The desktop reads a local engine until a plugin connects, and
+  /// then it reads the plugin's decoded frames instead; both are a
+  /// [MeterSource] and neither is a reason to build a second ticker. Rebuilding
+  /// the clock would be: every painter holds it as its `repaint` listenable, and
+  /// a painter still mounted for one frame after its notifier was disposed is
+  /// replaced by an error box.
+  ///
+  /// Setting it forgets the generation the previous source had reached, so the
+  /// first tick afterwards repaints rather than comparing two unrelated
+  /// counters.
+  MeterSource get engine => _source;
+  MeterSource _source;
+
+  set engine(MeterSource value) {
+    if (identical(value, _source)) return;
+    _source = value;
+    _seenGeneration = -1;
+  }
+
   late final Ticker _ticker;
 
   Duration _lastPublished = Duration.zero;
@@ -118,6 +139,8 @@ class MeterClock extends ChangeNotifier {
     }
     _lastPublished = elapsed;
 
+    final engine = _source;
+
     // The single FFI call on the frame path.
     engine.refresh();
 
@@ -142,7 +165,9 @@ class MeterClock extends ChangeNotifier {
     }
   }
 
-  int _seenGeneration = 0;
+  /// Starts at −1, because 0 is a real generation for a source to be at and a
+  /// source that published exactly once must still get that frame painted.
+  int _seenGeneration = -1;
 
   @override
   void dispose() {

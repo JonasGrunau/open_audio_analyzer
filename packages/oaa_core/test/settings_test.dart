@@ -175,5 +175,23 @@ void main() {
       expect(settings.copyWith(clearDevice: true).deviceId, isNull);
       expect(settings.copyWith(clearDevice: true).deviceName, isNull);
     });
+
+    test('the remote display name can be cleared, not only replaced', () {
+      // Null means *keep* everywhere in `copyWith`, and this field's null is an
+      // instruction — advertise under the machine's own host name. Without a
+      // flag of its own, emptying the name box in the remote panel restored the
+      // previous name and the default was unreachable once one had been set.
+      const settings = AppSettings(remoteDisplayName: 'Studio Mac');
+
+      expect(settings.copyWith(targetFps: 30).remoteDisplayName, 'Studio Mac');
+      expect(
+        settings.copyWith(remoteDisplayName: 'Booth').remoteDisplayName,
+        'Booth',
+      );
+      expect(
+        settings.copyWith(clearRemoteDisplayName: true).remoteDisplayName,
+        isNull,
+      );
+    });
   });
 }

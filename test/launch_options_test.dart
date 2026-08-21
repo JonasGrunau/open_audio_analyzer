@@ -10,7 +10,7 @@
 // like the config being ignored rather than like an argument being dropped.
 
 import 'package:oaa/src/app/launch_options.dart';
-import 'package:oaa/src/storage/config_paths.dart';
+import 'package:oaa_core/oaa_core.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

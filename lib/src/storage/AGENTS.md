@@ -4,9 +4,16 @@ Everything Open Audio Analyzer remembers between launches. GPL-3.0-or-later.
 
 | File | Purpose |
 |------|---------|
-| `config_paths.dart` | Where the configuration lives, per platform. Pure functions of an environment map and, on iOS, of the temporary directory — no `dart:io`, no Flutter. |
 | `config_store.dart` | Reading and writing it. Atomic writes, debounced session saves, and no exceptions. |
 | `startup_config.dart` | The one read of the whole directory, performed before the first frame. |
+
+**Where the configuration lives is not here either.** `resolveConfigRoot`,
+`ConfigDir`, `ConfigFile` and `slugify` are in
+`packages/oaa_core/lib/src/config_locations.dart`, because the `oaa` CLI reads
+the same delivery targets the app writes and cannot import this package. While
+those rules lived here the CLI knew only the six built-in targets, so a
+corrected `atsc-a85.json` changed the verdict in the window and not the exit
+code — which is the one a release pipeline believes.
 
 The models these files serialise are **not here** — `AppSettings`, `Skin`,
 `PresetSpec` and `Calibration` all live in `oaa_core`, because the `oaa` CLI and
@@ -86,15 +93,17 @@ This directory knows about files; it does not know what is in them.
 
 - **On macOS override the path with the flag, not the variable, whenever the
   microphone is also in play.** Handing an environment variable to a bundle
-  means launching `oaa.app/Contents/MacOS/oaa` directly, and a bare binary
-  launch changes how TCC attributes the microphone request — so the device fails
+  means launching `Open Audio Analyzer.app/Contents/MacOS/Open Audio Analyzer`
+  directly, and a bare binary launch changes how TCC attributes the microphone
+  request — so the device fails
   to open and the engine falls back to the test tone. Through `open` the device
   works and the variable never reaches the process. For a phase that was the
   choice of one or the other, and it was mis-reported once as "the persisted
   source is ignored". The flag settles it:
 
   ```sh
-  open -a build/macos/Build/Products/Debug/oaa.app --args --config-dir=/tmp/oaa
+  open "build/macos/Build/Products/Debug/Open Audio Analyzer.app" \
+    --args --config-dir=/tmp/oaa
   ```
 
   overrides the directory with TCC still attributing the request to the bundle,

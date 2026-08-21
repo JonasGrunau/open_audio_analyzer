@@ -21,7 +21,7 @@ import 'frame.dart';
 
 /// Reads a [Transport] out of a `0x0010` payload.
 abstract final class DawTransportCodec {
-  /// Payload size, frozen at protocol version 1.
+  /// Payload size, frozen when this frame type was added and unchanged since.
   static const int payloadBytes = 88;
 
   static const int _offsetFlags = 0;

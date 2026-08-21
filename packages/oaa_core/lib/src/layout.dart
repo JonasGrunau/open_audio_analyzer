@@ -16,7 +16,8 @@ enum ModuleKind {
     // title bar takes 24 of that and the module's own inset takes the rest,
     // so a one-row Number Box drew a title and an empty body — not "too
     // small", which is a statement, but blank, which is a fault. Stored
-    // layouts holding a one-row box are clamped up by `normaliseModule`.
+    // layouts holding a one-row box are clamped up by [GridRect.fittedTo],
+    // which `ModuleSpec.fromJson` applies to every rect it reads.
     minRows: 2,
     defaultColumns: 4,
     defaultRows: 2,
@@ -252,6 +253,28 @@ class GridRect {
         rows: rows ?? this.rows,
       );
 
+  /// This rect pinned to the canvas and to [kind]'s minimum size.
+  ///
+  /// Size is clamped first and position second, so a module past the right edge
+  /// slides back into view at full size rather than being squashed against it.
+  ///
+  /// Lives here rather than only in `grid.dart` because deserialisation needs
+  /// it: a stored layout is arbitrary integers from a file, and until this ran
+  /// on the way in, a module could be narrower than its kind's minimum *and*
+  /// hard against an edge — a pair the canvas then could not resize, because
+  /// the clamp bounds crossed over. `fitToGrid` is the same function under the
+  /// name the placement rules use.
+  GridRect fittedTo(ModuleKind kind) {
+    final fittedColumns = columns.clamp(kind.minColumns, kGridColumns);
+    final fittedRows = rows.clamp(kind.minRows, kGridRows);
+    return GridRect(
+      column: column.clamp(0, kGridColumns - fittedColumns),
+      row: row.clamp(0, kGridRows - fittedRows),
+      columns: fittedColumns,
+      rows: fittedRows,
+    );
+  }
+
   Map<String, Object?> toJson() => {
     'c': column,
     'r': row,
@@ -401,7 +424,16 @@ class ModuleSpec {
     return ModuleSpec(
       id: json['id']! as String,
       kind: kind,
-      rect: GridRect.fromJson(json['rect']! as Map<String, Object?>),
+      // Normalised on the way in, which is the *only* place it can be done
+      // once for every source of a layout: the session file, a preset the user
+      // hand-edited, and a layout that arrived over the wire from a host on a
+      // different version. A rect from a file is four arbitrary integers —
+      // negative, oversized, outside the canvas, or below a minimum that was
+      // raised since it was written — and everything downstream assumes
+      // otherwise. See [GridRect.fittedTo].
+      rect: GridRect.fromJson(
+        json['rect']! as Map<String, Object?>,
+      ).fittedTo(kind),
       options: (json['options'] as Map?)?.cast<String, Object?>() ?? const {},
     );
   }

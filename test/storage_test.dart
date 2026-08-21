@@ -11,7 +11,6 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:oaa/src/storage/config_paths.dart';
 import 'package:oaa/src/storage/config_store.dart';
 import 'package:oaa/src/storage/startup_config.dart';
 import 'package:oaa_core/oaa_core.dart';

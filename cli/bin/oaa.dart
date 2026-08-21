@@ -13,6 +13,7 @@
 // misses its delivery spec exits non-zero, which is what lets a build fail on
 // a master that is 2 LU too loud instead of shipping it.
 
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:args/args.dart';
@@ -61,7 +62,7 @@ Future<void> main(List<String> arguments) async {
   }
 
   if (args.flag('list-targets')) {
-    _listTargets();
+    _listTargets(_targets(args.option('config-dir')));
     return;
   }
 
@@ -81,10 +82,15 @@ Future<void> main(List<String> arguments) async {
     exit(ExitCode.error);
   }
 
+  // The built-ins with the user's own files over them. The app has always done
+  // this; the CLI knew only the built-ins, so a corrected `atsc-a85.json` gave
+  // one verdict in the window and another from the exit code a pipeline reads.
+  final targets = _targets(args.option('config-dir'));
+
   Calibration? target;
   final targetId = args.option('target');
   if (targetId != null) {
-    target = BuiltInCalibrations.byId(targetId);
+    target = _byId(targets, targetId);
     if (target == null) {
       stderr.writeln('oaa: unknown target "$targetId"');
       stderr.writeln('oaa: run `oaa --list-targets` to see them');
@@ -253,10 +259,65 @@ OfflineProgress? _progressReporter(String path) {
   };
 }
 
-void _listTargets() {
+/// Every delivery target available here: the built-ins, with the user's own
+/// files laid over them by id.
+///
+/// Reads the same directory the app writes, resolved by the same rules — see
+/// `resolveConfigRoot` in `oaa_core`, which is why that function lives there
+/// rather than in the app. A file that will not parse is skipped with a word to
+/// stderr rather than taken as an empty library: an unreadable target must not
+/// silently become "no such target", because the next thing that happens is an
+/// exit code somebody trusts.
+///
+/// [override] is `--config-dir`, which beats the environment, which beats the
+/// platform's convention.
+List<Calibration> _targets(String? override) {
+  final root = resolveConfigRoot(
+    operatingSystem: Platform.operatingSystem,
+    environment: Platform.environment,
+    override: override,
+    temporaryDirectory: Directory.systemTemp.path,
+  );
+  if (root == null) return BuiltInCalibrations.all;
+
+  final directory = Directory(
+    '$root${Platform.pathSeparator}${ConfigDir.calibrations}',
+  );
+  if (!directory.existsSync()) return BuiltInCalibrations.all;
+
+  final user = <Calibration>[];
+  try {
+    final entries = directory.listSync(followLinks: false)
+      ..sort((a, b) => a.path.compareTo(b.path));
+
+    for (final entry in entries) {
+      if (entry is! File || !entry.path.endsWith('.json')) continue;
+      try {
+        final decoded = jsonDecode(entry.readAsStringSync());
+        if (decoded is! Map) throw const FormatException('not a JSON object');
+        user.add(Calibration.fromJson(decoded.cast<String, Object?>()));
+      } on Object catch (error) {
+        stderr.writeln('oaa: ignoring ${entry.path}: $error');
+      }
+    }
+  } on FileSystemException catch (error) {
+    stderr.writeln('oaa: could not read ${directory.path}: ${error.message}');
+  }
+
+  return mergeCalibrations(BuiltInCalibrations.all, user);
+}
+
+Calibration? _byId(List<Calibration> targets, String id) {
+  for (final target in targets) {
+    if (target.id == id) return target;
+  }
+  return null;
+}
+
+void _listTargets(List<Calibration> targets) {
   stdout.writeln('Delivery targets:');
   stdout.writeln();
-  for (final target in BuiltInCalibrations.all) {
+  for (final target in targets) {
     stdout.writeln('  ${target.id.padRight(14)}${target.name}');
     stdout.writeln(
       '  ${' '.padRight(14)}'
@@ -302,6 +363,13 @@ ArgParser _buildParser() => ArgParser()
     'output',
     abbr: 'o',
     help: 'Write to a file instead of stdout.',
+    valueHelp: 'path',
+  )
+  ..addOption(
+    'config-dir',
+    help:
+        'Where to read your own delivery targets from. Defaults to the same '
+        'directory the app uses.',
     valueHelp: 'path',
   )
   ..addOption(

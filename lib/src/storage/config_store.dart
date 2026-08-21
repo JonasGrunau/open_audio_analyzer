@@ -4,7 +4,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'config_paths.dart';
+import 'package:oaa_core/oaa_core.dart';
 
 /// A JSON document as it was found on disk, with the file it came from.
 ///

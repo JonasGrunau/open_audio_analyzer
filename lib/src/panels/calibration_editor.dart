@@ -6,7 +6,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/providers.dart';
-import '../storage/config_paths.dart';
 
 /// Opens the delivery-target editor.
 ///

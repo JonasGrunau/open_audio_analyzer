@@ -218,6 +218,46 @@ void main() {
   });
 
   group('serialisation round-trips', () {
+    // --- What arrives from a file ----------------------------------------
+    //
+    // A rect in a document is four arbitrary integers. It may predate a
+    // module's minimum being raised, name a size this build considers
+    // unreadable, or have been typed by hand — and everything downstream
+    // assumes otherwise. `layout.dart` claimed for a phase that stored layouts
+    // were "clamped up by `normaliseModule`", a function that did not exist
+    // anywhere in the repository; the canvas then threw ArgumentError out of a
+    // pointer callback when a too-small module sat against the right edge,
+    // because the clamp bounds crossed over.
+    test('a module read from JSON is pinned to its minimum and the canvas', () {
+      final module = ModuleSpec.fromJson({
+        'id': 'm1',
+        'kind': 'spectrum',
+        // One cell wide, hard against the right edge, one row past the bottom.
+        'rect': {'c': 23, 'r': 15, 'w': 1, 'h': 1},
+      })!;
+
+      expect(module.rect.columns, ModuleKind.spectrumAnalyzer.minColumns);
+      expect(module.rect.rows, ModuleKind.spectrumAnalyzer.minRows);
+      expect(isInsideGrid(module.rect), isTrue);
+      // Slid back into view at full size rather than squashed against the edge.
+      expect(module.rect.right, kGridColumns);
+      expect(module.rect.bottom, kGridRows);
+    });
+
+    test('a nonsense rect from a hand-edited file still loads', () {
+      final module = ModuleSpec.fromJson({
+        'id': 'm1',
+        'kind': 'number_box',
+        'rect': {'c': -8, 'r': -3, 'w': 0, 'h': 999},
+      })!;
+
+      expect(isInsideGrid(module.rect), isTrue);
+      expect(module.rect.column, 0);
+      expect(module.rect.row, 0);
+      expect(module.rect.columns, ModuleKind.numberBox.minColumns);
+      expect(module.rect.rows, kGridRows);
+    });
+
     test('a laid-out tab survives JSON', () {
       var tab = _tab(const []);
       tab = tab.adding(ModuleKind.spectrumAnalyzer)!.tab;

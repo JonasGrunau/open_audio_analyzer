@@ -4,7 +4,7 @@ import 'package:oaa_core/oaa_core.dart';
 import 'package:oaa_ui/oaa_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../storage/config_paths.dart';
+import '../plugin/plugin_link.dart';
 import '../storage/config_store.dart';
 import '../storage/startup_config.dart';
 
@@ -88,6 +88,11 @@ class SettingsController extends Notifier<AppSettings> {
   ///
   /// Not whether it is publishing: that is deliberately not remembered — see
   /// [AppSettings.remoteDisplayPort].
+  ///
+  /// A [name] that trims to nothing clears the stored one, which is how the
+  /// display goes back to advertising under the machine's own host name.
+  /// Passing null leaves it alone — the two are different requests and used to
+  /// be the same one, so the field could never be emptied.
   void setRemoteDisplay({String? name, int? port, int? fps}) {
     final trimmed = name?.trim();
     _update(
@@ -95,6 +100,7 @@ class SettingsController extends Notifier<AppSettings> {
         remoteDisplayName: trimmed != null && trimmed.isNotEmpty
             ? trimmed
             : null,
+        clearRemoteDisplayName: trimmed != null && trimmed.isEmpty,
         remoteDisplayPort: port != null && port >= 1024 && port <= 65535
             ? port
             : null,
@@ -137,6 +143,14 @@ class SettingsController extends Notifier<AppSettings> {
         .scheduleWrite(ConfigFile.settings, next.toJson());
   }
 }
+
+/// The port the app accepts plugin connections on.
+///
+/// A provider only so that a test can ask the operating system for a free one:
+/// the suite runs its files concurrently, and a fixed port bound by two of them
+/// at once — or by a copy of the app the developer has open — is a flake with
+/// nothing to do with what was being tested. Production reads the default.
+final pluginLinkPortProvider = Provider<int>((ref) => kPluginLinkPort);
 
 /// How often the meters are allowed to repaint.
 final targetFpsProvider = Provider<int>(
@@ -217,16 +231,11 @@ class CalibrationLibraryController extends Notifier<List<Calibration>> {
     return true;
   }
 
+  /// Shared with the CLI — see [mergeCalibrations].
   static List<Calibration> _merge(
     List<Calibration> base,
     List<Calibration> overrides,
-  ) {
-    final byId = {for (final calibration in base) calibration.id: calibration};
-    for (final calibration in overrides) {
-      byId[calibration.id] = calibration;
-    }
-    return List.unmodifiable(byId.values);
-  }
+  ) => mergeCalibrations(base, overrides);
 }
 
 /// The active delivery target.

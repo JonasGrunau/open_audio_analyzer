@@ -110,6 +110,102 @@ void main() {
       expect(result.stdout, contains('ebu-r128'));
     });
 
+    // --- The user's own delivery targets ---------------------------------
+    //
+    // The CLI knew only the six built-ins, while the app merged the user's
+    // `calibrations/` files over them by id. So a corrected `atsc-a85.json`
+    // gave one verdict in the window and another from the exit code a release
+    // pipeline reads — from the same file, about the same master. These use
+    // `--config-dir` rather than the real configuration directory, so the
+    // suite never depends on what the developer happens to have saved.
+
+    /// Writes a delivery target into a config directory the CLI will read.
+    Directory configWith(String fileName, Map<String, Object?> json) {
+      final root = Directory('${_temp.path}/config-${json['id']}')
+        ..createSync(recursive: true);
+      Directory('${root.path}/calibrations').createSync();
+      File(
+        '${root.path}/calibrations/$fileName',
+      ).writeAsStringSync(jsonEncode(json));
+      return root;
+    }
+
+    test('a target the user wrote is offered', () {
+      final config = configWith('house.json', {
+        'id': 'house',
+        'name': 'House standard',
+        'lufs_target': -18.0,
+        'true_peak_max': -3.0,
+      });
+
+      final result = _run(['--config-dir', config.path, '--list-targets']);
+      expect(result.exitCode, 0);
+      expect(result.stdout, contains('house'));
+      expect(result.stdout, contains('House standard'));
+      // Still with the built-ins beside it, not instead of them.
+      expect(result.stdout, contains('streaming-14'));
+    });
+
+    test('a user file replaces the built-in of the same id', () {
+      // The whole point of the merge: our reading of a published spec is
+      // correctable without a release, and the correction has to reach the
+      // exit code as well as the window.
+      final config = configWith('ebu.json', {
+        'id': 'ebu-r128',
+        'name': 'EBU R 128, corrected',
+        'lufs_target': -23.0,
+        'lufs_tolerance': 0.1,
+        'true_peak_max': -1.0,
+      });
+
+      final result = _run(['--config-dir', config.path, '--list-targets']);
+      expect(result.exitCode, 0);
+      expect(result.stdout, contains('EBU R 128, corrected'));
+      expect(result.stdout, contains('±0.1 LUFS'));
+      expect(result.stdout, isNot(contains('EBU R 128 (broadcast)')));
+    });
+
+    test('a user target decides the exit code', () {
+      // The tone is around -14 LUFS, so it passes streaming-14 and misses a
+      // target set well below it. If the CLI were still reading only the
+      // built-ins this would exit 1 — unknown target — rather than 2.
+      final file = _writeWav('house.wav', 0.1993, 4.0);
+      final config = configWith('strict.json', {
+        'id': 'strict',
+        'name': 'Strict house target',
+        'lufs_target': -30.0,
+        'lufs_tolerance': 0.5,
+        'true_peak_max': -1.0,
+      });
+
+      final result = _run([
+        '-q',
+        '--config-dir',
+        config.path,
+        '--target',
+        'strict',
+        file.path,
+      ]);
+      expect(result.exitCode, 2, reason: 'stderr: ${result.stderr}');
+    });
+
+    test('a target file that will not parse is skipped, not fatal', () {
+      final root = Directory('${_temp.path}/config-broken')
+        ..createSync(recursive: true);
+      Directory('${root.path}/calibrations').createSync();
+      File(
+        '${root.path}/calibrations/broken.json',
+      ).writeAsStringSync('{ not json');
+
+      final result = _run(['--config-dir', root.path, '--list-targets']);
+
+      // One unreadable file must not turn the library into "no targets" — the
+      // next thing that happens is an exit code somebody trusts.
+      expect(result.exitCode, 0);
+      expect(result.stdout, contains('streaming-14'));
+      expect(result.stderr, contains('ignoring'));
+    });
+
     test('no arguments is an error, and the error goes to stderr', () {
       final result = _run([]);
       expect(result.exitCode, 1);

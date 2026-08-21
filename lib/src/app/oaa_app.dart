@@ -2,6 +2,7 @@
 
 // `AppExitResponse` is a `dart:ui` enum rather than a Flutter one, so neither
 // material.dart nor widgets.dart brings it into scope.
+import 'dart:async' show unawaited;
 import 'dart:ui' show AppExitResponse;
 
 import 'package:oaa_core/oaa_core.dart';
@@ -10,6 +11,7 @@ import 'package:oaa_ui/oaa_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../canvas/canvas_notice.dart';
 import '../canvas/grid_canvas.dart';
 import '../canvas/tab_strip.dart';
 import '../canvas/workspace.dart';
@@ -21,9 +23,10 @@ import '../panels/preset_browser.dart';
 import '../panels/report_panel.dart';
 import '../panels/settings_panel.dart';
 import '../panels/shortcuts_sheet.dart';
+import '../plugin/plugin_link.dart';
 import '../remote/display_screen.dart';
 import '../remote/remote_control.dart';
-import '../storage/config_paths.dart';
+import '../remote/remote_display_service.dart';
 import '../storage/startup_config.dart';
 import 'bar_controls.dart';
 import 'launch_options.dart';
@@ -109,7 +112,47 @@ class _WorkspaceState extends ConsumerState<_Workspace>
   String? _failure;
   String _sourceLabel = 'TEST TONE';
 
+  /// Publishing to a tablet, owned here rather than by the status-bar button
+  /// that switches it on.
+  ///
+  /// Two reasons, and both were bugs. It holds a socket and a publish timer
+  /// pointed at the engine, so it has to be told when the engine is replaced —
+  /// otherwise it keeps acquiring through a destroyed one and sends freed memory
+  /// to the tablet as a measurement. And the button that used to own it is
+  /// dropped from the status bar below 620 px of window width, so narrowing the
+  /// window tore down an active session with nothing anywhere saying why.
+  late final RemoteDisplayService _remote = RemoteDisplayService(
+    null, // no engine yet; `_openFor` attaches one
+    abiVersion: OaaEngine.abiVersion,
+  );
+
+  /// Plugin inserts, accepted on loopback.
+  ///
+  /// The plugin is the transient end of the link and the app is the one that
+  /// stays open, so the app listens and the plugin dials — see
+  /// `lib/src/plugin/plugin_link.dart`. This is the whole of the app's side of
+  /// it: own a link, and read the session it says is active.
+  ///
+  /// It was written, tested and never constructed, so the port was never bound
+  /// and a plugin retried forever against nothing while the README said the app
+  /// meters what the DAW is playing.
+  late final PluginLink _plugins = PluginLink(
+    port: ref.read(pluginLinkPortProvider),
+  );
+
   AppLifecycleListener? _lifecycle;
+
+  /// What the meters are reading: the active plugin session if one is
+  /// connected, and this machine's own engine otherwise.
+  ///
+  /// Inserting a plugin *is* the act of choosing it, so a connection takes the
+  /// canvas without anybody having to find a menu — which is what the README
+  /// describes and what `PluginLink.active` already decides. Removing it hands
+  /// the canvas back.
+  MeterSource? get _activeSource => _plugins.active?.snapshot ?? _engine;
+
+  /// Whether the canvas is showing a plugin rather than the local engine.
+  bool get _onPlugin => _plugins.active != null;
 
   @override
   void initState() {
@@ -117,6 +160,12 @@ class _WorkspaceState extends ConsumerState<_Workspace>
 
     final settings = ref.read(settingsProvider);
     _openFor(settings);
+
+    // Membership only — a session's *measurements* are read off its
+    // `WireSnapshot` by painters, never through a notifier. This rebuilds when
+    // a plugin arrives or leaves, which is a few times an hour.
+    _plugins.addListener(_onPluginsChanged);
+    unawaited(_plugins.start());
 
     // The source is a function of the settings from here on. `select` narrows
     // it to the two fields that require a restart — changing the skin or the
@@ -167,6 +216,42 @@ class _WorkspaceState extends ConsumerState<_Workspace>
     WidgetsBinding.instance.addPostFrameCallback((_) => _applyLaunchOptions());
   }
 
+  /// Clears the integrating measurements, where that is possible.
+  ///
+  /// It is not possible for a plugin. The protocol runs one way in version 2 —
+  /// a display cannot reset a producer's integration, and `docs/WIRE.md`
+  /// reserves the control frames that would change that but does not define
+  /// them. So rather than resetting the local engine nobody is looking at,
+  /// which is what a button wired straight to it would do, this says so.
+  void _reset() {
+    final session = _plugins.active;
+    if (session != null) {
+      ref
+          .read(canvasNoticeProvider.notifier)
+          .say(
+            'RESET cannot reach ${session.displayName}: the plugin link runs '
+            'one way. Restart the integration in your DAW, or switch back to a '
+            'local source.',
+          );
+      return;
+    }
+    _engine?.reset();
+  }
+
+  /// A plugin connected, disconnected, or became the active one.
+  void _onPluginsChanged() {
+    if (!mounted) return;
+    final source = _activeSource;
+    if (source != null) {
+      // The clock is retargeted rather than rebuilt: every painter holds it as
+      // its `repaint` listenable, and a painter that outlives its notifier by
+      // one frame is replaced by an error box.
+      _clock?.engine = source;
+      _remote.source = source;
+    }
+    setState(() {});
+  }
+
   /// Acts on `--open-panel`, and says so when an argument was not understood.
   void _applyLaunchOptions() {
     if (!mounted) return;
@@ -215,10 +300,16 @@ class _WorkspaceState extends ConsumerState<_Workspace>
       final engine = OaaEngine.start(source: source, deviceId: deviceId);
       setState(() {
         _engine = engine;
-        _clock = MeterClock(engine: engine, vsync: this);
+        _clock = MeterClock(
+          engine: _plugins.active?.snapshot ?? engine,
+          vsync: this,
+        );
         _sourceLabel = label;
         _failure = null;
       });
+      // Before the old engine is destroyed below, so the publish timer never
+      // gets a turn holding the freed one.
+      _remote.source = _plugins.active?.snapshot ?? engine;
     } on OaaEngineException catch (error) {
       // Showing the reason beats a blank window. For a device this is usually
       // a microphone permission that was declined or an interface that has
@@ -229,6 +320,10 @@ class _WorkspaceState extends ConsumerState<_Workspace>
         _sourceLabel = label;
         _failure = error.message;
       });
+      // Nothing is being measured, so there is nothing honest to publish. A
+      // display left attached shows em dashes rather than the last frame of a
+      // source that no longer exists.
+      _remote.source = null;
     }
 
     // **Disposed after the frame that replaces them, not before.** A
@@ -292,6 +387,11 @@ class _WorkspaceState extends ConsumerState<_Workspace>
   @override
   void dispose() {
     _lifecycle?.dispose();
+    // The sockets and the publish timer before the engine they read, or the
+    // timer gets one more turn against a freed handle.
+    _plugins.removeListener(_onPluginsChanged);
+    _plugins.dispose();
+    _remote.dispose();
     _clock?.dispose();
     _engine?.dispose();
     super.dispose();
@@ -302,6 +402,12 @@ class _WorkspaceState extends ConsumerState<_Workspace>
     final colors = OaaTheme.of(context);
     final engine = _engine;
     final clock = _clock;
+
+    // What the meters draw: the plugin somebody just inserted, or nothing yet.
+    // Resolved against `engine` at each use below, where it has been promoted
+    // non-null by the failure branch.
+    final plugin = _plugins.active?.snapshot;
+
     final notice = ref.watch(storageNoticeProvider);
 
     // Open Audio Analyzer draws almost nothing with Material, but the few stock
@@ -318,7 +424,7 @@ class _WorkspaceState extends ConsumerState<_Workspace>
             // where they stopped working whenever focus did not — see
             // lib/src/app/shortcuts.dart.
             : OaaShortcuts(
-                onReset: engine.reset,
+                onReset: _reset,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -328,8 +434,13 @@ class _WorkspaceState extends ConsumerState<_Workspace>
                     WindowDragArea(
                       child: _StatusBar(
                         engine: engine,
+                        source: plugin ?? engine,
                         clock: clock,
-                        sourceLabel: _sourceLabel,
+                        remote: _remote,
+                        onReset: _reset,
+                        sourceLabel: _onPlugin
+                            ? _plugins.active!.displayName.toUpperCase()
+                            : _sourceLabel,
                       ),
                     ),
                     const TabStrip(),
@@ -353,6 +464,25 @@ class _WorkspaceState extends ConsumerState<_Workspace>
                             )
                           : const SizedBox.shrink(),
                     ),
+                    // A port that could not be bound is shown for the same
+                    // reason: the plugin retries forever and says nothing, so
+                    // an app that cannot accept it looks exactly like a plugin
+                    // that is not sending. The usual cause is a second copy of
+                    // Open Audio Analyzer already running.
+                    ValueListenableBuilder<String?>(
+                      valueListenable: _plugins.failure,
+                      builder: (context, failure, _) => failure == null
+                          ? const SizedBox.shrink()
+                          : _NoticeSlot(
+                              child: _Notice(
+                                severity: colors.warn,
+                                text:
+                                    'Plugins cannot connect: $failure '
+                                    'Inserting the VST3 or AU in a DAW will '
+                                    'have no effect until this is resolved.',
+                              ),
+                            ),
+                    ),
                     // Persistence failures are shown rather than logged. A meter
                     // that has quietly stopped saving is a meter that loses a
                     // day's work at the moment the user finds out.
@@ -366,7 +496,7 @@ class _WorkspaceState extends ConsumerState<_Workspace>
                         ),
                       ),
                     Expanded(
-                      child: GridCanvas(engine: engine, clock: clock),
+                      child: GridCanvas(engine: plugin ?? engine, clock: clock),
                     ),
                   ],
                 ),
@@ -449,12 +579,31 @@ class _EngineFailure extends StatelessWidget {
 class _StatusBar extends ConsumerWidget {
   const _StatusBar({
     required this.engine,
+    required this.source,
     required this.clock,
+    required this.remote,
+    required this.onReset,
     required this.sourceLabel,
   });
 
+  /// This machine's engine. Only what the *source picker* acts on — the
+  /// readings come from [source], which may be a plugin instead.
   final OaaEngine engine;
+
+  /// What is being measured: the engine, or a connected plugin's frames.
+  final MeterSource source;
+
   final MeterClock clock;
+
+  /// Passed through rather than created here: the row this widget builds is
+  /// dropped on a narrow window, and the socket must not be.
+  final RemoteDisplayService remote;
+
+  /// Not `engine.reset`: a plugin cannot be reset from here, and a button that
+  /// silently resets a source nobody is looking at is worse than one that says
+  /// it cannot. See `_WorkspaceState._reset`.
+  final VoidCallback onReset;
+
   final String sourceLabel;
 
   static const double height = 40;
@@ -586,8 +735,8 @@ class _StatusBar extends ConsumerWidget {
                         if (showFormat) ...[
                           const SizedBox(width: Space.lg),
                           Text(
-                            '${(engine.sampleRate / 1000).toStringAsFixed(1)}'
-                            ' kHz · ${engine.channels} ch',
+                            '${(source.sampleRate / 1000).toStringAsFixed(1)}'
+                            ' kHz · ${source.channels} ch',
                             style: OaaType.readingSmall.copyWith(
                               color: colors.textFaint,
                             ),
@@ -598,7 +747,7 @@ class _StatusBar extends ConsumerWidget {
                       ],
                     ),
                   ),
-                  ElapsedReadout(engine: engine, clock: clock),
+                  ElapsedReadout(engine: source, clock: clock),
                   const SizedBox(width: Space.md),
                   // Bounded, not `Flexible`. A `Flexible` here shares the row's
                   // free space with the `Spacer` above — both default to
@@ -619,10 +768,7 @@ class _StatusBar extends ConsumerWidget {
                   ),
                   if (showRemote) ...[
                     const SizedBox(width: Space.sm),
-                    RemoteDisplayControl(
-                      source: engine,
-                      abiVersion: OaaEngine.abiVersion,
-                    ),
+                    RemoteDisplayControl(service: remote),
                   ],
                   if (showAnalyse) ...[
                     const SizedBox(width: Space.sm),
@@ -654,7 +800,7 @@ class _StatusBar extends ConsumerWidget {
                         'the max-since-reset peaks, the clip counters and the '
                         'elapsed clock. Momentary readings, the layout and the '
                         'delivery target are untouched.',
-                    onPressed: engine.reset,
+                    onPressed: onReset,
                   ),
                   // Last, and outside the working set on purpose. Everything to
                   // its left is about the measurement in progress — what is

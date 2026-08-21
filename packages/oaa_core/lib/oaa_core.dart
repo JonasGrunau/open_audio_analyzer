@@ -17,6 +17,7 @@
 library;
 
 export 'src/calibration.dart';
+export 'src/config_locations.dart';
 export 'src/grid.dart';
 export 'src/layout.dart';
 export 'src/meter_source.dart';

@@ -23,11 +23,24 @@ import 'mdns/mdns_service.dart';
 /// reach it, and that is a decision to offer, not one to make on the user's
 /// behalf while they are not looking.
 class RemoteDisplayService {
-  RemoteDisplayService({required this.source, required this.abiVersion});
+  RemoteDisplayService(this._source, {required this.abiVersion});
 
   /// What is being measured here. Read-only: nothing a display does can reach
   /// back through this.
-  final MeterSource source;
+  ///
+  /// Set it when the engine is replaced, and set it to null when there is no
+  /// engine at all. Neither is optional: an engine is destroyed and rebuilt
+  /// whenever the user changes source or device, and a service still pointing at
+  /// the previous one publishes freed memory to every attached display. Owned by
+  /// whatever owns the engine, for the same reason.
+  MeterSource? get source => _source;
+  MeterSource? _source;
+
+  set source(MeterSource? value) {
+    if (identical(value, _source)) return;
+    _source = value;
+    _host?.source = value;
+  }
 
   /// `OAA_ABI_VERSION` of the engine, carried in the handshake for bug reports.
   final int abiVersion;
@@ -95,9 +108,17 @@ class RemoteDisplayService {
 
   Future<void> _start() async {
     if (_host != null) return;
+    if (_source == null) {
+      // Nothing is being measured, so there is nothing to advertise. This is
+      // the state after an engine failed to open, and a host that listened
+      // anyway would put a row in somebody's list that shows em dashes.
+      failure.value = 'There is nothing to publish: no engine is running.';
+      isPublishing.value = false;
+      return;
+    }
 
     final host = DisplayHost(
-      source: source,
+      source: _source,
       hostName: hostName,
       abiVersion: abiVersion,
     )..fps = _fps;
@@ -188,12 +209,15 @@ class RemoteDisplayService {
     }
   }
 
-  Map<String, String> _txt() => {
-    'v': '1',
-    'name': hostName,
-    if (source.sampleRate > 0) 'sr': '${source.sampleRate}',
-    if (source.channels > 0) 'ch': '${source.channels}',
-  };
+  Map<String, String> _txt() {
+    final source = _source;
+    return {
+      'v': '1',
+      'name': hostName,
+      if (source != null && source.sampleRate > 0) 'sr': '${source.sampleRate}',
+      if (source != null && source.channels > 0) 'ch': '${source.channels}',
+    };
+  }
 
   void _onClients() => clients.value = _host?.clientCount.value ?? 0;
 

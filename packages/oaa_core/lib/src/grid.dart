@@ -36,19 +36,11 @@ bool isInsideGrid(GridRect rect) =>
 
 /// Pins [rect] to the canvas and to [kind]'s minimum size.
 ///
-/// Size is clamped first and position second, so a module dragged past the
-/// right edge slides back into view at full size rather than being squashed
-/// against it.
-GridRect fitToGrid(GridRect rect, ModuleKind kind) {
-  final columns = rect.columns.clamp(kind.minColumns, kGridColumns);
-  final rows = rect.rows.clamp(kind.minRows, kGridRows);
-  return GridRect(
-    column: rect.column.clamp(0, kGridColumns - columns),
-    row: rect.row.clamp(0, kGridRows - rows),
-    columns: columns,
-    rows: rows,
-  );
-}
+/// The placement rules' name for [GridRect.fittedTo], which is where the
+/// clamping lives so that deserialisation can apply it too — see the note
+/// there. One implementation, because a layout read from a file and a layout
+/// dragged with a pointer have to end up under the same rules.
+GridRect fitToGrid(GridRect rect, ModuleKind kind) => rect.fittedTo(kind);
 
 /// Layout edits. Every one returns a new [TabSpec]; nothing here mutates.
 ///

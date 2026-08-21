@@ -10,14 +10,15 @@ import 'frame.dart';
 /// it. `docs/WIRE.md` holds the normative table; this is that table as code.
 ///
 /// The layout was derived mechanically from `oaa_snapshot` in
-/// `engine/include/oaa/oaa.h` at ABI 3 — declaration order, top to bottom,
-/// every member including the `reservedN` padding members, natural widths,
-/// little-endian, no alignment padding. Deriving it that way is what lets a
-/// C++ sender written by somebody who never read this file produce the same
-/// bytes.
+/// `engine/include/oaa/oaa.h`, as that struct stood when the protocol was
+/// first written — declaration order, top to bottom, every member including
+/// the `reservedN` padding members, natural widths, little-endian, no alignment
+/// padding. Deriving it that way is what lets a C++ sender written by somebody
+/// who never read this file produce the same bytes.
 ///
-/// **But the derivation is not the definition.** The table is frozen at
-/// protocol version 1. `oaa_snapshot` will grow fields and bump
+/// **But the derivation is not the definition.** The table was frozen at
+/// protocol version 1 and version 2 carries it unchanged — only the magic
+/// moved, with the application's name. `oaa_snapshot` will grow fields and bump
 /// `OAA_ABI_VERSION`, which is a private matter between the engine and the
 /// things that link it; the wire layout moves only when the protocol version
 /// moves. Were they the same thing, every engine change would break every
@@ -79,7 +80,7 @@ abstract final class SnapshotWire {
   static const int offsetHistogram =
       offsetScope + MeterShape.scopePoints * 2 * _f32;
 
-  /// Total payload size. 15,056 at protocol version 1.
+  /// Total payload size. 15,056, unchanged since protocol version 1.
   static const int payloadBytes =
       offsetHistogram + MeterShape.histogramBins * _f32;
 

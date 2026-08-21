@@ -91,9 +91,18 @@ class _ReportPanelState extends ConsumerState<ReportPanel> {
   @override
   void dispose() {
     _subscription?.cancel();
-    _job
-      ?..cancel()
-      ..dispose();
+    _subscription = null;
+
+    // Cancelled, and freed only once the worker has gone. `dispose` cannot
+    // await, so the wait is handed to the future and this method returns —
+    // `OfflineAnalysisJob` drains the isolate's port independently of the
+    // subscription just cancelled above, so the exit is still observed and the
+    // native flag is still released. Freeing it here instead would hand the
+    // running worker four bytes that the next analysis is about to reallocate.
+    final job = _job;
+    _job = null;
+    if (job != null) unawaited(job.stop());
+
     super.dispose();
   }
 
@@ -124,9 +133,9 @@ class _ReportPanelState extends ConsumerState<ReportPanel> {
     }
 
     if (!mounted) {
-      job
-        ..cancel()
-        ..dispose();
+      // The panel closed while the isolate was starting. Cancel and let the
+      // future free the flag after the worker has gone — see `_stop`.
+      unawaited(job.stop());
       return;
     }
 
@@ -152,6 +161,8 @@ class _ReportPanelState extends ConsumerState<ReportPanel> {
     }
   }
 
+  /// The stream closes when the worker isolate has exited, so this is the one
+  /// place the flag can simply be freed.
   void _onDone() {
     _subscription = null;
     final job = _job;
@@ -160,12 +171,20 @@ class _ReportPanelState extends ConsumerState<ReportPanel> {
     if (mounted) setState(() => _job = null);
   }
 
+  /// Ends a run in progress and waits for it to actually be over.
+  ///
+  /// Awaited by `_analyse` before it starts the next one, which is the case that
+  /// used to go wrong: the previous worker was still decoding, its flag was
+  /// freed, the new job's token reallocated the same four bytes as zero, and the
+  /// old worker went on analysing its whole file — competing for the frame
+  /// budget the isolate exists to protect.
   Future<void> _stop() async {
-    _job?.cancel();
+    final job = _job;
+    _job = null;
+    if (job != null) await job.stop();
+
     await _subscription?.cancel();
     _subscription = null;
-    _job?.dispose();
-    _job = null;
   }
 
   /// Joins the engine's measurements to the domain report.

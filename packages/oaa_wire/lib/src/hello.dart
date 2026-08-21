@@ -100,6 +100,22 @@ class WireHello {
       spectrumBands: payload.getUint32(16, Endian.little),
       scopePoints: payload.getUint32(20, Endian.little),
       histogramBins: payload.getUint32(24, Endian.little),
+      // **`allowMalformed` is deliberate, and it stays.** It looks like the lax
+      // choice and is the useful one: a producer name is a label, not a
+      // measurement, so showing exactly what arrived is both the honest
+      // rendering and — as it turned out — the diagnostic.
+      //
+      // The plugin once built this field with `juce::String`'s `const char*`
+      // constructor, which reads one byte per codepoint, so an em dash went on
+      // the wire as six bytes instead of three. Decoding faithfully put
+      // `Open Audio Analyzer plugin â<80><94>` in the application's title bar,
+      // where a person saw it within a minute. Hardened to refuse — reject the
+      // frame, or blank the name — the plugin would have connected, metered
+      // correctly and shown a nameless producer, and the encoding fault would
+      // have stayed invisible for as long as nobody read the bytes.
+      //
+      // Refusing is right for anything the display *computes* from. Nothing is
+      // computed from this.
       producerName: utf8.decode(
         Uint8List.view(
           payload.buffer,

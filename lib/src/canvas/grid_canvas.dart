@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import 'dart:math' as math;
+
 import 'package:oaa_core/oaa_core.dart';
 import 'package:oaa_ui/oaa_ui.dart';
 import 'package:flutter/foundation.dart';
@@ -134,15 +136,27 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
       // Clamped against the canvas edge rather than run through fitToGrid,
       // which would slide the module left to make an oversized width fit. A
       // resize must never move the corner the user is not holding.
+      //
+      // The upper bound is taken as at least the lower one. A stored layout can
+      // put a module narrower than its kind's minimum hard against the right
+      // edge — that is why `ModuleHost` has a `ModuleTooSmall` placeholder at
+      // all — and for such a module the room remaining was *less* than the
+      // minimum, so the two bounds crossed and `clamp` threw ArgumentError out
+      // of a pointer callback. Not an assert: it throws in release too.
+      // `ModuleSpec.fromJson` now normalises rects on the way in, which should
+      // make this unreachable; the max stays because a crash on a drag is a bad
+      // way to find out it was not.
+      final maxColumns = math.max(
+        session.kind.minColumns,
+        kGridColumns - origin.column,
+      );
+      final maxRows = math.max(session.kind.minRows, kGridRows - origin.row);
       target = origin.copyWith(
         columns: (origin.columns + columns).clamp(
           session.kind.minColumns,
-          kGridColumns - origin.column,
+          maxColumns,
         ),
-        rows: (origin.rows + rows).clamp(
-          session.kind.minRows,
-          kGridRows - origin.row,
-        ),
+        rows: (origin.rows + rows).clamp(session.kind.minRows, maxRows),
       );
     } else {
       target = fitToGrid(

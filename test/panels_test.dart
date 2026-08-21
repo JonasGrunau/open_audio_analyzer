@@ -20,7 +20,7 @@ import 'package:oaa/src/panels/calibration_editor.dart';
 import 'package:oaa/src/panels/preset_browser.dart';
 import 'package:oaa/src/panels/settings_panel.dart';
 import 'package:oaa/src/remote/remote_control.dart';
-import 'package:oaa/src/storage/config_paths.dart';
+import 'package:oaa/src/remote/remote_display_service.dart';
 import 'package:oaa/src/storage/config_store.dart';
 import 'package:oaa/src/storage/startup_config.dart';
 import 'package:oaa_core/oaa_core.dart';
@@ -562,20 +562,25 @@ void main() {
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
 
+      // The service is constructed here rather than by the control, which is
+      // now a view onto one: it holds a socket and a publish timer keyed to the
+      // engine, and the row that shows it is dropped whenever the window is
+      // narrow. See `RemoteDisplayControl`.
+      final service = RemoteDisplayService(
+        const _SilentSource(),
+        abiVersion: 1,
+      );
+      addTearDown(service.dispose);
+
       await tester.pumpWidget(
         UncontrolledProviderScope(
           container: container,
           child: MaterialApp(
             theme: oaaThemeData(colors),
-            home: const OaaTheme(
+            home: OaaTheme(
               colors: colors,
               child: Material(
-                child: Center(
-                  child: RemoteDisplayControl(
-                    source: _SilentSource(),
-                    abiVersion: 1,
-                  ),
-                ),
+                child: Center(child: RemoteDisplayControl(service: service)),
               ),
             ),
           ),
