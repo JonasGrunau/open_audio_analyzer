@@ -44,11 +44,12 @@ by people who are not writing free software.
 |------|---------|
 | `CMakeLists.txt` | JUCE, `liboaa`, and the three formats. The pinned JUCE tag is one line; bumping it is a decision. |
 | `src/OaaWire.h/.cpp` | The wire protocol, producer side. No JUCE include — deliberately, so it is testable without a framework. |
-| `src/OaaTransportBox.h` | Seqlock handing one transport reading from the audio thread to the streaming thread. |
+| `src/OaaTransportBox.h` | Seqlock handing one transport reading from the audio thread to the streaming thread, and the edge accumulator beside it — the only place a one-block flag may live. |
 | `src/OaaStreamer.h/.cpp` | Owns the engine. Drains the FIFO, measures, serialises, sends, reconnects. |
 | `src/OaaPluginProcessor.h/.cpp` | The `AudioProcessor`. Real-time path and playhead capture. |
 | `src/OaaPluginEditor.h/.cpp` | A status panel. Not a meter, and must not become one. |
 | `test/wire_fixture.cpp` | Writes the golden the Dart codec is held against. |
+| `test/transport_box_test.cpp` | That an edge is delivered exactly once, without a DAW, a socket or a thread. Links no JUCE. |
 | `host/` | The fake DAW: a host that plays a file through this plugin and gives it a transport. Its own `AGENTS.md`. Nothing there ships. |
 
 ## Working in here
@@ -107,10 +108,27 @@ by people who are not writing free software.
   told to withhold the transport, to report a frame rate the wire has no code
   for, to loop a one-second region, to sit parked, and to play-stop-relocate-play
   on cue. Running those the first time found two defects in `captureTransport`
-  and the streaming thread that had shipped, and running the host beside the
-  application found a third — see **What it found** in `host/AGENTS.md`. The
-  lesson is the one in that file: the transport path is cheap to reason about
-  wrongly and cheap to measure.
+  and the streaming thread that had shipped, running the host beside the
+  application found a third, and running them on a *loaded* CI runner found a
+  fourth — see **What it found** in `host/AGENTS.md`. The lesson is the one in
+  that file: the transport path is cheap to reason about wrongly and cheap to
+  measure.
+
+- **An edge lives in exactly one place, and it is never the payload.**
+  `kDiscontinuity` describes a single audio block rather than a state, so
+  `TransportBox` keeps it in the `sticky_` accumulator, which is *claimed* by a
+  reader, and strips it out of the seqlock payload, which is *sampled*. Both
+  halves have failed in production and in opposite directions: with no
+  accumulator, three loop laps delivered the flag zero times in 186 frames;
+  with the flag also left in the payload, a jump block sampled twice delivered
+  one relocate as two, and a three-lap loop reported four. The second only
+  appears on a machine loaded enough that the streaming thread gets two turns
+  inside one audio block, which is why it reached CI and not a desk.
+
+  The test for it is deterministic and does not involve a DAW at all:
+  `test/transport_box_test.cpp` publishes a jump, reads twice, and requires the
+  second read to be clean. Anything else added to `kStickyFlags` inherits both
+  rules — accumulate it, and keep it out of the payload.
 
 - **NaN and −∞ go on the wire unchanged.** NaN means nobody measured it, −∞
   means digital silence. Both have bit patterns a careless serialiser normalises

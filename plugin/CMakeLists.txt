@@ -237,7 +237,25 @@ add_executable(oaa_wire_fixture
 target_link_libraries(oaa_wire_fixture PRIVATE oaa::oaa)
 target_include_directories(oaa_wire_fixture PRIVATE src)
 
+# The transport box's one property that a running system almost never
+# contradicts: an edge is delivered exactly once. It took a loaded CI runner to
+# show that it was not — see the header of test/transport_box_test.cpp — and the
+# reduction to a deterministic test is two reads with no publish between them.
+#
+# No JUCE here either. The box is a header over `wire::Transport`, so this
+# builds and runs in about a second beside the fixture.
+add_executable(oaa_transport_box_test
+  test/transport_box_test.cpp
+  src/OaaWire.cpp
+)
+target_link_libraries(oaa_transport_box_test PRIVATE oaa::oaa)
+target_include_directories(oaa_transport_box_test PRIVATE src)
+
 enable_testing()
+
+add_test(NAME transport_box_delivers_edges_once
+  COMMAND oaa_transport_box_test
+)
 
 add_test(NAME wire_fixture_matches_golden
   COMMAND ${CMAKE_COMMAND}

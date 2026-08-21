@@ -128,8 +128,8 @@ none of the modules that need real material.
 
 ## What it found
 
-Four things, all of which had been unobservable. Three were defects in code that
-had shipped, and all three are fixed.
+Five things, all of which had been unobservable. Four were defects in code that
+had shipped, and all four are fixed.
 
 - **A parked transport was reported as a relocate, continuously.** *Fixed.*
   A stopped DAW still runs its graph and reports the position it sits at,
@@ -155,6 +155,27 @@ had shipped, and all three are fixed.
   The consequence of missing it was the exact failure the flag exists to
   prevent: an integrated reading that silently spans two passes of the same
   music.
+
+- **And then a relocate reached the app twice.** *Fixed.* The sequel to the one
+  above, on the same bit, and it was half-hidden by the fix for it: the
+  accumulator that stopped edges being *missed* left them in the sampled payload
+  as well. `publish` stored the block's flags verbatim, so `read` could find
+  `kDiscontinuity` sitting in a payload whose edge it had already handed over.
+  The streaming thread normally publishes less often than the audio thread does,
+  so a jump block is sampled once and the duplicate never appears — but on a
+  **loaded** machine the two rates cross, two frames leave inside one audio
+  block, and one relocate arrives as two. Measured: **a three-lap loop reported
+  four flagged frames**, and `docs/WIRE.md` lets a consumer count relocations by
+  counting them.
+
+  Found on the first manual dispatch after this directory landed, on the macOS
+  runner — the plugin job runs only on a release or a manual run, so that was
+  the first time these cases had ever executed there — and reproduced locally at
+  about one run in six with every core busy, which is the only reason it could
+  be diagnosed rather than argued about. The payload now carries state only;
+  `sticky_` is the one place an edge lives.
+  `../test/transport_box_test.cpp` reduces the whole thing to two reads with no
+  publish in between, which is the loaded runner with the timing taken out.
 
 - **The producer name reached the app as mojibake.** *Fixed.* This one needed
   the fake DAW and the application running as a pair, which is a check neither

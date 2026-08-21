@@ -90,6 +90,15 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   published build rather than after.
 
 ### 🐛 Fixed
+- A relocate is reported once rather than twice. The plugin marks the single
+  audio block on which the playhead jumps, and that flag was carried both in the
+  accumulator that exists to deliver it exactly once *and* in the transport
+  payload, which is sampled — so a machine loaded enough for two frames to leave
+  inside one audio block delivered one relocate as two, and a three-lap loop
+  reported four. `docs/WIRE.md` lets a consumer count relocations by counting
+  flagged frames, so the count was wrong; no reading changes, because nothing
+  yet acts on the flag. Held by a new deterministic test rather than by a loaded
+  machine.
 - The "audio was lost" notice counts the frames the *metered* source discarded.
   It read the local engine's counter while the flag that raises it comes from
   whatever is on the canvas, so a plugin that overran produced "Audio was lost —

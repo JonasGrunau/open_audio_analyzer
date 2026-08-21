@@ -110,6 +110,26 @@ public:
      * check becomes decorative. */
     std::atomic_thread_fence(std::memory_order_release);
     value_ = t;
+
+    /* **The edges are stripped from the payload, and this line is the whole
+     * reason `kStickyFlags` is a named set.** The payload is *sampled* — the
+     * reader takes whatever is current, and the same block can be current for
+     * two reads in a row — so a flag left in it is a flag that can be delivered
+     * twice. `sticky_` is the only place an edge may live, because it is the
+     * only thing here that is claimed rather than sampled.
+     *
+     * This shipped, and it took a loaded machine to show: the streamer normally
+     * publishes less often than the audio thread does, so a jump block was
+     * sampled once and the duplicate never appeared. On a busy CI runner the
+     * two rates cross — two frames went out inside one audio block, both
+     * carrying the jump block's own flags — and a single relocate arrived as
+     * two. `docs/WIRE.md` lets a consumer count relocations by counting flagged
+     * frames, so the count was simply wrong, and the same run reported four
+     * laps of a three-lap loop. Found by
+     * `packages/oaa_wire/test/plugin_e2e_test.dart` on macOS, which was the
+     * first time those cases had ever run on that runner. */
+    value_.flags &= ~kStickyFlags;
+
     std::atomic_thread_fence(std::memory_order_release);
 
     sequence_.store(start + 2, std::memory_order_relaxed);
