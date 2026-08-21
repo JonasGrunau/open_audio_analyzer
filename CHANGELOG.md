@@ -22,6 +22,16 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   more than a push asks for.
 
 ### ⚡ Changed
+- The application is called Open Audio Analyzer everywhere it names itself. The
+  window title, the macOS menu bar, the Windows version resource and the Android
+  launcher label all said `oaa`, which is the repository's short name and not the
+  product's. The executable moves with them: `Open Audio Analyzer.app` on macOS,
+  `OpenAudioAnalyzer.exe` on Windows and `open-audio-analyzer` on Linux, where a
+  space is not available — the Flutter-generated CMake makes the executable name
+  a CMake target name, and CMake rejects one containing a space. The `oaa` CLI
+  keeps its name; it is a command, and a command with spaces in it is not one.
+  Bundle identifiers are unchanged, so no configuration moves and no host loses
+  track of the plugin.
 - The plugin's bundle identifier is `dev.openaudioanalyzer.oaa.plugin`. It was
   `io.github.jonasgrunau.bel`: the rename to Open Audio Analyzer moved every
   other identifier and missed this one, because nothing built the plugin to

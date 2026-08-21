@@ -65,7 +65,7 @@
          from Bel, which was a valid identifier by luck, and that is what broke
          the first release build. The display name lives in VisualElements
          below, where spaces belong. -->
-    <Application Id="Oaa" Executable="oaa.exe" EntryPoint="Windows.FullTrustApplication">
+    <Application Id="Oaa" Executable="OpenAudioAnalyzer.exe" EntryPoint="Windows.FullTrustApplication">
       <uap:VisualElements
         DisplayName="Open Audio Analyzer"
         Description="Loudness and spectrum metering for mixing, mastering and delivery"

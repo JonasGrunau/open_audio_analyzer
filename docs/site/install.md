@@ -143,7 +143,7 @@ changes how macOS attributes the microphone request — so the variable and
 device capture cannot be used in the same run.
 
 ```sh
-open -a /Applications/oaa.app --args --config-dir=/path/to/config
+open -a "/Applications/Open Audio Analyzer.app" --args --config-dir=/path/to/config
 ```
 
 ## Uninstalling

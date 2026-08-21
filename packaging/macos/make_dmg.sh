@@ -53,7 +53,7 @@ cd "$root"
 
 version=$(grep '^version:' pubspec.yaml | head -1 | cut -d' ' -f2 | cut -d'+' -f1)
 arch=$(uname -m)
-app="build/macos/Build/Products/Release/oaa.app"
+app="build/macos/Build/Products/Release/Open Audio Analyzer.app"
 out="build/packaging"
 dmg="$out/Open Audio Analyzer-$version-macos-$arch.dmg"
 staging="build/packaging/dmg-staging"

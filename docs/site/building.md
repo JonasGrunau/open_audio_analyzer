@@ -74,7 +74,7 @@ release build says so rather than ignoring it.
 On a built macOS bundle, pass them with `open --args`:
 
 ```sh
-open -a build/macos/Build/Products/Debug/oaa.app --args --open-panel=shortcuts
+open "build/macos/Build/Products/Debug/Open Audio Analyzer.app" --args --open-panel=shortcuts
 ```
 
 ## The plugin

@@ -107,7 +107,7 @@ cat > "$appdir/AppRun" <<'APPRUN'
 #!/bin/sh
 here=$(dirname "$(readlink -f "$0")")
 export LD_LIBRARY_PATH="$here/usr/bin/lib:${LD_LIBRARY_PATH:-}"
-exec "$here/usr/bin/oaa" "$@"
+exec "$here/usr/bin/open-audio-analyzer" "$@"
 APPRUN
 chmod +x "$appdir/AppRun"
 

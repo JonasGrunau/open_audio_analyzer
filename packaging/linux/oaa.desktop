@@ -3,8 +3,8 @@ Type=Application
 Name=Open Audio Analyzer
 GenericName=Loudness Analyzer
 Comment=Loudness and spectrum metering for mixing, mastering and delivery
-Exec=oaa %f
-TryExec=oaa
+Exec=open-audio-analyzer %f
+TryExec=open-audio-analyzer
 Icon=dev.openaudioanalyzer.oaa
 Terminal=false
 Categories=AudioVideo;Audio;AudioVideoEditing;
@@ -19,5 +19,5 @@ MimeType=audio/wav;audio/x-wav;audio/flac;audio/x-flac;audio/mpeg;audio/mp3;
 # The application draws its own chrome and starts on a canvas, not a document,
 # so a second window would be a second engine measuring the same input twice.
 SingleMainWindow=true
-StartupWMClass=oaa
+StartupWMClass=open-audio-analyzer
 StartupNotify=true

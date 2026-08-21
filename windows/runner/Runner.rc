@@ -90,12 +90,12 @@ BEGIN
         BLOCK "040904e4"
         BEGIN
             VALUE "CompanyName", "dev.openaudioanalyzer" "\0"
-            VALUE "FileDescription", "oaa" "\0"
+            VALUE "FileDescription", "Open Audio Analyzer" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "oaa" "\0"
+            VALUE "InternalName", "OpenAudioAnalyzer" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2026 dev.openaudioanalyzer. All rights reserved." "\0"
-            VALUE "OriginalFilename", "oaa.exe" "\0"
-            VALUE "ProductName", "oaa" "\0"
+            VALUE "OriginalFilename", "OpenAudioAnalyzer.exe" "\0"
+            VALUE "ProductName", "Open Audio Analyzer" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

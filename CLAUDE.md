@@ -257,7 +257,10 @@ is unaffected: it never links JUCE — it talks to the plugin over a socket.
 
   **`--open-panel=<name>` opens one of the five panels at startup**, in a debug
   build, which is how a panel gets looked at without clicking through to it:
-  `open -a build/macos/Build/Products/Debug/oaa.app --args --open-panel=settings`.
+  `open "build/macos/Build/Products/Debug/Open Audio Analyzer.app" --args --open-panel=settings`.
+  **Not `open -a`** — that resolves an application *name* and refuses a relative
+  path outright, which reads as "the build is missing" rather than as "the wrong
+  flag". Plain `open` takes the path and still forwards `--args`.
 
   **`screencapture` returns a black frame without screen-recording permission,**
   and macOS grants that per terminal application, so an agent usually cannot
@@ -279,9 +282,10 @@ is unaffected: it never links JUCE — it talks to the plugin over a socket.
   the iPad; that shipped, and the tablet now uses the system responder through
   the one platform channel in the application. On **macOS**, Local Network
   permission is attributed to the *responsible* process, so the same code is
-  allowed inside `open -a oaa.app` and denied under `flutter test` or a bare
-  `oaa.app/Contents/MacOS/oaa` — a discovery test that opens a real socket fails
-  on a machine where the feature works, and `EHOSTUNREACH` on a multicast send
+  allowed inside `open -a "Open Audio Analyzer.app"` and denied under `flutter
+  test` or a bare `Open Audio Analyzer.app/Contents/MacOS/Open Audio Analyzer`
+  — a discovery test that opens a real socket fails on a machine where the
+  feature works, and `EHOSTUNREACH` on a multicast send
   is what that denial looks like from inside. On **Android**, receiving needs a
   `MulticastLock` Dart cannot take and the socket opens happily without one.
   None of the three logs anything. See `lib/src/remote/AGENTS.md` § Platform

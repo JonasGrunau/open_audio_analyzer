@@ -27,7 +27,7 @@ app-id: dev.openaudioanalyzer.oaa
 runtime: org.freedesktop.Platform
 runtime-version: '24.08'
 sdk: org.freedesktop.Sdk
-command: oaa
+command: open-audio-analyzer
 
 finish-args:
   # Rendering. Flutter's Linux embedder is GTK on GL.
@@ -63,7 +63,7 @@ modules:
       - mkdir -p /app/oaa
       - cp -r bundle/* /app/oaa/
       - mkdir -p /app/bin
-      - ln -s /app/oaa/oaa /app/bin/oaa
+      - ln -s /app/oaa/open-audio-analyzer /app/bin/open-audio-analyzer
 
       - install -Dm644 oaa.desktop /app/share/applications/dev.openaudioanalyzer.oaa.desktop
       - install -Dm644 dev.openaudioanalyzer.oaa.metainfo.xml

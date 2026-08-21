@@ -6,7 +6,7 @@
          not sufficient on Wi-Fi: see lib/src/remote/AGENTS.md. -->
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE"/>
     <application
-        android:label="oaa"
+        android:label="Open Audio Analyzer"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
