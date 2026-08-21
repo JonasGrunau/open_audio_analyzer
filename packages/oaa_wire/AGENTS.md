@@ -71,7 +71,10 @@ dart test packages/oaa_wire
 ```
 
 `test/wire_test.dart` covers framing, `HELLO` rejection and round-trips.
-`test/plugin_golden_test.dart` decodes `plugin/test/golden/wire_v2.bin`, which
-the C++ serialiser generated — the only test that catches the two
-implementations drifting apart, because each one round-tripping against itself
-would pass forever while they disagreed.
+`test/plugin_golden_test.dart` decodes the goldens the C++ serialiser wrote —
+the only test that catches the two implementations drifting apart, because each
+one round-tripping against itself would pass forever while they disagreed. It
+reads two. `plugin/test/golden/wire_v3.bin` tracks the current serialiser.
+`plugin/test/golden/wire_v2.bin` is **frozen and never regenerated**: bytes
+produced before version 3 promised to move no table are the only thing that can
+hold the promise, and today's build cannot prove anything about yesterday's.

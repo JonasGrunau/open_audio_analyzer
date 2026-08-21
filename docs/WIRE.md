@@ -249,7 +249,10 @@ two is going to be believed.
 
 ### `0x0003` — SNAPSHOT
 
-**Payload is exactly 15,056 bytes at protocol version 2.**
+**Payload is exactly 15,056 bytes at protocol versions 2 and 3.** Version 3
+added a frame type and moved no byte of this table. That is held rather than
+asserted: `packages/oaa_wire/test/plugin_golden_test.dart` decodes the frozen
+version-2 golden with a version-3 build and diffs it against the version-3 one.
 
 The layout was *derived* mechanically, so that two hand-written serialisers
 cannot drift: take `oaa_snapshot` from `engine/include/oaa/oaa.h` at

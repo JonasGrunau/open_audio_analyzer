@@ -87,6 +87,17 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   neither a DAW nor the fake DAW can ask for them. It runs in the gated plugin
   job's `ctest`, and both it and the transport box's own test were verified by
   breaking the code under them and watching them fail.
+- Five documents caught up with protocol version 3's two goldens. `docs/WIRE.md`
+  still gave the SNAPSHOT payload size "at protocol version 2" in the one
+  document whose header declares version 3; `packages/oaa_wire/AGENTS.md` named
+  `wire_v2.bin` as the golden its codec test decodes, when the test reads both
+  and `wire_v3.bin` is the one tracking the current serialiser; and two comments
+  in `ci.yml` credited the C++ producing side with writing `wire_v2.bin`, which
+  it no longer does. The one that could have cost something: the regeneration
+  command in `plugin/test/wire_fixture.cpp` still wrote to `wire_v2.bin` — the
+  frozen file whose whole purpose is to hold bytes produced before version 3
+  promised to move no table. Following it would have destroyed the evidence and
+  left every test green.
 - Two claims about that branch are corrected here rather than in the 0.3.0
   notes, which are released. It is **not** reached by the Standalone build —
   JUCE 8's `AudioProcessorPlayer` installs a counting playhead whenever the

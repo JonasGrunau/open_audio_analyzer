@@ -227,8 +227,8 @@ jobs:
   # three parallel JUCE builds is the most expensive thing in this file by an
   # order of magnitude and a push does not ask the question. **The cost is that
   # `ctest` moves with it,** and that run is the producing half of the wire
-  # golden: `checks` asserts that the committed `wire_v2.bin` decodes, and only
-  # this job asserts that `plugin/src/OaaWire.cpp` still writes it. Between
+  # golden: `checks` asserts that the committed goldens decode, and only this
+  # job asserts that `plugin/src/OaaWire.cpp` still writes `wire_v3.bin`. Between
   # releases, that agreement is checked from one side. Building only the
   # `oaa_wire_fixture` target would restore it cheaply — it needs the engine
   # and one translation unit, not JUCE — and would need CMakeLists.txt to make
@@ -287,8 +287,8 @@ jobs:
         run: cmake --build plugin/build --config Release
 
       # The wire golden, from the producing side. `packages/oaa_wire` asserts
-      # that the committed `wire_v2.bin` decodes; this asserts that the C++ in
-      # `plugin/src/OaaWire.cpp` still writes it. Neither test is worth much
+      # that the committed goldens decode; this asserts that the C++ in
+      # `plugin/src/OaaWire.cpp` still writes `wire_v3.bin`. Neither test is worth much
       # without the other, and only one of them was running.
       - name: Tests
         run: ctest --test-dir plugin/build --output-on-failure -C Release

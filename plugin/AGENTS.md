@@ -48,7 +48,7 @@ by people who are not writing free software.
 | `src/OaaStreamer.h/.cpp` | Owns the engine. Drains the FIFO, measures, serialises, sends, reconnects. |
 | `src/OaaPluginProcessor.h/.cpp` | The `AudioProcessor`. Real-time path and playhead capture. |
 | `src/OaaPluginEditor.h/.cpp` | A status panel. Not a meter, and must not become one. |
-| `test/wire_fixture.cpp` | Writes the golden the Dart codec is held against. |
+| `test/wire_fixture.cpp` | Writes `test/golden/wire_v3.bin`, the golden the Dart codec is held against. `wire_v2.bin` beside it is frozen and is not regenerated. |
 | `test/transport_box_test.cpp` | That an edge is delivered exactly once, and that only a host which says something is reported as saying it. No DAW, no socket, no thread, no JUCE. |
 | `test/transport_capture_test.cpp` | That a host which says nothing has nothing invented for it. Hosts the `AudioProcessor` directly, because no plugin format can express either half of it. Needs JUCE. |
 | `host/` | The fake DAW: a host that plays a file through this plugin and gives it a transport. Its own `AGENTS.md`. Nothing there ships. |
