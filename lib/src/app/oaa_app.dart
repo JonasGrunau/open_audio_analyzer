@@ -230,19 +230,20 @@ class _WorkspaceState extends ConsumerState<_Workspace>
 
   /// Clears the integrating measurements, where that is possible.
   ///
-  /// It is not possible for a plugin. The protocol runs one way in version 2 —
-  /// a display cannot reset a producer's integration, and `docs/WIRE.md`
-  /// reserves the control frames that would change that but does not define
-  /// them. So rather than resetting the local engine nobody is looking at,
-  /// which is what a button wired straight to it would do, this says so.
+  /// It is not possible for a plugin. Protocol version 3 opened the app →
+  /// plugin direction, but it defines one control frame — `0x0020
+  /// SET_LUFS_MODE` — and a reset is not it; `docs/WIRE.md` leaves
+  /// `0x0021`–`0x002F` undefined. So rather than resetting the local engine
+  /// nobody is looking at, which is what a button wired straight to it would
+  /// do, this says so.
   void _reset() {
     final session = _plugins.active;
     if (session != null) {
       ref
           .read(canvasNoticeProvider.notifier)
           .say(
-            'RESET cannot reach ${session.displayName}: the plugin link runs '
-            'one way. Restart the integration in your DAW, or switch back to a '
+            'RESET cannot reach ${session.displayName}: the link carries no '
+            'reset. Restart the integration in your DAW, or switch back to a '
             'local source.',
           );
       return;

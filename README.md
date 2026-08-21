@@ -740,10 +740,10 @@ each other.
 The app takes the connection as the choice: a plugin that connects appears on the
 canvas in place of whatever local source was there, the status bar names it, and
 removing the plugin hands the canvas back. **RESET is the one control that
-cannot follow.** The link runs one way in protocol version 2, so nothing here
-can restart an integration inside the plugin; pressing it while a plugin is on
-screen says so rather than quietly resetting a local engine nobody is looking
-at.
+cannot follow.** Protocol version 3 opened the app → plugin direction, but it
+defines one frame and RESET is not it, so nothing here can restart an
+integration inside the plugin; pressing it while a plugin is on screen says so
+rather than quietly resetting a local engine nobody is looking at.
 
 ```sh
 cmake -B plugin/build -S plugin -G Ninja -DCMAKE_BUILD_TYPE=Release
@@ -784,10 +784,14 @@ parked session costs nothing, and a display that attaches to one is given the
 position it is parked at rather than waiting for somebody to press play.
 
 The **Elapsed** and **Timecode** LUFS modes are what that measurement is for,
-and they are **not built yet** — no module offers them today. Tying an
-integration window to the transport means restarting it when the transport
-moves, which is a command travelling from the app back to the plugin, and this
-version of the protocol only runs one way.
+and **no module offers them yet**. Tying an integration window to the transport
+means restarting it when the transport moves, which is a command travelling from
+the app back to the plugin — and as of protocol version 3 that command exists.
+The plugin applies the mode against the transport it captures per audio block
+rather than being told when to reset, because the app only sees the playhead at
+the publish rate and a reset arriving a frame late has already let the wrong
+audio into the reading. What is missing is the menu to choose a mode in; see
+[Known gaps](#-known-gaps-stated-plainly).
 
 Hosts differ enormously in what they actually report, and Open Audio Analyzer
 does not paper over it: every transport value carries a flag saying whether the
@@ -873,20 +877,23 @@ so a release built from a fork is unsigned and every script says so. See
 
 ### 🚧 Known gaps, stated plainly
 
-- 🎛️ **The Elapsed and Timecode LUFS modes are not built.** The plugin delivers
-  everything they need — the playhead, the timecode, and a flag when the
-  transport jumps — and no module offers the modes yet. Tying an integration
-  window to the transport means restarting it when somebody drags the playhead,
-  and that command travels from the app *to* the plugin: it needs a control
-  frame, and protocol version 2 reserves the range for one without defining it,
-  so it needs **a protocol version past 2**. The same one-way limit is why RESET
-  cannot reach a connected plugin. Continuous and System are unaffected,
-  and the remote display neither needs one nor will get one — the plugin port is
-  loopback, where the things that can connect are already running as you, while
-  the display port is on the LAN and stays read-only until somebody designs
-  authentication. Silently restarting an integration mid-programme is wrong in a
-  way nothing on screen reveals, which is not a capability to put on an
-  unauthenticated port.
+- 🎛️ **No module offers the Elapsed or Timecode LUFS modes yet.** What used to
+  block them is gone: the protocol needed a frame travelling from the app *to*
+  the plugin, and protocol version 3 defines one — `0x0020 SET_LUFS_MODE`, on
+  the ingest port only, which is loopback where whatever connects is already
+  running as you. The engine's half is built too. What is left is the part you
+  would see: a mode menu on the LUFS modules, and a region editor for Timecode,
+  which is the change that closes this. **Continuous is what every module
+  measures today**, and it is the mode a producer with no playhead can honour
+  anyway.
+
+  **RESET still cannot reach a connected plugin**, and that is now a smaller
+  statement than it was: the direction exists, but version 3 defines only the
+  mode frame and no reset frame, so `0x0021`–`0x002F` are still undefined.
+  The remote display neither needs one nor will get one — the display port is on
+  the LAN and stays read-only until somebody designs authentication for it.
+  Silently restarting an integration mid-programme is wrong in a way nothing on
+  screen reveals, which is not a capability to put on an unauthenticated port.
 - 🎬 **"The host supplies no transport" cannot be reached through VST3.** The
   plugin handles it — an empty transport, and dashes on screen — and the format
   has no way to say it: JUCE fills a process context with a zeroed project time
