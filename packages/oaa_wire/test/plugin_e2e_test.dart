@@ -370,27 +370,32 @@ void main() {
         expect(transport.hasTimecode, isFalse);
         expect(transport.hasPpq, isFalse);
         expect(transport.hasBarStart, isFalse);
+        expect(transport.hasLoopPoints, isFalse);
         expect(transport.isPlaying, isFalse);
         expect(transport.bpm, 0.0);
       }
 
-      // Time survives, and that is not this host misbehaving.
+      // Time survives, and that is not this host misbehaving — it is the
+      // furthest a *format* can go towards saying nothing.
       //
-      // `--no-playhead` makes the host's `getPosition()` return nothing, which
-      // is the branch `OaaPluginProcessor::captureTransport` answers with an
-      // empty transport. Through a VST3 that branch is unreachable: the format
-      // has no way to say "no position", so JUCE's host fills a ProcessContext
-      // with a zeroed project time and no validity flags, and JUCE's wrapper on
-      // the far side reports `timeInSamples` and `timeInSeconds`
-      // unconditionally. The plugin therefore sees a host parked at zero rather
-      // than a host that is not saying — which is the correct reading of what
-      // VST3 delivered.
-      //
-      // The empty-transport branch is reached by the Standalone build, which
-      // has no playhead at all. Nothing about it is wrong; it is just not
-      // observable from here.
+      // `--no-playhead` makes the fake DAW's `getPosition()` return nothing.
+      // JUCE's VST3 host then does what the format allows: `toProcessContext`
+      // zeroes a `ProcessContext`, fills in the sample rate and leaves every
+      // validity flag clear — which is also exactly what it sends for a host
+      // holding no playhead at all, so the two are the same bytes. The plugin's
+      // own VST3 wrapper reads `timeInSamples` and `timeInSeconds` back out of
+      // it unconditionally, because VST3 has no bit for "not saying". So the
+      // plugin is told *parked at zero, nothing else valid*, and reporting that
+      // is the correct reading of what arrived.
       expect(session.transports.last.hasTimeSeconds, isTrue);
       expect(session.transports.last.timeSeconds, 0.0);
+
+      // Which means the plugin's *empty* transport — the branch behind
+      // `getPlayHead() == nullptr` and an empty `getPosition()`, and the reason
+      // the application has a dashes state at all — cannot be reached from
+      // here, or from any DAW, through either shipping format. It is covered
+      // instead by `plugin/test/transport_capture_test.cpp`, which hosts the
+      // processor as the C++ object it is: `ctest -R transport_capture`.
 
       // The audio still went through: withholding a playhead does not stop a
       // meter from metering.

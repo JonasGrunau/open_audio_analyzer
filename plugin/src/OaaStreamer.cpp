@@ -231,7 +231,7 @@ Streamer::Status Streamer::status() const noexcept {
   s.elapsedSeconds      = statusElapsed_.load(std::memory_order_relaxed);
   s.sampleRate          = statusSampleRate_.load(std::memory_order_relaxed);
   s.channels            = statusChannels_.load(std::memory_order_relaxed);
-  s.hostGivesTransport  = transport_.hasEverPublished();
+  s.hostGivesTransport  = transport_.hostReportsPosition();
   return s;
 }
 

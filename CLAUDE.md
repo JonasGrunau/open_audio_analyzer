@@ -451,7 +451,9 @@ cmake -B plugin/build-nojuce -S plugin -DOAA_BUILD_PLUGIN=OFF && \
   ctest --test-dir plugin/build-nojuce  # the plugin's C++ that needs no JUCE
 cmake -B plugin/build -S plugin -DCMAKE_BUILD_TYPE=Release && \
   cmake --build plugin/build && \
-  ctest --test-dir plugin/build       # the VST3, the AU and the fake DAW compile
+  ctest --test-dir plugin/build       # the VST3, the AU and the fake DAW compile,
+                                      # and the plugin answers a host that says
+                                      # nothing
 dart test packages/oaa_wire           # again, now that a built fake DAW makes
                                       # the end-to-end cases run instead of skip
 flutter test test/plugin_to_display_e2e_test.dart
@@ -478,8 +480,10 @@ formats, `plugin/host/`. The framework-free half of that directory does run on
 every push, which is the `ctest` line above: the transport box's
 delivered-exactly-once test, the wire fixture against its golden, and the source
 lists, in five seconds with no JUCE fetched. What the gated job still owns is
-the VST3, the AU, the fake DAW, and the only runs that drive the plugin end to
-end.
+the VST3, the AU, the fake DAW, `transport_capture_invents_nothing` — which
+hosts the `AudioProcessor` itself, because the two branches it covers are the
+ones no plugin format can ask for — and the only runs that drive the plugin end
+to end.
 Two suites do that driving, both spawning `plugin/host/`'s `oaa-fake-daw
 --headless` and both skipping when it is not built:
 `packages/oaa_wire/test/plugin_e2e_test.dart` decodes what the plugin sends, and

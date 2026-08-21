@@ -51,6 +51,15 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   "Looking for hosts on this network…", which is the face a search that is about
   to succeed wears.
 
+### 🐛 Fixed
+- The plugin's status panel no longer claims a playhead from a host that is not
+  giving one. The line was drawn from whether a transport had ever been
+  published, and the plugin publishes one for every audio block — the empty one
+  that means "this host said nothing" included — so it read as a playhead the
+  moment audio started flowing, on precisely the host it exists to warn about.
+  It now follows what the host is reporting now, and says "no playhead from
+  host" again if a host stops.
+
 ### 🚧 Internal
 - Groundwork for the Elapsed and Timecode LUFS modes, which are **not yet
   offered by any module** — this is the protocol and the engine underneath them,
@@ -71,6 +80,21 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Off by default, and off for file analysis, which must measure a file whole.
   The two transport-driven modes need no engine API at all: they are the
   producer declining to push, so `engine/` still does not learn what a DAW is.
+- The plugin's answer to a host that supplies no transport is now held by a
+  test. `plugin/test/transport_capture_test.cpp` hosts the `AudioProcessor`
+  directly, which is the only way to reach either of the two branches behind it:
+  no VST3 or Audio Unit host can express "no playhead" or "no position", so
+  neither a DAW nor the fake DAW can ask for them. It runs in the gated plugin
+  job's `ctest`, and both it and the transport box's own test were verified by
+  breaking the code under them and watching them fail.
+- Two claims about that branch are corrected here rather than in the 0.3.0
+  notes, which are released. It is **not** reached by the Standalone build —
+  JUCE 8's `AudioProcessorPlayer` installs a counting playhead whenever the
+  processor it is given has none — and it is unreachable through an Audio Unit
+  as well, not only through VST3. The plugin's own handling was correct
+  throughout; only the note about what exercised it was wrong. `README.md` no
+  longer lists it under Known gaps, because it now has a test instead of a
+  paragraph.
 
 ## [0.3.0] — 2026-08-21
 

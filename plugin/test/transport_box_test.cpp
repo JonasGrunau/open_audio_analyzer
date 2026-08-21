@@ -143,15 +143,44 @@ void anEdgeAfterAnEdgeIsDeliveredAgain() {
   check(discontinuous(out), "a later relocate is reported");
 }
 
-void nothingIsPublishedUntilSomethingIs() {
+/*
+ * What "the host is giving us a transport" is allowed to mean.
+ *
+ * It used to mean "a block has gone through", which is a different question
+ * with the same answer almost everywhere: `captureTransport` publishes for
+ * *every* block, so on any host at all it became true the moment audio started
+ * flowing — including on a host that had said nothing, which is the single
+ * state the plugin's status panel prints it for. The empty publications below
+ * are the ones that used to read as a playhead.
+ */
+void onlyAHostThatSaysSomethingIsClaimed() {
   oaa::TransportBox box;
   oaa::wire::Transport out;
 
-  check(!box.hasEverPublished(), "a host that has said nothing is not claimed");
+  check(!box.hostReportsPosition(), "a host that has said nothing is not claimed");
+
+  box.publish(oaa::wire::Transport{});
+  check(!box.hostReportsPosition(),
+        "and publishing that silence, as every block does, is still not a claim");
+
   box.publish(rolling(0.0));
-  check(box.hasEverPublished(), "and is, once it has");
+  check(box.hostReportsPosition(), "a host that reports a position is claimed");
   check(box.read(out), "read");
   check(!discontinuous(out), "ordinary playback is not a relocate");
+
+  /* A host may stop reporting, which `captureTransport` treats as a state
+   * rather than as an error. The claim has to follow it back down, because the
+   * panel is read beside a display that has stopped drawing a position. */
+  box.publish(oaa::wire::Transport{});
+  check(!box.hostReportsPosition(), "and a host that stops reporting stops being claimed");
+
+  /* An edge is not a state. A block carrying nothing but a relocate must not
+   * read as a host reporting a position — which is also why `publish` masks the
+   * sticky bits out before recording this. */
+  oaa::wire::Transport edgeOnly;
+  edgeOnly.flags = oaa::wire::kDiscontinuity;
+  box.publish(edgeOnly);
+  check(!box.hostReportsPosition(), "and a relocate on its own is not a position");
 }
 
 }  // namespace
@@ -161,7 +190,7 @@ int main() {
   aRepeatedReadKeepsTheStateFlags();
   everyEdgeBetweenTwoReadsSurvives();
   anEdgeAfterAnEdgeIsDeliveredAgain();
-  nothingIsPublishedUntilSomethingIs();
+  onlyAHostThatSaysSomethingIsClaimed();
 
   if (failures != 0) {
     std::fprintf(stderr, "%d check(s) failed\n", failures);

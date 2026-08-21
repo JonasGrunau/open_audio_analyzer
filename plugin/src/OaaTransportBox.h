@@ -62,14 +62,14 @@
 namespace oaa {
 
 /*
- * Both atomics here are read and written from `processBlock`, and the whole
+ * Every atomic here is read and written from `processBlock`, and the whole
  * argument for a seqlock over `atomic<Transport>` is that a lock on the audio
  * thread fails occasionally, under load, as a click. That argument is only
  * sound if these are genuinely lock-free, which is an assumption worth being a
  * build failure rather than a sentence in a comment.
  */
 static_assert(std::atomic<uint32_t>::is_always_lock_free,
-              "This design puts two 32-bit atomics on the audio thread. If they "
+              "This design puts three 32-bit atomics on the audio thread. If they "
               "are not lock-free on this target, a seqlock is no safer here than "
               "the mutex it exists to avoid.");
 
@@ -133,6 +133,15 @@ public:
     std::atomic_thread_fence(std::memory_order_release);
 
     sequence_.store(start + 2, std::memory_order_relaxed);
+
+    /* Outside the seqlock on purpose. This is not part of the reading — it is
+     * the answer to "is the host saying anything at all", which the status
+     * panel asks from the message thread and must be able to get without taking
+     * part in a retry loop it could lose. Sticky bits are excluded for the same
+     * reason they are stripped from the payload above: a relocate is an event,
+     * not a state, and a single flagged block must not leave this claiming a
+     * transport that has since gone away. */
+    stateFlags_.store(t.flags & ~kStickyFlags, std::memory_order_relaxed);
   }
 
   /*
@@ -178,11 +187,27 @@ public:
     return false;
   }
 
-  /* True once the host has given us a position at least once. Until then there
-   * is nothing to show and the display must say so rather than render a
-   * default-constructed transport parked at bar one. */
-  bool hasEverPublished() const noexcept {
-    return sequence_.load(std::memory_order_relaxed) != 0;
+  /*
+   * True while the host is telling us where it is. There is nothing to show
+   * when it is false, and the display must say so rather than render a
+   * default-constructed transport parked at bar one.
+   *
+   * **Not "has a block gone through yet",** which is what this was and which
+   * made the plugin's own status panel report a playhead the moment audio
+   * started flowing — on a host that had said nothing at all, which is the one
+   * state that line exists to report. `captureTransport` publishes for *every*
+   * block, the empty transport included, so a publication having happened says
+   * nothing about a transport having arrived. The flags say it: a host that
+   * reports anything at all sets at least one, and an empty transport sets
+   * none.
+   *
+   * Current rather than ever, because the panel is read beside the
+   * application's dashes and answers *why* they are there. A host that stops
+   * reporting a position — which `captureTransport` handles as a state rather
+   * than as an error — is a host the display has stopped drawing one for.
+   */
+  bool hostReportsPosition() const noexcept {
+    return stateFlags_.load(std::memory_order_relaxed) != 0u;
   }
 
 private:
@@ -193,6 +218,10 @@ private:
    * whole reason it is out here is that the payload is sampled and this must
    * not be. */
   std::atomic<uint32_t> sticky_{0};
+
+  /* The state flags of the most recent publication, for a reader that only
+   * wants to know whether the host is saying anything. */
+  std::atomic<uint32_t> stateFlags_{0};
 };
 
 }  // namespace oaa

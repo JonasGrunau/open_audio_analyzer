@@ -49,7 +49,8 @@ by people who are not writing free software.
 | `src/OaaPluginProcessor.h/.cpp` | The `AudioProcessor`. Real-time path and playhead capture. |
 | `src/OaaPluginEditor.h/.cpp` | A status panel. Not a meter, and must not become one. |
 | `test/wire_fixture.cpp` | Writes the golden the Dart codec is held against. |
-| `test/transport_box_test.cpp` | That an edge is delivered exactly once, without a DAW, a socket or a thread. Links no JUCE. |
+| `test/transport_box_test.cpp` | That an edge is delivered exactly once, and that only a host which says something is reported as saying it. No DAW, no socket, no thread, no JUCE. |
+| `test/transport_capture_test.cpp` | That a host which says nothing has nothing invented for it. Hosts the `AudioProcessor` directly, because no plugin format can express either half of it. Needs JUCE. |
 | `host/` | The fake DAW: a host that plays a file through this plugin and gives it a transport. Its own `AGENTS.md`. Nothing there ships. |
 
 ## Working in here
@@ -130,6 +131,35 @@ by people who are not writing free software.
   second read to be clean. Anything else added to `kStickyFlags` inherits both
   rules — accumulate it, and keep it out of the payload.
 
+- **A host that says nothing must have nothing invented for it, and only a test
+  can show that.** `captureTransport` answers two questions before reading a
+  value — is there a playhead, and does it have a position — and a "no" to
+  either publishes an empty transport, which is what puts dashes on screen
+  instead of bar 1 at 120 bpm. **Neither answer can be produced through VST3 or
+  an Audio Unit.** JUCE's VST3 host turns both into the same zeroed
+  `ProcessContext` with a valid sample rate and no validity flags, and the
+  plugin's own wrapper reads a position back out of it unconditionally; the AU
+  wrapper scopes a playhead around every render. A plugin loaded as either
+  format is therefore told *parked at zero, nothing else valid* where the host
+  said nothing at all — the right reading of what the format delivered, and not
+  these branches.
+
+  So they were written against the specification and never run, and `README.md`
+  carried that as a known gap. `test/transport_capture_test.cpp` closes it by
+  hosting the processor as the C++ object it is and asserting on the transport it
+  published, with a third playhead that *does* answer so that "the struct is
+  empty" cannot pass by the processor having stopped publishing. It links
+  `OaaPlugin` rather than recompiling these sources, so what it drives is the
+  objects the shipping bundle contains.
+
+  **The second half of the same problem was in the box.** `hostReportsPosition()`
+  is what the editor's "no playhead from host" line is drawn from, and it used to
+  mean *has anything ever been published* — which, since every block publishes,
+  became true the moment audio started flowing, on exactly the host the line
+  exists to report. It now reports whether the most recent publication carried
+  any state flag, sticky bits masked out, so an edge is not mistaken for a
+  position and a host that stops reporting stops being claimed.
+
 - **NaN and −∞ go on the wire unchanged.** NaN means nobody measured it, −∞
   means digital silence. Both have bit patterns a careless serialiser normalises
   — NaN through arithmetic, −∞ through a clamp — and both are asserted in the
@@ -162,8 +192,13 @@ archive per platform. They are not inside the desktop installers yet.
 It is the only thing in CI that compiles the *plugin*. Every push does now
 configure this directory with `-DOAA_BUILD_PLUGIN=OFF` — no JUCE, no fetch, no
 framework compile — and run the part of `ctest` that needs none: the transport
-box's delivered-exactly-once test, the wire fixture against the golden, and the
-source lists. Five seconds.
+box's tests, the wire fixture against the golden, and the source lists. Five
+seconds.
+
+The remaining `ctest` case is only defined when there *is* a framework, because
+it hosts an `AudioProcessor`: `transport_capture_invents_nothing`, which is the
+one thing about this plugin that neither a DAW nor the fake DAW can demonstrate.
+See the bullet below.
 
 So **run the block above by hand before pushing anything that touches JUCE** —
 the plugin target, the formats, `host/`. Between releases nothing else will tell

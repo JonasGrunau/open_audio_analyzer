@@ -85,8 +85,11 @@ The jobs are split by what they need, and that split is deliberate:
   still *writes* them, and both halves now run on a push in five seconds.
 
   What stays gated is what genuinely needs the framework: the VST3, the AU, the
-  fake DAW, and every end-to-end case that drives them — so between releases the
-  live path is not exercised at all. The cost of that is not hypothetical. The
+  fake DAW, the one `ctest` case that hosts the `AudioProcessor` itself
+  (`transport_capture_invents_nothing` — the two branches no plugin format can
+  ask for, see `plugin/test/transport_capture_test.cpp`), and every end-to-end
+  case that drives them — so between releases the live path is not exercised at
+  all. The cost of that is not hypothetical. The
   first dispatch after `plugin/host/` landed failed on macOS, on cases that had
   never run there, and there were two defects under it: an edge delivered twice
   by the plugin when two frames leave inside one audio block, and the fake DAW

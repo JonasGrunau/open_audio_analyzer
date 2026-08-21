@@ -644,7 +644,9 @@ cmake -B plugin/build-nojuce -S plugin -DOAA_BUILD_PLUGIN=OFF && \
   ctest --test-dir plugin/build-nojuce  # the plugin's C++ that needs no JUCE
 cmake -B plugin/build -S plugin -DCMAKE_BUILD_TYPE=Release && \
   cmake --build plugin/build && \
-  ctest --test-dir plugin/build       # the VST3, the AU and the fake DAW compile
+  ctest --test-dir plugin/build       # the VST3, the AU and the fake DAW compile,
+                                      # and the plugin answers a host that says
+                                      # nothing
 dart test packages/oaa_wire           # again: with a built fake DAW the
                                       # end-to-end cases run instead of skipping
 flutter test test/plugin_to_display_e2e_test.dart
@@ -804,6 +806,19 @@ that arrives as zero is indistinguishable from a real one, and "bar 1, beat 1,
 is parked at bar 57 — so a host that reports no tempo gets no tempo printed, and
 one that reports no position at all gets dashes rather than a plausible zero.
 
+That last case is one **no DAW can actually produce**, and it is worth knowing
+why. Neither VST3 nor the Audio Unit API has a way to say "not saying": JUCE's
+VST3 host sends a zeroed process context with no validity flags, the plugin's
+wrapper reads a position back out of it unconditionally, and the Audio Unit
+scopes a playhead around every render. A host that withholds its transport
+therefore arrives as one *parked at zero with nothing else valid*, which is what
+the plugin reports, because it is the correct reading of what the format
+delivered. The dashes belong to the branch behind that, which the fake DAW
+cannot reach either — so it is held by
+[`plugin/test/transport_capture_test.cpp`](plugin/test/transport_capture_test.cpp),
+which hosts the processor as the C++ object it is and asserts that both ways of
+saying nothing publish nothing, and that the plugin's own status panel says so.
+
 ### 🧪 Testing the plugin without a DAW
 
 `plugin/host/` builds a **fake DAW**: a host that plays an audio file through
@@ -848,8 +863,11 @@ are fixed — three in the plugin's transport handling, one that only became
 visible with the fake DAW and the application running as a pair (a check neither
 test suite can be), and one in the fake DAW itself, which was inventing the very
 thing it exists to measure. The sixth is not a defect: the plugin's "host
-supplies no position" branch cannot be reached through VST3 at all, which is
-[below](#-known-gaps-stated-plainly).
+supplies no position" branch cannot be reached through *either* plugin format,
+so neither a DAW nor the fake DAW can ask for it. It is held instead by
+[`plugin/test/transport_capture_test.cpp`](plugin/test/transport_capture_test.cpp),
+which hosts the processor with no format wrapper in the way — the only place
+that branch exists.
 
 ---
 
@@ -897,12 +915,6 @@ so a release built from a fork is unsigned and every script says so. See
   the LAN and stays read-only until somebody designs authentication for it.
   Silently restarting an integration mid-programme is wrong in a way nothing on
   screen reveals, which is not a capability to put on an unauthenticated port.
-- 🎬 **"The host supplies no transport" cannot be reached through VST3.** The
-  plugin handles it — an empty transport, and dashes on screen — and the format
-  has no way to say it: JUCE fills a process context with a zeroed project time
-  and no validity flags, so the plugin correctly reads a host parked at zero
-  instead. The branch is exercised by the Standalone build, which has no
-  playhead at all. Nothing is broken; it is simply not observable from a DAW.
 - 🔊 **Capturing your own system's output needs macOS 14.4 or older to be
   worked around.** Everywhere else it now takes no setup at all, and there is
   no driver to install on any platform.

@@ -257,6 +257,43 @@ if(OAA_BUILD_HOST)
   add_subdirectory(host)
 endif()
 
+# ---------------------------------------------------------------------------
+# The transport capture test
+#
+# The two branches of `captureTransport` that no host can reach through a plugin
+# format — a host with no playhead, and a playhead with no position. Both were
+# written against the specification and never run, because neither VST3 nor an
+# Audio Unit can express them and so neither a DAW nor the fake DAW can ask for
+# them. See the header of test/transport_capture_test.cpp.
+#
+# It links `OaaPlugin` — the shipping bundle's own shared-code library — rather
+# than compiling the plugin's four sources a second time. That matters beyond
+# the build time it saves: the objects this test drives are the objects inside
+# the VST3 and the Audio Unit, so a difference in flags between a test build and
+# a plugin build cannot hide anything here.
+#
+# It does pay for its own copy of JUCE, which is a third framework compile in
+# this directory. Linking a JUCE module adds the module's sources to the
+# consuming target and there is no way to take the headers and the platform
+# libraries without them. The bill lands in the gated job that already builds
+# the framework twice, and the alternative — leaving the branches unrun, or
+# reaching into the fake DAW, which deliberately links no part of the plugin —
+# is worse than the minutes.
+#
+# Inside the OAA_BUILD_PLUGIN guard because it hosts an `AudioProcessor`, which
+# is a JUCE class: with -DOAA_BUILD_PLUGIN=OFF there is no framework to host it
+# with. The framework-free half of test/ runs on every push regardless.
+add_executable(oaa_transport_capture_test test/transport_capture_test.cpp)
+
+target_link_libraries(oaa_transport_capture_test PRIVATE
+  OaaPlugin
+  oaa::oaa
+  juce::juce_audio_utils
+  juce::juce_gui_basics
+)
+
+target_include_directories(oaa_transport_capture_test PRIVATE src)
+
 endif()  # OAA_BUILD_PLUGIN
 
 # ---------------------------------------------------------------------------
@@ -296,6 +333,16 @@ enable_testing()
 add_test(NAME transport_box_delivers_edges_once
   COMMAND oaa_transport_box_test
 )
+
+# Both halves of "the host said nothing", which is the one thing about the
+# plugin's transport handling that no host can demonstrate — see the header of
+# test/transport_capture_test.cpp. Only defined when there is a framework to
+# host an `AudioProcessor` with.
+if(TARGET oaa_transport_capture_test)
+  add_test(NAME transport_capture_invents_nothing
+    COMMAND oaa_transport_capture_test
+  )
+endif()
 
 add_test(NAME wire_fixture_matches_golden
   COMMAND ${CMAKE_COMMAND}

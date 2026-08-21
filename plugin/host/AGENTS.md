@@ -57,7 +57,7 @@ Three of the switches exist because a person cannot perform the gesture on cue:
 
 | | |
 |---|---|
-| `--no-playhead` | Report no transport at all. |
+| `--no-playhead` | Withhold the transport: this host's `getPosition()` returns nothing. What the plugin then receives is a position parked at zero with no other value valid, because that is as close to "not saying" as VST3 gets — see the finding below. |
 | `--parked` | Headless: render with the transport stopped, which is the state a session spends most of its time in. |
 | `--relocate-at=<s>` | Headless: play, stop, park, jump to the start, play again — the gesture `docs/WIRE.md` names as the reason the discontinuity bit exists. |
 
@@ -230,16 +230,33 @@ to measure.
   protocol defect rather than a typographical one. See the `juce::String` rule
   in `../AGENTS.md`.
 
-- **The plugin's "host supplies no position" branch is unreachable through
-  VST3.** *Not a defect, and nothing to fix.* `--no-playhead` makes this host's
-  `getPosition()` return nothing, which is the case `captureTransport` answers
-  with an empty transport. VST3 has no way to express it: JUCE's host fills a
-  `ProcessContext` with a zeroed project time and no validity flags, and JUCE's
-  wrapper on the far side reports `timeInSamples` and `timeInSeconds`
-  unconditionally. The plugin therefore sees a host parked at zero rather than a
-  host that is not saying — which is the correct reading of what the format
-  delivered. The branch is reached by the Standalone build, which has no
-  playhead at all.
+- **The plugin's "host supplies no position" branch is unreachable from here,
+  and from any DAW.** *Not a defect in either end.* `--no-playhead` makes this
+  host's `getPosition()` return nothing, and no plugin format can carry that.
+  JUCE's VST3 host maps it — and a host holding no playhead at all, which is the
+  same bytes — onto a zeroed `ProcessContext` with a valid sample rate and no
+  validity flags; the plugin's own VST3 wrapper then reads `timeInSamples` and
+  `timeInSeconds` back out of it unconditionally, because the format has no bit
+  for "not saying". So the plugin sees a host *parked at zero with nothing else
+  valid* rather than a host that is not saying, and reporting that is the
+  correct reading of what arrived. The Audio Unit wrapper scopes a playhead
+  around every render and answers unconditionally too, so it says no more.
+
+  What this means for the fake DAW is worth stating plainly: **it cannot reach
+  `captureTransport`'s two empty-transport guards, and neither can a DAW.** They
+  are covered instead by `plugin/test/transport_capture_test.cpp`, which hosts
+  the processor as the C++ object it is, with no format wrapper in the way —
+  `ctest -R transport_capture`, in the same gated run as everything else here.
+  Until that test existed this was written down as a known gap in `README.md`,
+  along with a claim that the Standalone build reached the branch: it does not,
+  because JUCE 8's `AudioProcessorPlayer` installs a counting playhead whenever
+  the processor it is given has none.
+
+  Writing the test found something the branch had been hiding: the plugin's own
+  status panel drew "no playhead from host" from whether a transport had *ever*
+  been published, so it stopped saying it as soon as audio flowed — on the one
+  host it was there to describe. Fixed in `TransportBox`, and held by the
+  framework-free test beside it.
 
 The two transport defects are held by
 `packages/oaa_wire/test/plugin_e2e_test.dart`, which asserts one flagged frame
