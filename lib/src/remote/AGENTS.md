@@ -16,7 +16,8 @@ halves live here.
 | `mdns/dns_message.dart` | Just enough DNS to advertise and find one service. |
 | `mdns/mdns_service.dart` | The responder, and the browser every platform but iOS uses. |
 | `mdns/host_discovery.dart` | `DiscoveredHost`, the `HostDiscovery` interface the picker draws, and which of the two searches this platform is allowed to run. |
-| `mdns/bonjour_discovery.dart` | The iOS search, over a channel to the system responder. Its native half is `ios/Runner/OaaBonjour.swift` — the only platform channel in the application. |
+| `mdns/bonjour_discovery.dart` | The iOS search, over a channel to the system responder. Its native half is `ios/Runner/OaaBonjour.swift`. |
+| `mdns/multicast_lock.dart` | The `WifiManager.MulticastLock` Android needs before anything multicast is delivered to it at all, reference counted so that overlapping searches hold one. A no-op everywhere else. Its native half is `android/.../OaaMulticastLock.kt`. |
 
 `docs/WIRE.md` is the protocol and it is normative. The codec is
 `packages/oaa_wire/`; nothing in here re-implements a byte of it.
@@ -289,9 +290,52 @@ halves live here.
   which is how a tablet shipped with a browser that had never found anything:
   it works on a simulator and fails on the iPad, silently, for a phase.
 
-- **Android discovery is not solved.** `CHANGE_WIFI_MULTICAST_STATE` is
-  declared, but on Wi-Fi Android also requires a `WifiManager.MulticastLock`,
-  which is a platform call Dart cannot make. Until that is a plugin, an Android
-  tablet browses nothing and must be given an address. The UI says so rather
-  than showing an empty list, which is the honest version of the same fact.
-  This is listed in the README's gaps.
+- **Android needs a lock, not a different browser.** `CHANGE_WIFI_MULTICAST_STATE`
+  in the manifest is what *allows* the `WifiManager.MulticastLock` to be taken;
+  it is not what lifts the Wi-Fi driver's multicast filter. Taking the lock is a
+  platform call, `mdns/multicast_lock.dart` over
+  `android/.../OaaMulticastLock.kt`, and the browser takes it **before the
+  bind** and gives it back with the socket. Without it the socket binds, joins
+  224.0.0.251, sends its query and receives nothing, for ever, with no error on
+  any path — which is how an Android tablet shipped browsing an empty network
+  under *Looking for hosts on this network…*, the exact state
+  `HostDiscovery.failure` exists to make impossible, reached through the one
+  door that had no error to report.
+
+  Two things about it are load-bearing:
+
+  - **The count is on the Dart side and the native lock is not counted at all.**
+    Two searches overlap every time one picker replaces another, and a desktop
+    browses while it advertises; a release counted per caller takes multicast
+    away from whoever is still looking. The native lock stays uncounted so that
+    a hot restart cannot leave it several acquisitions deep with nobody holding
+    it.
+  - **A refused lock is reported and then ignored.** It does not stop the
+    browse: a device with no Wi-Fi hardware has nothing filtering multicast, and
+    a wired tablet finds hosts without any lock at all. So the sentence goes to
+    `failure` while the search runs, and `host_picker.dart` shows a reason in
+    preference to "Looking for hosts" whenever there is one — a search that is
+    running and deaf must not wear the face of one that is about to succeed.
+
+  **`NsdManager` was not used, deliberately.** It is a third implementation of
+  DNS-SD, and three implementations are three opinions about what is on the
+  network; the lock is one platform call and leaves Android browsing with the
+  same code, and the same tests, as the desktops.
+
+  **Neither the emulator nor a unit test can show you any of this working.** An
+  Android emulator sits behind NAT that does not carry the LAN's multicast, so
+  it finds nothing whether the lock is held or not — the same trap as the iOS
+  simulator, in the opposite direction. What the suite holds is that the lock is
+  asked for, that overlapping searches share one, and that a refusal becomes a
+  sentence; that packets arrive is checked on hardware and nowhere else. What an
+  emulator *can* show is the half that is not about packets: `adb shell dumpsys
+  wifi` lists `Multicaster{Open Audio Analyzer mDNS}` while a picker is open and
+  nothing when it closes, and `WifiService` logs the acquire and the release by
+  tag. That is the check to run after touching either side of this channel.
+
+  **`reusePort` is not supported on Android, and Dart says so on stderr.**
+  `Dart Socket ERROR: … reusePort not supported on this platform` appears in
+  logcat on every bind and is *not* a failure: `_bindMulticast` asks for the
+  option, is refused, and rebinds with `reuseAddress` alone — which is the whole
+  point of it trying twice. Windows refuses it the same way. Do not go looking
+  for a bug in discovery because that line is in the log.

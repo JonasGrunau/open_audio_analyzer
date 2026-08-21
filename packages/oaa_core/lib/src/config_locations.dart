@@ -42,6 +42,19 @@
 /// takes that directory as an argument. It is the only value that identifies
 /// the container without a platform channel, and a platform channel is
 /// `path_provider`, which the first paragraph rules out.
+///
+/// **Android is the one where nothing in the environment can be made to answer
+/// at all**, and it is worth being precise about why, because the iPad's trick
+/// looks like it should transfer. There is no `HOME`; the temporary directory is
+/// `/data/local/tmp`, which belongs to no application and is not writable by
+/// one, so its parent names nothing; and the package's own container is
+/// `/data/user/<user>/<package>`, where the user is 0 on a phone and 10 in a
+/// work profile — guessing it wrong writes into another profile's path and fails
+/// as a permission error at save time. `getFilesDir()` is the only correct
+/// answer and it is a platform call, so [resolveConfigRoot] takes *that*
+/// directory as an argument the same way it takes the iPad's. One channel, one
+/// question, in `lib/src/storage/android_files_dir.dart`; every rule about what
+/// then goes where stays here, pure, where the CLI and a test can reach it.
 library;
 
 /// The environment variable that overrides the platform's convention.
@@ -80,14 +93,17 @@ const String kConfigDirEnvVar = 'OAA_CONFIG_DIR';
 /// instead would be worse.
 ///
 /// [temporaryDirectory] is `Directory.systemTemp.path`, and is read by the iOS
-/// branch alone — see the library comment. Passing it in rather than reading it
-/// keeps this function free of `dart:io` and lets a test on any platform
-/// exercise an iPad's paths, which is otherwise a device build away.
+/// branch alone — see the library comment. [androidFilesDirectory] is
+/// `getFilesDir()` from the one channel that asks for it, and is read by the
+/// Android branch alone. Passing both in rather than reading them keeps this
+/// function free of `dart:io` and of any binding, and lets a test on any
+/// platform exercise a tablet's paths, which is otherwise a device build away.
 String? resolveConfigRoot({
   required String operatingSystem,
   required Map<String, String> environment,
   String? override,
   String? temporaryDirectory,
+  String? androidFilesDirectory,
 }) {
   // The flag beats the environment variable, which beats the platform. A flag
   // is typed for this launch and an environment variable is usually inherited
@@ -125,15 +141,23 @@ String? resolveConfigRoot({
       // Settings → Session, not through the Files app.
       return '$container/Library/Application Support/Open Audio Analyzer';
 
-    // Linux and anything else Unix-shaped — including Android, which has no
-    // `HOME` either and therefore no configuration directory. Its container is
-    // not derivable the way iOS's is: Dart's temporary directory there is
-    // `/data/local/tmp`, which belongs to no app and is not writable by one.
-    // An Android tablet is a display and persists nothing; giving it a
-    // configuration means a platform channel to `getFilesDir()`.
-    //
-    // XDG first, because a user who has set XDG_CONFIG_HOME has said where
-    // they want this.
+    case 'android':
+      // `HOME` is deliberately not consulted, for the iOS branch's reason:
+      // Android does not set one, and the Unix branch below therefore resolved
+      // to null here and the app opened remembering nothing. The files
+      // directory is app-private, needs no permission, and is removed with the
+      // app — which is the right lifetime for a display's layout and skin.
+      if (androidFilesDirectory == null || androidFilesDirectory.isEmpty) {
+        return null;
+      }
+      // Named rather than used bare, so that nothing Open Audio Analyzer keeps
+      // here can collide with what the engine, an asset cache or a future
+      // plugin puts in the same directory. `oaa` is the same name the XDG
+      // branch below uses.
+      return '$androidFilesDirectory/oaa';
+
+    // Linux and anything else Unix-shaped. XDG first, because a user who has
+    // set XDG_CONFIG_HOME has said where they want this.
     default:
       final xdg = environment['XDG_CONFIG_HOME'];
       if (xdg != null && xdg.isNotEmpty) return '$xdg/oaa';

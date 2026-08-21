@@ -374,13 +374,15 @@ between machines or keep in version control.
 | 🪟 **Windows** | `%APPDATA%\Open Audio Analyzer` |
 | 🐧 **Linux** | `$XDG_CONFIG_HOME/oaa`, or `~/.config/oaa` |
 | 📱 **iPadOS** | `Library/Application Support/Open Audio Analyzer` inside the app's own container |
+| 🤖 **Android** | `oaa` inside the app's own `files` directory |
 
-The iPad row is the one you cannot open in a file manager, because iOS gives an
-app a private container and no way out of it. Settings → Session prints the
-path; a display persists its layout, its skin and the host it last connected to,
-and nothing else on the device can read them. **An Android tablet persists
-nothing** and says so at launch: its container is not derivable without a
-platform channel Open Audio Analyzer does not have.
+The two tablet rows are the ones you cannot open in a file manager, because both
+systems give an app a private directory and no way out of it. Settings → Session
+prints the path; a display persists its layout, its skin and the host it last
+connected to, and nothing else on the device can read them. Android's directory
+comes from `getFilesDir()` over a platform channel — nothing in the environment
+there names a directory the app may write to — and it goes when the app is
+uninstalled, as a tablet's copy of a layout should.
 
 `OAA_CONFIG_DIR` overrides the three desktop rows — for a portable install, or
 for keeping Open Audio Analyzer's configuration alongside your dotfiles — and
@@ -867,8 +869,8 @@ supplies no position" branch cannot be reached through VST3 at all, which is
 ¹ The plugin, the transport and the timecode ship. The **Elapsed and Timecode
 LUFS modes do not** — see below.
 
-² The display ships. **Discovery does not work on Android** and tab-per-display
-targeting is not built — both below.
+² The display ships, and discovery now works on all five platforms.
+**Tab-per-display targeting is not built** — see below.
 
 ³ All four installers build and are published on a tag. **None of them is signed
 in this repository** — signing needs certificates that are not ours to commit,
@@ -928,16 +930,21 @@ so a release built from a fork is unsigned and every script says so. See
   it on**, and why the link is one-directional: a display cannot reset, retarget
   or reconfigure the machine it is watching. Do not switch it on at a venue
   whose Wi-Fi you do not control.
-- 🌐 **Finding hosts automatically does not work on Android.** Receiving
-  multicast there needs a `WifiManager.MulticastLock`, which is a platform call
-  Dart cannot make and Open Audio Analyzer has no native plugin for. An Android
-  tablet browses nothing and has to be given an address, and its screen says
-  exactly that rather than showing an empty list that reads as "no hosts are
-  running". macOS, Windows, Linux and iPadOS discover normally — iPadOS through
-  the system's own Bonjour responder, because Apple does not let an app hold a
-  multicast socket without an entitlement it grants per developer on request.
-  Typing an address is supported everywhere and always will be, because
-  multicast is also the first thing a guest network blocks.
+- 🌐 **Neither tablet's discovery can be proved by a test.** All five platforms
+  find hosts by themselves now — the desktops and Android over a multicast
+  socket Open Audio Analyzer owns, iPadOS through the system's Bonjour
+  responder, because Apple does not let an app hold that socket without an
+  entitlement it grants per developer on request. Android holds a
+  `WifiManager.MulticastLock` while it searches, without which its Wi-Fi driver
+  discards every answer below the socket and says nothing about it. What no
+  suite can cover is whether the packets arrive: an Android emulator sits behind
+  NAT that does not carry the LAN's multicast, an iOS simulator is exempt from
+  the restriction the device enforces, and a `flutter test` on macOS is refused
+  the local network for a reason that has nothing to do with the code. Both
+  tablet paths are checked by hand on hardware, and the unit tests hold only
+  what happens once a packet is in. Typing an address is supported everywhere
+  and always will be, because multicast is also the first thing a guest network
+  blocks.
 - 📡 **Publishing is never remembered, on purpose.** The display's name, port
   and update rate persist like every other setting; whether to publish does not,
   and starts off at every launch. There is no password on that port, and a
@@ -951,13 +958,6 @@ so a release built from a fork is unsigned and every script says so. See
   **2** — or
   the host keys assignments by address, which breaks on DHCP. Until then the
   display shows the whole preset and the viewer picks the tab.
-- 🤖 **An Android tablet remembers nothing between launches.** Every other
-  platform resolves a configuration directory; Android is the one whose
-  container Open Audio Analyzer cannot find without a platform call — `HOME` is
-  unset and the temporary directory an iPad's container is derived from is
-  `/data/local/tmp` there, which belongs to no app. The display works, and says
-  at launch that nothing is being saved. Fixing it means a channel to
-  `getFilesDir()`.
 - 📱 **Tablets are display-first.** FFI works fine on iPadOS and Android, but
   audio *input* selection differs sharply per platform. The tablet build's
   primary role is the remote display.

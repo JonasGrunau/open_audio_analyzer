@@ -6,6 +6,8 @@ import 'dart:io';
 
 import 'package:oaa_core/oaa_core.dart';
 
+import 'android_files_dir.dart';
+
 /// A JSON document as it was found on disk, with the file it came from.
 ///
 /// The filename is carried alongside rather than derived from the document,
@@ -46,17 +48,28 @@ class ConfigStore {
   ///
   /// `Directory.systemTemp` is read here rather than in [resolveConfigRoot]
   /// because that function reads nothing. It is the iPad's container — see
-  /// `config_paths.dart` — and is ignored on every other platform.
+  /// `config_locations.dart` — and is ignored on every other platform.
+  ///
+  /// Android's files directory arrives the same way and for the same reason,
+  /// except that it comes from a channel rather than from the environment. It
+  /// is asked for **whenever this is Android**, including when `--config-dir`
+  /// or `OAA_CONFIG_DIR` is going to win: one channel call costs nothing at
+  /// startup, and deciding here which of the three sources applies would put a
+  /// second copy of that precedence outside the one function that owns it.
   static Future<ConfigStore> open({
     String? operatingSystem,
     Map<String, String>? environment,
     String? configDir,
   }) async {
+    final os = operatingSystem ?? Platform.operatingSystem;
     final path = resolveConfigRoot(
-      operatingSystem: operatingSystem ?? Platform.operatingSystem,
+      operatingSystem: os,
       environment: environment ?? Platform.environment,
       override: configDir,
       temporaryDirectory: Directory.systemTemp.path,
+      androidFilesDirectory: os == 'android'
+          ? await androidFilesDirectory()
+          : null,
     );
 
     if (path == null) {

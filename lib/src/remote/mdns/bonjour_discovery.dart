@@ -3,9 +3,12 @@
 /// Discovery on iOS and iPadOS, through the system responder.
 ///
 /// Why this exists rather than the socket every other platform uses is in
-/// `host_discovery.dart`. What matters here is that it is the *only* platform
-/// channel in the application, that it carries no measurement, and that it is
-/// a browser and nothing else — the tablet is a display and never advertises.
+/// `host_discovery.dart`. What matters here is that it carries no measurement,
+/// and that it is a browser and nothing else — the tablet is a display and
+/// never advertises. It is one of four platform channels in the application,
+/// and the only one that replaces a whole implementation rather than
+/// unblocking one: Android's `multicast_lock.dart` lets the ordinary socket
+/// work, where iOS refuses that socket outright.
 ///
 /// The native half is `ios/Runner/OaaBonjour.swift`. It emits the whole list on
 /// every change rather than add and remove events, because the list is what the

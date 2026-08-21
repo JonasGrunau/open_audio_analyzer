@@ -11,6 +11,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:oaa/src/storage/android_files_dir.dart';
 import 'package:oaa/src/storage/config_store.dart';
 import 'package:oaa/src/storage/startup_config.dart';
 import 'package:oaa_core/oaa_core.dart';
@@ -33,6 +34,11 @@ Future<ConfigStore> _store(Directory root) async {
 }
 
 void main() {
+  // For the one channel this layer has: Android is the only platform that will
+  // not tell a process where it may write through the environment. Everything
+  // else here is a real filesystem and no binding at all.
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   group('resolveConfigRoot', () {
     test('macOS uses Application Support', () {
       expect(
@@ -115,6 +121,52 @@ void main() {
       );
     });
 
+    test('Android uses the files directory the channel names', () {
+      // The one platform where nothing in the environment can be made to
+      // answer: no HOME, and a temporary directory of `/data/local/tmp` that
+      // belongs to no app, so the iPad's container trick yields nothing either.
+      const files = '/data/user/0/dev.openaudioanalyzer.oaa/files';
+      expect(
+        resolveConfigRoot(
+          operatingSystem: 'android',
+          environment: {},
+          androidFilesDirectory: files,
+        ),
+        '$files/oaa',
+      );
+    });
+
+    test('Android resolves to nothing rather than to somewhere it cannot '
+        'write', () {
+      // What a build with no channel, or an OS that will not name a directory,
+      // produces. `HOME` is deliberately not a fallback: Android does not set
+      // one, and `/data/local/tmp` is not this app's to write in — both of
+      // which turn a notice at launch into a permission error at save time.
+      for (final files in [null, '']) {
+        expect(
+          resolveConfigRoot(
+            operatingSystem: 'android',
+            environment: {'HOME': '/', 'XDG_CONFIG_HOME': '/data/local/tmp'},
+            temporaryDirectory: '/data/local/tmp',
+            androidFilesDirectory: files,
+          ),
+          isNull,
+          reason: 'files directory "$files"',
+        );
+      }
+    });
+
+    test('the files directory is ignored off Android', () {
+      expect(
+        resolveConfigRoot(
+          operatingSystem: 'linux',
+          environment: {'HOME': '/home/jo'},
+          androidFilesDirectory: '/data/user/0/dev.openaudioanalyzer.oaa/files',
+        ),
+        '/home/jo/.config/oaa',
+      );
+    });
+
     test('the temporary directory is ignored off iOS', () {
       expect(
         resolveConfigRoot(
@@ -127,13 +179,15 @@ void main() {
     });
 
     test('the override beats every platform rule', () {
-      for (final os in ['macos', 'windows', 'linux', 'ios']) {
+      for (final os in ['macos', 'windows', 'linux', 'ios', 'android']) {
         expect(
           resolveConfigRoot(
             operatingSystem: os,
             environment: {kConfigDirEnvVar: '/tmp/oaa', 'HOME': '/home/jo'},
             temporaryDirectory:
                 '/private/var/mobile/Containers/Data/App/A1/tmp',
+            androidFilesDirectory:
+                '/data/user/0/dev.openaudioanalyzer.oaa/files',
           ),
           '/tmp/oaa',
         );
@@ -278,6 +332,55 @@ void main() {
 
       expect(File('${root.path}/presets/one.json').existsSync(), isFalse);
     });
+
+    test('on Android it opens where the channel says, and remembers', () async {
+      // The wiring, which is the half a pure resolver cannot hold: the branch
+      // above is correct and worth nothing if nobody asks the platform. An
+      // Android tablet forgot its host, its tab and its skin at every launch
+      // for eight phases with this line missing and every other test green.
+      final files = _tempDir();
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(
+            filesDirChannel,
+            (call) async => call.method == 'path' ? files.path : null,
+          );
+      addTearDown(
+        () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(filesDirChannel, null),
+      );
+
+      final store = await ConfigStore.open(
+        operatingSystem: 'android',
+        environment: const {},
+      );
+      addTearDown(store.dispose);
+
+      expect(store.isAvailable, isTrue);
+      expect(store.root!.path, '${files.path}/oaa');
+
+      await store.writeJson(ConfigFile.settings, {'skin': 'graphite'});
+      expect(await store.readJson(ConfigFile.settings), {'skin': 'graphite'});
+    });
+
+    test(
+      'and with no channel to answer, says so instead of guessing',
+      () async {
+        // A runner that has lost `OaaFilesDir`. Persistence off is a state the
+        // whole application already handles and shows at launch; a guessed path
+        // fails at the first save, which reads like a broken install.
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(filesDirChannel, null);
+
+        final store = await ConfigStore.open(
+          operatingSystem: 'android',
+          environment: const {},
+        );
+        addTearDown(store.dispose);
+
+        expect(store.isAvailable, isFalse);
+        expect(store.lastError, contains('No configuration directory'));
+      },
+    );
 
     test('a disabled store answers everything without throwing', () async {
       final store = ConfigStore.disabled();

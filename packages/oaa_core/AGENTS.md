@@ -9,7 +9,7 @@ than aspired to.
 | `src/metric.dart` | `Metric` — the closed set of sixteen things that can be measured. |
 | `src/meter_source.dart` | `MeterSource` — everything a module is allowed to read. `OaaEngine` implements it over native memory and `WireSnapshot` over a socket, and the thirteen modules cannot tell them apart. |
 | `src/calibration.dart` | `Calibration`, the six built-in delivery targets, and `mergeCalibrations` — the one implementation of "a user file with a built-in's id replaces it", shared by the app's library and the CLI's. |
-| `src/config_locations.dart` | Where the configuration directory is, on each platform, and `slugify`. Pure functions of an environment map and, on iOS, of the temporary directory — no `dart:io`. Here rather than in the app because the CLI reads the same targets and cannot import the app. |
+| `src/config_locations.dart` | Where the configuration directory is, on each platform, and `slugify`. Pure functions of an environment map and — on the two platforms whose environment answers nothing — of the temporary directory on iOS and of `getFilesDir()` on Android, both passed in. No `dart:io`. Here rather than in the app because the CLI reads the same targets and cannot import the app. |
 | `src/layout.dart` | `GridRect`, `ModuleKind`, `ModuleSpec`, `TabSpec`, `PresetSpec`, and the typed readings of `ModuleSpec.options` — `SpectrumResponse`. |
 | `src/grid.dart` | Every rule about where a module may go, as pure functions over `TabSpec`. No pixels, no widgets — so the same rules hold for the canvas, for a preset loaded from disk and for the remote display. |
 | `src/settings.dart` | `AppSettings`, `AudioSourceKind`, and the schema version every file Open Audio Analyzer writes carries. |

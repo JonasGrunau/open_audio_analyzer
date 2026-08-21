@@ -15,9 +15,11 @@ import 'package:oaa/src/remote/mdns/bonjour_discovery.dart';
 import 'package:oaa/src/remote/mdns/dns_message.dart';
 import 'package:oaa/src/remote/mdns/host_discovery.dart';
 import 'package:oaa/src/remote/mdns/mdns_service.dart';
+import 'package:oaa/src/remote/mdns/multicast_lock.dart';
 import 'package:oaa_ui/oaa_ui.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// The packet `MdnsResponder` puts on the wire: the PTR as the answer, and the
@@ -386,6 +388,120 @@ void main() {
     });
   });
 
+  // The socket above is only half of what Android needs. The other half is a
+  // `WifiManager.MulticastLock`: without one the driver discards every answer
+  // below the socket, so the browse binds, joins, queries and hears nothing,
+  // with no error anywhere. These hold the two things that cannot be seen on a
+  // device — that the lock is asked for at all, and that it is given back.
+  group('the lock Android needs before any of that arrives', () {
+    late bool wasNeeded;
+    var acquires = 0;
+    var releases = 0;
+    String? refuseWith;
+
+    setUp(() {
+      wasNeeded = MulticastLock.platformNeedsLock;
+      MulticastLock.platformNeedsLock = true;
+      MulticastLock.reset();
+      acquires = 0;
+      releases = 0;
+      refuseWith = null;
+
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(multicastLockChannel, (call) async {
+            switch (call.method) {
+              case 'acquire':
+                acquires++;
+                final refusal = refuseWith;
+                if (refusal != null) {
+                  throw PlatformException(
+                    code: 'multicast-lock-unavailable',
+                    message: refusal,
+                  );
+                }
+              case 'release':
+                releases++;
+            }
+            return null;
+          });
+    });
+
+    tearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(multicastLockChannel, null);
+      MulticastLock.reset();
+      MulticastLock.platformNeedsLock = wasNeeded;
+    });
+
+    test('a browse takes it, and stopping gives it back', () async {
+      final browser = MdnsBrowser();
+      await browser.start();
+
+      // Before the socket, not after: the answers to the query the browse sends
+      // on its way up are the ones a display is waiting for.
+      expect(acquires, 1);
+      expect(releases, isZero);
+
+      await browser.stop();
+      await pumpEventQueue();
+      expect(releases, 1);
+    });
+
+    test('two searches that overlap hold one lock between them', () async {
+      // What replacing one host picker with another does — the arriving route's
+      // `initState` runs before the leaving route's `dispose` — and what a
+      // desktop that is advertising while it browses does all the time. A
+      // release counted per caller would take multicast away from whichever of
+      // them is still looking.
+      final leaving = MdnsBrowser();
+      final arriving = MdnsBrowser();
+      await leaving.start();
+      await arriving.start();
+      expect(acquires, 1);
+
+      await leaving.stop();
+      await pumpEventQueue();
+      expect(releases, isZero, reason: 'somebody is still searching');
+
+      await arriving.stop();
+      await pumpEventQueue();
+      expect(releases, 1);
+    });
+
+    test('a lock that cannot be taken is a sentence, not silence', () async {
+      refuseWith =
+          'Android is not letting Open Audio Analyzer receive '
+          'multicast (SecurityException). Enter an address below.';
+
+      // Reported rather than obeyed: a device with no Wi-Fi has nothing
+      // filtering multicast, so the search is still worth running — and the
+      // panel is where the reason belongs, next to the field for typing an
+      // address.
+      expect(await MulticastLock.acquire(), contains('SecurityException'));
+      expect(MulticastLock.holders, 1);
+
+      // A second searcher is told the same thing without a second trip.
+      expect(await MulticastLock.acquire(), contains('SecurityException'));
+      expect(acquires, 1);
+
+      MulticastLock.release();
+      MulticastLock.release();
+      await pumpEventQueue();
+      expect(releases, 1);
+    });
+
+    test('and nothing crosses the channel on a platform without one', () async {
+      MulticastLock.platformNeedsLock = false;
+
+      expect(await MulticastLock.acquire(), isNull);
+      MulticastLock.release();
+      await pumpEventQueue();
+
+      expect(acquires, isZero);
+      expect(releases, isZero);
+    });
+  });
+
   group('what the panel says when it cannot search', () {
     testWidgets('the reason, when there is one', (tester) async {
       final discovery = _StaticDiscovery()
@@ -403,9 +519,9 @@ void main() {
     });
 
     testWidgets('and the general version when there is not', (tester) async {
-      // Android: the socket opens, the join succeeds, and nothing is ever
-      // delivered because Dart cannot take a `WifiManager.MulticastLock`.
-      // There is no error to report — only the fact.
+      // A machine with no multicast-capable interface: a VM on host-only
+      // networking, a locked-down corporate image. Nothing named an errno, so
+      // there is no better sentence than the fact.
       await tester.pumpWidget(_panel(_StaticDiscovery()));
 
       expect(find.textContaining('cannot search the network'), findsOneWidget);
@@ -420,6 +536,28 @@ void main() {
 
       expect(find.textContaining('Looking for hosts'), findsOneWidget);
       expect(find.textContaining('cannot search the network'), findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('a search that is running and deaf does not', (tester) async {
+      // Android with the multicast lock refused: the socket is bound, the query
+      // is going out every five seconds, and not one answer will be delivered.
+      // "Looking for hosts on this network…" is true and useless — it is the
+      // face a search that is about to succeed wears.
+      await tester.pumpWidget(
+        _panel(
+          _StaticDiscovery()
+            ..isBrowsing.value = true
+            ..failure.value =
+                'Android is not delivering multicast to Open Audio Analyzer, '
+                'so hosts cannot be found automatically. Enter an address '
+                'below.',
+        ),
+      );
+
+      expect(find.textContaining('not delivering multicast'), findsOneWidget);
+      expect(find.textContaining('Looking for hosts'), findsNothing);
 
       await tester.pumpWidget(const SizedBox.shrink());
     });

@@ -151,7 +151,12 @@ class _HostPickerPanelState extends State<HostPickerPanel> {
                 title: 'On this network',
                 note: hosts.isNotEmpty
                     ? 'Tap a host to show its meters here.'
-                    : browsing
+                    // A search that is running *and* has something in its way
+                    // does not get to say it is looking: on Android a browse
+                    // whose multicast lock was refused sends its query, hears
+                    // nothing, and would otherwise present exactly the same
+                    // face as a search that is about to succeed.
+                    : browsing && failure == null
                     ? 'Looking for hosts on this network…'
                     : null,
                 ruled: false,
@@ -174,11 +179,13 @@ class _HostPickerPanelState extends State<HostPickerPanel> {
                   // machine — and stated in the words of whatever actually
                   // stopped it where those are known, because "cannot search"
                   // and "macOS is not letting Open Audio Analyzer search" send
-                  // that person to two different places. Android is the case
-                  // with no sentence to give: it needs a
-                  // `WifiManager.MulticastLock` that Dart cannot take, and the
-                  // socket opens perfectly without one.
-                  if (hosts.isEmpty && !browsing)
+                  // that person to two different places.
+                  //
+                  // Shown while a search is still running too, when there is a
+                  // reason to show: Android's multicast lock can be refused on
+                  // a socket that binds and joins perfectly, and a browse in
+                  // that state is running and deaf.
+                  if (hosts.isEmpty && (failure != null || !browsing))
                     PanelNote(
                       failure ??
                           'This device cannot search the network for hosts. '

@@ -43,7 +43,7 @@ is still not built, and `docs/PLAN.md` for what was planned.
 | `packages/oaa_core/lib/src/layout.dart` | `ModuleSpec` / `TabSpec` / `PresetSpec` — the serialised layout model. |
 | `packages/oaa_core/lib/src/meter_source.dart` | `MeterSource` — everything a module is allowed to read. `OaaEngine` implements it; so does the remote display's decoder. |
 | `docs/WIRE.md` | The wire protocol, normative. Three implementations, none written against another. |
-| `ios/Runner/OaaBonjour.swift` | One of the application's two platform channels — the other is `lib/src/app/window_chrome.dart` over `oaa/window_chrome`, which is what removes the macOS title bar. iOS refuses an app the multicast socket every other platform browses with, so a tablet searches through the system's Bonjour responder instead; `lib/src/remote/mdns/host_discovery.dart` is where the two meet. |
+| `ios/Runner/OaaBonjour.swift` | One of the application's **four** platform channels, and every one of them exists because a platform will not answer a question through the environment. iOS refuses an app the multicast socket every other platform browses with, so a tablet searches through the system's Bonjour responder instead; `lib/src/remote/mdns/host_discovery.dart` is where the two meet. The others: `lib/src/app/window_chrome.dart` over `oaa/window_chrome`, which removes the macOS title bar, and Android's two — `OaaMulticastLock.kt`, without which its multicast socket receives nothing, and `OaaFilesDir.kt`, without which it has nowhere to save. Both Android halves are registered in `android/app/src/main/kotlin/dev/openaudioanalyzer/oaa/MainActivity.kt`. |
 | `packages/oaa_core/lib/src/grid.dart` | Every rule about where a module may go, as pure functions. No pixels. |
 | `lib/src/canvas/grid_canvas.dart` | The canvas: drag, resize, selection, the preview overlay. |
 | `lib/src/canvas/workspace.dart` | The one path every layout edit takes, and the undo history. |
@@ -290,16 +290,25 @@ is unaffected: it never links JUCE — it talks to the plugin over a socket.
   restricted entitlement Apple grants per team by request — but the **simulator
   is exempt**, so the socket browses perfectly there and finds nothing, ever, on
   the iPad; that shipped, and the tablet now uses the system responder through
-  the one platform channel in the application. On **macOS**, Local Network
+  a platform channel of its own. On **macOS**, Local Network
   permission is attributed to the *responsible* process, so the same code is
   allowed inside `open -a "Open Audio Analyzer.app"` and denied under `flutter
   test` or a bare `Open Audio Analyzer.app/Contents/MacOS/Open Audio Analyzer`
   — a discovery test that opens a real socket fails on a machine where the
   feature works, and `EHOSTUNREACH` on a multicast send
   is what that denial looks like from inside. On **Android**, receiving needs a
-  `MulticastLock` Dart cannot take and the socket opens happily without one.
-  None of the three logs anything. See `lib/src/remote/AGENTS.md` § Platform
-  notes.
+  `WifiManager.MulticastLock` — a platform call, now `OaaMulticastLock.kt` — and
+  the socket opens, joins and queries perfectly without one while every answer
+  is discarded below it; the **emulator cannot show you the fix working**
+  either, because its NAT does not carry the LAN's multicast. None of the three
+  logs anything. See `lib/src/remote/AGENTS.md` § Platform notes.
+
+  **Android is also the one platform that will not say where a process may
+  write.** No `HOME`, and a temporary directory of `/data/local/tmp` that
+  belongs to no app, so the trick that finds an iPad's container finds nothing —
+  which is why `resolveConfigRoot` takes `getFilesDir()` as an argument and
+  `OaaFilesDir.kt` is what answers. It resolved to null there for eight phases
+  and the tablet forgot everything at every launch, green suite throughout.
 
 - **Bump `OAA_ABI_VERSION` when `oaa.h` changes shape,** and regenerate the
   bindings (`cd packages/oaa_engine && dart run ffigen --config ffigen.yaml`).

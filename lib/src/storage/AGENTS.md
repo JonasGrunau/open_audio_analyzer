@@ -6,6 +6,7 @@ Everything Open Audio Analyzer remembers between launches. GPL-3.0-or-later.
 |------|---------|
 | `config_store.dart` | Reading and writing it. Atomic writes, debounced session saves, and no exceptions. |
 | `startup_config.dart` | The one read of the whole directory, performed before the first frame. |
+| `android_files_dir.dart` | `getFilesDir()`, over the one channel this layer has. Android is the only platform that will not name a writable directory through the environment; its native half is `android/.../OaaFilesDir.kt`. |
 
 **Where the configuration lives is not here either.** `resolveConfigRoot`,
 `ConfigDir`, `ConfigFile` and `slugify` are in
@@ -76,10 +77,21 @@ This directory knows about files; it does not know what is in them.
   opened with "no configuration directory" and forgot every layout. **Do not
   fall back to `HOME` on iOS** — when it is set at all it is `/var/mobile`,
   which the app cannot write to, and that turns a notice at launch into a
-  permission error at save time. Android is the same hole and is *not* fixed:
-  its temporary directory is `/data/local/tmp`, which belongs to no app, so an
-  Android display persists nothing until somebody adds a channel to
-  `getFilesDir()`.
+  permission error at save time.
+
+- **Android is the same hole, and the environment cannot be made to fill it.**
+  It has no `HOME` either, and the iPad's trick does not transfer: its temporary
+  directory is `/data/local/tmp`, which belongs to no app, and the container path
+  contains the Android *user* — 0 on a tablet, 10 in a work profile — so it
+  cannot be guessed without eventually writing into somebody else's profile.
+  `getFilesDir()` is the only correct answer and it is a platform call, so
+  `android_files_dir.dart` asks for it and hands it to the same pure resolver
+  the iPad's container goes through. It resolved to null for eight phases and a
+  tablet started from the defaults at every launch — the display worked, so
+  nothing looked broken. **The channel is asked on Android even when
+  `--config-dir` or `OAA_CONFIG_DIR` will win**, so that the precedence between
+  the three stays in the one function that owns it rather than being decided
+  twice.
 
 - **Every path here is only correct because the macOS app is not sandboxed.**
   A sandboxed app's `HOME` is its own container, so all three platform branches

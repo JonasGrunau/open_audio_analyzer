@@ -6,8 +6,16 @@
 /// There are two implementations and the picker cannot tell them apart:
 ///
 /// * [MdnsBrowser] speaks multicast DNS over a socket Open Audio Analyzer owns. It is the one
-///   that works on macOS, Windows and Linux, and it is the reason
+///   that works on macOS, Windows, Linux and Android, and it is the reason
 ///   `mdns/dns_message.dart` exists rather than a plugin — see its header.
+///   **Android needs one thing from the platform before that socket receives
+///   anything**, and it is not a discovery API: a `WifiManager.MulticastLock`,
+///   which `mdns/multicast_lock.dart` takes while a search is running. Without
+///   it the driver filters every answer out below the socket, silently. That is
+///   one platform call and no new implementation of DNS-SD, which is why
+///   Android browses with the same code as the desktops rather than through
+///   `NsdManager` — a third browser would be a third opinion about what is on
+///   the network.
 /// * `BonjourDiscovery` asks the system responder, over a channel. It exists
 ///   because **iOS and iPadOS refuse the first one on real hardware.** A send to
 ///   224.0.0.251 fails with `EHOSTUNREACH` and nothing is delivered inbound

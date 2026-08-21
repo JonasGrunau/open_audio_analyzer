@@ -9,6 +9,19 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### ✨ Added
+- An Android tablet now finds hosts on the network by itself, like every other
+  platform. It held a multicast socket that never received an answer, because
+  Android's Wi-Fi driver discards multicast for an app that is not holding a
+  `WifiManager.MulticastLock` — silently, with the search still saying it was
+  looking. The lock is held while a search is running and given back when it
+  stops, so it costs nothing once a display is attached.
+- An Android tablet now remembers its layout, its skin and the host it was last
+  attached to. Nothing in an Android process names a directory it may write to,
+  so the configuration directory is asked for over a platform channel and lives
+  in the app's own `files` directory; every launch before this one started from
+  the defaults.
+
 ### ⚡ Changed
 - The wire protocol is at version 3, and a receiver now accepts any version it
   knows rather than only its own. A plugin built against 0.3.0 keeps working
@@ -25,6 +38,9 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   a test that decodes the frozen version-2 golden and diffs it against the
   version-3 one, where exactly four bytes differ and all four are version
   fields.
+- A host search that is running but cannot receive says so instead of
+  "Looking for hosts on this network…", which is the face a search that is about
+  to succeed wears.
 
 ### 🚧 Internal
 - Groundwork for the Elapsed and Timecode LUFS modes, which are **not yet

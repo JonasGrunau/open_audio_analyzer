@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 
 import 'dns_message.dart';
 import 'host_discovery.dart';
+import 'multicast_lock.dart';
 
 /// The service Open Audio Analyzer advertises. `_oaa._tcp` under the local
 /// domain, as DNS-SD spells it.
@@ -135,6 +136,13 @@ class MdnsResponder {
   Timer? _announceTimer;
   int _announcements = 0;
 
+  /// Whether this responder is one of the holders of the multicast lock.
+  ///
+  /// Advertising is mostly sending, which needs no lock — but a browser that
+  /// asks a direct question gets an answer only if the question arrives, and on
+  /// Android nothing multicast arrives without one. See `multicast_lock.dart`.
+  bool _locked = false;
+
   /// The instance as **one label**, which is what DNS-SD says it is.
   ///
   /// **A dot in here does not name an instance with a dot in it; it invents
@@ -177,8 +185,18 @@ class MdnsResponder {
   Future<void> start() async {
     if (_socket != null) return;
 
+    // Taken before the bind and given back with the socket. The failure is not
+    // read here: a responder that cannot hear a query still announces itself
+    // three times and then on every change, which is what browsers work from.
+    // The browser is the half that has a panel to put a sentence in.
+    _locked = true;
+    await MulticastLock.acquire();
+
     final (socket, _) = await _bindMulticast();
-    if (socket == null) return;
+    if (socket == null) {
+      _unlock();
+      return;
+    }
     _socket = socket;
 
     socket.listen((event) {
@@ -204,6 +222,7 @@ class MdnsResponder {
   Future<void> stop() async {
     _announceTimer?.cancel();
     _announceTimer = null;
+    _unlock();
 
     final socket = _socket;
     if (socket == null) return;
@@ -214,6 +233,13 @@ class MdnsResponder {
     // and somebody taps it and waits for a connection that cannot happen.
     _send(socket, await _records(ttl: 0));
     socket.close();
+  }
+
+  /// Gives back the multicast lock, once, however this responder ends.
+  void _unlock() {
+    if (!_locked) return;
+    _locked = false;
+    MulticastLock.release();
   }
 
   void _announce() {
@@ -306,7 +332,9 @@ class MdnsResponder {
 ///
 /// The implementation of [HostDiscovery] for every platform that lets an
 /// application hold a multicast socket, which is all of them except iOS and
-/// iPadOS — see `host_discovery.dart`.
+/// iPadOS — see `host_discovery.dart`. Android lets it hold one and then
+/// delivers nothing into it unless a `WifiManager.MulticastLock` is held, which
+/// is what [MulticastLock] is and why [start] takes it before the bind.
 class MdnsBrowser implements HostDiscovery {
   @override
   final ValueNotifier<List<DiscoveredHost>> hosts = ValueNotifier(const []);
@@ -333,6 +361,13 @@ class MdnsBrowser implements HostDiscovery {
   /// permission the system is asking about.
   bool _wanted = false;
 
+  /// Whether this browser is one of the holders of the multicast lock.
+  ///
+  /// Set before the lock is asked for, not after: [MulticastLock.acquire]
+  /// counts its caller synchronously, so a teardown that lands while the
+  /// channel call is in flight has to give back the hold that already exists.
+  bool _locked = false;
+
   final Map<String, DiscoveredHost> _found = {};
 
   /// Instance names seen in a PTR whose SRV has not arrived, and the addresses
@@ -350,23 +385,35 @@ class MdnsBrowser implements HostDiscovery {
     if (_wanted) return;
     _wanted = true;
 
+    // **Before the socket, because on Android a socket without this receives
+    // nothing and reports nothing.** The lock is what lifts the Wi-Fi driver's
+    // multicast filter; everywhere else this is a no-op. A failure to take it
+    // is carried rather than acted on — a device with no Wi-Fi has nothing
+    // filtering multicast in the first place, so the browse is still worth
+    // running and the sentence is what the panel shows next to it.
+    _locked = true;
+    final lockFailure = await MulticastLock.acquire();
+
     final (socket, error) = await _bindMulticast();
     // Checked before the failure below it, not after: a bind that failed while
     // the browser was going away must not report that to a disposed notifier
-    // either.
+    // either. The lock is already given back by whatever set `_wanted` false.
     if (!_wanted) {
       socket?.close();
       return;
     }
     if (socket == null) {
       _wanted = false;
+      _unlock();
       isBrowsing.value = false;
       failure.value = describeDiscoveryFailure(error);
       return;
     }
     _socket = socket;
     isBrowsing.value = true;
-    failure.value = null;
+    // The search is running; whether anything can reach it is the other half of
+    // what the panel needs, and null when nothing is in the way.
+    failure.value = lockFailure;
 
     socket.listen((event) {
       if (event != RawSocketEvent.read) return;
@@ -396,6 +443,7 @@ class MdnsBrowser implements HostDiscovery {
   /// precisely when the two would meet.
   void _release() {
     _wanted = false;
+    _unlock();
     _queryTimer?.cancel();
     _pruneTimer?.cancel();
     _queryTimer = null;
@@ -405,6 +453,13 @@ class MdnsBrowser implements HostDiscovery {
     _found.clear();
     _pending.clear();
     _hostAddresses.clear();
+  }
+
+  /// Gives back the multicast lock, once, however this browser ends.
+  void _unlock() {
+    if (!_locked) return;
+    _locked = false;
+    MulticastLock.release();
   }
 
   /// A send that failed is not a tick to try again on; it is the reason the

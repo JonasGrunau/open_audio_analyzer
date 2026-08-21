@@ -122,12 +122,14 @@ a directory you can read, edit, copy between machines and put in a repository:
 | Windows | `%APPDATA%\Open Audio Analyzer` |
 | Linux | `$XDG_CONFIG_HOME/oaa`, or `~/.config/oaa` |
 | iPadOS | `Library/Application Support/Open Audio Analyzer` inside the app's own container |
+| Android | `oaa` inside the app's own `files` directory |
 
-The iPad is the exception to "a directory you can read": iOS gives an app a
-private container, so the files are on the device but not reachable from the
-Files app or from a Mac. Settings → Session prints the path. An Android tablet
-persists nothing at all and says so at launch — Open Audio Analyzer cannot
-locate its container without a platform channel it does not have.
+The two tablets are the exception to "a directory you can read": both systems
+give an app a private directory, so the files are on the device but not
+reachable from a file manager or from a desktop. Settings → Session prints the
+path. Android's comes from `getFilesDir()`, because nothing in an Android
+process names a directory it is allowed to write to, and it is removed with the
+app.
 
 Two overrides, in order of precedence:
 

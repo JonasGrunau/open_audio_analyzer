@@ -1,9 +1,13 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- The remote display opens a TCP socket to an Open Audio Analyzer host. -->
     <uses-permission android:name="android.permission.INTERNET"/>
-    <!-- Receiving mDNS answers needs multicast delivery, which Android drops
-         for an app that has not asked for it. Note that the permission alone is
-         not sufficient on Wi-Fi: see lib/src/remote/AGENTS.md. -->
+    <!-- Receiving mDNS answers needs multicast delivery, which Android's Wi-Fi
+         driver filters out for an app that has not asked for it. This
+         permission is what allows the WifiManager.MulticastLock that lifts the
+         filter to be taken; taking it is a platform call, and the file that
+         makes it is OaaMulticastLock.kt. Install-time, so there is no dialog.
+         NEARBY_WIFI_DEVICES is deliberately not declared: it covers scanning
+         and managing Wi-Fi networks, which this application never does. -->
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE"/>
     <application
         android:label="Open Audio Analyzer"
