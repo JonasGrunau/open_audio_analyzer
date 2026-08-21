@@ -148,6 +148,21 @@ class PluginLink extends ChangeNotifier {
     _notify();
   }
 
+  /// Called for every transport frame a session sends, as it is decoded.
+  ///
+  /// **A plain callback, and deliberately not a notification.** This fires once
+  /// per audio block — ninety-odd times a second at a typical buffer size — so
+  /// routing it through [notifyListeners] would rebuild the canvas at block rate
+  /// to move a clock, which is the habit the whole frame path is built to avoid.
+  /// Nothing that repaints listens to it.
+  ///
+  /// It exists because one consumer cannot sample: the remote display forwards
+  /// transport to tablets at its own rate, and
+  /// [Transport.flagDiscontinuity] is an edge delivered once — see
+  /// [Transport.asDiscontinuous] and `docs/WIRE.md`. Anything that only wants a
+  /// position reads [PluginSession.transport] when it paints instead.
+  void Function(PluginSession session, Transport transport)? onTransport;
+
   /// Why listening failed, in a sentence meant for a person. Null when fine.
   ///
   /// The overwhelmingly common cause is a second copy of Open Audio Analyzer
@@ -275,7 +290,9 @@ class PluginLink extends ChangeNotifier {
             _notify();
 
           case WireFrameType.dawTransport:
-            session.transport = DawTransportCodec.decode(reader.payload);
+            final transport = DawTransportCodec.decode(reader.payload);
+            session.transport = transport;
+            onTransport?.call(session, transport);
 
           case WireFrameType.snapshot:
             session.snapshot.decode(reader.payload);

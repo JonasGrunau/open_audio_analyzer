@@ -7,6 +7,7 @@ The shell everything else is mounted in. GPL-3.0-or-later.
 | `oaa_app.dart` | `MaterialApp`, the widget that owns the engine and the clock, the status bar, and the notices. |
 | `bar_controls.dart` | `BarButton` and `BarChip` — the two shapes the status bar is built from. Public because the bar is not assembled in one file: `RemoteDisplayControl` owns a socket and lives in `lib/src/remote/`. |
 | `shortcuts.dart` | **Every keyboard shortcut Open Audio Analyzer has, as one table**, plus the widget that installs it and the generator for `docs/site/keyboard.md`. |
+| `transport_readout.dart` | The DAW's playhead, painted: position, tempo and meter, and the rules about which of the three a host has actually earned the right to have drawn. Built by the status bar and by the tablet's link bar, which is why it lives here rather than in `lib/src/remote/`. |
 | `launch_options.dart` | `--config-dir` and `--open-panel`, parsed by hand. |
 | `window_chrome.dart` | The window itself: the palette its buttons are drawn against, the room the status bar leaves them, and the drag and zoom a window with no title bar cannot get for free. macOS only. |
 

@@ -641,6 +641,9 @@ cmake -B plugin/build -S plugin -DCMAKE_BUILD_TYPE=Release && \
   ctest --test-dir plugin/build       # the VST3, the AU and the fake DAW compile
 dart test packages/oaa_wire           # again: with a built fake DAW the
                                       # end-to-end cases run instead of skipping
+flutter test test/plugin_to_display_e2e_test.dart
+                                      # and on to a display: DAW → plugin →
+                                      # app → tablet
 dart run tool/docs.dart               # the documentation site still builds
 ```
 
@@ -649,6 +652,13 @@ spawn the [fake DAW](#-testing-the-plugin-without-a-daw) and decode what the
 plugin sends over a real socket; without a build they skip, so the second run is
 where they actually happen. Nothing there downloads anything — the test writes
 its own signal.
+
+The line after it is the same run with the application in the middle: the app's
+plugin ingest accepts the plugin, its display host publishes what arrives, and a
+display client reads it back the way a tablet does — so a DAW's meters are shown
+to reach a second screen, field by field, rather than each half being shown to
+work on its own. It skips without a built plugin too, and both want port 47822,
+so neither runs while Open Audio Analyzer is open.
 
 The engine tests are worth a look even if you never touch the C. A sine of
 amplitude *A* has a peak of *A* and an RMS of *A*/√2 — exactly 3.0103 dB lower.
@@ -751,6 +761,19 @@ its frame rate — plus a flag when the playhead *jumps*, because an integrated
 reading taken across a relocate is the average of two passes of the same music
 and looks entirely reasonable.
 
+The status bar reads it back: the position in the most precise unit the host
+gave — timecode, else bar and beat, else the host's own clock — and the tempo
+and time signature beside it where the window is wide enough to hold them. It is
+drawn brighter while the transport is rolling than while it is parked, because
+two readings of the same frame otherwise print the same string.
+
+**And it reaches a tablet.** The desktop relays the playhead to every attached
+remote display, so an iPad across the room shows the DAW's position beside the
+DAW's meters — which is the point of having
+one there. It is sent when it changes rather than with every measurement, so a
+parked session costs nothing, and a display that attaches to one is given the
+position it is parked at rather than waiting for somebody to press play.
+
 The **Elapsed** and **Timecode** LUFS modes are what that measurement is for,
 and they are **not built yet** — no module offers them today. Tying an
 integration window to the transport means restarting it when the transport
@@ -759,10 +782,11 @@ version of the protocol only runs one way.
 
 Hosts differ enormously in what they actually report, and Open Audio Analyzer
 does not paper over it: every transport value carries a flag saying whether the
-host supplied it, and one that did not arrive reads as an em dash. A tempo that
-arrives as zero is indistinguishable from a real one, and "bar 1, beat 1,
+host supplied it, and a value that did not arrive is not drawn at all. A tempo
+that arrives as zero is indistinguishable from a real one, and "bar 1, beat 1,
 00:00:00:00" is a perfectly plausible thing to show somebody while their session
-is parked at bar 57.
+is parked at bar 57 — so a host that reports no tempo gets no tempo printed, and
+one that reports no position at all gets dashes rather than a plausible zero.
 
 ### 🧪 Testing the plugin without a DAW
 
@@ -776,21 +800,36 @@ plugin/build/host/OaaFakeDaw_artefacts/Release/oaa-fake-daw           # Linux
 
 It finds the VST3 in the build tree beside it, so with the app already running
 the only thing left is to open a track and press space. Tempo, time signature,
-timecode frame rate, a loop region, the record flag and the playhead itself are
-all controllable — including switching the playhead *off*, which is how a host
-that reports nothing gets tested on purpose. The plugin's own status panel opens
-in a second window.
+timecode frame rate, a loop region and the record flag are all controllable in
+the window, and the plugin's own status panel opens in a second one.
 
-`dart run tool/fetch_test_audio.dart` downloads a Creative Commons track to play
-through it. A sine tells you nothing about a spectrogram.
+Three more gestures are command-line switches, because they are the ones that
+have to happen on cue rather than when somebody remembers: `--no-playhead`
+reports no transport at all (the window has a checkbox for it too), and — in
+`--headless` runs — `--parked` renders with the transport stopped, the state a
+session spends most of its time in, while `--relocate-at=<s>` plays, stops,
+jumps back to the start and plays again. That last one is the gesture
+[`docs/WIRE.md`](docs/WIRE.md) names as the reason the discontinuity flag
+exists.
+
+`dart run tool/fetch_test_audio.dart` downloads music worth looking at: two
+CC BY 3.0 post-rock tracks, picked by measuring candidates rather than by
+reading titles. The default is a loud master with a real 10.3 LU range, a true
+peak *above* its sample peak, and a stereo field that moves. A sine has none of
+those — correlation pinned at 1.00, one spectrum bin, and an LRA of zero.
 
 The same binary runs with `--headless`: no window, no sound card, blocks pushed
 from a background thread. That is what
 [`packages/oaa_wire/test/plugin_e2e_test.dart`](packages/oaa_wire/test/plugin_e2e_test.dart)
 drives, and it is the only test that covers the live path — `prepareToPlay`, the
 FIFO, the playhead, the engine, the streaming thread and the socket — rather
-than the codec alone. It found two things on its first run, both listed under
-[Known gaps](#-known-gaps-stated-plainly).
+than the codec alone.
+
+It earned its keep immediately: three defects in shipped code that nothing else
+could see, all now fixed and listed under **What it found** in
+[`plugin/host/AGENTS.md`](plugin/host/AGENTS.md). Two were in the plugin's
+transport handling; the third only became visible when the fake DAW and the
+application were run as a pair, which is a check neither test suite can be.
 
 ---
 

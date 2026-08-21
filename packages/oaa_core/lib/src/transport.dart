@@ -301,6 +301,78 @@ class Transport {
         '${pad(totalSeconds % 60)}$separator${pad(frames)}';
   }
 
+  /// This reading with [isDiscontinuous] set.
+  ///
+  /// For a relay. `docs/WIRE.md` is explicit that the bit is **an edge,
+  /// delivered once** rather than a state to be sampled: a producer that emits
+  /// frames less often than blocks arrive has to accumulate it between frames,
+  /// because the jump is visible to it for exactly one block. Anything that
+  /// forwards transport at its own rate inherits that obligation — the desktop
+  /// relaying a plugin's playhead to a tablet publishes thirty times a second
+  /// against a DAW's ninety-odd blocks, so two frames in three would take the
+  /// bit with them if it were copied rather than carried forward. A relocate
+  /// that vanishes on the way to a screen is a screen that cannot be used to
+  /// count them, which `docs/WIRE.md` says a consumer may do.
+  Transport asDiscontinuous() => isDiscontinuous
+      ? this
+      : Transport(
+          flags: flags | flagDiscontinuity,
+          frameRate: frameRate,
+          timeSeconds: timeSeconds,
+          ppqPosition: ppqPosition,
+          ppqBarStart: ppqBarStart,
+          bpm: bpm,
+          editOriginSeconds: editOriginSeconds,
+          loopStartPpq: loopStartPpq,
+          loopEndPpq: loopEndPpq,
+          timeSamples: timeSamples,
+          timeSigNumerator: timeSigNumerator,
+          timeSigDenominator: timeSigDenominator,
+          hostFrames: hostFrames,
+        );
+
+  /// Value equality, because a relay sends on change.
+  ///
+  /// The desktop forwards a plugin's transport to its displays only when it
+  /// differs from the last one it sent, which is what keeps a parked session
+  /// and a machine with no DAW at all off the wire entirely. That comparison is
+  /// this operator, and it has to include every field: a host that moves the
+  /// playhead without changing anything else — which is every block of ordinary
+  /// playback — must not compare equal.
+  @override
+  bool operator ==(Object other) =>
+      other is Transport &&
+      other.flags == flags &&
+      other.frameRate == frameRate &&
+      other.timeSeconds == timeSeconds &&
+      other.ppqPosition == ppqPosition &&
+      other.ppqBarStart == ppqBarStart &&
+      other.bpm == bpm &&
+      other.editOriginSeconds == editOriginSeconds &&
+      other.loopStartPpq == loopStartPpq &&
+      other.loopEndPpq == loopEndPpq &&
+      other.timeSamples == timeSamples &&
+      other.timeSigNumerator == timeSigNumerator &&
+      other.timeSigDenominator == timeSigDenominator &&
+      other.hostFrames == hostFrames;
+
+  @override
+  int get hashCode => Object.hash(
+    flags,
+    frameRate,
+    timeSeconds,
+    ppqPosition,
+    ppqBarStart,
+    bpm,
+    editOriginSeconds,
+    loopStartPpq,
+    loopEndPpq,
+    timeSamples,
+    timeSigNumerator,
+    timeSigDenominator,
+    hostFrames,
+  );
+
   @override
   String toString() =>
       'Transport(playing: $isPlaying, time: $timeSeconds, bpm: $bpm)';

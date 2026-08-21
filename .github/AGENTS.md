@@ -58,6 +58,16 @@ The jobs are split by what they need, and that split is deliberate:
   initialisation wants a display even when the application never opens a
   window; nothing needs audio hardware.
 
+  On Linux it then runs one file of the application's suite,
+  `test/plugin_to_display_e2e_test.dart`, which is the same run carried one hop
+  further: the app's `PluginLink` accepts the plugin, its `DisplayHost`
+  publishes what arrives, and a `DisplayClient` reads it back as a tablet would.
+  That join is covered nowhere else — what a display receives is a *re-encode*
+  of a snapshot the app decoded, so a field lost in the middle leaves both
+  halves' suites green. It is one runner rather than three because the hop is
+  Dart over loopback and the same everywhere; it needs Flutter, which the rest
+  of this job does not, and it skips in `checks` for want of a built plugin.
+
   **Know what the gating costs.** `ctest` moves with the job, and that run is
   the producing half of the wire golden: `checks` asserts the committed
   `wire_v2.bin` decodes, and only this job asserts that

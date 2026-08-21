@@ -42,6 +42,21 @@ class RemoteDisplayService {
     _host?.source = value;
   }
 
+  /// The DAW's playhead behind [source], or [Transport.none] when there is
+  /// none.
+  ///
+  /// Set on every producer frame rather than sampled — see
+  /// [DisplayHost.transport], which explains why the difference is the whole
+  /// point. Held here as well so that a host started *after* a plugin connected
+  /// opens with the position the session is at rather than with nothing.
+  Transport get transport => _transport;
+  Transport _transport = Transport.none;
+
+  set transport(Transport value) {
+    _transport = value;
+    _host?.transport = value;
+  }
+
   /// `OAA_ABI_VERSION` of the engine, carried in the handshake for bug reports.
   final int abiVersion;
 
@@ -117,11 +132,10 @@ class RemoteDisplayService {
       return;
     }
 
-    final host = DisplayHost(
-      source: _source,
-      hostName: hostName,
-      abiVersion: abiVersion,
-    )..fps = _fps;
+    final host =
+        DisplayHost(source: _source, hostName: hostName, abiVersion: abiVersion)
+          ..fps = _fps
+          ..transport = _transport;
 
     try {
       await host.start(port: _port);

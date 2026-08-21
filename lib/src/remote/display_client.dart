@@ -75,6 +75,20 @@ class DisplayClient {
     BuiltInCalibrations.fallback,
   );
 
+  /// The host's playhead, or [Transport.none] when it has none to give.
+  ///
+  /// Not part of [snapshot], and deliberately: transport is metadata about a DAW
+  /// and the engine must not learn what one is — see `Transport`. It arrives in
+  /// its own frame, on change rather than with every measurement, so a session
+  /// parked at bar 57 sends one and then nothing.
+  ///
+  /// **A notifier rather than a field on the snapshot, and nothing on the paint
+  /// path may listen to it.** While a DAW is rolling this changes at the publish
+  /// rate, so a `ValueListenableBuilder` around a readout would rebuild a widget
+  /// thirty times a second forever. Read it from a painter that repaints on the
+  /// clock, the way `TransportReadout` does.
+  final ValueNotifier<Transport> transport = ValueNotifier(Transport.none);
+
   /// What the host calls itself, and its engine's ABI — both for display, not
   /// for decisions.
   final ValueNotifier<String?> hostName = ValueNotifier(null);
@@ -191,9 +205,17 @@ class DisplayClient {
             if (state.value != RemoteLinkState.live) {
               state.value = RemoteLinkState.live;
             }
+          case WireFrameType.dawTransport:
+            // **Not liveness.** Only a measurement can say the link is
+            // current: transport is sent on change, so a host parked at bar 1
+            // sends none of it for as long as nobody touches the DAW, and a
+            // stale timer that this reset would be a timer a quiet session
+            // could hold open with a playhead that has not moved.
+            transport.value = DawTransportCodec.decode(_reader.payload);
           default:
           // An unknown type is skipped rather than fatal — that is what lets a
-          // host that has learned to send DAW transport talk to this build.
+          // host that has learned to send something this build has never heard
+          // of talk to it anyway.
         }
       }
     } on Object catch (error) {
@@ -241,6 +263,12 @@ class DisplayClient {
     // screen can be claimed to be current, and a frozen meter reads exactly
     // like a quiet passage.
     snapshot.markStale();
+
+    // The playhead goes with them. A position held on screen after the
+    // measurements have gone to dashes is the same lie in a different unit, and
+    // a worse one here: a parked transport legitimately sends nothing for
+    // minutes, so a stopped clock and a lost link look identical.
+    transport.value = Transport.none;
     if (state.value == RemoteLinkState.live) {
       state.value = RemoteLinkState.stale;
     }
@@ -265,6 +293,13 @@ class DisplayClient {
     _staleTimer?.cancel();
     _staleTimer = null;
     snapshot.markStale();
+
+    // With the measurements, and for the same reason the reader is reset below:
+    // this outlives the socket. A display that reattached to a different
+    // machine — or to the same one after its DAW was closed — opened on the
+    // previous session's playhead, which is transport sent on change never
+    // arriving to contradict it.
+    transport.value = Transport.none;
 
     final subscription = _subscription;
     _subscription = null;
@@ -301,6 +336,7 @@ class DisplayClient {
     layout.dispose();
     skin.dispose();
     calibration.dispose();
+    transport.dispose();
     hostName.dispose();
     failure.dispose();
   }

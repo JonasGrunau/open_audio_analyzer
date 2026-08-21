@@ -31,6 +31,22 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   all.
 
 ### ✨ Added
+- A DAW's playhead now reaches a tablet. The desktop decoded the plugin's
+  transport frame and kept it: bars, beats, tempo, time signature and timecode
+  stopped at the desktop, so a remote display showed a plugin's meters beside no
+  position at all. It is relayed to every attached display now — on change
+  rather than with every measurement, so a parked session costs nothing, and
+  replayed when a display attaches so that one joining a parked session is not
+  left blank until somebody presses play. A jump in the playhead survives the
+  hop: the flag is an edge delivered once, and a relay publishing thirty times a
+  second against a DAW's ninety-odd blocks accumulates it rather than sampling
+  it.
+- The status bar and a tablet's link bar both show the host's transport: the
+  position in the most precise unit the host gave — timecode, else bar and beat,
+  else its own clock — with the tempo and time signature where there is room for
+  them, and brighter while the transport is rolling than while it is parked. The
+  app had been decoding all of it and showing none of it. A value the host did
+  not supply is not drawn at all, rather than printed as a plausible zero.
 - The app accepts plugin connections. `PluginLink` was written, tested and never
   constructed, so port 47822 was never bound: a VST3 or AU inserted in a DAW
   retried against nothing forever while the README said the desktop app meters
@@ -74,6 +90,11 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   published build rather than after.
 
 ### 🐛 Fixed
+- The "audio was lost" notice counts the frames the *metered* source discarded.
+  It read the local engine's counter while the flag that raises it comes from
+  whatever is on the canvas, so a plugin that overran produced "Audio was lost —
+  0 frames were discarded": a warning that contradicts itself, about a real loss
+  of audio, carrying the number somebody would put in a bug report.
 - The remote display no longer reads a destroyed engine. Changing the audio
   source or device while publishing to a tablet left the publish timer holding
   the engine it was built with, acquiring through a freed handle thirty times a
@@ -154,6 +175,15 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the socket at once; the byte-for-byte golden beside it is produced by a
   fixture that links no JUCE. It generates its own audio, so nothing in CI
   downloads anything, and it skips rather than fails without a built plugin.
+- A DAW's meters are held against what a tablet shows, in one test.
+  `test/plugin_to_display_e2e_test.dart` runs the same fake DAW through the
+  application's own plugin ingest and display host, attaches a display client —
+  which is what a tablet runs — and compares twenty-nine readings field by
+  field, plus the playhead: the tempo, the meter, the timecode and the bar the
+  host was told to be at. What a display receives is a re-encode of a snapshot
+  the app decoded off the plugin's socket, so a field dropped in the middle left
+  both halves' suites green and the tablet showing a dash. It skips without a
+  built plugin, and CI runs it on the Linux leg of the plugin job.
 - Two defects the fake DAW found on its first run are written down rather than
   patched quietly, both under Known gaps in `README.md`: the discontinuity flag
   usually does not survive the trip to the app, and the plugin's

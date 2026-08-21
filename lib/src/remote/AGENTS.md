@@ -88,6 +88,46 @@ halves live here.
   working through a backlog shows what the signal did half a second ago with
   total confidence, and unlike a dropped frame nothing about it looks wrong.
 
+- **What this publishes may itself have arrived over a wire.** When a plugin is
+  active the app points the host's source at that session's `WireSnapshot`, so
+  the frame a tablet decodes is a *re-encode* of one the app decoded off the
+  plugin's socket — the same codec twice, in opposite directions. It costs
+  nothing to write, because `SnapshotFrame.encode` takes a `MeterSource` and
+  `WireSnapshot` is one, and it is exactly the kind of path that fails one field
+  at a time: `plugin_link_test.dart` and `remote_display_test.dart` both stay
+  green while the tablet shows a dash where the desktop shows a number.
+  `test/plugin_to_display_e2e_test.dart` is what holds it, by running a real
+  VST3 in the fake DAW and comparing the display's readings against the app's
+  field by field.
+
+  **The DAW's transport makes the trip too, and it does not travel like a
+  measurement.** `0x0010` is forwarded to displays, and three things about how
+  are load-bearing:
+
+  - **On change, not on the tick.** A session parked at bar 57 and a desktop
+    metering a sound card both send one frame and then nothing. The cost of the
+    alternative is not the bandwidth, it is that every host would be publishing
+    "still nothing" thirty times a second for as long as the app is open.
+  - **Replayed on connect**, therefore. A tablet that attaches to a parked
+    session would otherwise show no position until somebody pressed play — which
+    is exactly when nobody is looking at the tablet.
+  - **The discontinuity bit is accumulated, never sampled.** `docs/WIRE.md`
+    specifies it as an edge delivered once, and this host publishes thirty times
+    a second against a DAW's ninety-odd blocks: two relocates in three would
+    vanish if the relay asked "where is the playhead now?" on its own schedule.
+    Every producer frame is written into `DisplayHost.transport` — that is why
+    it is a setter and not a callback the publish timer calls — and
+    `Transport.asDiscontinuous` is what carries the edge onto the frame that
+    goes out. A display may count relocations, so a dropped one is a relocation
+    that never happened as far as every screen in the building is concerned.
+
+  It is cleared when the link goes quiet, with the measurements and for the same
+  reason: a parked transport legitimately sends nothing for minutes, so a held
+  position and a dead link are indistinguishable. `TransportReadout` is what
+  draws it, and the desktop's status bar draws the same widget — a tablet with
+  its own opinion about what a missing tempo looks like is the beginning of two
+  meters that disagree.
+
 - **The host refreshes the source itself and the clock compares generations.**
   A `Ticker` stops when the window is occluded, which is exactly when the tablet
   is the screen being used. `MeterClock` therefore decides "is there something

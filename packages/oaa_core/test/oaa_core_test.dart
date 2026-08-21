@@ -185,4 +185,71 @@ void main() {
       }
     });
   });
+
+  // What a relay needs from a transport, and nothing the wire golden already
+  // covers. `packages/oaa_wire/test/plugin_golden_test.dart` holds the timecode
+  // arithmetic and the bar counting against bytes the plugin produced; these two
+  // exist because the desktop forwards a plugin's playhead to its displays, and
+  // both of them are how it decides what to send.
+  group('Transport', () {
+    const flags =
+        Transport.flagPlaying |
+        Transport.flagHasTimeSeconds |
+        Transport.flagHasBpm;
+    const rolling = Transport(flags: flags, timeSeconds: 12.5, bpm: 128);
+
+    test('a playhead that moved is not the playhead that was sent', () {
+      // The comparison the relay sends on. Ordinary playback changes nothing
+      // *but* the position, so a transport that compared equal here would put
+      // one frame on the wire and then hold a frozen clock on every tablet in
+      // the building for the length of the session.
+      expect(rolling, rolling);
+      expect(
+        rolling,
+        isNot(const Transport(flags: flags, timeSeconds: 12.6, bpm: 128)),
+      );
+      expect(rolling.hashCode, rolling.hashCode);
+    });
+
+    test('stopping is a change, at the same position', () {
+      // Two readings of the same frame, one rolling and one parked. The flags
+      // are the only difference and it is the difference a display draws.
+      const parked = Transport(
+        flags: Transport.flagHasTimeSeconds | Transport.flagHasBpm,
+        timeSeconds: 12.5,
+        bpm: 128,
+      );
+      expect(parked, isNot(rolling));
+    });
+
+    test('an edge can be carried onto a later frame', () {
+      final flagged = rolling.asDiscontinuous();
+
+      expect(rolling.isDiscontinuous, isFalse);
+      expect(flagged.isDiscontinuous, isTrue);
+
+      // Everything else survives: the frame this becomes still reports the
+      // position the playhead landed on, which is what `docs/WIRE.md` requires
+      // of the frame that carries the bit.
+      expect(flagged.timeSeconds, rolling.timeSeconds);
+      expect(flagged.bpm, rolling.bpm);
+      expect(flagged.isPlaying, isTrue);
+      expect(flagged.hasBpm, isTrue);
+
+      // And it is the same reading, so it must not compare equal to the one
+      // without the edge — a relay that sends on change has to see this.
+      expect(flagged, isNot(rolling));
+    });
+
+    test('carrying an edge that is already there changes nothing', () {
+      final once = rolling.asDiscontinuous();
+      expect(once.asDiscontinuous(), once);
+      expect(identical(once.asDiscontinuous(), once), isTrue);
+    });
+
+    test('nothing known is nothing known', () {
+      expect(Transport.none.isPresent, isFalse);
+      expect(const Transport(), Transport.none);
+    });
+  });
 }

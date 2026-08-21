@@ -259,9 +259,11 @@ is unaffected: it never links JUCE — it talks to the plugin over a socket.
   **The plugin has its own version of this, and it is `plugin/host/`.** A
   metering plugin cannot be judged from a unit test either — it has to be fed
   real music by something that moves a playhead. The fake DAW does that with a
-  window and a Play button, and with `--headless` it does it in a test. Two
-  defects were found the first time it ran, both in code that had shipped: see
-  **What it found** in `plugin/host/AGENTS.md`.
+  window and a Play button, and with `--headless` it does it in a test. Three
+  defects were found by running it, all in code that had shipped and all now
+  fixed — see **What it found** in `plugin/host/AGENTS.md`. One of the three
+  needed the fake DAW *and* the application running together, which is worth
+  knowing: neither suite can be that check.
 
   **`--open-panel=<name>` opens one of the five panels at startup**, in a debug
   build, which is how a panel gets looked at without clicking through to it:
@@ -334,6 +336,8 @@ claim something about it:
 | A new dependency | `CLAUDE.md` Dependencies, `README.md`, and the licence column if it is not permissive |
 | A test gate, or `.github/workflows/ci.yml` | `CLAUDE.md` Testing Requirements, `README.md` Tests, `.github/AGENTS.md`. **A gate named in a document and absent from `ci.yml` is a lie the whole team believes.** `ci.yml` is the only workflow — tests, docs, installers and the release are jobs in it, gated by event |
 | A keyboard shortcut | Nothing by hand — regenerate with `UPDATE_DOCS=1 flutter test test/shortcuts_test.dart` and commit `docs/site/keyboard.md` in the same change. `README.md`'s Layout → Keyboard names a handful of them and is prose, not a list |
+| **When** the plugin sets a transport flag, without any byte moving | `docs/WIRE.md`'s prose for that bit, `CHANGELOG.md` 🐛, and a case in `packages/oaa_wire/test/plugin_e2e_test.dart`. The row above covers the wire's *layout*; this is the other half. A consumer depends on when a producer sets a bit as much as on where the bit lives, and none of that is visible in a byte table — the discontinuity bit was being set every block while the transport sat parked, and delivered on almost none of the blocks where it mattered, with the layout perfectly correct throughout |
+| A switch on the fake DAW | `plugin/host/AGENTS.md`, and `README.md` if it is one of the gestures a person cannot perform on cue. `--help` in `FakeDawOptions.h` is the exhaustive list and the only one that has to be; the other two name the interesting ones and are prose |
 | A page the documentation site publishes, or its filename | The page list in `tool/docs.dart`. It is written out rather than globbed, so a renamed document fails the docs job instead of silently vanishing from the site |
 | A phase reaching done | `README.md` Roadmap, `CLAUDE.md`'s status line, `docs/PLAN.md` |
 | Anything a user sees or configures | `README.md`, and `CHANGELOG.md` under ✨ or ⚡ |
@@ -437,25 +441,40 @@ cmake -B plugin/build -S plugin -DCMAKE_BUILD_TYPE=Release && \
   ctest --test-dir plugin/build       # the VST3, the AU and the fake DAW compile
 dart test packages/oaa_wire           # again, now that a built fake DAW makes
                                       # the end-to-end cases run instead of skip
+flutter test test/plugin_to_display_e2e_test.dart
+                                      # and the hop after it: DAW → plugin →
+                                      # app → display
 dart run tool/docs.dart               # the documentation site still builds
 ```
 
 All ten gates are jobs in `ci.yml`, which is the only workflow. The repeated
 `dart test packages/oaa_wire` is not an eleventh: it is the same suite, run
 again where a built plugin turns its end-to-end cases from skipped into real.
-Two of the ten do not run on a push. `dart build cli` does, and is there because nothing else
-builds the CLI the way a release does: `cli/test` runs it with `dart run`, so
-`dart compile exe` was broken for an unknown length of time and was found by
-tagging a release. **The plugin build runs only on a release or a manual run**,
+The line after it is one file of the `flutter test` suite for the same reason —
+`test/plugin_to_display_e2e_test.dart` skips without a built plugin, and it is
+the only thing anywhere that runs a DAW's audio through the plugin, the app and
+out to a display.
+
+Two of the ten do not run on a push. `dart build cli` does, and is there because
+nothing else builds the CLI the way a release does: `cli/test` runs it with
+`dart run`, so `dart compile exe` was broken for an unknown length of time and
+was found by tagging a release. **The plugin build runs only on a release or a manual run**,
 because three parallel JUCE builds cost more than a push asks for — so run it
 by hand when you touch `plugin/` or `engine/`. It is the only thing that
 compiles the VST3, the AU and the fake DAW, the only thing that runs the C++
-side of the wire golden, and the only thing that drives the plugin end to end —
-`packages/oaa_wire/test/plugin_e2e_test.dart` spawns
-`plugin/host/`'s `oaa-fake-daw --headless` and decodes what the plugin sends, and
-skips when that binary is not built. The engine tests hold the meters against arithmetic: a
-sine of amplitude *A* peaks at *A* and has an RMS of *A*/√2, exactly 3.0103 dB
-lower. If those drift, the meters are wrong — not the tone.
+side of the wire golden, and the only thing that drives the plugin end to end.
+Two suites do that driving, both spawning `plugin/host/`'s `oaa-fake-daw
+--headless` and both skipping when it is not built:
+`packages/oaa_wire/test/plugin_e2e_test.dart` decodes what the plugin sends, and
+`test/plugin_to_display_e2e_test.dart` carries it one hop further — through the
+app's ingest and its display host to a `DisplayClient`, which is what a tablet
+runs — and asserts field by field that the display's readings are the ones the
+app got from the plugin. Both want port 47822, so neither can run while the
+application does, or while the other one is running.
+
+The engine tests hold the meters against arithmetic: a sine of amplitude *A*
+peaks at *A* and has an RMS of *A*/√2, exactly 3.0103 dB lower. If those drift,
+the meters are wrong — not the tone.
 
 Two of these fail in a way that looks like something else:
 

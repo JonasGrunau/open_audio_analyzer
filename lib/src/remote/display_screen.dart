@@ -4,6 +4,7 @@ import 'package:oaa_core/oaa_core.dart';
 import 'package:oaa_ui/oaa_ui.dart';
 import 'package:flutter/material.dart';
 
+import '../app/transport_readout.dart';
 import '../canvas/module_host.dart';
 import '../clock/meter_clock.dart';
 import 'display_client.dart';
@@ -154,6 +155,7 @@ class _LiveDisplay extends StatelessWidget {
         children: [
           _LinkBar(
             client: client,
+            clock: clock,
             state: state,
             layout: layout,
             tab: tab,
@@ -190,6 +192,7 @@ class _LiveDisplay extends StatelessWidget {
 class _LinkBar extends StatelessWidget {
   const _LinkBar({
     required this.client,
+    required this.clock,
     required this.state,
     required this.layout,
     required this.tab,
@@ -198,6 +201,11 @@ class _LinkBar extends StatelessWidget {
   });
 
   final DisplayClient client;
+
+  /// The one clock, borrowed for the transport readout. A tablet has no ticker
+  /// of its own to spare either.
+  final MeterClock clock;
+
   final RemoteLinkState state;
   final PresetSpec? layout;
   final int tab;
@@ -243,6 +251,25 @@ class _LinkBar extends StatelessWidget {
                 name ?? 'Connecting…',
                 style: OaaType.body.copyWith(color: colors.textPrimary),
               ),
+            ),
+
+            // **The playhead of the DAW at the other end, and the full width of
+            // it.** The desktop's bar can afford a timecode and nothing else;
+            // this one has room for the tempo and the meter as well, and it is
+            // the screen somebody is *reading* — a tablet on a stand across the
+            // room, next to the person who needs to say where the session is.
+            //
+            // Not wrapped in a `ValueListenableBuilder`: while a DAW rolls,
+            // this changes at the publish rate, and rebuilding the bar thirty
+            // times a second to move a clock is what the painted readout exists
+            // to avoid. It draws nothing at all when the host has no transport,
+            // so a display mirroring a desktop that is metering a sound card
+            // does not gain a row of dashes.
+            const SizedBox(width: Space.md),
+            TransportReadout(
+              transportOf: () => client.transport.value,
+              repaint: clock,
+              width: TransportReadout.fullWidth,
             ),
 
             if (tabs.length > 1) ...[

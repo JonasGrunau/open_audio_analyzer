@@ -297,6 +297,31 @@ jobs:
           dart pub get
           ${{ runner.os == 'Linux' && 'xvfb-run -a' || '' }} dart test
 
+      # The other hop, and the only place *it* runs: the same fake DAW, with the
+      # application's ingest and its display host in between, and a
+      # `DisplayClient` on the far end standing in for a tablet.
+      #
+      # It needs Flutter, which is why it is one runner rather than three: what
+      # it covers is the app re-encoding a snapshot it decoded, which is Dart
+      # over loopback and identical on every platform. What varies per OS is the
+      # plugin build, and the step above already exercises that on all three.
+      #
+      # One file rather than `flutter test`, because `checks` has already run
+      # the suite — this case skipped there, for want of a built plugin.
+      - name: Relay to a display
+        if: runner.os == 'Linux'
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Relay end to end
+        if: runner.os == 'Linux'
+        run: |
+          flutter pub get
+          xvfb-run -a flutter test test/plugin_to_display_e2e_test.dart
+
       # VST3 everywhere, AU where JUCE built one. Standalone is deliberately
       # left out: it is a window around a plugin whose whole purpose is to
       # stream to an application that is already running.

@@ -61,8 +61,12 @@ Three of the switches exist because a person cannot perform the gesture on cue:
 | `--parked` | Headless: render with the transport stopped, which is the state a session spends most of its time in. |
 | `--relocate-at=<s>` | Headless: play, stop, park, jump to the start, play again — the gesture `docs/WIRE.md` names as the reason the discontinuity bit exists. |
 
-`dart run tool/fetch_test_audio.dart` downloads a Creative Commons track worth
-looking at. A tone tells you nothing about a spectrogram.
+`dart run tool/fetch_test_audio.dart` downloads music worth looking at — two
+CC BY 3.0 tracks from Wikimedia Commons, chosen by measuring candidates with
+`oaa`. The script's header records the figures and why they matter; the short
+version is that a tone gives a correlation of exactly 1.00, one spectrum bin, an
+LRA of zero and a true peak that never exceeds its sample peak, so it exercises
+none of the modules that need real material.
 
 ## Rules
 
@@ -124,8 +128,8 @@ looking at. A tone tells you nothing about a spectrogram.
 
 ## What it found
 
-Three things on its first run, all of which had been unobservable. Two were
-defects in code that had shipped, and both are fixed.
+Four things, all of which had been unobservable. Three were defects in code that
+had shipped, and all three are fixed.
 
 - **A parked transport was reported as a relocate, continuously.** *Fixed.*
   A stopped DAW still runs its graph and reports the position it sits at,
@@ -152,6 +156,20 @@ defects in code that had shipped, and both are fixed.
   prevent: an integrated reading that silently spans two passes of the same
   music.
 
+- **The producer name reached the app as mojibake.** *Fixed.* This one needed
+  the fake DAW and the application running as a pair, which is a check neither
+  test suite can be: the e2e drives a socket with no app on the far end, and the
+  app's own ingest test replays bytes from a golden file. Run together, the
+  application's title bar read `Open Audio Analyzer plugin â<80><94>`.
+
+  `Streamer::ensureConnected` built the HELLO frame's name with
+  `juce::String`'s `const char*` constructor, which reads one byte per
+  codepoint, so an em dash went on the wire as six bytes instead of three. The
+  consumer was innocent — it decoded faithfully, which is what made the fault
+  visible at all. `docs/WIRE.md` specifies that field as UTF-8, so it was a
+  protocol defect rather than a typographical one. See the `juce::String` rule
+  in `../AGENTS.md`.
+
 - **The plugin's "host supplies no position" branch is unreachable through
   VST3.** *Not a defect, and nothing to fix.* `--no-playhead` makes this host's
   `getPosition()` return nothing, which is the case `captureTransport` answers
@@ -163,9 +181,16 @@ defects in code that had shipped, and both are fixed.
   delivered. The branch is reached by the Standalone build, which has no
   playhead at all.
 
-All three are held by `packages/oaa_wire/test/plugin_e2e_test.dart`, which
-asserts one flagged frame per observed lap rather than a constant: the flag marks
-a relocate, so a flagged frame and a lap are the same event counted two ways.
+The two transport defects are held by
+`packages/oaa_wire/test/plugin_e2e_test.dart`, which asserts one flagged frame
+per observed lap rather than a constant: the flag marks a relocate, so a flagged
+frame and a lap are the same event counted two ways.
+
+The third is not held by anything, and that is worth saying plainly. No
+automated check in this repository renders the application's chrome and reads
+it, so a string arriving mangled is caught by a person looking at a window. That
+is the argument for **running the pair by hand after touching either end** —
+`open` the app, then `open` the fake DAW — rather than trusting a green suite.
 
 ## The automated end to end
 
@@ -181,12 +206,26 @@ It generates its own audio rather than using the download: a CI runner fetching
 gate that fails for reasons unrelated to this repository. `OAA_TEST_TRACK` runs
 the same cases against a real file.
 
-It needs port 47822, so **the application cannot be running while it does**. The
-test skips with that explanation rather than failing on a bind error.
+A second suite spawns it: `test/plugin_to_display_e2e_test.dart`, in the
+application, which carries the same run one hop further. It accepts the plugin
+on 47822 with the app's own `PluginLink`, hands the session's snapshot to the
+app's own `DisplayHost`, attaches a `DisplayClient` — a tablet, in every respect
+that is code — and asserts that what the display shows is what the app
+got from the plugin: twenty-nine readings field by field, and the playhead — the
+tempo, the meter and the timecode this host was told to report. Neither half's
+suite could see that join: what a display receives is a *re-encode* of a snapshot
+the app decoded, so a field dropped in the middle leaves both halves green and
+the tablet showing a dash. That is not hypothetical — the transport was the field
+dropped in the middle, for as long as the display existed.
+
+Both need port 47822, so **the application cannot be running while they do**,
+and neither can run at the same time as the other. Both skip with that
+explanation rather than failing on a bind error.
 
 ```sh
-dart test packages/oaa_wire          # skips the e2e cases without a build
+dart test packages/oaa_wire                     # skips the e2e cases without a build
+flutter test test/plugin_to_display_e2e_test.dart   # skips without one too
 ```
 
-`ci.yml`'s `plugin` job runs it, which means on a release or a manual dispatch —
-so **run it by hand after touching `plugin/` or this directory**.
+`ci.yml`'s `plugin` job runs the first, which means on a release or a manual
+dispatch — so **run both by hand after touching `plugin/` or this directory**.

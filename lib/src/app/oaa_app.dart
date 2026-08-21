@@ -31,6 +31,7 @@ import '../storage/startup_config.dart';
 import 'bar_controls.dart';
 import 'launch_options.dart';
 import 'shortcuts.dart';
+import 'transport_readout.dart';
 import 'window_chrome.dart';
 
 /// The application root.
@@ -165,6 +166,17 @@ class _WorkspaceState extends ConsumerState<_Workspace>
     // `WireSnapshot` by painters, never through a notifier. This rebuilds when
     // a plugin arrives or leaves, which is a few times an hour.
     _plugins.addListener(_onPluginsChanged);
+
+    // Transport is the one thing a listener cannot carry: it arrives per audio
+    // block, and the remote display has to see *every* frame rather than sample
+    // them — `Transport.flagDiscontinuity` is an edge delivered once, so a
+    // relay that only looked thirty times a second would lose two relocates in
+    // three. Nothing on the paint path is behind this; the canvas reads the
+    // active session's transport when it paints.
+    _plugins.onTransport = (session, transport) {
+      if (identical(session, _plugins.active)) _remote.transport = transport;
+    };
+
     unawaited(_plugins.start());
 
     // The source is a function of the settings from here on. `select` narrows
@@ -249,6 +261,11 @@ class _WorkspaceState extends ConsumerState<_Workspace>
       _clock?.engine = source;
       _remote.source = source;
     }
+    // The playhead belongs to the session, so it goes when the session does. A
+    // display told nothing would hold the removed plugin's position until the
+    // link itself went stale, and a tablet showing bar 57 of a DAW that has
+    // been closed is a tablet showing a measurement of nothing.
+    _remote.transport = _plugins.active?.transport ?? Transport.none;
     setState(() {});
   }
 
@@ -441,11 +458,30 @@ class _WorkspaceState extends ConsumerState<_Workspace>
                         sourceLabel: _onPlugin
                             ? _plugins.active!.displayName.toUpperCase()
                             : _sourceLabel,
+                        // Null unless a DAW could be on the other end. The
+                        // readout itself draws nothing when a host has said
+                        // nothing, so this is about the *row*: an item that is
+                        // permanently blank on every machine metering a sound
+                        // card would still be taking 108 px off a bar that
+                        // measures its width in tens.
+                        transportOf: _onPlugin
+                            ? () => _plugins.active?.transport ?? Transport.none
+                            : null,
                       ),
                     ),
                     const TabStrip(),
                     // Rebuilds on the transition only, never on the sixty frames
                     // a second where nothing changed — see MeterClock.overrun.
+                    //
+                    // **The count comes from whatever is being metered, not from
+                    // the local engine.** The flag behind this notice does: the
+                    // clock watches `plugin ?? engine`, so a plugin that
+                    // overran raised it — and the sentence then read the
+                    // desktop's own engine, which is idle while a plugin is on
+                    // the canvas and had discarded nothing. "Audio was lost — 0
+                    // frames were discarded" is a self-contradicting warning
+                    // about a real loss of audio, and the number a user would
+                    // quote in a bug report.
                     ValueListenableBuilder<bool>(
                       valueListenable: clock.overrun,
                       builder: (context, hasOverrun, _) => hasOverrun
@@ -453,7 +489,8 @@ class _WorkspaceState extends ConsumerState<_Workspace>
                               child: _Notice(
                                 severity: colors.over,
                                 text:
-                                    'Audio was lost — ${engine.droppedFrames} '
+                                    'Audio was lost — '
+                                    '${(plugin ?? engine).droppedFrames} '
                                     'frames were discarded because analysis '
                                     'could not keep up. Integrated loudness and '
                                     'LRA average every block since the reset, so '
@@ -584,6 +621,7 @@ class _StatusBar extends ConsumerWidget {
     required this.remote,
     required this.onReset,
     required this.sourceLabel,
+    required this.transportOf,
   });
 
   /// This machine's engine. Only what the *source picker* acts on — the
@@ -605,6 +643,14 @@ class _StatusBar extends ConsumerWidget {
   final VoidCallback onReset;
 
   final String sourceLabel;
+
+  /// The DAW's playhead, read at paint time, or null when nothing being metered
+  /// could have one.
+  ///
+  /// A getter rather than a `Transport`, because this widget rebuilds a few
+  /// times an hour and the position moves ninety times a second. See
+  /// [TransportReadout].
+  final Transport Function()? transportOf;
 
   static const double height = 40;
 
@@ -682,6 +728,15 @@ class _StatusBar extends ConsumerWidget {
               // SETTINGS, RESET — does not fit either, and there is no honest
               // item left to drop. That is under half the supported minimum
               // window and is left to the platform.
+              // The transport readout is the widest single item the bar can
+              // gain — 92 px and its gap — and the only one that is not always
+              // there, so it opens last and highest. 1040 is measured the same
+              // way as the rest: with the readout forced on and the longest
+              // target name there is, the row needs 1004 px, and this leaves
+              // the same ~35 px of margin the gates below it carry.
+              // `test/scaling_test.dart` sweeps the bar with a real plugin
+              // attached, which is the only state this item exists in.
+              final showTransport = transportOf != null && width >= 1040;
               final showFormat = width >= 900;
               final showWordmark = width >= 790;
               final showAnalyse = width >= 730;
@@ -747,6 +802,17 @@ class _StatusBar extends ConsumerWidget {
                       ],
                     ),
                   ),
+                  // **Left of the elapsed clock, because they are two clocks
+                  // and only one of them is a measurement.** This is where the
+                  // session is; the one beside it is how long this reading has
+                  // been running. Reading order puts the host's time first —
+                  // it is the one somebody says out loud to another person in
+                  // the room — and the measurement's own clock next to the
+                  // target it is being judged against.
+                  if (showTransport) ...[
+                    TransportReadout(transportOf: transportOf!, repaint: clock),
+                    const SizedBox(width: Space.md),
+                  ],
                   ElapsedReadout(engine: source, clock: clock),
                   const SizedBox(width: Space.md),
                   // Bounded, not `Flexible`. A `Flexible` here shares the row's

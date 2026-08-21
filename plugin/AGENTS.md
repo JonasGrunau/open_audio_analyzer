@@ -107,9 +107,10 @@ by people who are not writing free software.
   told to withhold the transport, to report a frame rate the wire has no code
   for, to loop a one-second region, to sit parked, and to play-stop-relocate-play
   on cue. Running those the first time found two defects in `captureTransport`
-  and the streaming thread that had shipped — see **What it found** in
-  `host/AGENTS.md`. The lesson is the one in that file: the transport path is
-  cheap to reason about wrongly and cheap to measure.
+  and the streaming thread that had shipped, and running the host beside the
+  application found a third — see **What it found** in `host/AGENTS.md`. The
+  lesson is the one in that file: the transport path is cheap to reason about
+  wrongly and cheap to measure.
 
 - **NaN and −∞ go on the wire unchanged.** NaN means nobody measured it, −∞
   means digital silence. Both have bit patterns a careless serialiser normalises

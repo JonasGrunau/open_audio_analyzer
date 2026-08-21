@@ -168,6 +168,82 @@ Future<void> _pumpApp(
   );
 }
 
+/// The same, with a plugin attached — which is the only state in which the bar
+/// carries a transport readout.
+///
+/// The readout is 108 px including its gap, the widest single item the bar can
+/// gain, and it is the only one that is not always there: sweeping without a
+/// plugin sweeps a row that is 108 px narrower than the widest one a user can
+/// produce. Which is how the *last* status-bar overflow shipped — the sweep was
+/// green at every width because it never rendered the case with the long name in
+/// it.
+///
+/// The frames are the plugin's own, from `plugin/test/golden/wire_v2.bin`: a
+/// HELLO, a transport rolling at 120 bpm in 7/8 with drop-frame timecode, and a
+/// snapshot. Read synchronously — an awaited real read inside a `testWidgets`
+/// body never completes.
+Future<void> _pumpAppWithPlugin(
+  WidgetTester tester,
+  Size window, {
+  StartupConfig config = const StartupConfig(),
+}) async {
+  tester.view.physicalSize = window * 3;
+  tester.view.devicePixelRatio = 3;
+  addTearDown(tester.view.reset);
+
+  final frames = File('plugin/test/golden/wire_v2.bin').readAsBytesSync();
+
+  // Real socket work, so it has to happen where the real event loop can run it.
+  final port = (await tester.runAsync(() async {
+    final probe = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+    final free = probe.port;
+    await probe.close();
+    return free;
+  }))!;
+
+  final store = ConfigStore.disabled();
+  addTearDown(store.dispose);
+  final container = ProviderContainer(
+    overrides: [
+      configStoreProvider.overrideWithValue(store),
+      startupConfigProvider.overrideWithValue(config),
+      pluginLinkPortProvider.overrideWithValue(port),
+    ],
+  );
+  addTearDown(container.dispose);
+
+  await tester.pumpWidget(
+    UncontrolledProviderScope(container: container, child: const OaaApp()),
+  );
+  await tester.pump();
+
+  final socket = (await tester.runAsync(
+    () => Socket.connect(InternetAddress.loopbackIPv4, port),
+  ))!;
+  addTearDown(socket.destroy);
+
+  await tester.runAsync(() async {
+    socket.add(frames);
+    await socket.flush();
+  });
+
+  // Pumped until the plugin is on screen, which is what puts the readout in the
+  // row — above the readout's own width gate. Waiting on the *session* rather
+  // than on the readout is deliberate: below that gate there is no readout to
+  // wait for, and a helper that insisted on one would fail at every width where
+  // the bar is correctly dropping it.
+  final deadline = DateTime.now().add(const Duration(seconds: 10));
+  while (find.text('OPEN AUDIO ANALYZER PLUGIN — FIXTURE').evaluate().isEmpty) {
+    if (DateTime.now().isAfter(deadline)) {
+      fail('The plugin never reached the canvas, so the bar swept without it.');
+    }
+    await tester.pump(const Duration(milliseconds: 20));
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 10)),
+    );
+  }
+}
+
 /// One module, alone, at exactly the pixels a grid rect gets on [canvas].
 class _Solo extends StatefulWidget {
   const _Solo({required this.kind, required this.rect});
@@ -277,6 +353,35 @@ void main() {
         await _pumpApp(tester, Size(width, 900), config: _longNames);
       });
     }
+
+    // And the widest row the application can produce: everything above, plus a
+    // connected plugin's transport readout.
+    //
+    // Twenty pixels rather than five, and from the supported minimum rather
+    // than from 600, because each of these connects a real socket and waits for
+    // a real plugin session — an order of magnitude dearer than a pump. The
+    // band straddles the readout's own gate, which is the cliff that matters:
+    // below it the bar is the row every case above already sweeps, and above it
+    // the row only gets slacker.
+    //
+    // **The gate is on the row's width, not the window's**, and on macOS the
+    // two differ by 96 px — 80 for the window buttons drawn over the bar and 16
+    // of trailing padding. So the readout appears here from about 1136 px of
+    // window, and a band that stopped at 1200 would sweep it at three widths.
+    // That is the whole reason this goes to 1300.
+    for (var width = 960.0; width <= 1300.0; width += 20) {
+      testWidgets('at ${width.toInt()} px with a plugin attached', (
+        tester,
+      ) async {
+        await _pumpAppWithPlugin(tester, Size(width, 900), config: _longNames);
+      });
+    }
+
+    testWidgets('at the supported minimum with a plugin attached', (
+      tester,
+    ) async {
+      await _pumpAppWithPlugin(tester, kMinimumWindow, config: _longNames);
+    });
   });
 
   // Not "renders without throwing" — a painter that declines to draw throws

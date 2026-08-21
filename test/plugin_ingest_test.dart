@@ -19,6 +19,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:oaa/src/app/oaa_app.dart';
+import 'package:oaa/src/app/transport_readout.dart';
 import 'package:oaa/src/data/providers.dart';
 import 'package:oaa/src/storage/config_store.dart';
 import 'package:oaa/src/storage/startup_config.dart';
@@ -109,6 +110,11 @@ void main() {
     // The local engine, before anything connects.
     expect(find.text('TEST TONE'), findsOneWidget);
 
+    // And no playhead, because a sound card does not have one. The readout is
+    // absent rather than blank: it is 108 px of a bar that drops whole items
+    // rather than squeezing them.
+    expect(find.byType(TransportReadout), findsNothing);
+
     // The app is listening. This is the assertion the feature never passed:
     // before the link was wired, nothing was bound here and `connect` threw.
     final socket = (await tester.runAsync(
@@ -137,5 +143,24 @@ void main() {
     // fixture says 48 kHz stereo, and the status bar reads its format from
     // whatever is being metered.
     expect(find.text('48.0 kHz · 2 ch'), findsOneWidget);
+
+    // The DAW's playhead arrives in its own frame, ahead of the snapshot, and
+    // the bar gains a readout for it. The fixture is rolling at 120 bpm in 7/8
+    // with drop-frame timecode; what the readout makes of those is held in
+    // `test/transport_readout_test.dart` against the same values, and what is
+    // asserted here is the wiring — that a connected plugin puts a position in
+    // the bar at all, which is the half of this that no unit test can see.
+    expect(find.byType(TransportReadout), findsOneWidget);
+
+    // And the overrun notice counts the *plugin's* discarded frames. The
+    // fixture reports seven and raises the flag; the sentence used to read the
+    // desktop's own engine, which is idle while a plugin is on the canvas — so
+    // a real loss of audio was reported as "0 frames were discarded", which is
+    // a warning that contradicts itself and a number somebody would quote.
+    expect(
+      find.textContaining('7 frames were discarded'),
+      findsOneWidget,
+      reason: 'the notice is counting something other than what is metered',
+    );
   });
 }

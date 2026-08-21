@@ -123,7 +123,7 @@ cap; the largest legitimate frame is a snapshot at 15,068 bytes.
 | `0x0003` | `SNAPSHOT` | host → client | at the publish rate |
 | `0x0004` | `SKIN` | host → client | after `HELLO`, and whenever the skin changes |
 | `0x0005` | `CALIBRATION` | host → client | after `HELLO`, and whenever the target changes |
-| `0x0010`–`0x001F` | plugin transport | producer → app | see [DAW transport](#0x0010--daw_transport) |
+| `0x0010`–`0x001F` | plugin transport | producer → app, app → client | see [DAW transport](#0x0010--daw_transport) |
 | `0x0020`–`0x002F` | *reserved* | — | a control channel that does not exist in v1 |
 
 ### `0x0001` — HELLO
@@ -274,6 +274,34 @@ no DAW. Payload is 88 bytes.
 Transport is metadata, not measurement, which is why it rides in its own frame
 and never in `oaa_snapshot`: the engine must not learn what a DAW is.
 
+**It travels in both directions, and not on the same schedule.** An app that is
+metering a plugin relays the playhead to its displays, because a tablet showing
+a DAW's meters and no position is a tablet that cannot be used to say where the
+session is. On the display port the frame is the same 88 bytes and the rules
+around it differ:
+
+| | producer → app | app → client |
+|---|---|---|
+| when | before every `0x0003` | on change, and once on connect |
+| `flags == 0` | never sent — the producer omits the frame | sent, meaning "there is no playhead here" |
+
+Sending on change is what keeps a parked session and a machine with no DAW at
+all off the wire; the replay on connect is what stops a display that attached to
+a parked session from showing nothing until somebody presses play. A `flags == 0`
+frame is how a relay says the playhead has *gone* — the plugin was removed, or
+the app went back to metering a sound card — and it must be sent, because a
+display that is told nothing holds the last position it was given.
+
+**A consumer must not assume it has seen every producer frame.** The relay
+samples: the app publishes at the display rate, which is slower than a DAW's
+block rate, so intermediate positions do not survive the hop. The one thing that
+does is `DISCONTINUITY`, and the paragraphs below say why that is not optional.
+
+Neither direction needs a protocol version past 2. A display that predates
+transport skips the frame by length and is otherwise unaffected, and a display
+that expects one and never receives it is looking at a host with no DAW, which
+is a state it already has to draw.
+
 | off | type | field | meaning |
 |---|---|---|---|
 | 0 | `u32` | `flags` | see below |
@@ -327,6 +355,15 @@ A consumer may therefore count relocations by counting the frames that carry the
 bit, for as long as the link holds — an edge raised while a frame cannot be sent
 is lost with the connection, and a consumer that has just reconnected knows
 nothing about what happened while it was away regardless.
+
+**Anything that forwards transport is a producer for the purposes of both rules
+above.** A relay publishes less often than it is fed, exactly as a plugin does,
+so it must accumulate the bit between the frames it sends rather than copy
+whatever the last one it received happened to say — and clear it once it has
+gone out. The app does this in `DisplayHost`, which is why every producer frame
+is written to it rather than the publish timer asking for the current position:
+at thirty frames a second against a DAW's ninety-odd blocks, two relocates in
+three would otherwise be a position that moved and nothing else.
 
 It is the only bit in this frame that is about the *measurement* rather than
 about the host, and it belongs to the same family as `dropped_frames`. Play bars

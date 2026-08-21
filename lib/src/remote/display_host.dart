@@ -53,6 +53,34 @@ class DisplayHost {
   /// nothing is published.
   MeterSource? source;
 
+  /// The DAW's playhead behind [source], or [Transport.none] when whatever is
+  /// being measured has no host — a device, a file, or a plugin in a host that
+  /// reports no position.
+  ///
+  /// **Written on every frame the producer sends, never sampled at the publish
+  /// rate.** This is a setter rather than a callback for one reason, and it is
+  /// the reason the [Transport.flagDiscontinuity] bit exists: `docs/WIRE.md`
+  /// specifies it as an edge delivered once, so a relay that asked "what is the
+  /// playhead now?" thirty times a second would see two jumps in three only as
+  /// a position that moved. Every frame comes through here, the edge is
+  /// accumulated, and the publish tick carries whatever has happened since the
+  /// last one.
+  set transport(Transport value) {
+    // Sticky, and cleared only by a send. A relocate that happens between two
+    // publishes belongs to the next frame that goes out, alongside the position
+    // the playhead landed on.
+    if (value.isDiscontinuous) _edgePending = true;
+    _transport = value;
+  }
+
+  Transport get transport => _transport;
+  Transport _transport = Transport.none;
+  bool _edgePending = false;
+
+  /// The last transport put on the wire, so that a parked session and a machine
+  /// with no DAW at all cost nothing. Null until one has been sent.
+  Transport? _sentTransport;
+
   /// What the tablet shows in its list. A name, never an address.
   final String hostName;
 
@@ -220,6 +248,12 @@ class DisplayHost {
     if (calibration != null) {
       client.sendOnce(_calibrationFrame(calibration));
     }
+    // The playhead too, for the same reason and one of its own: transport goes
+    // out on change, so a tablet that attaches to a session parked at bar 57
+    // would otherwise show no position at all until somebody pressed play.
+    if (_transport.isPresent) {
+      client.sendOnce(DawTransportCodec.encodeFrame(_transport));
+    }
   }
 
   void _remove(_RemoteClient client) {
@@ -239,6 +273,13 @@ class DisplayHost {
   void _publish() {
     if (_clients.isEmpty) return;
 
+    // **Before the source check, not after.** A plugin that is removed takes
+    // the app's source with it, and a display whose last word on the subject
+    // was "bar 57, rolling" would hold that playhead on screen until the link
+    // itself went stale two seconds later. `Transport.none` is how "there is no
+    // playhead here" is said, and it is worth saying immediately.
+    _publishTransport();
+
     final source = this.source;
     if (source == null) return;
 
@@ -255,6 +296,46 @@ class DisplayHost {
     slot.frame.encode(source);
     for (final client in _clients) {
       client.sendPooled(slot);
+    }
+  }
+
+  /// Sends the transport if it has moved, or if an edge is waiting.
+  ///
+  /// On change rather than every tick: a session parked at bar 1 and a desktop
+  /// metering a sound card both send one frame and then nothing, where an
+  /// unconditional 30 Hz would put a hundred bytes a second of "still nothing"
+  /// on a Wi-Fi network for as long as the app is open.
+  ///
+  /// **The edge is checked separately from the comparison, and that is not
+  /// belt-and-braces.** A jump that lands the playhead back where an identical
+  /// earlier frame left it compares equal in every field, and `docs/WIRE.md`
+  /// lets a consumer count relocations by counting the frames that carry the
+  /// bit — a dropped one is a relocation that did not happen as far as every
+  /// display is concerned.
+  void _publishTransport() {
+    final transport = _transport;
+    if (!_edgePending && _sentTransport == transport) return;
+
+    final outgoing = _edgePending ? transport.asDiscontinuous() : transport;
+    _edgePending = false;
+
+    // What was *submitted*, not what was sent: the next comparison asks whether
+    // the host has moved, and the edge is not part of that question.
+    _sentTransport = transport;
+
+    // **`sendOnce`, which queues, where a snapshot is dropped.** The rule for
+    // measurements is that a client behind on its last write loses the frame
+    // rather than working through a backlog, because a display showing what the
+    // signal did half a second ago looks exactly like one showing what it is
+    // doing now. Transport is the other way round on both counts: an edge that
+    // is dropped is a relocation nobody can count, and a backlog cannot be seen
+    // — a drain delivers every queued frame in one turn of the event loop, and
+    // the readout takes the newest value when it next paints rather than
+    // replaying the ones behind it. So these are the rare-and-small path, like
+    // a layout, and a slow link costs a display nothing but a few dozen bytes.
+    final bytes = DawTransportCodec.encodeFrame(outgoing);
+    for (final client in _clients) {
+      client.sendOnce(bytes);
     }
   }
 

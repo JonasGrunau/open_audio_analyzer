@@ -224,6 +224,137 @@ void main() {
     },
   );
 
+  // --- The DAW's playhead, one hop further than it used to go --------------
+  //
+  // The desktop decodes transport off a plugin's socket and forwards it here.
+  // Everything below is about that relay rather than about the codec, which
+  // `packages/oaa_wire` holds: what reaches a tablet, what does not go on the
+  // wire at all, and the one bit that cannot simply be sampled.
+
+  group('the transport', () {
+    const parked = Transport(
+      flags:
+          Transport.flagHasTimeSeconds |
+          Transport.flagHasBpm |
+          Transport.flagHasTimeSig,
+      timeSeconds: 61.5,
+      bpm: 128,
+      timeSigNumerator: 7,
+      timeSigDenominator: 8,
+    );
+
+    test('reaches a display', () async {
+      await connect();
+
+      host.transport = parked;
+      await _settle();
+
+      expect(client.transport.value.hasBpm, isTrue);
+      expect(client.transport.value.bpm, closeTo(128, 1e-9));
+      expect(client.transport.value.timeSigNumerator, 7);
+      expect(client.transport.value.timeSigDenominator, 8);
+      expect(client.transport.value.timeSeconds, closeTo(61.5, 1e-9));
+      expect(client.transport.value.isPlaying, isFalse);
+    });
+
+    test('a host with no playhead sends none, not a zeroed one', () async {
+      await connect();
+      await _settle();
+
+      // `flags == 0` is the difference between "parked at bar 1, 120 bpm" and
+      // "no DAW here", and it is the whole reason the frame carries presence
+      // bits. A display that had been handed zeroes would draw the first.
+      expect(client.transport.value.isPresent, isFalse);
+      expect(client.transport.value, Transport.none);
+    });
+
+    test('a display that joins mid-session gets the position', () async {
+      // Transport goes out on change, so a tablet that attaches to a session
+      // parked at bar 57 would see nothing at all until somebody touched the
+      // DAW — which is exactly when they are not looking at the tablet.
+      host.transport = parked;
+      await _settle();
+
+      await connect();
+
+      expect(client.transport.value.timeSeconds, closeTo(61.5, 1e-9));
+    });
+
+    test('a playhead that goes away says so at once', () async {
+      await connect();
+      host.transport = parked;
+      await _settle();
+      expect(client.transport.value.isPresent, isTrue);
+
+      // The plugin was removed from the DAW. The app has no source and nothing
+      // to publish — and that is precisely when a display must be told, rather
+      // than holding bar 57 on screen until the link itself goes stale two
+      // seconds later.
+      host
+        ..source = null
+        ..transport = Transport.none;
+      await _settle();
+
+      expect(client.transport.value, Transport.none);
+    });
+
+    test('an edge between two frames is carried, not lost', () async {
+      await connect();
+      await _settle();
+
+      // The case `docs/WIRE.md` spells out: DISCONTINUITY is an edge delivered
+      // once, and this host publishes thirty times a second against a DAW's
+      // ninety-odd blocks. Somebody drags the playhead back to bar 1 and
+      // playback continues, so the jump arrives on one producer frame and the
+      // two after it are ordinary — a relay that answered "what is the playhead
+      // now?" on its own schedule would report a position that moved and no
+      // relocation at all, and a display cannot count what it is never told.
+      host
+        ..transport = parked.asDiscontinuous()
+        ..transport = const Transport(
+          flags: Transport.flagPlaying | Transport.flagHasTimeSeconds,
+          timeSeconds: 0.1,
+        );
+      await _settle();
+
+      expect(
+        client.transport.value.isDiscontinuous,
+        isTrue,
+        reason: 'the relocate was dropped on the way to the display',
+      );
+      expect(
+        client.transport.value.timeSeconds,
+        closeTo(0.1, 1e-9),
+        reason: 'the flag belongs to the position the playhead landed on',
+      );
+
+      // And it is an edge here too: the next frame does not repeat it.
+      host.transport = const Transport(
+        flags: Transport.flagPlaying | Transport.flagHasTimeSeconds,
+        timeSeconds: 0.2,
+      );
+      await _settle();
+
+      expect(client.transport.value.isDiscontinuous, isFalse);
+      expect(client.transport.value.timeSeconds, closeTo(0.2, 1e-9));
+    });
+
+    test('goes to nothing when the link goes quiet', () async {
+      await connect();
+      host.transport = parked;
+      await _settle();
+      expect(client.transport.value.isPresent, isTrue);
+
+      await host.stop();
+      await _settle(milliseconds: 700);
+
+      // A parked transport legitimately sends nothing for minutes, so a held
+      // position and a dead link look identical on screen. The meters go to
+      // dashes here; the playhead has to go with them.
+      expect(client.transport.value, Transport.none);
+    });
+  });
+
   test('a quiet link stops claiming to be current', () async {
     source
       ..generation = 1
