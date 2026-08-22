@@ -600,9 +600,19 @@ site](https://jonasgrunau.github.io/open_audio_analyzer/install.html).
 > See `macos/Runner/*.entitlements`, which carries the sandbox reasoning, and
 > that script, which repeats it where somebody signing a build will be standing.
 
+> [!NOTE]
+> **The iPad build goes to TestFlight, and is not on the releases page.** A
+> tagged release builds it, signs it for the App Store and uploads it — after
+> the release is published, so a TestFlight build always belongs to a release
+> that exists. The IPA is not attached as an asset because an App Store
+> signature provisions no devices: a file you downloaded could not be installed
+> on your iPad, by you or by anyone. Building it yourself is two lines in
+> [Building](#-building) and needs no credentials at all.
+
 The scripts that build these live in [`packaging/`](packaging/AGENTS.md), one
-per platform, and `ci.yml`'s packaging jobs run all four on a tag and on
-demand. Each produces an unsigned artefact and says so rather than failing when
+per platform, and `ci.yml`'s packaging jobs run all four installers and the iPad
+build on a tag and on demand — only the TestFlight upload waits for the
+release. Each produces an unsigned artefact and says so rather than failing when
 the signing secrets are absent — a fork has none, and a build that stopped there
 would be useless to it.
 

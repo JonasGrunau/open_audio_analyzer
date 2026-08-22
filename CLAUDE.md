@@ -382,6 +382,22 @@ is unaffected: it never links JUCE — it talks to the plugin over a socket.
   as configured and did nothing. `packaging/macos/keychain.sh` is the missing
   half of the first.
 
+- **The iOS side has no `codesign --verify`, and its rejection arrives after the
+  release is published.** `flutter build ipa` exits 0 on an export that fell
+  back to *automatic* signing — which on a runner signs with nothing usable —
+  because the fallback is a trace-level log message and not an error. And what
+  refuses the result is App Store Connect, during an upload `ci.yml` runs after
+  `publish` by design, so there is no earlier gate to fail. Three things stand
+  in for one: `make_ipa.sh` checks the provisioning profile before it builds
+  (bundle id, no provisioned devices, no `get-task-allow`), reads the signing
+  authority back off the finished `.xcarchive` after it, and manual signing is
+  injected through `ios/Flutter/Release.xcconfig` rather than the project — the
+  Runner target stays on automatic signing so `flutter run -d <ipad>` still
+  works for a person, and a runner never tries to *create* a distribution
+  certificate, which an account caps and which no error message would name.
+  **A `workflow_dispatch` builds and signs the IPA without uploading it**, which
+  is the only cheap way to check any of this; a tag is not the place to find out.
+
 - **A macOS bundle's architecture and deployment target default to the machine
   that built it.** Both are set at the top of `plugin/CMakeLists.txt`; before
   they were, the released plugin was arm64-only with `minos 26.0`, so it could
@@ -426,6 +442,7 @@ claim something about it:
 | A test gate, or `.github/workflows/ci.yml` | `CLAUDE.md` Testing Requirements, `README.md` Tests, `.github/AGENTS.md`. **A gate named in a document and absent from `ci.yml` is a lie the whole team believes.** `ci.yml` is the only workflow — tests, docs, installers and the release are jobs in it, gated by event |
 | A keyboard shortcut | Nothing by hand — regenerate with `UPDATE_DOCS=1 flutter test test/shortcuts_test.dart` and commit `docs/site/keyboard.md` in the same change. `README.md`'s Layout → Keyboard names a handful of them and is prose, not a list |
 | **When** the plugin sets a transport flag, without any byte moving | `docs/WIRE.md`'s prose for that bit, `CHANGELOG.md` 🐛, and a case in `packages/oaa_wire/test/plugin_e2e_test.dart`. The row above covers the wire's *layout*; this is the other half. A consumer depends on when a producer sets a bit as much as on where the bit lives, and none of that is visible in a byte table — the discontinuity bit was being set every block while the transport sat parked, and delivered on almost none of the blocks where it mattered, with the layout perfectly correct throughout |
+| The iOS build, its signing, or the TestFlight upload | `packaging/AGENTS.md`, `docs/site/building.md`'s credential table, `.github/AGENTS.md`, and `docs/site/install.md`'s iPadOS section. The IPA is **not** a release asset — if you make it one, `README.md`'s note and the publish step's exclusion both become wrong |
 | A switch on the fake DAW | `plugin/host/AGENTS.md`, and `README.md` if it is one of the gestures a person cannot perform on cue. `--help` in `FakeDawOptions.h` is the exhaustive list and the only one that has to be; the other two name the interesting ones and are prose |
 | A page the documentation site publishes, or its filename | The page list in `tool/docs.dart`. It is written out rather than globbed, so a renamed document fails the docs job instead of silently vanishing from the site |
 | A phase reaching done | `README.md` Roadmap, `CLAUDE.md`'s status line, `docs/PLAN.md` |

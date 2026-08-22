@@ -121,13 +121,18 @@ sh  packaging/macos/make_dmg.sh
 pwsh packaging/windows/make_msix.ps1
 sh  packaging/linux/make_appimage.sh
 sh  packaging/linux/make_flatpak.sh
+sh  packaging/ios/make_ipa.sh        # the iPad build, for TestFlight
+sh  packaging/ios/testflight.sh      # and the upload, separately
 ```
 
 Everything lands in `build/packaging/`.
 
 Signing is by environment variable, and every script produces an unsigned
 artefact and warns rather than failing when the variables are absent — a fork
-has no secrets, and a build that stopped there would be useless to it.
+has no secrets, and a build that stopped there would be useless to it. **The
+IPA is the one exception**, because there is no unsigned form of it: an App
+Store export either has a distribution signature or does not exist, so
+`make_ipa.sh` produces nothing at all and says so.
 
 | Variable | For |
 | --- | --- |
@@ -135,6 +140,11 @@ has no secrets, and a build that stopped there would be useless to it.
 | `OAA_NOTARY_PROFILE` | A `xcrun notarytool store-credentials` profile. Your own machine only — it lives in *that machine's* keychain, so a CI runner given this name finds nothing |
 | `OAA_NOTARY_APPLE_ID`, `OAA_NOTARY_TEAM_ID`, `OAA_NOTARY_PASSWORD` | The same credentials in a form a runner can be handed. The password is an [app-specific password](https://support.apple.com/en-us/102654), not the Apple ID's own |
 | `OAA_SIGNING_CERTIFICATE`, `OAA_SIGNING_CERTIFICATE_PASSWORD` | base64 of a `.p12` and its export password, for a machine whose keychain is empty. `packaging/macos/keychain.sh` imports it; on your own Mac use Keychain Access and skip both |
+| `OAA_IOS_CERTIFICATE`, `OAA_IOS_CERTIFICATE_PASSWORD` | base64 of a `.p12` holding an **Apple Distribution** certificate, and its export password. A different certificate type from the Developer ID above and not interchangeable with it — one signs a Mac app for direct download, the other signs an iOS app for the store. `keychain.sh` imports either |
+| `OAA_IOS_PROFILE` | base64 of an **App Store** `.mobileprovision` for `com.openaudioanalyzer.oaa`. A development or ad-hoc profile exports an IPA that builds, signs and verifies cleanly and is refused at the end of the upload, so `make_ipa.sh` checks the profile before it builds |
+| `OAA_IOS_TEAM_ID`, `OAA_IOS_SIGNING_IDENTITY` | Optional. They default to the team in the Xcode project and to `Apple Distribution`, which matches whichever such certificate the keychain holds |
+| `OAA_ASC_KEY_ID`, `OAA_ASC_ISSUER_ID`, `OAA_ASC_KEY` | An App Store Connect **API key** — its id, the issuer uuid, and base64 of the `.p8`. Needed by `testflight.sh` and nothing else. The key needs the **App Manager** role or the upload is refused with a permissions error that names no role |
+| `OAA_BUILD_NUMBER` | Optional. `CFBundleVersion` for the iPad build; unset, `pubspec.yaml`'s `+N` is used. CI passes the workflow run counter, because App Store Connect refuses a build number it has already accepted for the same version string |
 | `OAA_WINDOWS_CERT` | Path to a `.pfx` |
 | `OAA_WINDOWS_CERT_PASS` | Its password |
 | `OAA_WINDOWS_PUBLISHER` | The certificate's subject, **exactly** — e.g. `CN=Jonas Grunau` |
@@ -148,6 +158,16 @@ Two things that will otherwise cost you an afternoon:
   because "Open Anyway" is only offered for a blocked launch and loading a
   plugin is a library load. An identity and notarisation credentials, or
   neither.
+- **An App Store rejection arrives after the release is published.** The iOS
+  path has no equivalent of `codesign --verify`: `flutter build ipa` exits 0 on
+  an export that fell back to automatic signing, and App Store Connect is the
+  first thing that says no — during an upload that `ci.yml` deliberately runs
+  *after* the release exists. `make_ipa.sh` therefore checks what it can before
+  and after the build: the profile's bundle id, that it provisions no devices
+  and allows no debugging, and then the signing authority read back off the
+  finished archive. Run it once by hand, or with `workflow_dispatch`, before
+  trusting a tag to it — a dispatch builds and signs the IPA and does not
+  upload, which is the useful half of the check.
 - **`OAA_WINDOWS_PUBLISHER` must equal the certificate subject byte for byte.**
   Not the display name, not a tidied version of it. A mismatch fails at install
   time with `0x800B0100`, which reads as "the signature is invalid" and sends

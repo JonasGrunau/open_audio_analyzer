@@ -1,7 +1,9 @@
 # Install
 
 Every release publishes four installers, a command-line binary and the DAW
-plugin. Pick the one for your machine; there is nothing else to set up.
+plugin. Pick the one for your machine; there is nothing else to set up. The iPad
+display is the exception and goes through TestFlight — see
+[iPadOS](#ipados) for why there is nothing to download.
 
 | Platform | Download | Notes |
 | --- | --- | --- |
@@ -98,8 +100,8 @@ as [VB-Audio Cable](https://vb-audio.com/Cable/).
 ### AppImage
 
 ```sh
-chmod +x Open.Audio.Analyzer-0.5.0-x86_64.AppImage
-./Open.Audio.Analyzer-0.5.0-x86_64.AppImage
+chmod +x Open.Audio.Analyzer-0.6.0-x86_64.AppImage
+./Open.Audio.Analyzer-0.6.0-x86_64.AppImage
 ```
 
 GTK 3 is expected from the host — every desktop Linux that can run a Flutter
@@ -111,7 +113,7 @@ distribution simply refuses to start on an older one.
 ### Flatpak
 
 ```sh
-flatpak install --user Open.Audio.Analyzer-0.5.0-x86_64.flatpak
+flatpak install --user Open.Audio.Analyzer-0.6.0-x86_64.flatpak
 flatpak run com.openaudioanalyzer.oaa
 ```
 
@@ -121,6 +123,25 @@ each](https://github.com/JonasGrunau/open_audio_analyzer/blob/main/packaging/lin
 
 For system audio on either, PipeWire's own loopback or `pactl load-module
 module-null-sink` gives you a monitor source Open Audio Analyzer can open.
+
+## iPadOS
+
+The iPad build is a **display**, not a second analyser: it draws another
+machine's meters over the local network, with the desktop application doing the
+measuring. [Remote display](index.html) covers how the two find each other.
+
+It is distributed through **TestFlight** rather than from the releases page, and
+that is not an oversight. An App Store signature provisions no devices, so an
+IPA you downloaded could not be installed on your iPad by you or by anybody
+else — there is no file here that would do you any good. Every tagged release
+uploads a build; ask on the
+[repository](https://github.com/JonasGrunau/open_audio_analyzer) for access, or
+build it yourself, which needs a Mac with Xcode and no credentials beyond a free
+Apple ID:
+
+```sh
+flutter run -d <your ipad>    # `flutter devices` names it
+```
 
 ## In a DAW
 

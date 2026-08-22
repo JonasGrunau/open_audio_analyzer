@@ -75,6 +75,21 @@
   <content_rating type="oars-1.1"/>
 
   <releases>
+    <release version="0.6.0" date="2026-08-22">
+      <description>
+        <p>
+          The application identifier is now com.openaudioanalyzer.oaa. On Linux
+          that is also the flatpak application id, so this release installs
+          beside an earlier one rather than upgrading it; remove the old
+          dev.openaudioanalyzer.oaa if you do not want both. Downloaded macOS
+          builds no longer need a quarantine flag stripped by hand, because the
+          plugin bundles and the disk image are notarised. The VST3 and Audio
+          Unit are universal and load on macOS 11 and later, where every
+          previous release shipped a bundle built only for the machine that
+          built it.
+        </p>
+      </description>
+    </release>
     <release version="0.5.0" date="2026-08-22">
       <description>
         <p>

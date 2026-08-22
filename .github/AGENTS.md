@@ -9,8 +9,8 @@ in:
 |---|---|
 | pull request | `checks`, `engine`, `docs` |
 | push to `main` | the same, plus `pages` |
-| `workflow_dispatch` | the same, plus `plugin` and every installer |
-| tag `v*` | the same, plus `publish` |
+| `workflow_dispatch` | the same, plus `plugin`, every installer and `ipa` |
+| tag `v*` | the same, plus `publish`, and `testflight` after it |
 
 It was three files — `ci.yml`, `docs.yml`, `release.yml` — split on the argument
 that packaging is an order of magnitude slower than testing and must not slow
@@ -111,6 +111,23 @@ The jobs are split by what they need, and that split is deliberate:
   dependencies have build hooks, and all three CLI jobs failed on the first tag
   that ever ran the packaging jobs.
 
+- **`ipa` and `testflight`** are one path split across the release. `ipa` builds
+  and signs the iPad build beside the other packagers; `testflight` uploads it,
+  and it is the only job in this file that runs **after** `publish`.
+
+  That ordering is the design rather than an accident of dependencies. An upload
+  to App Store Connect cannot be withdrawn, and `xcodebuild -exportArchive` will
+  happily export and upload in one step — which would have put the upload in
+  `ipa`, before the other installers finished and before the release existed. A
+  TestFlight build for a version that was never released is a state nothing else
+  here can produce and nobody can clean up. So the IPA travels between the two
+  jobs as an artefact, and `publish` names `ipa` in `needs` so that a signing
+  failure fails the release rather than following it.
+
+  A manual dispatch runs `ipa` and not `testflight`, which is the useful half:
+  it proves the certificate, the profile and the export without spending a
+  build number.
+
 ## Rules
 
 - **`FLUTTER_VERSION` must match `.tool-versions`.** CI that passes on a
@@ -175,6 +192,28 @@ The jobs are split by what they need, and that split is deliberate:
   instead: each gap kept the other invisible. `packaging/macos/keychain.sh`
   now runs before anything signs, in both the `plugin` and `dmg` jobs, and the
   notary credentials are passed in the runner-shaped form.
+- **The IPA is built and deliberately not published.** It is the one artefact
+  in this workflow that is not attached to the release: an App Store signature
+  provisions no devices, so nobody who downloaded it could install it. The
+  publish step excludes `testflight-ipa` by path rather than narrowing its
+  download to a name pattern, so a future artefact nobody thought about is
+  attached by mistake rather than omitted by mistake — of the two, only the
+  second is silent.
+- **`testflight` is gated on an output of `ipa`, not just on the tag.** An App
+  Store IPA has no unsigned form, so with no credentials `make_ipa.sh` produces
+  nothing at all — which is the correct outcome and not a failure. But a job
+  that produced nothing uploads no artefact, and `download-artifact` errors on a
+  name that does not exist: without the gate, a tag in a repository or a fork
+  with no iOS secrets turns a release that went out perfectly well into a red
+  run, on a step that has nothing to do with the release. `ipa` reports whether
+  it built anything and `testflight` skips on `false`. A skipped job says what
+  happened; a failed download says something is broken.
+- **The iOS build number is `github.run_number`, not `pubspec.yaml`'s `+N`.**
+  App Store Connect refuses a build number it has already accepted for the same
+  version string, and it refuses it during the upload — which is after the
+  release has been published. The pubspec's number is maintained by hand, so a
+  re-run of a tag collides there and nowhere else in the workflow. The run
+  counter only ever increases.
 - **The `plugin` job signs at configure time and notarises before it archives.**
   `-DOAA_CODESIGN_IDENTITY` is a cache variable because the target that reads it
   is generated, so it belongs on the `cmake -B` line and not in `env:`; and the

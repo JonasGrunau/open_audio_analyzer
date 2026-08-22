@@ -9,11 +9,35 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.6.0] — 2026-08-22
+
 ### ✨ Added
 - macOS releases can be notarised, which is what lets a downloaded plugin or dmg
   be opened with no further steps. A Developer ID signature now also carries the
   hardened runtime and a secure timestamp, both of which Apple requires before it
   will notarise anything and neither of which was being requested.
+- Tagging a release now builds the iPadOS display and uploads it to TestFlight,
+  so a tablet no longer has to be built from source to be updated. The upload
+  runs after the release is published rather than before it, which means a
+  TestFlight build always corresponds to a release that exists. The IPA itself
+  is deliberately not attached to the release: an App Store build provisions no
+  devices, so a downloaded copy could not be installed by anyone.
+- The iPadOS build declares that it uses no encryption. Without that declaration
+  every TestFlight build waits in "Missing Compliance" until somebody answers
+  the export question by hand, which is the one step an automatic upload cannot
+  take.
+
+### ⚡ Changed
+- The application identifier is now `com.openaudioanalyzer.oaa`, and the
+  plugin's is `com.openaudioanalyzer.oaa.plugin`. Both were under `dev.`, which
+  reversed a domain nobody held; these reverse `open-audio-analyzer.com`. The
+  hyphens do not survive the trip, and cannot: an Android `applicationId` and a
+  Kotlin package are Java identifiers and reject `-`, while Apple's
+  `CFBundleIdentifier` accepts only letters, digits, `-` and `.` and so rejects
+  the `_` that Android would want in its place. Stripping them is the one form
+  that is legal on all six platforms. The Linux application id, the AppStream
+  and flatpak ids, the msix identity and the hicolor icon filenames all move
+  with it.
 
 ### 🐛 Fixed
 - The macOS plugin bundles are built for Apple silicon **and** Intel, and load on
@@ -33,18 +57,6 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The README no longer claims the macOS build is distributed "signed with a
   Developer ID and notarised". It has never been either.
 
-### ⚡ Changed
-- The application identifier is now `com.openaudioanalyzer.oaa`, and the
-  plugin's is `com.openaudioanalyzer.oaa.plugin`. Both were under `dev.`, which
-  reversed a domain nobody held; these reverse `open-audio-analyzer.com`. The
-  hyphens do not survive the trip, and cannot: an Android `applicationId` and a
-  Kotlin package are Java identifiers and reject `-`, while Apple's
-  `CFBundleIdentifier` accepts only letters, digits, `-` and `.` and so rejects
-  the `_` that Android would want in its place. Stripping them is the one form
-  that is legal on all six platforms. The Linux application id, the AppStream
-  and flatpak ids, the msix identity and the hicolor icon filenames all move
-  with it.
-
 ### 🚧 Internal
 - CI imports a signing certificate before anything signs. `OAA_SIGNING_IDENTITY`
   was being handed to `codesign` on runners whose keychain was empty, and
@@ -52,6 +64,12 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   machine, so neither secret could have worked on a runner — and neither failed a
   job, because they had never been set and the scripts took their no-credential
   branches instead.
+- `packaging/ios/make_ipa.sh` and `packaging/ios/testflight.sh`, and the `ipa`
+  and `testflight` jobs in `ci.yml`. Manual signing is injected through
+  `ios/Flutter/Release.xcconfig` so the Xcode project stays on automatic signing
+  for local development; the script reads the signing authority back off the
+  archive, because `flutter build ipa` exits 0 on an export that silently fell
+  back to automatic signing.
 
 ## [0.5.0] — 2026-08-22
 
@@ -1700,7 +1718,8 @@ meters do not exist yet. See the [roadmap](README.md#roadmap).
 - Licensing is split: MIT for `engine/`, `oaa_engine` and `oaa_core`;
   GPL-3.0-or-later for the application, UI, CLI and plugin.
 
-[unreleased]: https://github.com/JonasGrunau/open_audio_analyzer/compare/v0.5.0...HEAD
+[unreleased]: https://github.com/JonasGrunau/open_audio_analyzer/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/JonasGrunau/open_audio_analyzer/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/JonasGrunau/open_audio_analyzer/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/JonasGrunau/open_audio_analyzer/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/JonasGrunau/open_audio_analyzer/compare/v0.3.0...v0.4.0

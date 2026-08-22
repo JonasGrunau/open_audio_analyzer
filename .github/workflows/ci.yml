@@ -31,12 +31,19 @@
 #
 #   pull request        checks, engine, docs
 #   push to main        the same, plus the Pages deployment
-#   workflow_dispatch   the same, plus the plugin and every installer
-#   tag v*              the same, plus publish
+#   workflow_dispatch   the same, plus the plugin, every installer and the ipa
+#   tag v*              the same, plus publish and then testflight
 #
 # The plugin is on the release side of that line with the installers: three
 # parallel JUCE builds is the most expensive thing here by an order of
 # magnitude. What that costs is written above the job.
+#
+# `testflight` is the only job that runs *after* `publish` rather than before
+# it, and that is deliberate. An upload to App Store Connect cannot be taken
+# back, so it happens once the release exists — never leaving a TestFlight
+# build for a version that was never published. Its IPA is built in `ipa`,
+# alongside the other packagers, so a signing failure fails the release instead
+# of following it.
 #
 # ---------------------------------------------------------------------------
 # The AppImage runner is deliberately old
@@ -740,6 +747,88 @@ jobs:
           if-no-files-found: error
 
   # -------------------------------------------------------------------------
+  # The iPad build, which is the one artefact nobody downloads
+  #
+  # An App Store signature provisions no devices, so this IPA cannot be
+  # sideloaded or handed to a tester — it can only be uploaded. It is therefore
+  # built here, beside the other packagers, and *not* attached to the release;
+  # the `publish` step below excludes it by name, because publishing an
+  # installer that installs nothing is worse than publishing nothing.
+  #
+  # `publish` needs this job all the same. That is the whole point of the
+  # ordering: if the iOS build cannot be signed, the release does not happen,
+  # rather than happening and leaving TestFlight a version behind with nothing
+  # to explain it.
+  #
+  # `keychain.sh` is the dmg's script, handed a different certificate. iOS App
+  # Store distribution needs an **Apple Distribution** certificate; a Developer
+  # ID signs a Mac app and is refused here. Two secrets rather than one for
+  # that reason — the two certificates are not interchangeable and a single
+  # secret name would invite exactly that mistake.
+  # -------------------------------------------------------------------------
+
+  ipa:
+    name: ipa
+    needs: checks
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    runs-on: macos-latest
+    outputs:
+      built: ${{ steps.built.outputs.built }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Signing certificate
+        env:
+          OAA_SIGNING_CERTIFICATE: ${{ secrets.OAA_IOS_CERTIFICATE }}
+          OAA_SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.OAA_IOS_CERTIFICATE_PASSWORD }}
+        run: sh packaging/macos/keychain.sh
+
+      # OAA_BUILD_NUMBER is the run counter and not `pubspec.yaml`'s `+N`.
+      # TestFlight refuses a build number it has seen before for the same
+      # version string, and it refuses it at the end of the upload — which here
+      # is after the release has been published. The run counter only ever
+      # increases; see the header of make_ipa.sh.
+      - name: Build and sign
+        env:
+          OAA_IOS_PROFILE: ${{ secrets.OAA_IOS_PROFILE }}
+          OAA_IOS_TEAM_ID: ${{ secrets.OAA_IOS_TEAM_ID }}
+          OAA_IOS_SIGNING_IDENTITY: ${{ secrets.OAA_IOS_SIGNING_IDENTITY }}
+          OAA_BUILD_NUMBER: ${{ github.run_number }}
+        run: sh packaging/ios/make_ipa.sh
+
+      # Whether anything was built is a job output, and `testflight` is gated on
+      # it. Without that gate, a tag in a repository with no iOS secrets fails:
+      # this job succeeds having produced nothing, no artefact is created, and
+      # `download-artifact` errors on a name that does not exist — turning a
+      # release that went out perfectly well into a red run. A skipped job says
+      # what happened; a failed download says something is broken.
+      - name: Built?
+        id: built
+        run: |
+          if ls build/packaging/*.ipa >/dev/null 2>&1; then
+            echo 'built=true' >>"$GITHUB_OUTPUT"
+          else
+            echo 'built=false' >>"$GITHUB_OUTPUT"
+            echo 'No IPA: the iOS signing secrets are not set. Nothing to upload.'
+          fi
+
+      # `ignore` rather than `error`, unlike every other packaging job. An App
+      # Store IPA cannot be produced unsigned, so a fork and a run without the
+      # secrets produce no file at all rather than an unusable one, and neither
+      # is a failure. The step above is what turns that into a decision.
+      - uses: actions/upload-artifact@v4
+        if: steps.built.outputs.built == 'true'
+        with:
+          name: testflight-ipa
+          path: build/packaging/*.ipa
+          if-no-files-found: error
+
+  # -------------------------------------------------------------------------
   # The release
   #
   # `needs` names the test jobs as well as the packaging ones, which is the
@@ -749,7 +838,7 @@ jobs:
 
   publish:
     name: Publish
-    needs: [checks, engine, plugin, dmg, msix, appimage, flatpak, cli]
+    needs: [checks, engine, plugin, dmg, msix, appimage, flatpak, cli, ipa]
     runs-on: ubuntu-latest
     # Only a tag becomes a release. A manual run is a check that the scripts
     # still work, and it leaves its artefacts on the run rather than publishing
@@ -785,6 +874,13 @@ jobs:
       # `$(find ...)` splits that on the spaces: the first tag to reach this
       # step died on `no matches found for artifacts/oaa-linux-appimage/Open`,
       # with all seven builds green and nothing else left to do.
+      #
+      # `testflight-ipa` is excluded, and it is the only exclusion. An App
+      # Store IPA provisions no devices, so nobody who downloaded it could
+      # install it — it exists to be uploaded, which the job after this does.
+      # The exclusion is by path rather than the download being narrowed to a
+      # pattern, deliberately: a future artefact whose name nobody thought
+      # about is then attached rather than silently left off the release.
       - name: Release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -793,9 +889,58 @@ jobs:
           while IFS= read -r -d '' file; do
             assets+=("$file")
             echo "attaching $file"
-          done < <(find artifacts -type f -print0 | sort -z)
+          done < <(find artifacts -type f -not -path 'artifacts/testflight-ipa/*' -print0 | sort -z)
           [ "${#assets[@]}" -gt 0 ] || { echo 'no artefacts to attach' >&2; exit 1; }
           gh release create "${GITHUB_REF_NAME}" \
             --title "Open Audio Analyzer ${GITHUB_REF_NAME}" \
             --notes-file notes.md \
             "${assets[@]}"
+
+  # -------------------------------------------------------------------------
+  # TestFlight, after the release and not before it
+  #
+  # `needs: publish`, which is the ordering the whole iOS path is arranged
+  # around. `xcodebuild -exportArchive` can upload as it exports, and using
+  # that would have put the upload in the `ipa` job — before the other
+  # installers had finished, before the release existed, and with no way to
+  # undo it if a later job went red. A build sitting in TestFlight for a
+  # version that was never released is a state nothing else here can produce
+  # and nobody can clean up.
+  #
+  # So the IPA travels as an artefact and this job is the last thing in the
+  # file. `publish` only runs on a tag, so this only runs on a tag: a manual
+  # dispatch builds and signs the IPA and stops there, which is the check that
+  # the signing works without spending a TestFlight build number on it.
+  #
+  # It does not wait for App Store Connect to finish processing. Processing
+  # takes minutes to an hour, it happens after the upload has been accepted,
+  # and a workflow that held a runner open for it would be paying for a
+  # progress bar.
+  # -------------------------------------------------------------------------
+
+  testflight:
+    name: TestFlight
+    # `publish` for the ordering, `ipa` for its output — `publish` already needs
+    # `ipa`, so this adds a name to read and not a wait.
+    needs: [publish, ipa]
+    if: startsWith(github.ref, 'refs/tags/v') && needs.ipa.outputs.built == 'true'
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: testflight-ipa
+          path: build/packaging
+
+      # An App Store Connect API key, not an Apple ID. The same distinction
+      # `notarize.sh` documents: an Apple ID plus an app-specific password
+      # authenticates a person, and a person has agreements to accept, so it
+      # fails on a runner as though the credential were wrong. The key belongs
+      # to the team and needs the App Manager role.
+      - name: Upload
+        env:
+          OAA_ASC_KEY_ID: ${{ secrets.OAA_ASC_KEY_ID }}
+          OAA_ASC_ISSUER_ID: ${{ secrets.OAA_ASC_ISSUER_ID }}
+          OAA_ASC_KEY: ${{ secrets.OAA_ASC_KEY }}
+        run: sh packaging/ios/testflight.sh

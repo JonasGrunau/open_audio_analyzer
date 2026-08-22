@@ -11,6 +11,8 @@ GPL-3.0-or-later.
 | `macos/make_dmg.sh` | Build, sign, disk image, and hand the result to `notarize.sh`. |
 | `macos/keychain.sh` | Imports a Developer ID `.p12` into a keychain of its own, for a machine that has none — a CI runner. Refuses to run outside CI without `OAA_KEYCHAIN_FORCE`, because it *replaces* the login keychain search list. |
 | `macos/notarize.sh` | Submit, wait, staple, verify. Takes a dmg, a pkg or any number of bundles, and is the only implementation of this — the plugin's macOS bundles go through it too, from `ci.yml`. |
+| `ios/make_ipa.sh` | Build and export the iPad build as an App Store IPA. The only script here whose output nobody downloads — see the rule below. Injects manual signing through `ios/Flutter/Release.xcconfig` so the Xcode project stays on automatic signing for whoever develops here. |
+| `ios/testflight.sh` | Upload that IPA to App Store Connect. Split from the build because `ci.yml` runs it *after* the release is published. |
 | `windows/AppxManifest.xml` | The msix manifest, with two placeholders. |
 | `windows/make_msix.ps1` | Build, stage, `makeappx`, `signtool`. |
 | `windows/images/` | Generated msix logos. |
@@ -22,9 +24,61 @@ GPL-3.0-or-later.
 | `linux/flatpak/com.openaudioanalyzer.oaa.yml` | The flatpak manifest. Packages a bundle that was already built. |
 
 Output always lands in `build/packaging/`. `ci.yml`'s packaging jobs run
-all four on a tag and on demand.
+all four installers, and the IPA, on a tag and on demand; only the upload waits
+for the release.
 
 ## Rules
+
+- **The IPA is the one artefact here that a user cannot install, and that is
+  what it is for.** An App Store signature provisions no devices: the file
+  cannot be sideloaded, handed to a tester, or re-signed by whoever downloaded
+  it. It exists to be uploaded, so `ci.yml` keeps it off the release's asset
+  list — publishing an installer that installs nothing is worse than publishing
+  nothing. Every other script in this directory produces a file somebody opens.
+
+- **An App Store IPA has no unsigned form**, so `make_ipa.sh` is the one script
+  here that breaks the rule below it: with no credentials it produces *nothing*
+  and says so, rather than an unsigned artefact. There is no unsigned IPA to
+  produce — an archive that fails to export is not a lesser version of one that
+  did.
+
+- **Manual signing is injected through `ios/Flutter/Release.xcconfig`, never
+  into the Xcode project.** The Runner target stays on automatic signing so that
+  `flutter run -d <ipad>` keeps working for a person with their own Apple ID. A
+  runner has none, and automatic signing there reaches out to *create* a
+  distribution certificate — an account caps how many may exist, so a workflow
+  doing it every release either fails on the cap or consumes it, and neither
+  failure names the cause. The xcconfig is the Release configuration's base
+  configuration, so Xcode reads it when it archives and
+  `xcodebuild -showBuildSettings` reports it, which is where `flutter build ipa`
+  looks; Debug is untouched.
+
+- **There is no hand-written `ExportOptions.plist`, deliberately.** Xcode 15.4
+  renamed the export methods — `app-store` became `app-store-connect` — and a
+  plist naming the wrong one for the Xcode on the runner fails the export.
+  `flutter build ipa --export-method app-store` asks Xcode its version and
+  writes whichever string it wants, and fills in the provisioning profile's UUID
+  as well. It only does that when `CODE_SIGN_STYLE=Manual`,
+  `PROVISIONING_PROFILE_SPECIFIER` and `DEVELOPMENT_TEAM` are all visible in the
+  build settings; when they are not it falls back to a plist holding nothing but
+  the method, exports with automatic signing, and logs that at trace level.
+  `make_ipa.sh` reads the authority off the archive afterwards for exactly that
+  reason — the fallback is not an error and does not fail the build.
+
+- **The profile is installed into both provisioning-profile directories.**
+  Xcode 16 and Flutter 3.44 read
+  `~/Library/Developer/Xcode/UserData/Provisioning Profiles`; everything before
+  them read `~/Library/MobileDevice/Provisioning Profiles`. Installing into one
+  works on exactly one side of that boundary, and getting it wrong presents as
+  the silent automatic-signing fallback above rather than as a missing file.
+
+- **A rejection from App Store Connect arrives after the release is published**,
+  which is why `make_ipa.sh` checks the profile itself: the bundle id it names,
+  that it provisions no devices, and that it does not allow debugging. A
+  development or ad-hoc profile exports an IPA that builds, signs and verifies
+  cleanly and is refused at the end of the upload. `ITMS-90717` — the icon alpha
+  channel described below — is the same shape of failure and was found the same
+  way: months later, in front of the store.
 
 - **One mark, three shapes, and the phones are the reason.** The desktop
   artwork *is* the rounded tile, with transparent corners, because nothing

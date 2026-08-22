@@ -4,6 +4,15 @@
 <dict>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
+	<!-- Open Audio Analyzer uses no encryption. The wire protocol in
+	     docs/WIRE.md is plaintext over the local network and there is nothing
+	     else that leaves the device. Stating it here rather than leaving it
+	     unset is what makes a TestFlight upload usable: without the key every
+	     build lands in "Missing Compliance" and no tester can install it until
+	     somebody answers the same question by hand in App Store Connect, which
+	     is the one step an automated upload cannot take. -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
