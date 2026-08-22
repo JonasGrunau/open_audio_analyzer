@@ -75,6 +75,26 @@
   <content_rating type="oars-1.1"/>
 
   <releases>
+    <release version="0.9.0" date="2026-08-22">
+      <description>
+        <p>
+          Two loudness readings change, both found by running the official EBU
+          and ITU vector sets for the first time. Material of 7.1 channels or
+          wider read 0.35 LU too loud, because the surround weight was applied
+          to the rear pair as well as the side pair; and the maximum momentary
+          and short-term loudness are now looked for on a 10 ms grid instead of
+          a 100 ms one, so a transient that fell between the old points reads up
+          to 0.7 LU higher. Integrated loudness, loudness range and both peak
+          readings are unchanged. The spectrum analyser now draws its bands
+          tilted, 4.5 dB per octave by default, which leaves a mix roughly
+          horizontal and spends the height on what deviates from that rather
+          than on the ramp every mix has. The oscilloscope can be triggered by a
+          transient, and carries its height and threshold as sliders on the
+          module itself. The histogram can be smoothed, and the loudness
+          distribution prints its range at last.
+        </p>
+      </description>
+    </release>
     <release version="0.8.0" date="2026-08-22">
       <description>
         <p>

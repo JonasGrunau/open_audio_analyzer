@@ -129,7 +129,7 @@ packages:
       path: "../oaa_core"
       relative: true
     source: path
-    version: "0.8.0"
+    version: "0.9.0"
   path:
     dependency: transitive
     description:

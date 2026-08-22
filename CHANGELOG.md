@@ -9,6 +9,8 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.9.0] — 2026-08-22
+
 ### 📐 Measurement
 - **7.1 material reads 0.35 LU quieter, and correctly.** The +1.5 dB surround
   weight was applied to every channel past the LFE, so a 7.1 stream had it on
@@ -2345,7 +2347,8 @@ meters do not exist yet. See the [roadmap](README.md#roadmap).
 - Licensing is split: MIT for `engine/`, `oaa_engine` and `oaa_core`;
   GPL-3.0-or-later for the application, UI, CLI and plugin.
 
-[unreleased]: https://github.com/JonasGrunau/open_audio_analyzer/compare/v0.8.0...HEAD
+[unreleased]: https://github.com/JonasGrunau/open_audio_analyzer/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/JonasGrunau/open_audio_analyzer/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/JonasGrunau/open_audio_analyzer/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/JonasGrunau/open_audio_analyzer/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/JonasGrunau/open_audio_analyzer/compare/v0.5.0...v0.6.0

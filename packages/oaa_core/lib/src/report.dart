@@ -183,7 +183,7 @@ class AnalysisReport {
 
   final List<ReportTimelinePoint> timeline;
 
-  /// What produced this report, as `Open Audio Analyzer 0.8.0`.
+  /// What produced this report, as `Open Audio Analyzer 0.9.0`.
   final String toolVersion;
 
   /// Peak to loudness ratio, LU. Derived, so it cannot disagree with its parts.
