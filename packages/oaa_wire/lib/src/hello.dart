@@ -157,9 +157,15 @@ class WireHello {
       return 'The host speaks wire protocol $protocolVersion and this display '
           'speaks ${WireFrame.minimumVersion}-${WireFrame.protocolVersion}.';
     }
-    if (snapshotPayloadBytes != SnapshotWire.payloadBytes) {
+    // Two sizes are legal, and for the same reason the version range is: this
+    // build writes the version 4 table and can read the one versions 1 to 3
+    // froze, so an older plugin is a producer it understands rather than one it
+    // hangs up on. Anything else is a table nobody here has seen.
+    if (snapshotPayloadBytes != SnapshotWire.payloadBytes &&
+        snapshotPayloadBytes != SnapshotWireLegacy.payloadBytes) {
       return 'The host sends $snapshotPayloadBytes-byte measurements and this '
-          'display expects ${SnapshotWire.payloadBytes}.';
+          'display expects ${SnapshotWire.payloadBytes} or '
+          '${SnapshotWireLegacy.payloadBytes}.';
     }
     if (maxChannels != MeterShape.maxChannels ||
         spectrumBands != MeterShape.spectrumBands ||

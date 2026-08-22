@@ -30,13 +30,17 @@
  * Regenerating, after a *deliberate* protocol change only:
  *
  *   cmake --build plugin/build --target oaa_wire_fixture
- *   ./plugin/build/oaa_wire_fixture plugin/test/golden/wire_v3.bin
+ *   ./plugin/build/oaa_wire_fixture plugin/test/golden/wire_v4.bin
  *
- * `wire_v3.bin` is the one that tracks this serialiser, and the one
+ * `wire_v4.bin` is the one that tracks this serialiser, and the one
  * `wire_fixture_matches_golden` compares against. **Never regenerate
- * `wire_v2.bin`.** It is frozen evidence that version 3 moved a frame type and
- * no table; bytes written by today's build prove nothing about what yesterday's
- * wrote, so regenerating it destroys the only thing that holds the promise.
+ * `wire_v2.bin`, and as of version 4 never `wire_v3.bin` either.** Bytes
+ * written by today's build prove nothing about what yesterday's wrote, so
+ * regenerating either destroys the only thing that holds a promise about the
+ * past. `v2` against `v3` is the evidence that version 3 moved a frame type and
+ * no table; `v3` on its own is now the only exercise of the version 1-3 decode
+ * path, which is what lets an already-installed plugin survive an app
+ * upgrade.
  *
  * The values below include a NaN and a negative infinity on purpose. Both have
  * bit patterns that a careless serialiser normalises — NaN through arithmetic,

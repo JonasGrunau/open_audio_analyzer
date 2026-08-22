@@ -18,17 +18,22 @@ import 'package:test/test.dart';
 void main() {
   _lufsModeTests();
 
-  group('the frozen shape of protocol version 1', () {
-    test('a snapshot payload is 15,056 bytes', () {
-      // Frozen. `docs/WIRE.md` publishes this number, the plugin's C++ sender
-      // asserts it, and HELLO refuses a producer that disagrees. If a change to
-      // MeterShape moved it, every remote display in the field would refuse
+  group('the frozen shape of protocol version 4', () {
+    test('a snapshot payload is 7,652 bytes for one analysis block', () {
+      // Frozen for as long as the protocol version is. `docs/WIRE.md` publishes
+      // this number, the plugin's C++ sender asserts it, and HELLO refuses a
+      // producer that announces neither this nor the legacy size. If a change
+      // to MeterShape moved it, every remote display in the field would refuse
       // every host that had not been updated in lockstep — which is the correct
       // behaviour, and this test is where you find that out.
-      expect(SnapshotWire.payloadBytes, 15056);
+      expect(SnapshotWire.payloadBytes, 7652);
+      expect(SnapshotWire.baseBytes, 3556);
+      expect(SnapshotWire.maxPayloadBytes, 3556 + 4096 * 4);
     });
 
     test('field offsets match the published table', () {
+      // Identical to versions 1-3 up to the end of `clip`; everything after it
+      // moved, because the five plotted arrays are two bytes an element now.
       expect(SnapshotWire.offsetGeneration, 0);
       expect(SnapshotWire.offsetElapsedSeconds, 8);
       expect(SnapshotWire.offsetSampleRate, 16);
@@ -42,15 +47,51 @@ void main() {
       expect(SnapshotWire.offsetVu, 160);
       expect(SnapshotWire.offsetClip, 192);
       expect(SnapshotWire.offsetSpectrum, 224);
-      expect(SnapshotWire.offsetSpectrumPeak, 2272);
-      expect(SnapshotWire.offsetLraLow, 4320);
-      expect(SnapshotWire.offsetSpectrumPan, 4336);
-      expect(SnapshotWire.offsetScope, 6384);
-      expect(SnapshotWire.offsetHistogram, 14576);
+      expect(SnapshotWire.offsetSpectrumPeak, 1248);
+      expect(SnapshotWire.offsetLraLow, 2272);
+      expect(SnapshotWire.offsetSpectrumPan, 2288);
+      expect(SnapshotWire.offsetHistogram, 3312);
+      expect(SnapshotWire.offsetScopeFrames, 3552);
+      expect(SnapshotWire.offsetScope, 3556);
+    });
+
+    test('every 16-bit array starts on an even offset', () {
+      // Not decoration: a `Uint16List.view` onto an odd offset throws, and the
+      // layout is derived from MeterShape rather than written out, so a future
+      // shape change could quietly produce one.
+      for (final offset in [
+        SnapshotWire.offsetSpectrum,
+        SnapshotWire.offsetSpectrumPeak,
+        SnapshotWire.offsetSpectrumPan,
+        SnapshotWire.offsetScope,
+        SnapshotWire.offsetHistogram,
+      ]) {
+        expect(offset.isEven, isTrue, reason: 'offset $offset is odd');
+      }
+      // And every float32 field stays four-byte aligned for the same reason.
+      for (final offset in [
+        SnapshotWire.offsetLraLow,
+        SnapshotWire.offsetLraHigh,
+        SnapshotWire.offsetLraGate,
+      ]) {
+        expect(offset % 4, 0, reason: 'offset $offset is not 4-aligned');
+      }
+    });
+
+    test('the frozen version 1-3 table is still described exactly', () {
+      // Decode-only, and it must not drift: an older plugin outlives an app
+      // upgrade, and these are the offsets its bytes are written at.
+      expect(SnapshotWireLegacy.payloadBytes, 15056);
+      expect(SnapshotWireLegacy.offsetSpectrum, 224);
+      expect(SnapshotWireLegacy.offsetSpectrumPeak, 2272);
+      expect(SnapshotWireLegacy.offsetLraLow, 4320);
+      expect(SnapshotWireLegacy.offsetSpectrumPan, 4336);
+      expect(SnapshotWireLegacy.offsetScope, 6384);
+      expect(SnapshotWireLegacy.offsetHistogram, 14576);
     });
 
     test('a whole snapshot frame is header plus payload', () {
-      expect(SnapshotFrame().bytes.length, 12 + 15056);
+      expect(SnapshotFrame().bytes.length, 12 + SnapshotWire.maxPayloadBytes);
     });
   });
 
@@ -128,15 +169,81 @@ void main() {
 
       final decoded = _roundTrip(source);
 
+      // Exact, because these four are still float32 on the wire: they are read
+      // as numbers beside the meters they drive, not only as pixels.
       expect(decoded.peak, source.peak);
       expect(decoded.rms, source.rms);
       expect(decoded.vu, source.vu);
       expect(decoded.clip, source.clip);
-      expect(decoded.spectrum, source.spectrum);
-      expect(decoded.spectrumPeak, source.spectrumPeak);
-      expect(decoded.spectrumPan, source.spectrumPan);
-      expect(decoded.scope, source.scope);
-      expect(decoded.histogram, source.histogram);
+
+      // The five plotted arrays are fixed point at version 4, so the claim is
+      // half a step of their own encoding — not "close enough". Anything looser
+      // would stop this noticing an array written through the wrong codec.
+      _expectClose(decoded.spectrum, source.spectrum, 0.5 / Quantise.dbStep);
+      _expectClose(
+        decoded.spectrumPeak,
+        source.spectrumPeak,
+        0.5 / Quantise.dbStep,
+      );
+      _expectClose(decoded.spectrumPan, source.spectrumPan, 0.5 / 32767);
+      // Only the part this measurement filled — over a wire the list is
+      // allocated at the protocol's maximum. See `MeterSource.scopeFrames`.
+      expect(decoded.scopeFrames, source.scopeFrames);
+      _expectClose(
+        decoded.scope.sublist(0, decoded.scopeFrames * 2),
+        source.scope,
+        0.5 / Quantise.sampleScale,
+      );
+      _expectClose(decoded.histogram, source.histogram, 0.5 / 0xFFFE);
+    });
+
+    test('a quantised array keeps NaN distinct from every real reading', () {
+      // The rule the protocol is built on, at the one place version 4 could
+      // have broken it: fixed point has no NaN of its own. A band that read as
+      // the floor instead would draw a spectrum flat along the bottom, which is
+      // a picture of silence — and silence is a measurement nobody took.
+      final source = _FakeSource();
+      source.spectrum[0] = double.nan;
+      source.spectrum[1] = Quantise.dbOrigin; // the very bottom of the range
+      source.spectrum[2] = double.negativeInfinity;
+      source.spectrumPan[0] = double.nan;
+      source.spectrumPan[1] = -1;
+      source.scope[0] = double.nan;
+      source.scope[1] = 0;
+      source.histogram[0] = double.nan;
+      source.histogram[1] = 0;
+
+      final decoded = _roundTrip(source);
+
+      expect(decoded.spectrum[0].isNaN, isTrue);
+      expect(decoded.spectrum[1].isNaN, isFalse);
+      expect(decoded.spectrum[1], closeTo(Quantise.dbOrigin, 0.01));
+      // Digital silence clamps to the bottom of the encoding rather than
+      // becoming "not measured"; it *was* measured, and it was silent.
+      expect(decoded.spectrum[2].isNaN, isFalse);
+
+      expect(decoded.spectrumPan[0].isNaN, isTrue);
+      expect(decoded.spectrumPan[1], closeTo(-1, 1e-4));
+
+      expect(decoded.scope[0].isNaN, isTrue);
+      expect(decoded.scope[1], 0);
+
+      expect(decoded.histogram[0].isNaN, isTrue);
+      expect(decoded.histogram[1], 0);
+    });
+
+    test('a sample past full scale is carried, not folded to the rim', () {
+      // A float file may legitimately exceed full scale. Q1.14 has headroom to
+      // +1.9999 for that reason — a goniometer that wrapped an intersample peak
+      // back inside the circle would draw a limiter that is not there.
+      final source = _FakeSource();
+      source.scope[0] = 1.5;
+      source.scope[1] = -1.5;
+
+      final decoded = _roundTrip(source);
+
+      expect(decoded.scope[0], closeTo(1.5, 1e-4));
+      expect(decoded.scope[1], closeTo(-1.5, 1e-4));
     });
 
     test('a NaN stays a NaN and never becomes a reading', () {
@@ -298,7 +405,7 @@ void main() {
   group('framing', () {
     test('a frame split across three chunks reassembles', () {
       final frame = SnapshotFrame()..encode(_FakeSource()..generation = 3);
-      final bytes = frame.bytes;
+      final bytes = frame.wire;
       final reader = FrameReader();
 
       reader.add(bytes.sublist(0, 5));
@@ -320,8 +427,8 @@ void main() {
       final second = SnapshotFrame()..encode(_FakeSource()..generation = 2);
 
       final reader = FrameReader()
-        ..add(first.bytes)
-        ..add(second.bytes);
+        ..add(first.wire)
+        ..add(second.wire);
 
       final snapshot = WireSnapshot();
 
@@ -344,7 +451,7 @@ void main() {
 
       final reader = FrameReader()
         ..add(unknown)
-        ..add(snapshot.bytes);
+        ..add(snapshot.wire);
 
       expect(reader.moveNext(), isTrue);
       expect(reader.type, 0x0010);
@@ -384,9 +491,9 @@ void main() {
       final fresh = SnapshotFrame()..encode(_FakeSource()..generation = 42);
 
       final reader = FrameReader()
-        ..add(interrupted.bytes.sublist(0, 6000))
+        ..add(interrupted.wire.sublist(0, 6000))
         ..reset()
-        ..add(fresh.bytes);
+        ..add(fresh.wire);
 
       expect(reader.moveNext(), isTrue);
       expect(reader.type, WireFrameType.snapshot);
@@ -399,14 +506,14 @@ void main() {
       // still reassemble across chunks, rather than one that has lost its
       // buffer or its offsets.
       final frame = SnapshotFrame()..encode(_FakeSource()..generation = 5);
-      final reader = FrameReader()..add(frame.bytes);
+      final reader = FrameReader()..add(frame.wire);
 
       expect(reader.moveNext(), isTrue);
       reader.reset();
 
-      reader.add(frame.bytes.sublist(0, 100));
+      reader.add(frame.wire.sublist(0, 100));
       expect(reader.moveNext(), isFalse);
-      reader.add(frame.bytes.sublist(100));
+      reader.add(frame.wire.sublist(100));
       expect(reader.moveNext(), isTrue);
       expect((WireSnapshot()..decode(reader.payload)).generation, 5);
     });
@@ -476,7 +583,30 @@ void main() {
           producerName: 'appended a field',
         ),
       );
-      expect(decoded.incompatibility, contains('15060'));
+      expect(decoded.incompatibility, contains('7652'));
+    });
+
+    test('the legacy snapshot size is accepted, and only that one', () {
+      WireHello sized(int bytes) => _decodeHello(
+        WireHello(
+          snapshotPayloadBytes: bytes,
+          abiVersion: 3,
+          maxChannels: MeterShape.maxChannels,
+          spectrumBands: MeterShape.spectrumBands,
+          scopePoints: MeterShape.scopePoints,
+          histogramBins: MeterShape.histogramBins,
+          producerName: 'a plugin that predates version 4',
+        ),
+      );
+
+      // The promise `WireFrame.minimumVersion` makes: a plugin installed before
+      // the app was upgraded still draws. It announces the version 1-3 size.
+      expect(sized(SnapshotWireLegacy.payloadBytes).incompatibility, isNull);
+      expect(sized(SnapshotWire.payloadBytes).incompatibility, isNull);
+
+      // Anything between them is a table nobody here has ever written, and
+      // guessing at it is how a meter draws a confident wrong number.
+      expect(sized(12000).incompatibility, isNotNull);
     });
 
     test('a newer ABI is accepted — it is not the check that matters', () {
@@ -513,6 +643,9 @@ WireSnapshot _roundTrip(MeterSource source) =>
 /// its test, which is why this suite runs with no toolchain, no native library
 /// and no audio device.
 class _FakeSource implements MeterSource {
+  @override
+  Transport transport = Transport.none;
+
   @override
   int generation = 0;
 
@@ -616,6 +749,9 @@ class _FakeSource implements MeterSource {
   final Float32List scope = Float32List(MeterShape.scopePoints * 2);
 
   @override
+  int scopeFrames = MeterShape.scopePoints;
+
+  @override
   final Float32List histogram = Float32List(MeterShape.histogramBins);
 
   @override
@@ -717,4 +853,20 @@ void _lufsModeTests() {
       expect(region.sameAs(moved), isFalse);
     });
   });
+}
+
+/// Asserts two arrays agree to within [tolerance], element for element.
+///
+/// Written out rather than `pairwiseCompare` so that a failure names the index
+/// — an array of 2,048 that differs at one place is otherwise reported as two
+/// walls of numbers.
+void _expectClose(
+  List<double> actual,
+  List<double> expected,
+  double tolerance,
+) {
+  expect(actual, hasLength(expected.length));
+  for (var i = 0; i < expected.length; i++) {
+    expect(actual[i], closeTo(expected[i], tolerance), reason: 'element $i');
+  }
 }

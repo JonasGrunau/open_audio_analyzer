@@ -1105,8 +1105,9 @@ so a release built from a fork is unsigned and every script says so. See
   `displayTargetId` and nothing honours it yet: assigning tabs to a particular
   screen means the host has to be able to tell two displays apart, and in a
   protocol where the display says nothing at all, it cannot. Either the display
-  identifies itself — which is a client→host frame, so a protocol version past
-  **2** — or
+  identifies itself — which is a client→host frame, and the display port has
+  none by policy rather than by limitation: the protocol has had one since
+  version 3, on the ingest port, which is loopback — or
   the host keys assignments by address, which breaks on DHCP. Until then the
   display shows the whole preset and the viewer picks the tab.
 - 📱 **Tablets are display-first.** FFI works fine on iPadOS and Android, but

@@ -6,6 +6,10 @@ Repository scripts. Nothing here ships. GPL-3.0-or-later.
 |------|---------|
 | `docs.dart` | Builds the documentation site from the Markdown in this repository, and the mark from `assets/brand/oaa-mark.svg`. `dart run tool/docs.dart --out build/docs`. |
 | `bench_spectrogram.dart` | The measurements behind the figures in `lib/src/modules/spectrogram.dart`: the run-length strategy against a rect per run, and the run counts on realistic band jitter that retired it in favour of the pixel path. `flutter test tool/bench_spectrogram.dart`. |
+| `bench_material.dart` | The measurement the three benchmarks drive, and the one place that knows the wire. It encodes through `SnapshotWire.encode` and decodes through `WireSnapshot` rather than writing offsets by hand, because a harness that reimplements the layout drifts from it — this one did, at protocol version 4, and went on reporting plausible timings for a window that drew nothing. Not a benchmark itself. |
+| `bench_wire.dart` | What a remote display pays to decode a 15,056-byte snapshot: the bulk path against the accessor-per-element loop it replaced, and the encode cost on the desktop end. `flutter test tool/bench_wire.dart`. |
+| `bench_gpu.dart` | The same fourteen modules on a **real GPU**, read off `FrameTiming` in a profile build: `flutter run -d macos --profile -t tool/bench_gpu.dart`. `bench_modules.dart` rasterises in software and overstated the phase scope 2.5x, so this is the one whose numbers are quoted. Measure one module at a time with `--dart-define=only=<id>` — a full sweep throttles. |
+| `bench_modules.dart` | What each of the fourteen modules costs per published frame, recording and rasterising separately, driven through a `WireSnapshot` so the figures are a tablet's arithmetic. This is what cleared the wire and named the phase scope. `flutter test tool/bench_modules.dart`. |
 | `fetch_test_audio.dart` | Downloads the Creative Commons music the application is looked at with. `dart run tool/fetch_test_audio.dart`. Writes to `test_audio/`, which is gitignored. |
 
 ## Rules
@@ -47,10 +51,21 @@ Repository scripts. Nothing here ships. GPL-3.0-or-later.
   `dart:io` and `dart:convert` and nothing else, which is why
   `ci.yml`'s `docs` job is a Dart SDK and forty seconds with no Flutter
   anywhere in it. That constraint belongs to `docs.dart` rather than to this
-  directory — `bench_spectrogram.dart` needs `dart:ui`, and therefore an engine
+  directory — the benchmarks need `dart:ui`, and therefore an engine
   — and it survives as long as the `docs` job runs `docs.dart` and nothing else.
 
-- **`bench_spectrogram.dart` is run by hand, and is not a gate.** It is written
+- **A benchmark reports how many pixels it inked, and that is not decoration.**
+  `bench_modules.dart` fails a module that inked fewer than 500 and
+  `bench_gpu.dart` prints `DREW NOTHING` beside it. Both exist because the
+  harness once stopped drawing entirely — a protocol change moved the offsets it
+  was writing by hand — and neither the timings nor the exit code noticed: a
+  window that draws nothing still lays out, still presents frames, and still
+  reports figures that are low, stable and completely plausible. It was caught
+  by somebody glancing at the window. A benchmark that cannot see what it
+  measured is a random number generator, so every figure is published beside the
+  evidence that there was something there to measure.
+
+- **The three benchmarks are run by hand, and none of them is a gate.** Written
   as a `flutter test` file because `dart:ui` needs an engine, not because it
   tests anything: `flutter test` with no arguments globs `test/`, so this never
   runs in CI, and it asserts nothing about a timing. A stopwatch in the gate

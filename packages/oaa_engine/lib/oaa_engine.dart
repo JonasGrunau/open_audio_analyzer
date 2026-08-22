@@ -328,6 +328,12 @@ class OaaEngine implements MeterSource {
   @override
   final Float32List scope;
 
+  /// Always one analysis block: an engine publishes a snapshot per block, so
+  /// the whole of [scope] is always this measurement's. It varies only over a
+  /// wire — see `MeterSource.scopeFrames`.
+  @override
+  int get scopeFrames => MeterShape.scopePoints;
+
   /// Fraction of the gated short-term loudness blocks in each of
   /// [kOaaHistogramBins] bins between [kOaaHistogramMinLufs] and
   /// [kOaaHistogramMaxLufs]. Sums to 1, or to 0 before anything is measured.
@@ -580,6 +586,13 @@ class OaaEngine implements MeterSource {
   /// the bands sit at the floor and are indistinguishable from silence.
   @override
   bool get hasSpectrum => !_disposed && _snapshot.flags & (1 << 2) == 0;
+
+  @override
+  /// Always [Transport.none]. An audio device has no playhead, and the engine
+  /// must not learn what one is — the DAW's transport reaches the application
+  /// over the wire, beside the measurements rather than inside them.
+  @override
+  Transport get transport => Transport.none;
 
   @override
   double get lufsMomentary => _disposed ? double.nan : _snapshot.lufs_momentary;

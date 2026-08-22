@@ -78,6 +78,18 @@ class _RemoteDisplayScreenState extends State<RemoteDisplayScreen>
 
   @override
   Widget build(BuildContext context) {
+    // The clock's ceiling, which nothing else on this screen would ever set.
+    //
+    // On the desktop both this and `targetFps` are pushed by `_StatusBar` in
+    // `lib/src/app/oaa_app.dart`, and a display has no status bar — so a tablet
+    // ran at the `MeterClock` default of 60 fps and ignored the platform's
+    // reduce-motion preference outright, on the one kind of hardware where a
+    // person is most likely to have asked for it. This is the half that costs
+    // nothing to be right about; see the note in `AGENTS.md` for the fps half,
+    // which needs a control this screen does not yet have.
+    _clock.reducedMotion =
+        MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+
     // The palette follows the host's skin, so the two screens look like one
     // instrument. Rebuilt only when the skin actually changes — a skin arrives
     // once per session, not once per frame.

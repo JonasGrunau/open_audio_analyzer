@@ -95,17 +95,20 @@ void writeSnapshotFrame(std::vector<uint8_t>& out, const oaa_snapshot& s,
   w.f32Array(s.vu, kChannels);
   w.u32Array(s.clip, kChannels);
 
-  w.f32Array(s.spectrum, kBands);
-  w.f32Array(s.spectrum_peak, kBands);
+  w.dbArray(s.spectrum, kBands);
+  w.dbArray(s.spectrum_peak, kBands);
 
   w.f32(s.lra_low);
   w.f32(s.lra_high);
   w.f32(s.lra_gate);
   w.f32(s.reserved3);
 
-  w.f32Array(s.spectrum_pan, kBands);
-  w.f32Array(s.scope, kScope);
-  w.f32Array(s.histogram, kHistogram);
+  w.unitArray(s.spectrum_pan, kBands);
+  w.fractionArray(s.histogram, kHistogram);
+
+  /* Last, and length-prefixed. A plugin always sends exactly one block. */
+  w.u32(static_cast<uint32_t>(kScopeFrames));
+  w.sampleArray(s.scope, kScope);
 
   /* Cheap, and it catches the one bug this file can plausibly have: a field
    * transcribed in the wrong order still totals correctly, but a field *missed*

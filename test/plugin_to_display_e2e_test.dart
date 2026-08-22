@@ -435,7 +435,13 @@ Map<String, double> _readings(MeterSource source) => <String, double>{
   'spectrum[256]': source.spectrum[256],
   'spectrumPeak[256]': source.spectrumPeak[256],
   'spectrumPan[256]': source.spectrumPan[256],
-  'scope[0]': source.scope[0],
+  // The **newest** pair, not the oldest. The app relays a scope run that
+  // accumulates every block it measured between two sends, so the display's
+  // `scope[0]` is older audio than the app's — by design, and the whole reason
+  // a remote oscilloscope can draw a contiguous trace at all. What must match
+  // is the leading edge, which is the same moment on both sides.
+  'scope[newest].l': source.scope[(source.scopeFrames - 1) * 2],
+  'scope[newest].r': source.scope[(source.scopeFrames - 1) * 2 + 1],
   'histogram[0]': source.histogram[0],
 };
 

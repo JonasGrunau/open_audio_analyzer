@@ -88,6 +88,9 @@ class _Tone implements MeterSource {
   double get elapsedSeconds => _frames / _rate;
   @override
   Float32List get scope => _scope;
+
+  @override
+  int get scopeFrames => _scope.length ~/ 2;
   @override
   dynamic noSuchMethod(Invocation invocation) => throw UnimplementedError();
 }

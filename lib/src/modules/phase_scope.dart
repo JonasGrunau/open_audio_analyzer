@@ -48,6 +48,47 @@ import '../clock/meter_clock.dart';
 /// than compounded through an 8-bit surface, and the trail no longer blurs. The
 /// old one resampled the whole picture every frame, so a moving dot smeared
 /// instead of fading in place.
+/// ---------------------------------------------------------------------------
+/// It is fragment-bound, and that is why the fix is sparseness
+///
+/// This was the most expensive module in the application to rasterise, by a
+/// long way, and the number that mattered took two benchmarks to find.
+/// `tool/bench_modules.dart` runs under `flutter test`, which has no GPU, and
+/// put the rasterise at ~24 ms — a figure worth distrusting, because points are
+/// exactly what a GPU is good at. `tool/bench_gpu.dart` exists because of that
+/// distrust and reads the engine's own `FrameTiming` in a profile build: on an
+/// Apple Silicon Mac the honest answer was **9.6 ms of rasterising per frame**,
+/// over half a 60 fps budget for one module, on a feature whose point is a
+/// tablet with less GPU than that. The software figure overstated it 2.5x and
+/// reordered the table underneath it; the ranking's top entry survived.
+///
+/// **The cost is fragments, and only fragments.** Drawing all forty frames in a
+/// single `drawRawPoints` call measured 5,985 µs against 6,057 µs for forty
+/// separate ones, so batching the calls buys nothing and there is no point
+/// building a bucketing scheme for them. 40,960 translucent dots over a plot
+/// about 300 px across is four and a half dots per pixel, and blending them is
+/// the entire bill.
+///
+/// So the two things that worked both remove fragments rather than rearrange
+/// them, and neither touches the exactness the trail is built on:
+///
+///   - **No antialiasing.** 9,616 → 6,057 µs. A 1.4 px dot in a cloud of tens
+///     of thousands gains nothing legible from it. `StrokeCap.square` is
+///     *slower* than round, which sounds backwards and is not: Skia has a fast
+///     path for round points and none for square ones.
+///   - **Sparseness that follows the fade** — see [_detailFor]. 19,200 points
+///     instead of 40,960.
+///
+/// Together, **9.6 ms to 3.3 ms** on the GPU, and 24.3 ms to 9.1 ms on the
+/// software rasteriser — two backends, the same 2.6x, which is the sort of
+/// agreement worth having before believing either. What was *not* done is worth recording too:
+/// accumulating the trail into a pixel buffer, the way `spectrogram.dart` does.
+/// That works there because a spectrogram scrolls — one new column and a
+/// memmove, O(height) a frame. A trail decays everywhere at once, so the same
+/// idea is O(width x height) of Dart on the UI thread every published frame,
+/// and it would trade a parallel raster cost for a serial one while
+/// reintroducing the 8-bit compounding this design was written to escape.
+///
 class PhaseScopeModule extends StatefulWidget {
   const PhaseScopeModule({
     required this.engine,
@@ -57,6 +98,37 @@ class PhaseScopeModule extends StatefulWidget {
 
   final MeterSource engine;
   final MeterClock clock;
+
+  /// A permutation whose every power-of-two prefix is evenly spread.
+  ///
+  /// Bit reversal: position *p* receives sample `bitrev(p)`, so the first
+  /// 2^k positions hold samples spaced 2^(10-k) apart across the block. A
+  /// goniometer traces the signal's path in time, so a subsample that is even
+  /// in time is even along the path — which is what makes a shortened prefix
+  /// look like the same figure drawn more sparsely rather than like a piece of
+  /// it. Falls back to the identity if the block is not a power of two, which
+  /// no engine block is.
+  @visibleForTesting
+  static Int32List stratifiedOrder(int count) {
+    final order = Int32List(count);
+    final bits = count.bitLength - 1;
+    if (count != 1 << bits) {
+      for (var i = 0; i < count; i++) {
+        order[i] = i;
+      }
+      return order;
+    }
+    for (var i = 0; i < count; i++) {
+      var value = i;
+      var reversed = 0;
+      for (var bit = 0; bit < bits; bit++) {
+        reversed = (reversed << 1) | (value & 1);
+        value >>= 1;
+      }
+      order[i] = reversed;
+    }
+    return order;
+  }
 
   @override
   State<PhaseScopeModule> createState() => _PhaseScopeModuleState();
@@ -71,11 +143,44 @@ const double _decay = 0.86;
 /// surface can show, so the fortieth frame is the last that could contribute.
 const int _trailFrames = 40;
 
+/// How many detail levels a slot is stored at: full, half, quarter, eighth.
+const int _detailLevels = 4;
+
+/// Which of those a frame of a given age is drawn at.
+///
+/// **The dimmer a frame is, the more sparsely it is drawn.** This is the whole
+/// of the module's cost control and it is worth saying why it is legitimate.
+/// The trail is 40,960 points blended over a plot about 300 px across — four
+/// and a half dots per pixel — and it was measured at 9.6 ms of rasterising a
+/// frame on an Apple Silicon Mac, over half a 60 fps budget for one module, on
+/// a feature whose whole purpose is a tablet with less GPU than that. The cost
+/// is fragments and nothing else: drawing all forty frames in a *single*
+/// `drawRawPoints` call measured 5,985 µs against 6,057 µs for forty calls, so
+/// batching them buys nothing and only the point count is left.
+///
+/// Ages 30 to 39 are drawn at alphas from 0.011 down to 0.0024 — at most three
+/// parts in 255. An eighth of the points at three parts in 255 is not a picture
+/// anybody can tell from all of them, and the frames that carry the shape you
+/// actually read are untouched: the first ten are drawn whole.
+int _detailFor(int age) {
+  if (age < 10) return 0;
+  if (age < 20) return 1;
+  if (age < 30) return 2;
+  return 3;
+}
+
 class _PhaseScopeModuleState extends State<PhaseScopeModule> {
   /// [_trailFrames] frames of scope points, oldest overwritten. The views onto
   /// its slots are built once, so drawing neither copies nor allocates.
   Float32List _ring = Float32List(0);
-  List<Float32List> _frames = const [];
+
+  /// Views onto each slot, one per detail level — see [_detail]. Built with the
+  /// ring so that a paint picks one rather than allocating one.
+  List<List<Float32List>> _frames = const [];
+
+  /// Where a sample goes inside a slot, so that a *prefix* of the slot is a
+  /// subsample spread evenly over the block. See [PhaseScopeModule.stratifiedOrder].
+  Int32List _order = Int32List(0);
   int _next = 0;
   int _filled = 0;
 
@@ -97,24 +202,59 @@ class _PhaseScopeModuleState extends State<PhaseScopeModule> {
   /// sitting exactly at the origin.
   int lastGeneration = 0;
 
-  /// Stores one frame of scope points as the newest.
-  void write(Float32List scope) {
-    if (scope.isEmpty) return;
-    if (_ring.length != _trailFrames * scope.length) {
-      _ring = Float32List(_trailFrames * scope.length);
+  /// Stores the newest measurement's points as the newest trail frame.
+  ///
+  /// **Takes at most [MeterShape.scopePoints] pairs, and the newest ones.** A
+  /// snapshot off a wire may carry several blocks of audio in one frame — see
+  /// `MeterSource.scopeFrames` — and a goniometer does not want them: it draws
+  /// a cloud rather than a waveform, the extra pairs land on pixels the others
+  /// already covered, and a variable run would give the ring a variable stride
+  /// and break the stratified order below. The oscilloscope is the module that
+  /// needs every sample; this one needs a representative scatter of them.
+  void write(Float32List scope, int frames) {
+    if (scope.isEmpty || frames <= 0) return;
+
+    final take = frames < MeterShape.scopePoints
+        ? frames
+        : MeterShape.scopePoints;
+    final from = (frames - take) * 2;
+    final slotLength = MeterShape.scopePoints * 2;
+
+    if (_ring.length != _trailFrames * slotLength) {
+      _ring = Float32List(_trailFrames * slotLength);
+      _order = PhaseScopeModule.stratifiedOrder(MeterShape.scopePoints);
       _frames = [
         for (var slot = 0; slot < _trailFrames; slot++)
-          Float32List.sublistView(
-            _ring,
-            slot * scope.length,
-            (slot + 1) * scope.length,
-          ),
+          [
+            for (var level = 0; level < _detailLevels; level++)
+              Float32List.sublistView(
+                _ring,
+                slot * slotLength,
+                slot * slotLength + (slotLength >> level),
+              ),
+          ],
       ];
       _next = 0;
       _filled = 0;
     }
 
-    _ring.setRange(_next * scope.length, (_next + 1) * scope.length, scope);
+    // Scattered rather than copied, so that the first half of a slot is every
+    // other sample and the first eighth is every eighth — see [_detail].
+    final base = _next * slotLength;
+    for (var i = 0; i < MeterShape.scopePoints; i++) {
+      final to = base + _order[i] * 2;
+      if (i < take) {
+        _ring[to] = scope[from + i * 2];
+        _ring[to + 1] = scope[from + i * 2 + 1];
+      } else {
+        // A short run — the link dropped a frame, or nothing has been measured
+        // yet. NaN rather than a stale pair: `drawRawPoints` skips it, where a
+        // leftover would draw a sample from a different moment.
+        _ring[to] = double.nan;
+        _ring[to + 1] = double.nan;
+      }
+    }
+
     _next = (_next + 1) % _trailFrames;
     if (_filled < _trailFrames) _filled++;
   }
@@ -139,7 +279,13 @@ class _PhaseScopeModuleState extends State<PhaseScopeModule> {
             ..color = colors.accent.withValues(
               alpha: math.pow(_decay, age).toDouble(),
             )
-            ..strokeCap = StrokeCap.round,
+            ..strokeCap = StrokeCap.round
+            // A 1.4 px dot in a cloud of tens of thousands gains nothing
+            // legible from being antialiased, and it measured 9,616 µs against
+            // 6,057 µs to have it. `StrokeCap.square` is *slower* than round
+            // here, which is the opposite of what it sounds like — Skia has a
+            // fast path for round points and none for square ones.
+            ..isAntiAlias = false,
       ];
     }
 
@@ -197,7 +343,7 @@ class _PhaseScopePainter extends MeterPainter {
 
     if (engine.generation != 0 && engine.generation != state.lastGeneration) {
       state.lastGeneration = engine.generation;
-      state.write(engine.scope);
+      state.write(engine.scope, engine.scopeFrames);
     }
 
     // --- The trail, oldest first so the newest frame is on top --------------
@@ -213,7 +359,7 @@ class _PhaseScopePainter extends MeterPainter {
         final slot = (state._next - 1 - age + _trailFrames * 2) % _trailFrames;
         canvas.drawRawPoints(
           ui.PointMode.points,
-          state._frames[slot],
+          state._frames[slot][_detailFor(age)],
           // strokeWidth is in the transformed space, so it has to be divided
           // back out or a dot would be `radius` pixels across.
           state._trail[age]..strokeWidth = _pointSize / radius,

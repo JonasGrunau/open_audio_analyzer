@@ -49,8 +49,17 @@ import '../clock/meter_clock.dart';
 /// once per analysis block — and an analysis block *is* 1024 frames, so
 /// consecutive publishes are contiguous: no overlap to deduplicate and no gap
 /// to invent. Everything below is built on that buffer, so the module works
-/// unchanged on a tablet reading a socket, and adding it moved neither
-/// `OAA_ABI_VERSION` nor the wire protocol.
+/// unchanged on a tablet reading a socket.
+///
+/// **Read [MeterSource.scopeFrames], never `scope.length`.** Over a wire the
+/// list is allocated at the protocol's maximum and only partly filled. That
+/// coincidence of 1024 with 1024 is also exactly what a remote display cannot
+/// have: its link runs at 15, 30 or 60 Hz against an engine measuring at about
+/// 47, so a frame stands for more audio than one block holds and the host sends
+/// what actually elapsed. This module was the reason that had to change — it
+/// detected the shortfall correctly and cleared its ring every single frame,
+/// which reads as a scope that will not draw rather than as a link that is
+/// starving it.
 ///
 /// **A publish nobody reads is gone, though.** `oaa_snapshot_acquire` is a
 /// seqlock with one slot, so contiguity holds only for a reader that sees every
@@ -361,7 +370,11 @@ class _ScopeHistory {
     if (_base == null) return;
 
     final scope = engine.scope;
-    final published = scope.length ~/ 2;
+    // Not `scope.length`: over a wire the list is allocated at the protocol's
+    // maximum and only partly filled, and how much of it is this measurement's
+    // is the difference between a contiguous trace and one that resets every
+    // frame. See `MeterSource.scopeFrames`.
+    final published = engine.scopeFrames;
     if (_sampleRate <= 0 || _rawFrames == 0 || published == 0) return;
 
     final elapsed = engine.elapsedSeconds;

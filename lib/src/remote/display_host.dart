@@ -162,6 +162,8 @@ class DisplayHost {
   Future<void> stop() async {
     _timer?.cancel();
     _timer = null;
+    _pump?.cancel();
+    _pump = null;
 
     // The displays go before anything is awaited. `server.close()` suspends,
     // and every turn between here and the resumption is one in which a frame
@@ -268,6 +270,66 @@ class DisplayHost {
       Duration(microseconds: (1000000 / _fps).round()),
       (_) => _publish(),
     );
+
+    _pump?.cancel();
+    _pump = Timer.periodic(_pumpInterval, (_) => _collect());
+  }
+
+  /// How often the source is checked for a new measurement, as opposed to how
+  /// often one is sent.
+  ///
+  /// The engine publishes about every 21 ms and the link runs at 15, 30 or
+  /// 60 Hz, so at every rate but the fastest a send stands for more than one
+  /// measurement. Sending the newest block and discarding the rest is what made
+  /// a remote oscilloscope gap on every single frame — see
+  /// `MeterSource.scopeFrames`. 5 ms is comfortably inside the engine's period
+  /// at every sample rate it supports, and the check itself is a generation
+  /// compare.
+  static const Duration _pumpInterval = Duration(milliseconds: 5);
+
+  Timer? _pump;
+
+  /// Audio measured since the last send, oldest first.
+  ///
+  /// Sized once at the protocol's maximum so that nothing on this path
+  /// allocates. It overflows on a link slow enough — 15 Hz above 48 kHz — and
+  /// when it does the oldest audio is dropped rather than the newest, because a
+  /// display drawing the recent past is right and one drawing a stale window is
+  /// not. The consumer is told how much arrived and draws the shortfall as the
+  /// gap it is.
+  final Float32List _run = Float32List(MeterShape.maxScopeFrames * 2);
+  int _runFrames = 0;
+
+  /// The generation [_collect] last took audio from, so that two askers cannot
+  /// consume each other's answer — the same rule as `MeterClock`.
+  int _collected = -1;
+
+  void _collect() {
+    final source = this.source;
+    if (source == null) return;
+
+    source.refresh();
+    if (source.generation == _collected) return;
+    _collected = source.generation;
+
+    final frames = source.scopeFrames;
+    if (frames <= 0) return;
+
+    final capacity = MeterShape.maxScopeFrames;
+    if (_runFrames + frames > capacity) {
+      // Keep the newest. Shifting is a copy of at most one full run, at the
+      // engine's rate, and only on a link that cannot keep up at all.
+      final keep = capacity - frames;
+      if (keep <= 0) {
+        _runFrames = 0;
+      } else {
+        _run.setRange(0, keep * 2, _run, (_runFrames - keep) * 2);
+        _runFrames = keep;
+      }
+    }
+
+    _run.setRange(_runFrames * 2, (_runFrames + frames) * 2, source.scope);
+    _runFrames += frames;
   }
 
   void _publish() {
@@ -283,17 +345,25 @@ class DisplayHost {
     final source = this.source;
     if (source == null) return;
 
-    // Our own acquire, for the reason in the class comment.
-    source.refresh();
+    // Our own acquire, for the reason in the class comment. [_collect] does the
+    // same on a much finer timer; both compare generations rather than trusting
+    // what `refresh` returned, which is what lets there be more than one asker.
+    _collect();
 
     final slot = _freeSlot();
     if (slot == null) {
       // Every buffer is still in flight, which means every client is slower
       // than the publish rate. Dropping this measurement is the whole design.
+      //
+      // The accumulated run is *kept*, not cleared: the audio was measured and
+      // the next frame that does go out should carry it. Clearing here would
+      // turn a dropped frame into a hole in the waveform.
       return;
     }
 
-    slot.frame.encode(source);
+    slot.frame.encode(source, scope: _run, scopeFrames: _runFrames);
+    _runFrames = 0;
+
     for (final client in _clients) {
       client.sendPooled(slot);
     }
@@ -436,7 +506,7 @@ class _RemoteClient {
     _inFlight = slot;
     slot.inFlight++;
     try {
-      _socket.add(slot.frame.bytes);
+      _socket.add(slot.frame.wire);
     } on Object {
       _release();
       close();

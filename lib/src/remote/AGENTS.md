@@ -235,9 +235,48 @@ halves live here.
   the first consumes the answer and the second is told nothing happened, so one
   of the two screens silently stops repainting. Do not put that back.
 
+- **The display screen sets the clock's ceiling, and cannot yet set its rate.**
+  On the desktop both `MeterClock.targetFps` and `MeterClock.reducedMotion` are
+  pushed by `_StatusBar` in `lib/src/app/oaa_app.dart`, and this screen has no
+  status bar — so for eight phases a tablet ran at the constructor default of
+  60 fps and ignored the platform's reduce-motion preference outright, on the
+  hardware where a person is most likely to have asked for it. `build` now sets
+  `reducedMotion` from the window, which needs nothing but a `MediaQuery`.
+
+  **`targetFps` is still unset, and closing that needs a decision rather than a
+  line of code.** The value lives in `settingsProvider`, and
+  `RemoteDisplayScreen` is deliberately not a `ConsumerWidget` — reading it
+  means either making it one, which puts a `ProviderScope` requirement on every
+  test that mounts this screen, or passing it in from the two call sites, one of
+  which (`_EngineFailure`) has no `ref`. Either way the tablet also wants a
+  control of its own, because the setting is on a screen a display is not
+  showing. Note that the link rate and the repaint rate are separate: the host
+  publishes at 15/30/60 and `MeterClock` already skips a tick with no new
+  generation, so the cost of the default is a `refresh()` per vsync rather than
+  wasted paints. What it really buys is a way to spend less on a slow tablet —
+  see the phase scope note in `lib/src/modules/phase_scope.dart`.
+
+- **The host collects on a fast timer and sends on a slow one, and the two are
+  not the same clock.** `_pump` runs every 5 ms and appends `scope` whenever the
+  source's generation moves; `_timer` runs at the link rate and sends what has
+  accumulated. That is not an optimisation — it is the only way the waveform is
+  continuous. A snapshot carries one analysis block, 1,024 frames, and a link at
+  30 Hz stands for 1,600 of them at 48 kHz: forwarding the newest block delivers
+  64 % of the audio, and the oscilloscope, which works out how much elapsed from
+  `elapsedSeconds`, correctly reads the shortfall as a discontinuity and clears
+  its ring. Every frame, silently, at every rate but 60. See
+  `MeterSource.scopeFrames` and `docs/WIRE.md` § The scope run.
+
+  Two details that are load-bearing. The run is **kept when a frame is dropped**
+  — the audio was measured, and clearing it would turn a dropped frame into a
+  hole. And it is truncated **oldest-first** when it overflows, because a
+  display drawing the recent past is right and one drawing a stale window is
+  not.
+
 - **`Socket.add` keeps the buffer it is given.** The snapshot frame is reused,
   so the host holds a ring of four and does not touch one until its write has
-  flushed. Overwriting a pending buffer splices half of one measurement onto
+  flushed. Each is allocated at the largest a frame may be, because the scope
+  run varies in length and nothing on the send path may allocate. Overwriting a pending buffer splices half of one measurement onto
   half of another, and the frame still parses.
 
 - **The `FrameReader` is reset on every path that ends a connection**, which is

@@ -2,6 +2,8 @@
 
 import 'dart:typed_data';
 
+import 'transport.dart';
+
 /// The shape of one published measurement, as counts rather than bytes.
 ///
 /// These mirror `OAA_MAX_CHANNELS` and friends in `engine/include/oaa/oaa.h`,
@@ -23,8 +25,19 @@ abstract final class MeterShape {
   /// Log-spaced spectrum bands published for drawing.
   static const int spectrumBands = 512;
 
-  /// Stereo sample pairs published for the phase scope.
+  /// Stereo sample pairs one analysis block carries — the engine's own block
+  /// size, so a snapshot straight off an engine always holds exactly this many.
   static const int scopePoints = 1024;
+
+  /// The most stereo pairs a *transported* snapshot may carry.
+  ///
+  /// A remote display publishes at 15, 30 or 60 Hz while the engine measures at
+  /// about 47, so one transported frame may have to carry several blocks of
+  /// audio if the waveform is to stay contiguous — see [MeterSource.scopeFrames]
+  /// for what goes wrong when it does not. 4,096 covers 48 kHz at the slowest
+  /// link rate (3,200 pairs) with headroom; past that the run is truncated and
+  /// the consumer is told, which it can draw honestly as a gap.
+  static const int maxScopeFrames = 4096;
 
   /// Bins in the published short-term loudness distribution, and the range in
   /// LUFS they span.
@@ -100,6 +113,23 @@ abstract interface class MeterSource {
   /// Whether measurement is under way. A stopped desktop engine and a remote
   /// link that has gone quiet both report false.
   bool get isRunning;
+
+  /// The playhead of the DAW behind this source, or [Transport.none].
+  ///
+  /// **On the interface rather than beside it, because a module cannot be
+  /// handed anything else.** The oscilloscope's tempo sync needs to know where
+  /// the bar line is, and the rule in `CLAUDE.md` is that a module reads a
+  /// [MeterSource] and never a concrete engine — so a display that needs the
+  /// playhead widens this rather than growing a second path to it. The
+  /// alternative was a callback threaded through the canvas, which the tablet
+  /// would not have had: it runs the same fourteen modules over a socket.
+  ///
+  /// [Transport.none] is the honest answer for a sound card, and for a DAW that
+  /// never says. Every field behind it has a presence bit — see [Transport] —
+  /// because a tempo of 0.0 is indistinguishable from a real one and a bar
+  /// counter that starts at 1 while the host is parked at bar 57 is exactly the
+  /// invented measurement this project forbids.
+  Transport get transport;
 
   // --- Whether the numbers can be trusted -----------------------------------
 
@@ -194,11 +224,35 @@ abstract interface class MeterSource {
   /// [MeterShape.dbFloor], because the pan of silence is not a direction.
   Float32List get spectrumPan;
 
-  /// The last [MeterShape.scopePoints] stereo frames, interleaved x=left,
-  /// y=right, oldest first. Raw sample values, not rotated into goniometer
-  /// axes — that rotation is a display choice and belongs in the painter's
-  /// transform, where it costs nothing.
+  /// Stereo frames, interleaved x=left, y=right, oldest first, of which the
+  /// first [scopeFrames] pairs are valid. Raw sample values, not rotated into
+  /// goniometer axes — that rotation is a display choice and belongs in the
+  /// painter's transform, where it costs nothing.
+  ///
+  /// **Read [scopeFrames], never `scope.length`.** The list is allocated once
+  /// at its largest and only partly filled; the rest is whatever the previous
+  /// frame left there.
   Float32List get scope;
+
+  /// How many stereo pairs of [scope] are this measurement's.
+  ///
+  /// Always [MeterShape.scopePoints] from an engine, because a snapshot is
+  /// published once per analysis block and that block is exactly that long. It
+  /// varies over a wire, and the reason is the one thing about this interface
+  /// worth reading twice.
+  ///
+  /// A remote display's link runs at 15, 30 or 60 Hz and the engine measures at
+  /// about 47, so at the default 30 Hz a frame stands for 1,600 frames of audio
+  /// at 48 kHz while one block carries 1,024. A transport that sent the newest
+  /// block regardless would hand the oscilloscope 64 % of the waveform and no
+  /// way to know it — and the module, which computes how much audio arrived
+  /// from `elapsedSeconds`, would correctly conclude the ring was no longer
+  /// contiguous and reset it. Every tick. So the host accumulates what it
+  /// measured between two sends and this says how much of it there is.
+  ///
+  /// Never more than [MeterShape.maxScopeFrames]. A consumer that finds less
+  /// audio here than elapsed knows a gap is real rather than assuming one.
+  int get scopeFrames;
 
   /// Fraction of the gated short-term blocks in each of
   /// [MeterShape.histogramBins] bins. Sums to 1, or to 0 before anything is

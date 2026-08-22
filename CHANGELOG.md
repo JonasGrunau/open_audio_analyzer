@@ -18,6 +18,83 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   back to the iPad Air 2 and the mini 4 — so what this excludes is an iPad that
   has not been updated, not an iPad that cannot be.
 
+### 🐛 Fixed
+- **The oscilloscope on a remote display draws a continuous waveform.** It
+  could not before, at either of the two slower link rates, and the reason was
+  structural rather than a slip: a snapshot carried one analysis block — 1,024
+  frames, 21.3 ms at 48 kHz — while a link at 30 Hz stands for 1,600 frames of
+  audio and one at 15 Hz for 3,200. The module worked out how much audio had
+  elapsed, correctly concluded its buffer was no longer contiguous, and cleared
+  it. On every single frame. Nothing logged anything and no test failed; it
+  simply would not draw, and only the 60 fps rate escaped it. The host now
+  accumulates what it measured between two sends and says how much that is, so
+  the trace is continuous at 15, 30 and 60. Above 48 kHz on the slowest rate
+  more audio can elapse than one frame may carry, and the shortfall is drawn as
+  the gap it is rather than filled in.
+- **A remote display honours the system's reduce-motion preference.** It
+  ignored it entirely and redrew at 60 fps whatever the tablet had been asked
+  for — the desktop reads that preference in its status bar, and a display has
+  no status bar. It now caps at 30 fps when the platform asks, like every other
+  screen. Choosing the display's own refresh rate from the tablet is still not
+  possible; the setting exists but nothing on that screen writes it.
+
+- **The phase scope costs less than half what it did to draw**, which is felt
+  on a tablet before anywhere else. It was 9.6 ms of rasterising per frame on
+  an Apple Silicon Mac — over half a 60 fps budget for one module — and is now
+  3.3 ms, from switching off antialiasing that a 1.4 px dot in a cloud of tens
+  of thousands gains nothing from, and from drawing the dimmest half of the
+  trail more sparsely than the half you actually read. The trail is the same
+  length, fades over the same time, and is still computed exactly rather than
+  compounded through an 8-bit surface. The figure it draws is unchanged; the
+  faintest edge of the cloud is very slightly sparser.
+
+- **A remote display uses less than half the network it did.** The measurement
+  frame is 7,648 bytes where it was 15,056, so a tablet at the default 30 Hz
+  link rate now costs about 230 kB/s instead of 452 kB/s, and 406 kB/s instead
+  of 904 kB/s at 60 Hz. The five arrays that exist only to be drawn — the
+  spectrum, its peak hold, its pan, the scope and the histogram — travel as
+  fixed point instead of 32-bit floats, at a resolution between two and four
+  orders of magnitude finer than the pixels they land on. **No number you read
+  changes**: every scalar, and the per-channel peak, RMS, VU and clip figures,
+  are carried exactly as before. This is wire protocol version 4, so a tablet
+  and a desktop must be on the same release to link — a mismatch is refused at
+  connect with a sentence naming both. A plugin already installed in your DAW
+  keeps working with a newer app, as it did before.
+
+  The waveform is the one thing that got *bigger*: it is now carried at the rate
+  it was measured rather than one block a frame (see the oscilloscope entry
+  under Fixed), which costs about 190 kB/s at 48 kHz whatever the link rate. Net
+  of that, 30 Hz is still down by a third and 60 Hz by more than half; 15 Hz is
+  the one rate that costs slightly more than it did, and it is the rate that was
+  most broken.
+
+### 🚧 Internal
+- Decoding a snapshot was measured and cleared as a cause of a slow tablet:
+  4 µs a frame against a 33,000 µs budget at the default link rate. It was
+  briefly rewritten as nine block copies, eleven times faster and worth
+  nothing; protocol version 4 then made that impossible anyway, because
+  fixed-point arrays have to be converted element by element rather than moved.
+  Recorded because the wire was the obvious suspect and was the wrong one —
+  the cost was in a single module's rasterising, two benchmarks away.
+- `tool/bench_wire.dart` and `tool/bench_modules.dart` measure the two halves of
+  what a remote display costs — decoding a frame, and drawing it — with
+  recording and rasterising reported separately, because they are different
+  costs on different threads and the interesting one is not always the one
+  being measured.
+- `tool/bench_gpu.dart` measures the same modules on a real GPU, off the
+  engine's own frame timings in a profile build. It exists because the software
+  rasteriser `flutter test` uses overstated the phase scope by two and a half
+  times and reordered the table under it — the module that needed the work was
+  still the one at the top, but no figure from a software backend was worth
+  quoting.
+- Every benchmark now reports how many pixels it inked, and fails or says so
+  loudly when that is none. The harness had drifted from the wire layout it was
+  writing by hand and stopped drawing altogether, while still reporting timings
+  that were low, stable and entirely plausible; it was caught by somebody
+  looking at the window rather than by anything in the suite. The material is
+  now built through the real encoder and decoder — `tool/bench_material.dart` —
+  so there is no second implementation of the protocol to drift.
+
 ## [0.8.0] — 2026-08-22
 
 ### ✨ Added

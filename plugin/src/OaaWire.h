@@ -46,6 +46,7 @@
 #pragma once
 
 #include <cassert>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -80,7 +81,7 @@ inline constexpr uint32_t kMagic = 0x5741414Fu;
  * changes when the bytes on the socket change. An additive ABI bump that leaves
  * `oaa_snapshot` untouched — which is exactly what the file-decoding work is —
  * must not invalidate a link that would have worked perfectly. */
-inline constexpr uint16_t kProtocolVersion = 3;
+inline constexpr uint16_t kProtocolVersion = 4;
 
 /* The oldest version this build can still decode. Version 3 added a frame type
  * and moved no table, so a version-2 peer is a peer whose every table this
@@ -115,10 +116,28 @@ enum class FrameType : uint16_t {
 inline constexpr size_t kHeaderBytes = 12;
 
 /* --------------------------------------------------------------------- */
-/* Payload sizes, frozen at protocol version 1 and unchanged in version 2 */
+/* Payload sizes                                                          */
 /* --------------------------------------------------------------------- */
 
-inline constexpr size_t kSnapshotBytes  = 15056;
+/* Version 4. The five arrays a module *plots* — spectrum, spectrum_peak,
+ * spectrum_pan, scope, histogram — are fixed point rather than float32, which
+ * is 95 % of the frame; every scalar a person reads as a number is still
+ * float32. See `quantise` below and the version 4 table in docs/WIRE.md.
+ *
+ * `scope` is also **variable length and last**, carrying however much audio
+ * elapsed rather than a fixed block, so that a relay publishing more slowly
+ * than the engine measures can still send a contiguous waveform. A plugin is
+ * never that relay — it publishes once per analysis block — so what it writes
+ * is always exactly one block and `kSnapshotBytes` is a constant here. */
+inline constexpr size_t kScopeFrames    = 1024;
+inline constexpr size_t kSnapshotBase   = 3556;
+inline constexpr size_t kSnapshotBytes  = kSnapshotBase + kScopeFrames * 4;
+
+/* What versions 1 to 3 sent, and still the size of the C struct. A consumer
+ * accepts either — an older plugin outlives an app upgrade — but nothing here
+ * writes this one any more. */
+inline constexpr size_t kSnapshotLegacyBytes = 15056;
+
 inline constexpr size_t kTransportBytes = 88;
 
 /* New at protocol version 3. mode u32 | flags u32 | start f64 | end f64 */
@@ -137,12 +156,88 @@ inline constexpr size_t kHelloFixedBytes = 32;
  * Neither is a decision to make by accident, which is why this is a build
  * failure and not a runtime check.
  *
- * The fix is to bump `kProtocolVersion`, add the field to the version-2 table
+ * The fix is to bump `kProtocolVersion`, add the field to the version-4 table
  * in docs/WIRE.md, and update both implementations together.
+ *
+ * Note what this no longer says. Up to version 3 the wire happened to be
+ * `sizeof(oaa_snapshot)` and a producer could memcpy the struct behind this
+ * assert; at version 4 it cannot, because the plotted arrays are two bytes per
+ * element on the wire and four in the struct. The guard is still worth having
+ * for exactly the reason above — it is the tripwire on the struct, not on the
+ * frame — so it is written against the struct's own size.
  */
-static_assert(sizeof(oaa_snapshot) == kSnapshotBytes,
+static_assert(sizeof(oaa_snapshot) == kSnapshotLegacyBytes,
               "oaa_snapshot changed size. See the comment above: this is a "
               "wire-protocol version decision, not a mechanical fix.");
+
+/* --------------------------------------------------------------------- */
+/* Fixed point, for the arrays that are only ever drawn                   */
+/* --------------------------------------------------------------------- */
+
+/*
+ * The other half of `packages/oaa_wire/lib/src/quantise.dart`. That file
+ * carries the reasoning — which consumer set each width, and why a display
+ * cannot tell the difference; this is the same arithmetic so that two
+ * implementations written against the document produce the same bytes.
+ *
+ * **The rule is narrow on purpose: a number a person reads stays exact.** Every
+ * scalar, and `peak`/`rms`/`vu`/`clip`, are still float32. Only the five
+ * plotted arrays are quantised.
+ *
+ * **NaN survives.** An unmeasured quantity travels as NaN and is drawn as an em
+ * dash — zero is a real reading for several of these — so each encoding
+ * reserves a code that is outside its value range.
+ */
+inline constexpr uint16_t kDbNaN       = 0xFFFF;
+inline constexpr uint16_t kDbMax       = 0xFFFE;
+inline constexpr float    kDbOrigin    = -160.0f;
+inline constexpr float    kDbStep      = 256.0f;
+
+inline constexpr int16_t  kUnitNaN     = -32768;
+inline constexpr int32_t  kUnitScale   = 32767;
+
+inline constexpr int16_t  kSampleNaN   = -32768;
+inline constexpr float    kSampleScale = 16384.0f;
+inline constexpr int32_t  kSampleMax   = 32767;
+
+inline constexpr uint16_t kFractionNaN = 0xFFFF;
+inline constexpr int32_t  kFractionMax = 0xFFFE;
+
+/* std::lround and Dart's num.round() both round half away from zero, which is
+ * what makes these two implementations agree on the boundary cases. */
+inline uint16_t quantiseDb(float v) {
+  if (std::isnan(v)) return kDbNaN;
+  /* Clamped before rounding: std::lround of an infinity is undefined, and
+   * -INFINITY is an ordinary reading here — it is what digital silence is. */
+  const double scaled = (double(v) - kDbOrigin) * kDbStep;
+  if (!(scaled > 0.0)) return 0;
+  if (scaled >= double(kDbMax)) return kDbMax;
+  return static_cast<uint16_t>(std::lround(scaled));
+}
+
+inline int16_t quantiseUnit(float v) {
+  if (std::isnan(v)) return kUnitNaN;
+  const double scaled = double(v) * kUnitScale;
+  if (scaled <= double(-kUnitScale)) return static_cast<int16_t>(-kUnitScale);
+  if (scaled >= double(kUnitScale)) return static_cast<int16_t>(kUnitScale);
+  return static_cast<int16_t>(std::lround(scaled));
+}
+
+inline int16_t quantiseSample(float v) {
+  if (std::isnan(v)) return kSampleNaN;
+  const double scaled = double(v) * kSampleScale;
+  if (scaled <= double(-kSampleMax)) return static_cast<int16_t>(-kSampleMax);
+  if (scaled >= double(kSampleMax)) return static_cast<int16_t>(kSampleMax);
+  return static_cast<int16_t>(std::lround(scaled));
+}
+
+inline uint16_t quantiseFraction(float v) {
+  if (std::isnan(v)) return kFractionNaN;
+  const double scaled = double(v) * kFractionMax;
+  if (!(scaled > 0.0)) return 0;
+  if (scaled >= double(kFractionMax)) return static_cast<uint16_t>(kFractionMax);
+  return static_cast<uint16_t>(std::lround(scaled));
+}
 
 /* --------------------------------------------------------------------- */
 /* DAW transport                                                          */
@@ -278,6 +373,14 @@ public:
 
   void f32Array(const float* v, size_t n) { for (size_t i = 0; i < n; ++i) f32(v[i]); }
   void u32Array(const uint32_t* v, size_t n) { for (size_t i = 0; i < n; ++i) u32(v[i]); }
+
+  void i16(int16_t v) { u16(static_cast<uint16_t>(v)); }
+
+  /* The version 4 arrays. See `quantise*` above. */
+  void dbArray(const float* v, size_t n) { for (size_t i = 0; i < n; ++i) u16(quantiseDb(v[i])); }
+  void unitArray(const float* v, size_t n) { for (size_t i = 0; i < n; ++i) i16(quantiseUnit(v[i])); }
+  void sampleArray(const float* v, size_t n) { for (size_t i = 0; i < n; ++i) i16(quantiseSample(v[i])); }
+  void fractionArray(const float* v, size_t n) { for (size_t i = 0; i < n; ++i) u16(quantiseFraction(v[i])); }
 
 private:
   std::vector<uint8_t>& out_;

@@ -22,7 +22,7 @@ abstract final class WireFrame {
   /// Version 3 adds `0x0020 SET_LUFS_MODE` and changes no existing table, which
   /// is what makes [isKnownVersion] able to accept a version-2 peer instead of
   /// refusing it.
-  static const int protocolVersion = 3;
+  static const int protocolVersion = 4;
 
   /// The oldest version whose tables this build can still decode.
   ///
@@ -139,7 +139,7 @@ class WireFormatException implements Exception {
 /// frame so a caller can hold on to bytes it will have decoded microseconds
 /// later. Decode out of the view; do not store it.
 class FrameReader {
-  FrameReader({int initialCapacity = WireFrame.headerBytes + 16384})
+  FrameReader({int initialCapacity = WireFrame.headerBytes + 20480})
     : _buffer = Uint8List(initialCapacity) {
     _view = ByteData.view(_buffer.buffer);
   }

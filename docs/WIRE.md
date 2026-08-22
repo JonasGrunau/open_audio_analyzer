@@ -1,7 +1,28 @@
 # The Open Audio Analyzer wire protocol
 
-**Protocol version 3.** This document is normative. Where an implementation and
+**Protocol version 4.** This document is normative. Where an implementation and
 this file disagree, this file is right and the implementation has a bug.
+
+**Version 4 is the first version to change a measurement table**, and it is the
+first that a version-3 consumer cannot read. The five arrays a module *plots* —
+`spectrum`, `spectrum_peak`, `spectrum_pan`, `scope`, `histogram` — are
+fixed point rather than `float32`, which takes the snapshot payload from 15,056
+bytes to **7,652** for one analysis block: 95 % of the frame was those five
+arrays, and none of their values is ever shown to a person as a number.
+Everything that *is* shown as a number — every scalar, and `peak`, `rms`, `vu`,
+`clip` — is still `float32`. See
+[Fixed point](#fixed-point-the-arrays-that-are-only-ever-drawn).
+
+**Version 4 also makes `scope` variable-length, and moves it last.** A frame
+carries the audio that actually elapsed since the previous one instead of a
+fixed 1,024 frames, because a link running slower than the engine measures
+cannot otherwise send a contiguous waveform — see
+[The scope run](#the-scope-run). Every other offset is fixed.
+
+A version-4 consumer still reads the version 1–3 table, and must: see
+[Version compatibility](#version-compatibility). A version-3 *consumer* meeting
+a version-4 producer refuses at the handshake, on the payload size, which is
+the designed behaviour and produces a sentence naming both numbers.
 
 Version 2 differed from version 1 in one field: the magic, which spells the
 application's name and moved when the name did. Every other table was the
@@ -35,7 +56,7 @@ the layout to draw them in** — never audio, never control.
 
 **The display port is deliberately one-directional.** A remote display cannot
 reset the host's integrated loudness, cannot change its device and cannot load a
-preset on it, in version 3 exactly as in version 2. That is not an omission to
+preset on it, in version 4 exactly as in versions 2 and 3. That is not an omission to
 be filled in later without thought: a read-only stream has no attack surface
 beyond the measurements it already publishes, and adding a control channel there
 is the change that turns "a screen in the live room shows the mix engineer's
@@ -130,8 +151,9 @@ not understand cost it a `seek` and nothing else.
 
 **A payload longer than 1 MiB is rejected and the connection is dropped.** A
 length field is an instruction to allocate, and a corrupt or hostile one that
-says four gigabytes must not be obeyed. Nothing in version 3 comes close to the
-cap; the largest legitimate frame is a snapshot at 15,068 bytes.
+says four gigabytes must not be obeyed. Nothing in version 4 comes close to the
+cap; the largest legitimate frame is a snapshot at 19,952 bytes — a full 4,096-
+pair scope run — and 7,664 in the ordinary one-block case.
 
 ### Version compatibility
 
@@ -139,7 +161,9 @@ cap; the largest legitimate frame is a snapshot at 15,068 bytes.
 Concretely: a frame whose version is greater than the receiver's own is refused
 and the connection dropped, because a higher version may have moved a table the
 receiver would then misread. A frame whose version is *lower* is accepted, and
-decoded with that version's tables — which for 2 against 3 are the same tables.
+decoded with that version's tables — which for 2 against 3 are the same tables,
+and for 1–3 against 4 are the frozen table in
+[the version 1–3 snapshot](#the-version-13-snapshot-table).
 
 This replaces the equality check versions 1 and 2 used, and it is a change to
 the framing rules rather than to any byte layout. Equality was survivable while
@@ -249,18 +273,24 @@ two is going to be believed.
 
 ### `0x0003` — SNAPSHOT
 
-**Payload is exactly 15,056 bytes at protocol versions 2 and 3.** Version 3
-added a frame type and moved no byte of this table. That is held rather than
-asserted: `packages/oaa_wire/test/plugin_golden_test.dart` decodes the frozen
-version-2 golden with a version-3 build and diffs it against the version-3 one.
+**Payload is `3,556 + 4 x scope_frames` bytes at protocol version 4** — 7,652
+for the one analysis block every measuring producer sends — and was exactly
+15,056 at versions 1 to 3. A consumer must accept both shapes and decode each
+with its own table; a producer writes only its own version's.
 
-The layout was *derived* mechanically, so that two hand-written serialisers
-cannot drift: take `oaa_snapshot` from `engine/include/oaa/oaa.h` at
-`OAA_ABI_VERSION` 3, walk it top to bottom in declaration order, emit every
+A payload that is neither 15,056 nor `3,556 + 4n` for some `0 <= n <= 4096` is
+refused, and so is one whose `scope_frames` disagrees with its length. The
+length and the count are two statements of the same fact and a receiver must not
+pick one: reading past the payload draws whatever the previous frame left
+there.
+
+The version 1–3 layout was *derived* mechanically, so that two hand-written
+serialisers could not drift: take `oaa_snapshot` from `engine/include/oaa/oaa.h`
+at `OAA_ABI_VERSION` 3, walk it top to bottom in declaration order, emit every
 member including the `reservedN` padding members, each in its natural width,
 little-endian, with no alignment padding between members.
 
-**That derivation produced the table below, and the table is what is
+**That derivation produced the tables below, and the tables are what is
 normative — not the current contents of `oaa.h`.** The distinction is the whole
 reason this is not a struct copy. `oaa_snapshot` will grow: fields get appended
 and `OAA_ABI_VERSION` is bumped, which is a private matter between the engine
@@ -268,6 +298,13 @@ and the things that link it. The wire layout changes only when the *protocol*
 version changes. If the two were the same thing, every engine change would
 silently break every remote display in the field, and it would break them by
 drawing wrong numbers rather than by failing.
+
+**Version 4 ends the coincidence that made a struct copy possible at all.** The
+five plotted arrays are two bytes an element on the wire and four in the struct,
+so a producer must walk the fields. Field *order* is unchanged; every offset
+after `clip` moved.
+
+#### The version 4 snapshot table
 
 | off | type | field | | off | type | field |
 |---|---|---|---|---|---|---|
@@ -277,20 +314,103 @@ drawing wrong numbers rather than by failing.
 | 20 | `u32` | `channels` | | 128 | `f32[8]` | `rms` |
 | 24 | `u32` | `flags` | | 160 | `f32[8]` | `vu` |
 | 28 | `u32` | `dropped_frames` | | 192 | `u32[8]` | `clip` |
-| 32 | `f32` | `lufs_momentary` | | 224 | `f32[512]` | `spectrum` |
-| 36 | `f32` | `lufs_short` | | 2272 | `f32[512]` | `spectrum_peak` |
-| 40 | `f32` | `lufs_integrated` | | 4320 | `f32` | `lra_low` |
-| 44 | `f32` | `lra` | | 4324 | `f32` | `lra_high` |
-| 48 | `f32` | `true_peak` | | 4328 | `f32` | `lra_gate` |
-| 52 | `f32` | `true_peak_max` | | 4332 | `f32` | `reserved3` |
-| 56 | `f32` | `sample_peak_max` | | 4336 | `f32[512]` | `spectrum_pan` |
-| 60 | `f32` | `reserved1` | | 6384 | `f32[2048]` | `scope` |
-| 64 | `f32` | `dr_short` | | 14576 | `f32[120]` | `histogram` |
-| 68 | `f32` | `dr_integrated` | | | | |
-| 72 | `f32` | `crest` | | **15056** | | **total** |
-| 76 | `f32` | `plr` | | | | |
+| 32 | `f32` | `lufs_momentary` | | 224 | `u16[512]` | `spectrum` |
+| 36 | `f32` | `lufs_short` | | 1248 | `u16[512]` | `spectrum_peak` |
+| 40 | `f32` | `lufs_integrated` | | 2272 | `f32` | `lra_low` |
+| 44 | `f32` | `lra` | | 2276 | `f32` | `lra_high` |
+| 48 | `f32` | `true_peak` | | 2280 | `f32` | `lra_gate` |
+| 52 | `f32` | `true_peak_max` | | 2284 | `f32` | `reserved3` |
+| 56 | `f32` | `sample_peak_max` | | 2288 | `i16[512]` | `spectrum_pan` |
+| 60 | `f32` | `reserved1` | | 3312 | `u16[120]` | `histogram` |
+| 64 | `f32` | `dr_short` | | 3552 | `u32` | `scope_frames` |
+| 68 | `f32` | `dr_integrated` | | 3556 | `i16[2n]` | `scope` |
+| 72 | `f32` | `crest` | | | | |
+| 76 | `f32` | `plr` | | **3556+4n** | | **total** |
 | 80 | `f32` | `psr` | | | | |
 | 84 | `f32` | `reserved2` | | | | |
+
+#### The scope run
+
+`scope_frames` is the number of stereo pairs in `scope`, and `scope` is `2 x
+scope_frames` `i16` samples, interleaved x=left, y=right, oldest first. At most
+**4,096** pairs.
+
+**A producer that measures sends one analysis block — 1,024 pairs — and nothing
+else.** The plugin is always that, and so is the app's own engine: a snapshot is
+published once per block.
+
+**A producer that relays sends what elapsed.** The app publishing to a remote
+display is the only one, and it is why this field exists. Its link runs at 15,
+30 or 60 Hz while the engine measures at about 47, so at the default 30 Hz one
+frame stands for 1,600 frames of audio at 48 kHz where a block carries 1,024. A
+relay that forwarded the newest block would deliver 64 % of the waveform, and
+the consuming oscilloscope — which works out how much audio arrived from
+`elapsed_seconds` — would correctly conclude its buffer was no longer
+contiguous and reset it. On every frame. So a relay accumulates what it measured
+between two sends and says how much that was.
+
+**The cap is a real limit, not a formality.** 4,096 pairs covers 48 kHz at the
+slowest link rate with headroom, and does not cover 96 kHz there. Past it the
+run is truncated **oldest-first** — a display drawing the recent past is right
+and one drawing a stale window is not — and the consumer, finding less audio
+than elapsed, draws the shortfall as the gap it is rather than inventing
+samples.
+
+`HELLO` advertises the payload size for a *one-block* frame, so that two builds
+still compare a single integer.
+
+#### The version 1–3 snapshot table
+
+Frozen. A version-4 consumer decodes a producer that announces 15,056 bytes with
+this table, which is what keeps a plugin working across an app upgrade.
+
+| off | type | field | | off | type | field |
+|---|---|---|---|---|---|---|
+| 0–223 | | *identical to the table above* | | 4320 | `f32` | `lra_low` |
+| 224 | `f32[512]` | `spectrum` | | 4324 | `f32` | `lra_high` |
+| 2272 | `f32[512]` | `spectrum_peak` | | 4328 | `f32` | `lra_gate` |
+| 4336 | `f32[512]` | `spectrum_pan` | | 4332 | `f32` | `reserved3` |
+| 6384 | `f32[2048]` | `scope` | | | | |
+| 14576 | `f32[120]` | `histogram` | | **15056** | | **total** |
+
+At versions 1–3, `sizeof(oaa_snapshot)` was *also* 15,056 with no internal
+padding on every platform Open Audio Analyzer targets, so a C or C++ producer
+could `memcpy` the struct behind
+`static_assert(sizeof(oaa_snapshot) == 15056)`. **That is no longer true at
+version 4** and the assert in `plugin/src/OaaWire.h` is now a tripwire on the
+struct rather than a licence to copy it.
+
+#### Fixed point: the arrays that are only ever drawn
+
+**The rule is narrow: a number a person reads stays exact.** Every scalar, and
+`peak`, `rms`, `vu` and `clip`, are `float32` at version 4 exactly as before —
+those are what a delivery decision is made from, and they are 128 bytes. The
+five quantised arrays are never displayed as numbers; they become pixels.
+
+| array | code | encoding | resolution |
+|---|---|---|---|
+| `spectrum`, `spectrum_peak` | `u16` | `round((dB + 160) * 256)`, clamped to `0..0xFFFE` | 1/256 dB |
+| `spectrum_pan` | `i16` | `round(v * 32767)`, clamped to `±32767` | 3.1e-5 |
+| `scope` | `i16` | Q1.14: `round(v * 16384)`, clamped to `±32767` | 6.1e-5, range ±1.9999 |
+| `histogram` | `u16` | `round(v * 0xFFFE)`, clamped to `0..0xFFFE` | 1.5e-5 |
+
+Each width was chosen against the widest consumer rather than rounded to a
+convenient number. The spectrum analyser resolves about 0.204 dB per pixel at a
+default size on a 1920-wide canvas and the spectrogram quantises to 1.625 dB
+itself, against a 1/256 dB step here. A goniometer needs about ten bits to put a
+sample on the right pixel, against Q1.14's fourteen.
+
+`scope` keeps headroom past full scale deliberately: a float file may
+legitimately exceed it, and folding an intersample peak back inside the circle
+would draw a limiter that is not there.
+
+**Clamp before rounding.** `-INFINITY` is an ordinary value here — it is what
+digital silence is — and rounding it is undefined in C and throws in Dart.
+
+**Each encoding reserves a code for NaN, outside its value range:** `0xFFFF` for
+the two unsigned encodings, `0x8000` (−32768) for the two signed ones. See
+below, and note that this is the only thing about version 4 that could have
+broken the rule the protocol is built on.
 
 `flags` are the `OAA_FLAG_*` bits from `oaa.h`: `1<<0` running, `1<<1` loudness
 unavailable, `1<<2` spectrum unavailable, `1<<3` overrun.
@@ -298,13 +418,6 @@ unavailable, `1<<2` spectrum unavailable, `1<<3` overrun.
 Reserved members are transmitted and ignored. Carrying them means a future
 field that fills a reserved slot moves nothing, and a receiver that ignores them
 costs nothing.
-
-Because `oaa.h` declares its 8-byte members first and everything after is
-4-byte, `sizeof(oaa_snapshot)` is *also* 15,056 with no internal padding on
-every platform Open Audio Analyzer targets. A C or C++ producer may therefore
-`memcpy` the struct instead of walking it — but only behind
-`static_assert(sizeof(oaa_snapshot) == 15056)`, so that the day the two stop
-agreeing is a build failure rather than a shifted frame.
 
 #### NaN is data
 
@@ -314,7 +427,11 @@ Zero is a legitimate reading for correlation, balance and several dB quantities,
 so it cannot double as "no data", and a display that draws a substituted zero is
 showing a number nobody measured. The receiving end renders an em dash.
 
-This is the one rule in this document that is worth breaking a build over.
+This is the one rule in this document that is worth breaking a build over, and
+version 4 is where it was nearly lost: fixed point has no NaN of its own, so
+each encoding above reserves a code for it and excludes that code from its value
+range. A band that arrived as the floor instead would draw a spectrum flat along
+the bottom — a picture of silence, which is a measurement nobody took.
 
 ### `0x0010` — DAW_TRANSPORT
 

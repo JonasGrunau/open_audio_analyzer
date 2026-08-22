@@ -111,6 +111,67 @@ void main() {
     });
   });
 
+  // The same promise as the group above, one version harder. Versions 1 to 3
+  // shared a table and could be decoded by pretending nothing had changed;
+  // version 4 moved every offset after the per-channel block and halved five
+  // arrays, so reading `wire_v3.bin` now exercises a genuinely separate path —
+  // `SnapshotWireLegacy`. That path exists for one reason and it is a real one:
+  // a plugin sits in the DAW's own folder and stays there across app upgrades,
+  // so the first version-4 app meets version-3 plugins on ordinary machines.
+  //
+  // These bytes were written by a compiler before version 4 was designed, which
+  // is what makes them evidence rather than a restatement.
+  group('a version-3 producer, decoded by this version-4 build', () {
+    test('is accepted, and its measurements arrive intact', () {
+      final reader = FrameReader()..add(_goldenBytes('wire_v3.bin'));
+
+      WireHello? hello;
+      final snapshot = WireSnapshot();
+      var sawSnapshot = false;
+
+      while (reader.moveNext()) {
+        expect(reader.version, 3);
+        switch (reader.type) {
+          case WireFrameType.hello:
+            hello = WireHello.decode(reader.payload);
+          case WireFrameType.snapshot:
+            snapshot.decode(reader.payload);
+            sawSnapshot = true;
+        }
+      }
+
+      expect(hello, isNotNull);
+      expect(hello!.snapshotPayloadBytes, SnapshotWireLegacy.payloadBytes);
+      expect(
+        hello.incompatibility,
+        isNull,
+        reason: 'an older plugin must still be drawable after an app upgrade',
+      );
+
+      expect(sawSnapshot, isTrue);
+
+      // Read through the old table, so these are exact rather than quantised —
+      // and they are the values the version-4 assertions below check too, which
+      // is what makes this a test of the *offsets* and not just of the parse.
+      expect(snapshot.channels, 2);
+      expect(snapshot.sampleRate, 48000);
+      expect(snapshot.loudnessRangeLow, closeTo(-20.0, 1e-5));
+      expect(snapshot.loudnessRangeHigh, closeTo(-12.0, 1e-5));
+      expect(snapshot.loudnessRangeGate, closeTo(-34.0, 1e-5));
+
+      for (var i = 0; i < MeterShape.spectrumBands; i++) {
+        expect(snapshot.spectrum[i], closeTo(-(i % 100).toDouble(), 1e-5));
+        expect(snapshot.spectrumPan[i], closeTo((i % 3).toDouble() - 1, 1e-5));
+      }
+      for (var i = 0; i < MeterShape.scopePoints * 2; i++) {
+        expect(snapshot.scope[i], closeTo((i % 7) / 7.0 - 0.5, 1e-6));
+      }
+      for (var i = 0; i < MeterShape.histogramBins; i++) {
+        expect(snapshot.histogram[i], closeTo(i / 120.0, 1e-6));
+      }
+    });
+  });
+
   group('the C++ plugin golden', () {
     late FrameReader reader;
     late Transport transport;
@@ -143,10 +204,12 @@ void main() {
 
     test('carries three frames of the expected sizes', () {
       // A 32-byte hello block plus a 38-byte UTF-8 name, an 88-byte transport
-      // and a 15,056-byte snapshot, each behind a 12-byte envelope.
+      // and a 7,652-byte snapshot, each behind a 12-byte envelope. The snapshot
+      // was 15,056 through version 3: the five plotted arrays are most of the
+      // difference, and the scope's four-byte length prefix is the rest.
       final bytes = _goldenBytes().length;
-      expect(bytes, (12 + 32 + 38) + (12 + 88) + (12 + 15056));
-      expect(bytes, 15250);
+      expect(bytes, (12 + 32 + 38) + (12 + 88) + (12 + 7652));
+      expect(bytes, 7846);
     });
 
     test('agrees with this build about what a frame means', () {
@@ -166,7 +229,7 @@ void main() {
     });
 
     test('accepts a producer whose engine ABI differs from ours', () {
-      // The fixture pins ABI 3 while the engine in this tree is on 4, so this
+      // The fixture pins ABI 3 while the engine in this tree is on 5, so this
       // is a genuine mismatch rather than a hypothetical one — and it must be
       // accepted. The two numbers move for different reasons: an additive ABI
       // bump leaves every byte of this protocol untouched, and refusing a link
@@ -224,21 +287,40 @@ void main() {
         expect(snapshot.clip[i], i);
       }
 
+      // The tolerances below are the *encodings'* — half a step each, from
+      // `Quantise` — not a shrug. A looser number here would stop this test
+      // noticing a field written through the wrong codec, which is the drift it
+      // exists to catch: a spectrum band put through the sample encoding would
+      // still be a plausible dB value.
+      const dbTolerance = 0.5 / Quantise.dbStep;
+      const sampleTolerance = 0.5 / Quantise.sampleScale;
+      const unitTolerance = 0.5 / 32767;
+      const fractionTolerance = 0.5 / 0xFFFE;
+
       for (var i = 0; i < MeterShape.spectrumBands; i++) {
-        expect(snapshot.spectrum[i], closeTo(-(i % 100).toDouble(), 1e-5));
+        expect(
+          snapshot.spectrum[i],
+          closeTo(-(i % 100).toDouble(), dbTolerance),
+        );
         expect(
           snapshot.spectrumPeak[i],
-          closeTo(-(i % 100).toDouble() + 1, 1e-5),
+          closeTo(-(i % 100).toDouble() + 1, dbTolerance),
         );
-        expect(snapshot.spectrumPan[i], closeTo((i % 3).toDouble() - 1, 1e-5));
+        expect(
+          snapshot.spectrumPan[i],
+          closeTo((i % 3).toDouble() - 1, unitTolerance),
+        );
       }
 
       for (var i = 0; i < MeterShape.scopePoints * 2; i++) {
-        expect(snapshot.scope[i], closeTo((i % 7) / 7.0 - 0.5, 1e-6));
+        expect(
+          snapshot.scope[i],
+          closeTo((i % 7) / 7.0 - 0.5, sampleTolerance),
+        );
       }
 
       for (var i = 0; i < MeterShape.histogramBins; i++) {
-        expect(snapshot.histogram[i], closeTo(i / 120.0, 1e-6));
+        expect(snapshot.histogram[i], closeTo(i / 120.0, fractionTolerance));
       }
     });
 
@@ -370,7 +452,7 @@ void main() {
 /// be a stale copy — and the entire value of this file is that the bytes came
 /// out of a different implementation in a different language. A golden that has
 /// drifted back into agreement with the code it is checking proves nothing.
-Uint8List _goldenBytes([String name = 'wire_v3.bin']) {
+Uint8List _goldenBytes([String name = 'wire_v4.bin']) {
   var directory = Directory.current;
   for (var depth = 0; depth < 5; depth++) {
     final candidate = File('${directory.path}/plugin/test/golden/$name');

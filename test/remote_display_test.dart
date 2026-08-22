@@ -45,6 +45,73 @@ void main() {
     await _settle();
   }
 
+  // The defect this was written for: `OAA_SCOPE_POINTS` is 1,024 and so is the
+  // engine's analysis block, so a snapshot carries 21.3 ms of audio at 48 kHz
+  // and the engine publishes about 47 of them a second. A link at 15 or 30 Hz
+  // stands for more audio than one block holds, and a host that forwarded the
+  // newest block would hand the oscilloscope a fraction of the waveform — which
+  // the module correctly detects as a discontinuity and responds to by clearing
+  // its ring. Every frame. It never showed as an error; it showed as a scope
+  // that would not draw.
+  group('a link slower than the engine still carries every sample', () {
+    for (final fps in kRemoteFpsOptions) {
+      test('at $fps fps the run accounts for all the audio measured', () async {
+        host.fps = fps;
+        await connect();
+
+        // Sampled *while* audio is flowing. Once the source stops there is
+        // nothing left to accumulate and a frame honestly carries a run of
+        // zero, so the last frame of the run is the wrong one to look at.
+        var widest = 0;
+
+        const blocks = 40;
+        for (var i = 0; i < blocks; i++) {
+          source.generation++;
+          source.elapsedSeconds += MeterShape.scopePoints / 48000;
+          await _settle(milliseconds: 21);
+          final seen = client.snapshot.scopeFrames;
+          if (seen > widest) widest = seen;
+        }
+
+        expect(
+          client.snapshot.generation,
+          greaterThan(0),
+          reason: 'nothing arrived at all',
+        );
+
+        // What one publish period covers, in samples. Below the engine's ~47 Hz
+        // that is more than one block, which is the whole point.
+        final perFrame = 48000 / fps;
+        final wanted = perFrame < MeterShape.scopePoints
+            ? MeterShape.scopePoints
+            : perFrame;
+
+        if (wanted > MeterShape.scopePoints) {
+          // The defect, stated directly: below the engine's rate a frame has to
+          // carry more than one block, and the old transport carried exactly
+          // one at every link rate. A slack of one block would have made this
+          // vacuous at 30 fps, where a block is already two thirds of a frame.
+          expect(
+            widest,
+            greaterThan(MeterShape.scopePoints),
+            reason:
+                'the widest run at $fps fps was $widest pairs — one analysis '
+                'block, against ${wanted.round()} of audio a frame. The run is '
+                'not accumulating and the oscilloscope will gap every frame',
+          );
+          expect(
+            widest,
+            greaterThanOrEqualTo((wanted * 0.75).round()),
+            reason: 'the run is accumulating but losing audio',
+          );
+        } else {
+          expect(widest, greaterThanOrEqualTo(MeterShape.scopePoints));
+        }
+        expect(widest, lessThanOrEqualTo(MeterShape.maxScopeFrames));
+      });
+    }
+  });
+
   test('a display learns who it is attached to', () async {
     await connect();
 
@@ -411,7 +478,7 @@ void main() {
         socket
           ..add(hello)
           // Partway through a snapshot, and then the network is gone.
-          ..add(Uint8List.sublistView(frame.bytes, 0, 6000));
+          ..add(Uint8List.sublistView(frame.wire, 0, 6000));
         Future<void>.delayed(const Duration(milliseconds: 60), socket.destroy);
         return;
       }
@@ -419,7 +486,7 @@ void main() {
       socket.add(hello);
       final pump = Timer.periodic(const Duration(milliseconds: 30), (timer) {
         try {
-          socket.add(frame.bytes);
+          socket.add(frame.wire);
         } on Object {
           timer.cancel();
         }
@@ -513,6 +580,9 @@ Future<void> _settle({int milliseconds = 120}) =>
     Future<void>.delayed(Duration(milliseconds: milliseconds));
 
 class _FakeSource implements MeterSource {
+  @override
+  Transport transport = Transport.none;
+
   @override
   int generation = 0;
 
@@ -614,6 +684,9 @@ class _FakeSource implements MeterSource {
 
   @override
   final Float32List scope = Float32List(MeterShape.scopePoints * 2);
+
+  @override
+  int scopeFrames = MeterShape.scopePoints;
 
   @override
   final Float32List histogram = Float32List(MeterShape.histogramBins);

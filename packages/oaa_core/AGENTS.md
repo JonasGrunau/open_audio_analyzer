@@ -7,10 +7,10 @@ than aspired to.
 | File | Contents |
 |------|----------|
 | `src/metric.dart` | `Metric` — the closed set of sixteen things that can be measured. |
-| `src/meter_source.dart` | `MeterSource` — everything a module is allowed to read. `OaaEngine` implements it over native memory and `WireSnapshot` over a socket, and the fourteen modules cannot tell them apart. |
+| `src/meter_source.dart` | `MeterSource` — everything a module is allowed to read, measurements and the DAW's playhead. `OaaEngine` implements it over native memory and `WireSnapshot` over a socket, and the fourteen modules cannot tell them apart. One member is not a measurement and is easy to skip past: `scopeFrames` says how much of `scope` is this frame's, because a wire may carry several analysis blocks in one snapshot and reading `scope.length` instead is what made a remote oscilloscope refuse to draw. |
 | `src/calibration.dart` | `Calibration`, the six built-in delivery targets, and `mergeCalibrations` — the one implementation of "a user file with a built-in's id replaces it", shared by the app's library and the CLI's. |
 | `src/config_locations.dart` | Where the configuration directory is, on each platform, and `slugify`. Pure functions of an environment map and — on the two platforms whose environment answers nothing — of the temporary directory on iOS and of `getFilesDir()` on Android, both passed in. No `dart:io`. Here rather than in the app because the CLI reads the same targets and cannot import the app. |
-| `src/layout.dart` | `GridRect`, `ModuleKind`, `ModuleSpec`, `TabSpec`, `PresetSpec`, and the typed readings of `ModuleSpec.options` — `SpectrumResponse`, `ScopeTimeBase`. |
+| `src/layout.dart` | `GridRect`, `ModuleKind`, `ModuleSpec`, `TabSpec`, `PresetSpec`, and the typed readings of `ModuleSpec.options` — `SpectrumResponse`, `SpectrumHold`, `ScopeTimeBase`, `ScopeSync`, `ScopeDivision`, `ScopeGrid`, `ScopeStereo`, `ScopeZoom`. |
 | `src/grid.dart` | Every rule about where a module may go, as pure functions over `TabSpec`. No pixels, no widgets — so the same rules hold for the canvas, for a preset loaded from disk and for the remote display. |
 | `src/settings.dart` | `AppSettings`, `AudioSourceKind`, and the schema version every file Open Audio Analyzer writes carries. |
 | `src/skin.dart` | `Skin` and the thirteen colour roles, as integers. The adapter to `OaaColors` is `oaa_ui`'s. |

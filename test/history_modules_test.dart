@@ -108,6 +108,9 @@ class _Fake implements MeterSource {
   Float32List get scope => _scope;
 
   @override
+  int get scopeFrames => _scope.length ~/ 2;
+
+  @override
   dynamic noSuchMethod(Invocation invocation) => throw UnimplementedError();
 }
 

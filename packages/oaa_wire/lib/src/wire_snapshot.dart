@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:oaa_core/oaa_core.dart';
 
+import 'quantise.dart';
 import 'snapshot_codec.dart';
 
 /// A [MeterSource] whose measurements arrived over a socket.
@@ -49,10 +50,28 @@ class WireSnapshot implements MeterSource {
   final Float32List spectrumPan = Float32List(MeterShape.spectrumBands);
 
   @override
-  final Float32List scope = Float32List(MeterShape.scopePoints * 2);
+  /// Allocated at the largest a frame may carry, and only partly filled — read
+  /// [scopeFrames], never `scope.length`. Allocated once like every array here,
+  /// because a painter may hold it across a frame.
+  final Float32List scope = Float32List(MeterShape.maxScopeFrames * 2);
+
+  @override
+  int get scopeFrames => _scopeFrames;
+  int _scopeFrames = 0;
 
   @override
   final Float32List histogram = Float32List(MeterShape.histogramBins);
+
+  /// The playhead of the DAW behind whoever is sending these measurements.
+  ///
+  /// **Set from outside, because it does not ride in the snapshot frame.** The
+  /// transport is its own frame type — `0x0010`, see `docs/WIRE.md` — sent by
+  /// a plugin producer and forwarded to displays, and a source that is an audio
+  /// device never sends one at all. Whoever decodes that frame writes it here;
+  /// [markStale] takes it away again, because a link that has gone quiet is not
+  /// a link whose playhead is parked.
+  @override
+  Transport transport = Transport.none;
 
   int _generation = 0;
   int _seenGeneration = 0;
@@ -96,10 +115,23 @@ class WireSnapshot implements MeterSource {
   /// here means something ignored it, and decoding a differently shaped frame
   /// would produce a screen of plausible wrong numbers.
   void decode(ByteData payload, {int offset = 0}) {
-    if (payload.lengthInBytes - offset < SnapshotWire.payloadBytes) {
+    final available = payload.lengthInBytes - offset;
+
+    // Which table this frame is written in. A version 1-3 producer — an older
+    // plugin, which `WireFrame.minimumVersion` exists to keep working — sends
+    // the 15,056-byte one, and the difference is visible in the length alone.
+    // Dispatching on the size rather than on a remembered handshake keeps the
+    // decision beside the bytes it is about.
+    final legacy = available == SnapshotWireLegacy.payloadBytes;
+
+    if (!legacy &&
+        (available < SnapshotWire.baseBytes ||
+            available > SnapshotWire.maxPayloadBytes ||
+            (available - SnapshotWire.baseBytes) % 4 != 0)) {
       throw ArgumentError(
-        'snapshot payload is ${payload.lengthInBytes - offset} bytes, '
-        'expected ${SnapshotWire.payloadBytes}',
+        'snapshot payload is $available bytes, which is neither the version '
+        '1-3 size of ${SnapshotWireLegacy.payloadBytes} nor '
+        '${SnapshotWire.baseBytes} plus four bytes a stereo pair',
       );
     }
 
@@ -134,9 +166,15 @@ class WireSnapshot implements MeterSource {
     _lufsShort = f32(SnapshotWire.offsetLufsShort);
     _lufsIntegrated = f32(SnapshotWire.offsetLufsIntegrated);
     _lra = f32(SnapshotWire.offsetLra);
-    _lraLow = f32(SnapshotWire.offsetLraLow);
-    _lraHigh = f32(SnapshotWire.offsetLraHigh);
-    _lraGate = f32(SnapshotWire.offsetLraGate);
+    _lraLow = f32(
+      legacy ? SnapshotWireLegacy.offsetLraLow : SnapshotWire.offsetLraLow,
+    );
+    _lraHigh = f32(
+      legacy ? SnapshotWireLegacy.offsetLraHigh : SnapshotWire.offsetLraHigh,
+    );
+    _lraGate = f32(
+      legacy ? SnapshotWireLegacy.offsetLraGate : SnapshotWire.offsetLraGate,
+    );
 
     _truePeak = f32(SnapshotWire.offsetTruePeak);
     _truePeakMax = f32(SnapshotWire.offsetTruePeakMax);
@@ -156,15 +194,65 @@ class WireSnapshot implements MeterSource {
     _readFloats(payload, offset + SnapshotWire.offsetVu, vu);
     _readUints(payload, offset + SnapshotWire.offsetClip, clip);
 
-    _readFloats(payload, offset + SnapshotWire.offsetSpectrum, spectrum);
-    _readFloats(
-      payload,
-      offset + SnapshotWire.offsetSpectrumPeak,
-      spectrumPeak,
-    );
-    _readFloats(payload, offset + SnapshotWire.offsetSpectrumPan, spectrumPan);
-    _readFloats(payload, offset + SnapshotWire.offsetScope, scope);
-    _readFloats(payload, offset + SnapshotWire.offsetHistogram, histogram);
+    if (legacy) {
+      _readFloats(
+        payload,
+        offset + SnapshotWireLegacy.offsetSpectrum,
+        spectrum,
+      );
+      _readFloats(
+        payload,
+        offset + SnapshotWireLegacy.offsetSpectrumPeak,
+        spectrumPeak,
+      );
+      _readFloats(
+        payload,
+        offset + SnapshotWireLegacy.offsetSpectrumPan,
+        spectrumPan,
+      );
+      _readFloats(
+        payload,
+        offset + SnapshotWireLegacy.offsetScope,
+        scope,
+        MeterShape.scopePoints * 2,
+      );
+      _scopeFrames = MeterShape.scopePoints;
+      _readFloats(
+        payload,
+        offset + SnapshotWireLegacy.offsetHistogram,
+        histogram,
+      );
+    } else {
+      // Fixed-point at protocol version 4; see [Quantise] for the widths and
+      // for how NaN survives them.
+      _readDb(payload, offset + SnapshotWire.offsetSpectrum, spectrum);
+      _readDb(payload, offset + SnapshotWire.offsetSpectrumPeak, spectrumPeak);
+      _readUnits(payload, offset + SnapshotWire.offsetSpectrumPan, spectrumPan);
+      _readFractions(payload, offset + SnapshotWire.offsetHistogram, histogram);
+
+      // Trusted only as far as the length agrees with it. A count that does not
+      // match the bytes is a producer this build does not understand, and
+      // reading past the payload would draw whatever the last frame left there.
+      var frames = payload.getUint32(
+        offset + SnapshotWire.offsetScopeFrames,
+        Endian.little,
+      );
+      if (SnapshotWire.payloadBytesFor(frames) != available) {
+        throw ArgumentError(
+          'snapshot says $frames stereo pairs, which is not $available bytes',
+        );
+      }
+      if (frames > MeterShape.maxScopeFrames) {
+        frames = MeterShape.maxScopeFrames;
+      }
+      _scopeFrames = frames;
+      _readSamples(
+        payload,
+        offset + SnapshotWire.offsetScope,
+        scope,
+        frames * 2,
+      );
+    }
 
     _stale = false;
   }
@@ -194,6 +282,7 @@ class WireSnapshot implements MeterSource {
   }
 
   void _clear() {
+    transport = Transport.none;
     _elapsedSeconds = double.nan;
     _flags =
         SnapshotWire.flagLoudnessUnavailable |
@@ -225,11 +314,51 @@ class WireSnapshot implements MeterSource {
     spectrumPeak.fillRange(0, spectrumPeak.length, double.nan);
     spectrumPan.fillRange(0, spectrumPan.length, double.nan);
     scope.fillRange(0, scope.length, double.nan);
+    // A block's worth of NaN rather than nothing, so the trail-keeping modules
+    // are handed the unavailable state and clear rather than holding their last
+    // picture — which is the whole point of going stale. See [markStale].
+    _scopeFrames = MeterShape.scopePoints;
     histogram.fillRange(0, histogram.length, double.nan);
   }
 
-  static void _readFloats(ByteData from, int at, Float32List into) {
+  static void _readDb(ByteData from, int at, Float32List into) {
     for (var i = 0; i < into.length; i++) {
+      into[i] = Quantise.dbBack(from.getUint16(at + i * 2, Endian.little));
+    }
+  }
+
+  static void _readUnits(ByteData from, int at, Float32List into) {
+    for (var i = 0; i < into.length; i++) {
+      into[i] = Quantise.unitBack(from.getInt16(at + i * 2, Endian.little));
+    }
+  }
+
+  static void _readSamples(
+    ByteData from,
+    int at,
+    Float32List into, [
+    int? count,
+  ]) {
+    for (var i = 0; i < (count ?? into.length); i++) {
+      into[i] = Quantise.sampleBack(from.getInt16(at + i * 2, Endian.little));
+    }
+  }
+
+  static void _readFractions(ByteData from, int at, Float32List into) {
+    for (var i = 0; i < into.length; i++) {
+      into[i] = Quantise.fractionBack(
+        from.getUint16(at + i * 2, Endian.little),
+      );
+    }
+  }
+
+  static void _readFloats(
+    ByteData from,
+    int at,
+    Float32List into, [
+    int? count,
+  ]) {
+    for (var i = 0; i < (count ?? into.length); i++) {
       into[i] = from.getFloat32(at + i * 4, Endian.little);
     }
   }
