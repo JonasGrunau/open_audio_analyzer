@@ -10,6 +10,18 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### 🐛 Fixed
+- The canvas no longer gets slower the longer a spectrogram is on screen. The
+  spectrogram redrew its whole history as run-length marks on every published
+  frame, and its cost was budgeted against smooth columns — real material
+  jitters a brightness step between most adjacent rows, so a large display was
+  re-recording and re-rasterising 150,000–230,000 marks about 47 times a
+  second, a cost that ramped for the half-minute the history took to fill after
+  a mount and then stayed. Every meter repaints from the same clock, so it
+  dragged the whole canvas — most visibly the analyser — and the remote display
+  paid the same price on weaker hardware, more of it at the 60 fps link rate.
+  The history is now kept as pixels and drawn as one image, a quarter of a
+  millisecond per published frame whatever the signal does; the numbers are in
+  `tool/bench_spectrogram.dart`.
 - On a remote display, the tab control now sits beside the name of the machine
   being watched instead of stranded in the middle of the link bar. The bar kept
   room for the host's playhead whether or not the host had one, so on every host

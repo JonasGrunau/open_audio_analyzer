@@ -255,11 +255,15 @@ is unaffected: it never links JUCE — it talks to the plugin over a socket.
   this way, which took the application to 266 GB and then killed the raster
   thread, whose destructors recurse once per retained frame and overflowed its
   stack 3,286 deep. **There is no way to accumulate into a GPU surface from
-  `dart:ui`** — a display that needs history keeps that history as data and
-  redraws it from scratch, bounded by the module's size rather than by the
-  length of the session. See the header of `lib/src/modules/spectrogram.dart`,
-  and `PointBuckets` for what makes redrawing tens of thousands of marks cheap
-  enough to do every frame.
+  `dart:ui`** — a display that needs history keeps that history as data, bounded
+  by the module's size rather than by the length of the session, and either
+  redraws it from scratch (the stereo cloud, through `PointBuckets`) or renders
+  it to an RGBA buffer uploaded whole as a *pixel-backed* image per published
+  frame (the spectrogram, through `ImageDescriptor.raw` — safe where
+  `toImageSync` is not, because a pixel image holds bytes and no display list,
+  and each one replaces a predecessor that is disposed on the spot). See the
+  header of `lib/src/modules/spectrogram.dart` for how its first design died of
+  the chain and its second of real material's run counts.
 
 - **A module that accumulates advances on `engine.generation`, not on `paint`.**
   Paint also runs on a resize or a theme change, and a spectrogram that scrolled
