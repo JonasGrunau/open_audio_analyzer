@@ -301,20 +301,46 @@ void main() {
       responder.dispose();
     });
 
+    // A display that cannot search is handed a field to type an address into.
+    // A host that cannot announce itself *is* the thing being looked for, so
+    // telling it to enter an address is telling it to fix the other machine.
+    //
+    // The claim is about the two *sentences*, so it is asserted on the two
+    // paths that write one: the refusal macOS can be talked out of, and a
+    // socket that could not be had at all. On the third path there is no
+    // sentence to differ — a bare errno is all there is to report and both ends
+    // report it — and asserting non-equality there failed on Linux while
+    // passing on the machine it was written on, which is the whole reason this
+    // is split by platform rather than by hope.
     test('the two ends of the link do not offer the same way out', () {
-      // A display that cannot search is handed a field to type an address into.
-      // A host that cannot announce itself *is* the thing being looked for, so
-      // telling it to enter an address is telling it to fix the other machine.
       expect(
-        describeAdvertisementFailure(refused),
-        isNot(describeDiscoveryFailure(refused)),
+        describeAdvertisementFailure(null),
+        isNot(describeDiscoveryFailure(null)),
       );
+      expect(describeDiscoveryFailure(null), contains('Enter an address'));
+      expect(
+        describeAdvertisementFailure(null),
+        isNot(contains('Enter an address')),
+      );
+
       if (Platform.isMacOS) {
+        expect(
+          describeAdvertisementFailure(refused),
+          isNot(describeDiscoveryFailure(refused)),
+        );
         expect(describeDiscoveryFailure(refused), contains('enter an address'));
         expect(
           describeAdvertisementFailure(refused),
           isNot(contains('enter an address')),
         );
+      } else {
+        // Both ends say the same thing here, deliberately: the errno is the
+        // only fact available and neither end has advice to add to it.
+        expect(
+          describeAdvertisementFailure(refused),
+          contains('No route to host'),
+        );
+        expect(describeDiscoveryFailure(refused), contains('No route to host'));
       }
     });
   });

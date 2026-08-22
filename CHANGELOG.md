@@ -198,6 +198,11 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   archive failed and no build could reach TestFlight. `make_ipa.sh` also
   compares the profile's team against the build's before archiving, as its
   fourth pre-build check.
+- The test that holds the two ends of the link to different advice no longer
+  asserts it on the one path that writes no advice at all. Outside macOS a
+  refused multicast send is reported as its errno, by both ends, because the
+  errno is the only fact there is — so the assertion passed on the machine it
+  was written on and failed the Linux job.
 
 ## [0.6.0] — 2026-08-22
 
