@@ -10,7 +10,7 @@
          and managing Wi-Fi networks, which this application never does. -->
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE"/>
     <application
-        android:label="Open Audio Analyzer"
+        android:label="OAA"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

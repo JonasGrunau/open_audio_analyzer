@@ -19,6 +19,17 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   answers any later for it: what Flutter recognises there is still a single
   click, and the pair is counted in the runner.
 
+### ⚡ Changed
+- The iOS and Android home screen label is `OAA`, the wordmark the status bar
+  already draws. It was `Open Audio Analyzer`, which no tablet ever actually
+  showed: iOS fits an icon label to the width of one icon by tightening the
+  tracking before it truncates, and tracking is spent on the spaces between
+  words first — a 19-character name arrived on the home screen as
+  `OpenAudioAnal…`, run together and cut short anyway. Apple's guidance is
+  twelve characters. The product's name is unchanged everywhere it fits: the
+  macOS, Windows and Linux applications, both permission prompts, and every
+  configuration directory — nothing a tablet has saved moves.
+
 ### 🐛 Fixed
 - The canvas no longer gets slower the longer a spectrogram is on screen. The
   spectrogram redrew its whole history as run-length marks on every published
