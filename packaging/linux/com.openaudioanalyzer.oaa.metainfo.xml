@@ -75,6 +75,24 @@
   <content_rating type="oars-1.1"/>
 
   <releases>
+    <release version="0.7.0" date="2026-08-22">
+      <description>
+        <p>
+          The Linux download that carries the VST3 is a tarball: unpack it and
+          run ./install.sh, which needs no root and writes under your home
+          directory unless you ask it for --system. It is its own uninstaller
+          too. This flatpak still installs the application alone, and that is a
+          property of the format rather than something left undone — a plugin
+          built against the sandbox's libraries cannot be loaded by a DAW
+          running on the host's. The Linux VST3 is now built against the same
+          glibc as everything shipped beside it, where being built against a
+          newer one made it absent from an older distribution's plugin browser
+          with nothing logged. A display can also be paired by camera now: the
+          desk shows a QR code and a tablet reads it, which is the route that
+          works on a network that blocks multicast.
+        </p>
+      </description>
+    </release>
     <release version="0.6.0" date="2026-08-22">
       <description>
         <p>
