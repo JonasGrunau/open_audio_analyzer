@@ -9,6 +9,8 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.10.0] — 2026-08-22
+
 ### ✨ Added
 - A skin editor. Settings → Appearance → **Edit skin** opens all thirteen colour
   roles with a picker on each, and the canvas behind the panel repaints as you
@@ -137,6 +139,12 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   whenever the panel was scrolled. The second was supplied by Flutter, which
   decorates a scrolling region on macOS, Windows and Linux without being asked;
   the panel now declines it. Tablets never showed it.
+- **The Super Meter's target tick sits in its slot again.** The slot is a
+  surround laid down under the tick so that its contrast is identical on all
+  three rings, whatever each ring is currently drawing; it was being stroked at
+  exactly the tick's own width, so the tick covered it completely and was read
+  against the arc after all. It stands 1.5 px out either side now, which is what
+  the constant describing it always said. The tick itself is unchanged.
 
 ### 🚧 Internal
 - The remote display's skin frame is rate-limited to one every 150 ms, with the
@@ -2545,7 +2553,8 @@ meters do not exist yet. See the [roadmap](README.md#roadmap).
 - Licensing is split: MIT for `engine/`, `oaa_engine` and `oaa_core`;
   GPL-3.0-or-later for the application, UI, CLI and plugin.
 
-[unreleased]: https://github.com/JonasGrunau/open_audio_analyzer/compare/v0.9.0...HEAD
+[unreleased]: https://github.com/JonasGrunau/open_audio_analyzer/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/JonasGrunau/open_audio_analyzer/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/JonasGrunau/open_audio_analyzer/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/JonasGrunau/open_audio_analyzer/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/JonasGrunau/open_audio_analyzer/compare/v0.6.0...v0.7.0

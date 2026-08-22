@@ -192,8 +192,8 @@ The only Linux download that carries the plugin, and the one to take if you use
 a DAW.
 
 ```sh
-tar -xzf Open.Audio.Analyzer-0.9.0-linux-x86_64.tar.gz
-cd "Open Audio Analyzer-0.9.0-linux-x86_64"
+tar -xzf Open.Audio.Analyzer-0.10.0-linux-x86_64.tar.gz
+cd "Open Audio Analyzer-0.10.0-linux-x86_64"
 ./install.sh
 ```
 
@@ -216,8 +216,8 @@ next to what it installed.
 ### AppImage
 
 ```sh
-chmod +x Open.Audio.Analyzer-0.9.0-x86_64.AppImage
-./Open.Audio.Analyzer-0.9.0-x86_64.AppImage
+chmod +x Open.Audio.Analyzer-0.10.0-x86_64.AppImage
+./Open.Audio.Analyzer-0.10.0-x86_64.AppImage
 ```
 
 GTK 3 is expected from the host — every desktop Linux that can run a Flutter
@@ -229,7 +229,7 @@ distribution simply refuses to start on an older one.
 ### Flatpak
 
 ```sh
-flatpak install --user Open.Audio.Analyzer-0.9.0-x86_64.flatpak
+flatpak install --user Open.Audio.Analyzer-0.10.0-x86_64.flatpak
 flatpak run com.openaudioanalyzer.oaa
 ```
 

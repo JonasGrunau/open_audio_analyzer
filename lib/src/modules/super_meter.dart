@@ -349,7 +349,14 @@ class _SuperMeterPainter extends MeterPainter {
        _targetSlot = (Paint()
          ..color = colors.meterTrack
          ..style = PaintingStyle.stroke
-         ..strokeWidth = OaaStroke.heavy),
+         // Wider than the tick by [_targetCase] either side, which is what
+         // makes it a slot the tick sits *in* rather than a line hidden under
+         // it. It was [OaaStroke.heavy] — the tick's own width — from the
+         // change that raised the tick to that weight, so everything above was
+         // true of the code and false of the screen: the slot was covered
+         // exactly, and the tick was read against whatever the ring was
+         // drawing after all.
+         ..strokeWidth = OaaStroke.heavy + 2 * _targetCase),
        super(repaint: repaint);
 
   final MeterSource engine;

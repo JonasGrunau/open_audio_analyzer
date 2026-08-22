@@ -75,6 +75,30 @@
   <content_rating type="oars-1.1"/>
 
   <releases>
+    <release version="0.10.0" date="2026-08-22">
+      <description>
+        <p>
+          Skins can be edited in the application. Settings, Appearance, Edit
+          skin opens all thirteen colour roles with a picker on each, prints
+          every role's contrast ratio against the surface it is read on, and
+          repaints the canvas and any tablet mirroring it as a colour is
+          dragged. The two skins that ship can no longer be replaced by a file
+          on disk. Open Audio Analyzer also has a new logo, a white waveform on
+          a teal ramp, and every icon it installs follows it. The VU meter has a
+          face: a scale band along the rim, a needle under a machined hub, a
+          mark that holds the loudest point of the last second and a half, and
+          the reference level that reads as 0 VU printed where it can be seen.
+          The spectrogram and the oscilloscope can be drawn in full colour, off
+          by default, the spectrogram colouring level and the oscilloscope the
+          balance between bass, mids and highs. The loudness distribution fits
+          its axis to the programme instead of always drawing sixty decibels of
+          which fifty are empty, and a menu now marks the value it holds by
+          recessing that row rather than by making it the brightest one.
+          Delivery targets can be reset to the built-in six. No measurement
+          changes in this release.
+        </p>
+      </description>
+    </release>
     <release version="0.9.0" date="2026-08-22">
       <description>
         <p>
