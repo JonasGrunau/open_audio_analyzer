@@ -16,7 +16,7 @@ publishes. GPL-3.0-or-later, except the two font families, which are SIL OFL
 | `brand/oaa-logo.svg` | **The drawing.** An Inkscape document: the wave, in white, over the teal ramp, on a 500-unit square. The only artwork in this repository that is edited by hand, and the file every icon and every twin below is generated from. |
 | `brand/oaa-logo-background.svg` | Generated. The ramp on its own, full bleed and square. |
 | `brand/oaa-mark.svg` | Generated. The wave on its own, white, on nothing. **For a dark surface only** — it is white, so on a pale page it is not there. |
-| `brand/oaa-icon.svg` | Generated. The app icon: the wave on the ramp in a squircle tile. The one to reach for when the background is not known. Read at build time by `tool/docs.dart`, which inlines it as the site's header mark and writes it out as the favicon. |
+| `brand/oaa-icon.svg` | Generated. The app icon: the wave on the ramp in a squircle tile. The one to reach for when the background is not known. `make_icons.dart` writes it out again as `website/public/oaa.svg`, byte for byte, which is the copy the Open Graph card uses. |
 | `brand/oaa-icon.png` | Generated. The same icon at 512 px with transparent corners, for `README.md` and anywhere else that wants an image rather than a vector. |
 | `brand/oaa-mark-old.svg` | The four-bar mark, retired in 0.10.0. Kept because it is on every release before it. |
 
@@ -101,7 +101,16 @@ publishes. GPL-3.0-or-later, except the two font families, which are SIL OFL
 
 - **The white mark cannot go on a pale surface, and the old one could.** Four
   teal bars read on anything, so `oaa-mark.svg` was safe to hand to any
-  consumer; the wave is white and on white it is not there. That is why
-  `tool/docs.dart` inlines `oaa-icon.svg` and not `oaa-mark.svg`, and why the
-  favicon moved with it — a tab strip is pale on most machines. Reach for the
-  bare mark only where the background is known to be dark.
+  consumer; the wave is white and on white it is not there. So anything that
+  does not know its background takes `oaa-icon.svg`, which brings its own — the
+  Open Graph card does, through `website/public/oaa.svg`. Reach for the bare
+  mark only where the background is known to be dark.
+
+- **A browser tab is the case where neither of them works, and it has a file of
+  its own.** The tile at 16 px is mostly ramp with four grey pixels of wave in
+  it, and the white mark on a pale tab strip is not there at all — so
+  `website/public/favicon.svg` is a third drawing: the wave cropped out of the
+  tile and stroked in the signal colour, which survives a light strip and a dark
+  one. It is the only artwork in this repository outside `brand/` that is
+  hand-drawn, `make_icons.dart` deliberately does not write it, and it is the
+  one file where the rule above this table is suspended.

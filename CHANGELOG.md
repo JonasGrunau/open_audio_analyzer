@@ -9,6 +9,36 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### 🐛 Fixed
+- The documentation site's sitemap names the eight documentation pages as well
+  as the front page. It had named the front page alone since before the manual
+  was part of the site, so nothing but the home page was being offered to a
+  search engine that asked.
+
+### 🚧 Internal
+- The website's tab icon survives a run of the icon generator.
+  `packaging/icon/make_icons.dart` wrote the app icon's tile over
+  `website/public/favicon.svg`, which is a different drawing on purpose — the
+  wave cropped out of the tile and stroked in the signal colour, because a tab
+  shows it at 16 px where the tile is mostly ramp. The hand-drawn version
+  therefore lasted until the next run of the generator and was reverted with no
+  error and no diff anybody read. The generator no longer writes that one file,
+  and says why where the line was.
+- `website/public/oaa.svg` is back. It is the app icon's tile, written by the
+  generator, and `scripts/og.html` references it rather than holding a copy of
+  the mark; it was deleted in the change that redrew the logo while that
+  reference stayed, so the Open Graph card had been pointing at a missing file.
+- `website/AGENTS.md` describes the directory as it is: the documentation pages
+  and the two lists that decide what they are, the live analyzer and the mock
+  the two Flutter targets share, and why `tools/` is outside the repository's
+  analyze gate. Its file table had been an inventory of a website that no longer
+  existed — three files it named were gone and eighteen it did not name were
+  there.
+- `CLAUDE.md`, `assets/AGENTS.md` and `tool/AGENTS.md` no longer say that
+  `tool/docs.dart` renders the documentation site. It renders one redirect per
+  page now, and the manifest it used to carry lives in
+  `website/src/lib/docs.mjs`.
+
 ## [0.10.0] — 2026-08-22
 
 ### ✨ Added

@@ -12,10 +12,14 @@ what is not built are all facts about the directories next to this one — and a
 site kept in its own repository states them from memory. One repository means a
 release can move the binaries and the page describing them in one commit.
 
-It does not replace `docs/site/`. Those pages are generated from this repository
-by `tool/docs.dart` and published to `jonasgrunau.github.io`; this is the front
-door that links to them, and the two are different audiences — somebody deciding
-whether to download it, and somebody who already has.
+**The documentation is part of this site now.** `/docs` renders the
+repository's own Markdown — `docs/site/*.md`, `docs/METRICS.md`, `docs/WIRE.md`
+and `CHANGELOG.md` — read from where those files are written rather than copied
+in, so a change to a document is a change to the site with no step between.
+`tool/docs.dart` used to generate a separate GitHub Pages site from the same
+Markdown; what it publishes now is a redirect per page, because
+`jonasgrunau.github.io/open_audio_analyzer/install.html` is in released READMEs
+and in issue threads nobody can edit.
 
 ## Files
 
@@ -24,57 +28,92 @@ whether to download it, and somebody who already has.
 | `README.md` | How to run, deploy and regenerate it, and how to point the domain at Cloudflare. The human-facing half of this file. |
 | `astro.config.mjs` | Static output, `format: 'file'`, stylesheets always inlined. The whole build configuration. |
 | `wrangler.jsonc` | Cloudflare Workers static assets, and the two custom domains. `not_found_handling: "404-page"` is what serves `404.html`, and `routes` is what gives the Worker an address at all — `workers_dev` is false, so a deploy without them succeeds and is reachable nowhere. A Worker does neither by itself. |
-| `package.json` | The six scripts. `dev` and `build` both run `measure` first, so a fresh clone needs no extra step. |
+| `package.json` | The nine scripts. `prebuild` runs before every build and is not optional — see `scripts/clean-content-cache.mjs`. `deploy` builds the live analyzer first, which `build` alone does not, so working on the site needs no Flutter toolchain. |
 | `tsconfig.json` | Astro's strict preset, and nothing else. |
-| `src/layouts/Base.astro` | The shell every page is built from: head, JSON-LD, header, footer. The one place the canonical host and the two outbound links are written. |
-| `src/pages/index.astro` | The front page. The meter bridge, the module catalogue, the architecture and the honest gaps. Also the platform table — see the rules below. |
-| `src/pages/download.astro` | The six artefacts, what each carries, and what capturing system output needs per platform. |
+| `src/content.config.ts` | The documentation collection: the four sources above, loaded from the repository root by path rather than slug, so an entry can be matched to the file it came from. A list and not a glob, because `docs/` also holds `PLAN.md` and `AGENTS.md` and neither is documentation. |
+| `src/lib/docs.mjs` | Every page the manual publishes, in navigation order — the manifest `tool/docs.dart` used to carry. A document that is not in it is not published; one that is in it and not on disk fails the build. |
+| `src/lib/docs-content.mjs` | Getting a manifest entry's Markdown out of the collection, matched by the path it has in the repository. The indirection exists to fail the build when somebody renames a document, which is the failure that actually happens. |
+| `src/lib/markdown.mjs` | The two things the repository's own Markdown needs before it is a website: links written for flat `.html` files (`install.html#in-a-daw`), and links sideways into the repository (`docs/METRICS.md`, `README.md#roadmap`). Rewritten at render time rather than by editing eight documents that are also read on GitHub. |
+| `src/lib/app.mjs` | `REPO`, `RELEASES` and `VERSION`. The version is **read from the application's `pubspec.yaml` at build time**: typed here, it was three literals and it was a release behind within the hour after a tag. |
+| `src/layouts/Base.astro` | The shell every page is built from: head, JSON-LD, header, footer. The one place the canonical host is written. |
+| `src/layouts/Docs.astro` | One documentation page: the contents, the document, its sections. What is not ordinary about it is the readout above the title, which names the file in the repository the page was rendered from and links to it — the reader who has just found the mistake can see where the fix goes. |
+| `src/pages/index.astro` | The front page. The analyzer, the module catalogue, the architecture, the platform table and the honest gaps. Also `PLATFORMS` — see the rules below. |
+| `src/pages/docs.astro` | `/docs`: `docs/site/index.md` rendered, with the manual's contents underneath it. A landing page that is only a list of links makes the reader choose before telling them what they are choosing between. |
+| `src/pages/docs/[slug].astro` | Every documentation page but that one. `build.format: 'file'` and no trailing slash, so it writes `dist/docs/install.html` and the address is `/docs/install`. |
 | `src/pages/404.astro` | Three links and no search. |
-| `src/scripts/painters.js` | The canvas painters behind the hero bridge. Pure functions of `(context, size, measurements, frame)`; none owns a timer. |
-| `src/scripts/bridge.js` | The one `requestAnimationFrame` loop on the page, and the only thing that drives those painters. Stops when the section scrolls away or the tab is hidden, and freezes on `prefers-reduced-motion`. |
+| `src/scripts/facade.js` | The still in front of the live analyzer, and the swap to the real thing when a reader asks for it — prefetched on hover, an iframe rather than Flutter mounted into this document. Its header says why both. |
+| `src/scripts/toc.js` | Marking the section you are in, in the list on the right. An `IntersectionObserver`, not a scroll listener: on a document as long as the metrics reference, running on every frame is the whole cost of the feature. |
 | `src/styles/global.css` | The tokens: the application's palette and spacing scale, the three typefaces, and the two rules carried over from `oaa_ui` — every spatial value from the scale, every number monospaced with tabular figures. |
-| `scripts/measure.mjs` | Synthesises a twenty-second stereo programme and measures it — K-weighting, R128 gating, LRA, oversampled true peak, an FFT — into `src/data/bridge.json`. Deterministic: a seeded PRNG, no wall clock, no input files. |
-| `scripts/render-modules.mjs` | Photographs the fourteen modules out of `tools/module-renderer` by driving Chrome over the DevTools protocol, and writes `public/modules/*.webp`. |
+| `src/styles/docs.css` | The manual, set as a manual: body text at full contrast rather than muted, a measure, and the three-column shape. Global rather than scoped because Astro scopes a component's CSS by stamping the elements it compiled, and it did not compile these — they are Markdown rendered at build time. |
+| `src/data/analyzer-still.json` | The still's pixel size, written beside the picture by `npm run analyzer`, so the facade is sized from the image that exists rather than from a number typed twice. |
+| `scripts/measure.mjs` | The gated loudness path in JavaScript — K-weighting, R128 gating, LRA, oversampled true peak, an FFT — which fed the meter bridge the front page used to draw. **Nothing calls it.** Left in place because it works and is self-contained, not because it is used; see the rules. |
+| `scripts/render-modules.mjs` | Photographs the fourteen modules out of `tools/module-renderer` and writes `public/modules/*.webp`. Two device pixels per logical one and the frame sized to where it lands — more resolution came out softer, and the README says why. |
+| `scripts/render-analyzer.mjs` | Builds `tools/analyzer-demo` into `public/analyzer/` and photographs it into `public/analyzer-still.webp`. |
+| `scripts/lib/headless.mjs` | Serving a directory to a headless Chrome and photographing what it draws, shared by both renderers. Waits for `globalThis.oaaRenderReady` — the picture — rather than for a stopwatch, because `--virtual-time-budget` does not drive Flutter's ticker. |
+| `scripts/lib/fonts.mjs` | Puts the application's typefaces where a tool's own pubspec can name them. `OaaType` asks for the bare family names, which only an application-level declaration provides, and a relative path in that declaration builds fine and 404s at runtime. |
+| `scripts/clean-content-cache.mjs` | Drops Astro's rendered-content store before a build. The store is keyed by each document's digest, so editing a plugin in `src/lib/markdown.mjs` changes no digest, the build reports success and the site is silently a build behind. Every plugin here was written into that trap at least once. |
 | `scripts/og.html` | The Open Graph card as a page, so it uses the site's own tokens. Rendered by `npm run og` into `public/og.png`. |
 | `public/modules/*.webp` | The fourteen thumbnails. Committed output — see the rules. |
+| `public/analyzer-still.webp` | The still the front page shows in front of the live analyzer. Committed for the same reason, and needed by every build rather than only by a deploy. |
 | `public/og.png` | The Open Graph card. Committed for the same reason. |
-| `public/oaa.svg`, `public/favicon.svg`, `public/icon-180.png` | The app icon. **Written by `packaging/icon/make_icons.dart`**, not copied here by hand — the first two are `assets/brand/oaa-icon.svg` byte for byte. `Base.astro` and `scripts/og.html` reference `oaa.svg` rather than inlining it, because both used to hold their own copy of the mark and both would have gone stale in 0.10.0. |
-| `public/robots.txt`, `public/sitemap.xml` | Written by hand. Four URLs do not need a generator. |
-| `tools/module-renderer/` | A Flutter web target that depends on `package:oaa` and renders one real module per page load against a mock `MeterSource`. Its own `README.md` documents the query string. Not in the root workspace, and not analysed by the repository's gates. |
+| `public/oaa.svg`, `public/icon-180.png` | The app icon. **Written by `packaging/icon/make_icons.dart`**, not copied here by hand — `oaa.svg` is `assets/brand/oaa-icon.svg` byte for byte, and is what `scripts/og.html` references rather than holding its own copy of the mark. |
+| `public/favicon.svg` | The tab icon, and **the one icon in this repository that is drawn by hand**: the wave cropped out of the tile and stroked in the signal colour, because a tab shows it at 16 px where the tile is most of what you see and the wave inside it is four grey pixels. `Base.astro` uses it for the header mark as well, so a reader fetches one file. `make_icons.dart` wrote the tile over it until 0.10.0; there is a note where that line was. |
+| `public/robots.txt`, `public/sitemap.xml` | Written by hand. Nine URLs do not need a generator — but they do need adding to, and did not get it: the sitemap named the front page alone for as long as the documentation had been part of this site. |
+| `tools/module-renderer/` | A Flutter web target that depends on `package:oaa` and renders one real module per page load against the mock in `tools/oaa_mock`. Its own `README.md` documents the query string. |
+| `tools/analyzer-demo/` | The same idea, one canvas further: eight real modules, one `MeterClock`, the same `ModuleHost` and the same painters the application runs. Compiled into `public/analyzer/` and loaded only when a reader presses the still. |
+| `tools/oaa_mock/` | The mock `MeterSource` both of them play, as a package. Two copies of it would be two mocks that eventually disagree about what the programme did, and then the still and the live demo would show different readings for the same material. |
 
 Generated and git-ignored, all of it by `website/.gitignore`: `node_modules/`,
-`dist/`, `.astro/`, `.wrangler/` and `src/data/bridge.json`.
+`dist/`, `.astro/`, `.wrangler/`, `src/data/bridge.json` and `public/analyzer/`
+— the last being about 5 MB of compiled Flutter that `npm run deploy` builds.
 
 ## Rules
 
-- **The numbers on the front page are measurements, not copy.** `measure.mjs`
-  runs at build time and the page reads its output. If a number on the hero ever
-  becomes a string in an `.astro` file, the site has started claiming things
-  about a measurement tool that nobody measured, which is the one failure this
-  project cannot afford. The script states where it differs from the shipping
-  engine rather than implying it is the same code.
+- **Nothing on this site draws a meter of its own.** The catalogue is
+  photographs of the real modules and the front page is a photograph of the real
+  canvas with the application itself one press behind it; both come out of
+  Flutter targets that depend on `package:oaa`. The front page used to open with
+  a meter bridge this site drew in JavaScript from measurements taken at build
+  time — real numbers and invented pictures, which is the one thing a
+  measurement tool must not publish, because the drawing and the meter drift
+  apart silently. It is the argument `packages/oaa_core/lib/src/meter_source.dart`
+  makes for why the application refuses to write its meters twice.
+  `scripts/measure.mjs` is what fed it and is now called by nothing; deleting it
+  would lose a working, dependency-free implementation of the gated loudness
+  path, so it stays, unwired and labelled.
 
-- **The catalogue is photographs of the real modules.** `render-modules.mjs`
-  drives the actual widgets through `tools/module-renderer`; there is no second
-  copy of any meter here. `painters.js` draws the hero bridge and only the hero
-  bridge — it is an illustration of a canvas, not of a measurement display, and
-  it must never grow into the catalogue. Two implementations of one meter are two
-  meters that will eventually disagree, which is the argument
-  `packages/oaa_core/lib/src/meter_source.dart` makes for the application
-  itself.
+- **The documentation is read from where it is written, never copied.** The
+  manifest in `src/lib/docs.mjs` and the pattern in `src/content.config.ts` are
+  the two lists that decide what is published, and they must agree: a source in
+  one and not the other is a page that silently does not exist. A document that
+  moves fails the build here, which is what `tool/docs.dart` exiting non-zero
+  used to be for.
 
-- **The thumbnails and `og.png` are committed rather than built.** Rendering
-  them needs Flutter, Chrome and `cwebp` on the machine, and CI should need none
-  of the three. The cost is that they go stale silently: **a change to how a
-  module looks is a change to its photograph**, and
+- **The thumbnails, `og.png` and the analyzer still are committed rather than
+  built.** Rendering them needs Flutter, Chrome and `cwebp` on the machine, and
+  CI should need none of the three. The cost is that they go stale silently: **a
+  change to how a module looks is a change to its photograph**, and
   `npm run modules -- --only <id>` in the same commit is the whole fix.
 
-- **Nothing here regenerates a version, a requirement or a filename.** `V` in
-  `download.astro`, the `req` column beside it and `PLATFORMS` in `index.astro`
-  are typed, and no test reads them. They were wrong within a day of being
-  written — the macOS floor moved to 14.2 in the same change that added this
-  directory and the download page still said 11 Big Sur. Treat them the way
-  `CLAUDE.md` treats the install page's blurb: copy that goes stale unseen.
+- **The version is derived; the requirements are not.** `src/lib/app.mjs` reads
+  `VERSION` out of the application's `pubspec.yaml`, so no page can name a
+  release the repository is not on. `PLATFORMS` in `index.astro` — the minimum
+  macOS, what each installer carries — is still typed, and no test reads it. It
+  was wrong within a day of being written: the macOS floor moved to 14.2 in the
+  same change that added this directory and the download page still said 11 Big
+  Sur. Treat it the way `CLAUDE.md` treats the install page's blurb: copy that
+  goes stale unseen.
+
+- **`tools/` is outside the root workspace, and outside the repository's analyze
+  gate.** Each of the three packages resolves its own dependencies, and nothing
+  in `ci.yml` builds this directory — so on a runner, `package:oaa_mock` names a
+  package that has never been resolved there. They are excluded in the root
+  `analysis_options.yaml` for that reason and analysed by the
+  `analysis_options.yaml` each of them carries. It is worth knowing *why* they
+  passed the root gate for as long as they did: each target held its own copy of
+  the mock and imported it relatively, and a relative import needs no package
+  resolution. Sharing the mock is what turned a gate that never looked into one
+  that failed.
 
 - **No shadows and no gradients, and every spatial value from the scale.** The
   first follows from the application's own "machined panels sitting flush", and

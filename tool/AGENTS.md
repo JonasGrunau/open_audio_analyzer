@@ -44,15 +44,17 @@ Repository scripts. Nothing here ships. GPL-3.0-or-later.
   the script writes `ATTRIBUTION.md` beside them, for the tracks it actually
   produced rather than the ones it was asked for.
 
-- **`docs.dart` has no dependencies, and that is the reason it is here rather
-  than a `mkdocs.yml`.** The documents the site publishes — `docs/METRICS.md`,
+- **`docs.dart` has no dependencies, and keeping it that way is still the
+  point.** It was the argument for writing a site generator here rather than
+  configuring one: the documents it published — `docs/METRICS.md`,
   `docs/WIRE.md` — are normative and held by tests, so a site that can break on
-  a machine where the code is fine is a site that will. `docs.dart` imports
-  `dart:io` and `dart:convert` and nothing else, which is why
-  `ci.yml`'s `docs` job is a Dart SDK and forty seconds with no Flutter
-  anywhere in it. That constraint belongs to `docs.dart` rather than to this
-  directory — the benchmarks need `dart:ui`, and therefore an engine
-  — and it survives as long as the `docs` job runs `docs.dart` and nothing else.
+  a machine where the code is fine is a site that will. The rendering moved to
+  `website/`, which is a Node project and does have dependencies; what is left
+  here is the redirect table, and it imports `dart:io` and nothing else. That is
+  why the job in `ci.yml` is still a Dart SDK and a few seconds with no Flutter
+  anywhere in it. The constraint belongs to `docs.dart` rather than to this
+  directory — the benchmarks need `dart:ui`, and therefore an engine — and it
+  survives as long as that job runs `docs.dart` and nothing else.
 
 - **A benchmark reports how many pixels it inked, and that is not decoration.**
   `bench_modules.dart` fails a module that inked fewer than 500 and

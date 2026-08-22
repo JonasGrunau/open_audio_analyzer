@@ -997,7 +997,20 @@ void main() {
   // open-audio-analyzer.com. Nothing in `ci.yml` builds the site, so these were
   // copied across by hand and were the next thing certain to go stale.
   _write('website/public/oaa.svg', utf8.encode(_iconSvg()));
-  _write('website/public/favicon.svg', utf8.encode(_iconSvg()));
+
+  // **`website/public/favicon.svg` is deliberately not written here, and it is
+  // the only icon in this repository that is drawn by hand.** A browser tab
+  // shows it at 16 px, where the tile is most of what you see and the wave
+  // inside it is four grey pixels; that file is the wave cropped out of the
+  // tile and stroked in the signal colour instead, which survives a pale tab
+  // strip and a dark one. Its own header says the same thing.
+  //
+  // This line wrote the tile over it until 0.10.0, so the crop lived exactly as
+  // long as the interval between somebody drawing it and the next run of this
+  // program — no error, no diff to review, just the tab icon quietly back to
+  // the one that does not read. `oaa.svg` above is the tile and is what
+  // `scripts/og.html` wants, because a social card is 1200 px wide and there
+  // the ground is the point.
   // `apple-touch-icon` is full bleed for the same reason the app icon on that
   // platform is: iOS rounds a web clip with its own curve, so one drawn here
   // would be rounded twice and show the page behind it in the four corners.

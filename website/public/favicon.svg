@@ -12,6 +12,13 @@
   the tab, and the strokes carry the signal colour rather than white, which
   survives both a light and a dark tab bar.
 
+  **Hand-drawn, and the only icon in the repository that is.** Every other one
+  is written by that program from assets/brand/oaa-logo.svg, and this file was
+  too until 0.10.0: it wrote the tile here as well, so a crop drawn by hand
+  survived until the next run and then went back to the tile with no error and
+  no diff anybody read. The line that did it is gone, and there is a note where
+  it was. Redraw this file by hand; running the generator will not touch it.
+
   Keep runs of hyphens out of any comment added here. Two in a row end an XML
   comment and every renderer that loads the file through an img element then
   shows a broken image with no error anywhere.
