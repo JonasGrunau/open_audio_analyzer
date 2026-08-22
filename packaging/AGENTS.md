@@ -53,6 +53,21 @@ for the release.
   `xcodebuild -showBuildSettings` reports it, which is where `flutter build ipa`
   looks; Debug is untouched.
 
+  **A key the target sets itself is not read from there at all**, and that is
+  how `OAA_IOS_TEAM_ID` came to be decorative for a release. The Runner target's
+  Release configuration carried its own `DEVELOPMENT_TEAM`, and a setting in a
+  target's `buildSettings` outranks the same key arriving from its
+  `baseConfigurationReference`. `CODE_SIGN_STYLE` and
+  `PROVISIONING_PROFILE_SPECIFIER` are absent from that configuration and took
+  effect, so the archive was manually signed against the right profile name and
+  the *project's* team — and Xcode reported
+  `No profile for team 'X' matching 'Y' found` with the correct profile
+  installed, valid, and for a team nothing was looking under. The line is gone
+  from the Release configuration; Debug and Profile keep theirs, which is what
+  `flutter run` uses. Opening Signing & Capabilities in Xcode is enough to write
+  it back, which is why `make_ipa.sh` now holds the profile's own team against
+  the one it is about to write rather than trusting the xcconfig to win.
+
 - **There is no hand-written `ExportOptions.plist`, deliberately.** Xcode 15.4
   renamed the export methods — `app-store` became `app-store-connect` — and a
   plist naming the wrong one for the Xcode on the runner fails the export.
@@ -74,7 +89,8 @@ for the release.
 
 - **A rejection from App Store Connect arrives after the release is published**,
   which is why `make_ipa.sh` checks the profile itself: the bundle id it names,
-  that it provisions no devices, and that it does not allow debugging. A
+  that it provisions no devices, that it does not allow debugging, and that the
+  team it was issued to is the team the build is configured for. A
   development or ad-hoc profile exports an IPA that builds, signs and verifies
   cleanly and is refused at the end of the upload. `ITMS-90717` — the icon alpha
   channel described below — is the same shape of failure and was found the same

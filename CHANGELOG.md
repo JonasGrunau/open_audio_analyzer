@@ -9,6 +9,15 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### 🚧 Internal
+- `OAA_IOS_TEAM_ID` now reaches the iPad build. The Runner target's Release
+  configuration set its own `DEVELOPMENT_TEAM`, which outranks the xcconfig
+  `make_ipa.sh` writes, so a profile created under any other team was installed
+  and valid and Xcode looked for it under the project's team instead — the
+  archive failed and no build could reach TestFlight. `make_ipa.sh` also
+  compares the profile's team against the build's before archiving, as its
+  fourth pre-build check.
+
 ## [0.6.0] — 2026-08-22
 
 ### ✨ Added

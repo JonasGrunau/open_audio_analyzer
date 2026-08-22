@@ -214,6 +214,31 @@ if [ -z "$team" ]; then
   exit 1
 fi
 
+# The fourth check, and the one that cost a release. `app_id` is
+# `<team>.<bundle id>`, so the profile names the team it was issued for and it
+# can be held against the team the build is about to use. They differed once,
+# and nothing here noticed: the Runner target's Release configuration set
+# DEVELOPMENT_TEAM in its own `buildSettings`, which outranks the
+# `baseConfigurationReference` the block below appends to, so the team written
+# into the xcconfig was silently shadowed by the project's own. It surfaces from
+# Xcode as `No profile for team 'X' matching 'Y' found` naming the *project's*
+# team, with OAA_IOS_TEAM_ID set correctly and having no effect whatever — and
+# the profile installed, valid, and for a different team. The line is gone from
+# that configuration now; this is what says so if it ever comes back, which
+# opening Signing & Capabilities in Xcode is enough to do.
+profile_team=${app_id%%.*}
+if [ "$profile_team" != "$team" ]; then
+  echo "make_ipa: the profile was issued to team $profile_team and the build" >&2
+  echo "  is configured for team $team, so Xcode would find no profile and" >&2
+  echo "  fall back to signing with whatever it could invent." >&2
+  echo "  Either team may print as *** above — that is Actions masking" >&2
+  echo "  OAA_IOS_TEAM_ID, and the mismatch is real regardless. Check that" >&2
+  echo "  OAA_IOS_TEAM_ID names the team the profile was created under, and" >&2
+  echo "  that no DEVELOPMENT_TEAM has reappeared in the Runner target's" >&2
+  echo "  Release configuration in ios/Runner.xcodeproj/project.pbxproj." >&2
+  exit 1
+fi
+
 # Appended, not written: the file's one line is `#include "Generated.xcconfig"`,
 # and Flutter regenerates what that include points at on every build. Replacing
 # the file would drop it and the build would fail on a missing FLUTTER_ROOT.
