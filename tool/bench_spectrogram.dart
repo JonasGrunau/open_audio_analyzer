@@ -257,148 +257,154 @@ void main() {
     },
   );
 
-  test('spectrogram: run-length cost against band jitter, and the pixel path', () async {
-    final palette = _buildPalette();
-    const rows = 300;
-    const bands = 512;
-    const floorDb = -84.0;
-    const ceilingDb = -6.0;
-    final rowHeight = _height / rows;
+  test(
+    'spectrogram: run-length cost against band jitter, and the pixel path',
+    () async {
+      final palette = _buildPalette();
+      const rows = 300;
+      const bands = 512;
+      const floorDb = -84.0;
+      const ceilingDb = -6.0;
+      final rowHeight = _height / rows;
 
-    int stepAt(Float32List spectrum, int row) {
-      final band = ((rows - 1 - row) / (rows - 1) * (bands - 1)).round();
-      final db = spectrum[band];
-      if (db <= floorDb) return 0;
-      final level = ((db - floorDb) / (ceilingDb - floorDb)).clamp(0.0, 1.0);
-      return (level * (_steps - 1)).round();
-    }
-
-    // A musical envelope with a moving bump, plus per-band jitter — the shape
-    // the engine's peak-per-bin bands actually have. Deterministic, so the run
-    // counts printed here are the same on every machine.
-    void fill(Float32List out, int seed, double jitterDb, int t) {
-      var state = seed * 2654435761 + t;
-      double noise() {
-        state = (state * 1103515245 + 12345) & 0x7fffffff;
-        return state / 0x7fffffff * 2 - 1;
+      int stepAt(Float32List spectrum, int row) {
+        final band = ((rows - 1 - row) / (rows - 1) * (bands - 1)).round();
+        final db = spectrum[band];
+        if (db <= floorDb) return 0;
+        final level = ((db - floorDb) / (ceilingDb - floorDb)).clamp(0.0, 1.0);
+        return (level * (_steps - 1)).round();
       }
 
-      for (var band = 0; band < bands; band++) {
-        final f = band / (bands - 1);
-        final slope = -18.0 - 38.0 * f;
-        final bump = 10.0 * math.exp(-math.pow((f - 0.35) / 0.18, 2).toDouble());
-        out[band] = (slope + bump + noise() * jitterDb).clamp(-96.0, 0.0);
-      }
-    }
-
-    stdout.writeln();
-    for (final jitter in [0.0, 1.0, 2.0]) {
-      // The run-length path: coalesce every column, emit and record the lot,
-      // the work it did on every published frame.
-      final spectrum = Float32List(bands);
-      final ends = Uint16List(_columns * rows);
-      final steps = Uint8List(_columns * rows);
-      final runCounts = Uint16List(_columns);
-      var totalRuns = 0;
-      for (var column = 0; column < _columns; column++) {
-        fill(spectrum, 1, jitter, column);
-        final base = column * rows;
-        var count = 0;
-        var current = stepAt(spectrum, 0);
-        for (var row = 1; row <= rows; row++) {
-          final step = row < rows ? stepAt(spectrum, row) : -1;
-          if (step == current) continue;
-          ends[base + count] = row;
-          steps[base + count] = current;
-          count++;
-          current = step;
+      // A musical envelope with a moving bump, plus per-band jitter — the shape
+      // the engine's peak-per-bin bands actually have. Deterministic, so the run
+      // counts printed here are the same on every machine.
+      void fill(Float32List out, int seed, double jitterDb, int t) {
+        var state = seed * 2654435761 + t;
+        double noise() {
+          state = (state * 1103515245 + 12345) & 0x7fffffff;
+          return state / 0x7fffffff * 2 - 1;
         }
-        runCounts[column] = count;
-        totalRuns += count;
+
+        for (var band = 0; band < bands; band++) {
+          final f = band / (bands - 1);
+          final slope = -18.0 - 38.0 * f;
+          final bump =
+              10.0 * math.exp(-math.pow((f - 0.35) / 0.18, 2).toDouble());
+          out[band] = (slope + bump + noise() * jitterDb).clamp(-96.0, 0.0);
+        }
       }
 
-      final marks = PointBuckets(_steps);
-      void emit() {
-        marks.clear();
+      stdout.writeln();
+      for (final jitter in [0.0, 1.0, 2.0]) {
+        // The run-length path: coalesce every column, emit and record the lot,
+        // the work it did on every published frame.
+        final spectrum = Float32List(bands);
+        final ends = Uint16List(_columns * rows);
+        final steps = Uint8List(_columns * rows);
+        final runCounts = Uint16List(_columns);
+        var totalRuns = 0;
         for (var column = 0; column < _columns; column++) {
-          final x = _columns - column - 0.5;
+          fill(spectrum, 1, jitter, column);
           final base = column * rows;
-          var top = 0;
-          for (var run = 0; run < runCounts[column]; run++) {
-            final end = ends[base + run];
-            final step = steps[base + run];
-            if (step > 0) marks.run(step, x, top * rowHeight, end * rowHeight);
-            top = end;
+          var count = 0;
+          var current = stepAt(spectrum, 0);
+          for (var row = 1; row <= rows; row++) {
+            final step = row < rows ? stepAt(spectrum, row) : -1;
+            if (step == current) continue;
+            ends[base + count] = row;
+            steps[base + count] = current;
+            count++;
+            current = step;
+          }
+          runCounts[column] = count;
+          totalRuns += count;
+        }
+
+        final marks = PointBuckets(_steps);
+        void emit() {
+          marks.clear();
+          for (var column = 0; column < _columns; column++) {
+            final x = _columns - column - 0.5;
+            final base = column * rows;
+            var top = 0;
+            for (var run = 0; run < runCounts[column]; run++) {
+              final end = ends[base + run];
+              final step = steps[base + run];
+              if (step > 0) {
+                marks.run(step, x, top * rowHeight, end * rowHeight);
+              }
+              top = end;
+            }
           }
         }
+
+        emit();
+        final runLength = _median(20, () {
+          emit();
+          _record((c) => marks.draw(c, ui.PointMode.lines, palette)).dispose();
+        });
+
+        stdout.writeln(
+          '  jitter ±${jitter.toStringAsFixed(0)} dB: '
+          '${(totalRuns / _columns).toStringAsFixed(0)} runs/column, '
+          'run-length emit+record ${'$runLength'.padLeft(5)} us '
+          'and ~${(totalRuns * 16 / 1024 / 1024).toStringAsFixed(1)} MB of '
+          'display list, per published frame',
+        );
       }
 
-      emit();
-      final runLength = _median(20, () {
-        emit();
-        _record((c) => marks.draw(c, ui.PointMode.lines, palette)).dispose();
+      // The pixel path: shift, write one column through the palette, copy out,
+      // instantiate. The same numbers whatever the signal does.
+      final pixels = Uint8List(_columns * rows * 4);
+      final staging = Uint8List(pixels.length);
+      final append = _median(50, () {
+        pixels.setRange(0, pixels.length - 4, pixels, 4);
+        for (var row = 0; row < rows; row++) {
+          final p = (row * _columns + _columns - 1) * 4;
+          pixels[p] = row;
+          pixels[p + 1] = row >> 1;
+          pixels[p + 2] = row >> 2;
+          pixels[p + 3] = 255;
+        }
+        staging.setAll(0, pixels);
       });
+      ui.Image? image;
+      final instantiate = await _medianAsync(20, () async {
+        final buffer = await ui.ImmutableBuffer.fromUint8List(staging);
+        final descriptor = ui.ImageDescriptor.raw(
+          buffer,
+          width: _columns,
+          height: rows,
+          pixelFormat: ui.PixelFormat.rgba8888,
+        );
+        final codec = await descriptor.instantiateCodec();
+        final frame = await codec.getNextFrame();
+        codec.dispose();
+        descriptor.dispose();
+        buffer.dispose();
+        image?.dispose();
+        image = frame.image;
+      });
+      final record = _median(50, () {
+        _record(
+          (c) => c.drawImageRect(
+            image!,
+            const Rect.fromLTWH(0, 0, _width, rows * 1.0),
+            const Rect.fromLTWH(0, 0, _width, _height),
+            Paint(),
+          ),
+        ).dispose();
+      });
+      image?.dispose();
 
       stdout.writeln(
-        '  jitter ±${jitter.toStringAsFixed(0)} dB: '
-        '${(totalRuns / _columns).toStringAsFixed(0)} runs/column, '
-        'run-length emit+record ${'$runLength'.padLeft(5)} us '
-        'and ~${(totalRuns * 16 / 1024 / 1024).toStringAsFixed(1)} MB of '
-        'display list, per published frame',
+        '  pixel path, any signal: append $append us, '
+        'image ${'$instantiate'.padLeft(5)} us, record ${'$record'.padLeft(3)} us, '
+        'per published frame',
       );
-    }
+      stdout.writeln();
 
-    // The pixel path: shift, write one column through the palette, copy out,
-    // instantiate. The same numbers whatever the signal does.
-    final pixels = Uint8List(_columns * rows * 4);
-    final staging = Uint8List(pixels.length);
-    final append = _median(50, () {
-      pixels.setRange(0, pixels.length - 4, pixels, 4);
-      for (var row = 0; row < rows; row++) {
-        final p = (row * _columns + _columns - 1) * 4;
-        pixels[p] = row;
-        pixels[p + 1] = row >> 1;
-        pixels[p + 2] = row >> 2;
-        pixels[p + 3] = 255;
-      }
-      staging.setAll(0, pixels);
-    });
-    ui.Image? image;
-    final instantiate = await _medianAsync(20, () async {
-      final buffer = await ui.ImmutableBuffer.fromUint8List(staging);
-      final descriptor = ui.ImageDescriptor.raw(
-        buffer,
-        width: _columns,
-        height: rows,
-        pixelFormat: ui.PixelFormat.rgba8888,
-      );
-      final codec = await descriptor.instantiateCodec();
-      final frame = await codec.getNextFrame();
-      codec.dispose();
-      descriptor.dispose();
-      buffer.dispose();
-      image?.dispose();
-      image = frame.image;
-    });
-    final record = _median(50, () {
-      _record(
-        (c) => c.drawImageRect(
-          image!,
-          const Rect.fromLTWH(0, 0, _width, rows * 1.0),
-          const Rect.fromLTWH(0, 0, _width, _height),
-          Paint(),
-        ),
-      ).dispose();
-    });
-    image?.dispose();
-
-    stdout.writeln(
-      '  pixel path, any signal: append $append us, '
-      'image ${'$instantiate'.padLeft(5)} us, record ${'$record'.padLeft(3)} us, '
-      'per published frame',
-    );
-    stdout.writeln();
-
-    expect(pixels.length, _columns * rows * 4);
-  });
+      expect(pixels.length, _columns * rows * 4);
+    },
+  );
 }
