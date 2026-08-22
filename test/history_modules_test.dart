@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// The three modules that keep a history, held to the property whose absence
+// The four modules that keep a history, held to the property whose absence
 // crashed the application.
 //
 // Open Audio Analyzer used to accumulate the spectrogram, the phase trail and
@@ -14,8 +14,9 @@
 // finally dropped.
 //
 // The property that prevents the crash is not "no images" — it is **no
-// unbounded retention**. The phase trail and the stereo cloud keep their
-// history as data and redraw it, creating no images at all. The spectrogram
+// unbounded retention**. The phase trail, the stereo cloud and the
+// oscilloscope keep their history as data and redraw it, creating no images at
+// all. The spectrogram
 // keeps its history as pixels and uploads them as an image per published
 // frame — a *pixel-backed* image from `ImageDescriptor.raw`, which holds no
 // display list and no chain, and which replaces a predecessor that is disposed
@@ -29,6 +30,7 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:oaa/src/clock/meter_clock.dart';
+import 'package:oaa/src/modules/oscilloscope.dart';
 import 'package:oaa/src/modules/phase_scope.dart';
 import 'package:oaa/src/modules/spectrogram.dart';
 import 'package:oaa/src/modules/stereo_cloud.dart';
@@ -45,6 +47,10 @@ import 'package:flutter_test/flutter_test.dart';
 class _Fake implements MeterSource {
   int _generation = 0;
 
+  /// One analysis block per publish, which is what the engine does — and what
+  /// makes `elapsedSeconds` and the scope buffer describe the same audio.
+  int _frames = 0;
+
   final Float32List _spectrum = Float32List(MeterShape.spectrumBands);
   final Float32List _pan = Float32List(MeterShape.spectrumBands);
   final Float32List _scope = Float32List(MeterShape.scopePoints * 2);
@@ -53,6 +59,7 @@ class _Fake implements MeterSource {
   /// the displays have a reason to change.
   void publish() {
     _generation++;
+    _frames += MeterShape.scopePoints;
     for (var band = 0; band < _spectrum.length; band++) {
       final tilt = band / _spectrum.length;
       _spectrum[band] = -84 + 70 * (1 - tilt) * ((_generation + band) % 7) / 6;
@@ -78,6 +85,12 @@ class _Fake implements MeterSource {
 
   @override
   int get channels => 2;
+
+  @override
+  int get sampleRate => 48000;
+
+  @override
+  double get elapsedSeconds => _frames / 48000;
 
   @override
   double get correlation => 0.5;
@@ -133,8 +146,8 @@ class _HarnessState extends State<_Harness>
   );
 }
 
-/// Three of these stack inside the 800×600 the test binding gives a window.
-const _size = Size(320, 180);
+/// Four of these stack inside the 800×600 the test binding gives a window.
+const _size = Size(320, 140);
 
 Widget _sized(Widget child) =>
     SizedBox(width: _size.width, height: _size.height, child: child);
@@ -166,7 +179,7 @@ void main() {
   testWidgets('the modules that keep a history retain no images', (
     tester,
   ) async {
-    // Every `ui.Image` in the process, from any code. The three modules below
+    // Every `ui.Image` in the process, from any code. The four modules below
     // are the only things drawing, so anything that lands here was created by
     // one of them. The spectrogram legitimately creates one pixel-backed image
     // per published frame — what it must never do is keep them: a module whose
@@ -174,6 +187,9 @@ void main() {
     // prevent.
     final alive = <ui.Image>{};
     var createdEver = 0;
+    // Four modules now, and only one of them uploads anything. The bound below
+    // is on what is *alive*, not on what was made, so adding a module that
+    // creates no images cannot loosen it.
     final previousCreate = ui.Image.onCreate;
     final previousDispose = ui.Image.onDispose;
     ui.Image.onCreate = (image) {
@@ -196,6 +212,7 @@ void main() {
             _sized(SpectrogramModule(engine: engine, clock: clock)),
             _sized(PhaseScopeModule(engine: engine, clock: clock)),
             _sized(StereoCloudModule(engine: engine, clock: clock)),
+            _sized(OscilloscopeModule(engine: engine, clock: clock)),
           ],
         ),
       ),
@@ -275,6 +292,61 @@ void main() {
       await _shoot(tester, key),
       isNot(scrolled),
       reason: 'the spectrogram did not scroll when a measurement arrived',
+    );
+  });
+
+  testWidgets('the oscilloscope rolls on new audio and on nothing else', (
+    tester,
+  ) async {
+    // The same property as the test above and worth stating twice, because the
+    // oscilloscope reaches it by different arithmetic: it does not advance by
+    // a column per publish, it advances by however many frames
+    // `elapsedSeconds` says were measured. A display keyed on paint instead
+    // would scroll during a resize or a skin change, and a waveform that
+    // scrolls without audio is a picture of time that did not pass.
+    final source = _Fake();
+    final key = GlobalKey();
+
+    await tester.pumpWidget(
+      _Harness(
+        source: source,
+        child: (engine, clock) => RepaintBoundary(
+          key: key,
+          // A rolling base, because a triggered one re-acquires its window
+          // from the samples it kept and would move for a reason that has
+          // nothing to do with scrolling.
+          child: _sized(
+            OscilloscopeModule(
+              engine: engine,
+              clock: clock,
+              timeBase: ScopeTimeBase.s1,
+            ),
+          ),
+        ),
+      ),
+    );
+
+    for (var frame = 0; frame < 20; frame++) {
+      source.publish();
+      await _frame(tester);
+    }
+    final rolled = await _shoot(tester, key);
+
+    for (var frame = 0; frame < 20; frame++) {
+      await _frame(tester);
+    }
+    expect(
+      await _shoot(tester, key),
+      rolled,
+      reason: 'the oscilloscope rolled on a repaint that carried no audio',
+    );
+
+    source.publish();
+    await _frame(tester);
+    expect(
+      await _shoot(tester, key),
+      isNot(rolled),
+      reason: 'the oscilloscope did not roll when a measurement arrived',
     );
   });
 }

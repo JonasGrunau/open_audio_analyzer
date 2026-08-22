@@ -24,7 +24,7 @@ import 'workspace.dart';
 ///
 /// A canvas can hold a dozen live meters. If a drag rebuilt the widget tree as
 /// the pointer moved, every one of those subtrees would be rebuilt at pointer
-/// rate — inflating thirteen modules, thirteen painters and thirteen cached
+/// rate — inflating fourteen modules, fourteen painters and fourteen cached
 /// `ui.Paragraph` sets per pointer event — while the audio thread continues to
 /// publish at 47 Hz and the display expects a frame every 16 ms. It would stall
 /// exactly when the user is watching the screen most closely.
@@ -263,6 +263,16 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
             'Response — ${module.spectrumResponse.label}',
             color: colors.textMuted,
           ),
+        // The one control the oscilloscope has, and it is two settings in one:
+        // it sets how much time the width holds *and*, by doing so, whether
+        // the display is triggered or rolls. See `ScopeTimeBase`.
+        if (module.kind == ModuleKind.oscilloscope)
+          oaaMenuItem(
+            context,
+            _ModuleAction.timeBase,
+            'Time base — ${module.scopeTimeBase.label}',
+            color: colors.textMuted,
+          ),
         oaaMenuItem(context, _ModuleAction.duplicate, 'Duplicate'),
         oaaMenuItem(
           context,
@@ -280,6 +290,8 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
         await _showMetricMenu(globalPosition, module);
       case _ModuleAction.response:
         await _showResponseMenu(globalPosition, module);
+      case _ModuleAction.timeBase:
+        await _showTimeBaseMenu(globalPosition, module);
       case _ModuleAction.duplicate:
         if (!_controller.duplicateModule(module.id)) {
           _report('No room on this tab for another ${module.kind.label}.');
@@ -335,6 +347,31 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
 
     if (response == null || !mounted) return;
     _controller.setModuleOption(module.id, 'response', response.id);
+  }
+
+  Future<void> _showTimeBaseMenu(
+    Offset globalPosition,
+    ModuleSpec module,
+  ) async {
+    final colors = OaaTheme.of(context);
+    final current = module.scopeTimeBase;
+    final base = await showMenu<ScopeTimeBase>(
+      context: context,
+      color: colors.panelRaised,
+      position: menuPositionAt(context, globalPosition),
+      items: [
+        for (final base in ScopeTimeBase.values)
+          oaaMenuItem(
+            context,
+            base,
+            base.label,
+            color: base == current ? colors.textPrimary : colors.textMuted,
+          ),
+      ],
+    );
+
+    if (base == null || !mounted) return;
+    _controller.setModuleOption(module.id, 'timeBase', base.id);
   }
 
   // --- Build --------------------------------------------------------------
@@ -416,7 +453,7 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
                 // The refusal line. A `Consumer` so that the message can
                 // arrive from the keyboard as well as from a dropped drag,
                 // and so that saying it rebuilds this corner rather than the
-                // thirteen meters above it.
+                // fourteen meters above it.
                 Positioned(
                   left: 0,
                   right: 0,
@@ -503,7 +540,7 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
   }
 }
 
-enum _ModuleAction { metric, response, duplicate, delete }
+enum _ModuleAction { metric, response, timeBase, duplicate, delete }
 
 /// One module and the five transparent layers that make it manipulable.
 class _ModuleSlot extends StatelessWidget {
@@ -874,7 +911,7 @@ class _PreviewPainter extends MeterPainter {
     canvas.drawPath(sheet, _scrim);
 
     // The grid appears only while something is being dragged. Permanently
-    // ruled lines behind thirteen meters is graph paper, and it competes with
+    // ruled lines behind fourteen meters is graph paper, and it competes with
     // the measurements; during a drag it is the thing the eye needs.
     //
     // Clipped to the sheet, so the ruling stops at the module being carried

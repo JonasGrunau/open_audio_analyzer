@@ -13,7 +13,7 @@ import '../data/metric_reader.dart';
 /// One measurement, watched, with the worst it has been **latched**.
 ///
 /// The latch is the entire module. Every other meter here answers "what is it
-/// doing now", and nobody watches thirteen of those continuously — you play a
+/// doing now", and nobody watches fourteen of those continuously — you play a
 /// mix, you talk to someone, and the one moment true peak went over is three
 /// minutes in the past and gone from every display. This one keeps it until it
 /// is cleared, which is the only way a warning about a transient is any use.
@@ -209,7 +209,7 @@ class _AlertPainter extends MeterPainter {
     // The latched value tracks the live one at roughly a third of its size, so
     // the two keep the same relationship at every module size. Its label does
     // not: `WORST` is a label, and labels are the same everywhere on the
-    // canvas — scaling those is how thirteen modules end up with thirteen type
+    // canvas — scaling those is how fourteen modules end up with fourteen type
     // scales.
     final worstSize = (fontSize * 0.32).clamp(12.0, 26.0).toDouble();
     final worstHeight = worstSize + Space.xxs;

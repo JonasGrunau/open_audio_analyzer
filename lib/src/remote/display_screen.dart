@@ -14,7 +14,7 @@ import 'host_picker.dart';
 ///
 /// The thing worth noticing here is how little of it there is. It opens a
 /// socket and hands a `MeterSource` and a `PresetSpec` to [ModuleHost] — the
-/// *same* [ModuleHost] the desktop canvas uses, wrapping the same thirteen
+/// *same* [ModuleHost] the desktop canvas uses, wrapping the same fourteen
 /// modules and the same painters. There is no tablet rendering path. A remote
 /// display whose meters had been written a second time would eventually
 /// disagree with the desktop about what the signal did, and at that point

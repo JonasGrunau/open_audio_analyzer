@@ -38,7 +38,7 @@ PopupMenuItem<T> oaaMenuItem<T>(
   );
 }
 
-/// Offers all thirteen module kinds.
+/// Offers all fourteen module kinds.
 ///
 /// In declaration order, which is roughly simplest first, and not alphabetical:
 /// somebody who has used this menu twice reaches for a position rather than

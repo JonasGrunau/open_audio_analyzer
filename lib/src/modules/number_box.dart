@@ -11,12 +11,12 @@ import '../data/metric_reader.dart';
 
 /// Displays any single measurement as a number.
 ///
-/// The simplest of the thirteen modules, and therefore the one that establishes
+/// The simplest of the fourteen modules, and therefore the one that establishes
 /// the pattern all the others follow:
 ///
 ///   - The widget is the **body only**. Its title bar, border, menu affordance
 ///     and selection state belong to the `ModuleFrame` the canvas wraps it in,
-///     so that thirteen modules cannot drift into thirteen slightly different
+///     so that fourteen modules cannot drift into fourteen slightly different
 ///     frames.
 ///   - The widget builds **once**. It rebuilds only when the palette or the
 ///     target changes, never because a measurement did.

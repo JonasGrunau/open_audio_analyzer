@@ -110,7 +110,7 @@ class ReadoutPainter {
 
 /// Maps a [ReadingState] onto the palette.
 ///
-/// Centralised so that "over" is the same red in all thirteen modules. It sounds
+/// Centralised so that "over" is the same red in all fourteen modules. It sounds
 /// trivial; it is the difference between a colour that means something and a
 /// colour that is just decoration.
 ///

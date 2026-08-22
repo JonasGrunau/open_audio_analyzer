@@ -59,7 +59,7 @@ final workspaceProvider = NotifierProvider<WorkspaceController, Workspace>(
 /// pattern with an inverse per operation, is where undo bugs come from: the
 /// inverse of "delete a module" has to restore its id, its options and its
 /// position in the list, and it will be written once and then not updated when
-/// a thirteenth module kind arrives.
+/// a fourteenth module kind arrives.
 ///
 /// **Selection changes do not enter the history.** Undo that walks back through
 /// every click before it undoes anything is undo that nobody uses.
@@ -378,10 +378,16 @@ PresetSpec defaultPreset() {
           // that benefits most from it: at 24 columns each of its 512 bands
           // gets more than two pixels, and below about half that the display
           // starts throwing away detail the engine measured.
-          module(ModuleKind.spectrumAnalyzer, 0, 0, 24, 8),
-          module(ModuleKind.spectrogram, 0, 8, 12, 8),
-          module(ModuleKind.phaseScope, 12, 8, 6, 8),
-          module(ModuleKind.stereoCloud, 18, 8, 6, 8),
+          module(ModuleKind.spectrumAnalyzer, 0, 0, 24, 7),
+          // Under it, and just as wide, for the opposite reason: time is the
+          // oscilloscope's axis and a second of audio across twelve columns is
+          // half the transients. Four rows rather than more because a waveform
+          // is read by its shape and gains little from height, where the three
+          // displays below it are all square-ish and lose a lot.
+          module(ModuleKind.oscilloscope, 0, 7, 24, 4),
+          module(ModuleKind.spectrogram, 0, 11, 12, 5),
+          module(ModuleKind.phaseScope, 12, 11, 6, 5),
+          module(ModuleKind.stereoCloud, 18, 11, 6, 5),
         ],
       ),
     ],

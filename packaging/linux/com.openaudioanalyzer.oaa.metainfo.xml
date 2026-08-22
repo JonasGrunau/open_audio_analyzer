@@ -67,7 +67,7 @@
     <control>touch</control>
   </supports>
 
-  <!-- A canvas of thirteen meters does not fit on a phone. -->
+  <!-- A canvas of fourteen meters does not fit on a phone. -->
   <requires>
     <display_length compare="ge">768</display_length>
   </requires>

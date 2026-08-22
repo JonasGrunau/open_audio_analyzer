@@ -1,7 +1,8 @@
 # Open Audio Analyzer
 
 Open Audio Analyzer is a modular metering suite: a canvas of resizable meter
-modules — loudness, true peak, VU, spectrum, spectrogram, phase scope, histogram
+modules — loudness, true peak, VU, spectrum, spectrogram, oscilloscope, phase
+scope, histogram
 — organised into tabs, driven by presets, delivery targets and skins, with
 offline file analysis and a companion display that mirrors a tab to a tablet
 over Wi-Fi.
@@ -43,7 +44,7 @@ worse than one that admits them.
 
 ## The canvas
 
-Twelve module kinds, arranged on a twenty-four by sixteen grid across as many
+Fourteen module kinds, arranged on a twenty-four by sixteen grid across as many
 tabs as you like.
 
 | | |
@@ -59,6 +60,7 @@ tabs as you like.
 | **Loudness Distribution** | How often the programme sat at each loudness, with the two percentiles LRA is the distance between. |
 | **Spectrum Analyzer** | 512 log-spaced bands from a 4096-point Hann window, zero-padded to a 16384-point transform. |
 | **Spectrogram** | The same transform over time. |
+| **Oscilloscope** | The waveform itself, a lane per channel. A time base from 5 ms to 5 seconds: triggered on a rising zero crossing below 200 ms so a periodic signal stands still, rolling above it. Full-scale samples are drawn in the over colour. |
 | **Phase Scope** | The goniometer, from the raw stereo sample stream. |
 | **Stereo Cloud** | Stereo position per frequency band. Needs two channels; on a mono source it says so. |
 

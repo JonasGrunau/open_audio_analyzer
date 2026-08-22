@@ -9,6 +9,38 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### ✨ Added
+- An **Oscilloscope** module: the waveform itself, in a lane per channel. Its
+  one control is a time base, from 5 ms to 5 s, and it sets both how much time
+  the width holds and how the window is found — below 200 ms the display is
+  triggered on a rising zero crossing, so a periodic signal stands still and
+  can be read, and above it the display rolls right to left the way a DAW
+  draws a waveform. Anything that reached full scale is drawn in the over
+  colour, so a clipped passage is a red band rather than a flat top somebody
+  has to notice. It measures nothing the previous thirteen modules did not:
+  the samples were already published, and it works on a tablet unchanged.
+- The oscilloscope leaves a gap where audio was measured and never published —
+  a file pushed through faster than real time, or a device that overran. The
+  alternative is drawing the samples that happen to be at hand across the
+  whole stretch, which is a picture of a programme that never played, at the
+  right amplitude and in the right place.
+
+### ⚡ Changed
+- The default layout's Spectrum tab carries the oscilloscope across its full
+  width. The analyser and the three displays below it are a row shorter each
+  to make room. A layout you have already arranged is untouched — the canvas
+  as you left it is what reopens.
+
+### 🚧 Internal
+- The meter clock now acquires the engine's snapshot on every tick and throttles
+  only the repaint. The frame-rate setting still does what it says — at 30 fps
+  the meters rasterise thirty times a second — but a measurement is no longer
+  lost between two of them. The engine's snapshot has one slot, so anything a
+  reader does not take before the next publish is gone; that cost the old
+  arrangement one measurement in three at 30 fps against a 47 Hz publish rate.
+  The oscilloscope is the first module for which that is a hole rather than a
+  coarser picture, and it reads the new unthrottled channel.
+
 ## [0.7.0] — 2026-08-22
 
 ### ✨ Added

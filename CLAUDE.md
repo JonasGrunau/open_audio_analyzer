@@ -14,7 +14,7 @@ the licensing split and the honest list of gaps. Read it before changing
 anything non-trivial. `docs/PLAN.md` is the full phased plan.
 
 **Currently Phase 8 complete — every phase in `docs/PLAN.md` has shipped.**
-All thirteen modules measure something. Loudness and true peak are held against
+All fourteen modules measure something. Loudness and true peak are held against
 the EBU conformance cases in CI, and the spectrum against a sine of known
 amplitude. Layouts, settings, delivery targets and skins persist as JSON under
 the platform's configuration directory. Files are analysed offline by the app
@@ -113,7 +113,10 @@ is unaffected: it never links JUCE — it talks to the plugin over a socket.
   - route measurements through Riverpod, a `Stream`, or a `ValueNotifier` that
     widgets rebuild from;
   - give a module its own `Ticker` — there is exactly one, and independent
-    tickers drift so that two meters can disagree within a frame;
+    tickers drift so that two meters can disagree within a frame. A module that
+    must see *every* published measurement rather than every repaint listens to
+    `MeterClock.measurements`, which is the same clock unthrottled and marks
+    nothing dirty; a `Ticker` of its own is still never the answer;
   - lay out a `ui.Paragraph` when the formatted string has not changed.
 
 - **`engine/` must not learn about Flutter, and `oaa_core` must not learn about
@@ -124,7 +127,7 @@ is unaffected: it never links JUCE — it talks to the plugin over a socket.
 
 - **A module reads `MeterSource`, never a concrete engine.** There are two
   implementations — `OaaEngine` over native memory, and `WireSnapshot` over a
-  socket — and the thirteen modules cannot tell them apart. That is what lets a
+  socket — and the fourteen modules cannot tell them apart. That is what lets a
   tablet with no engine draw the desktop's meters with the desktop's painters.
   If something cannot be drawn from a `MeterSource`, widen the interface; do not
   write a second painter, because two implementations of a meter are two meters

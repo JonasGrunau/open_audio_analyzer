@@ -7,7 +7,7 @@ exactly once.
 |------|----------|
 | `src/tokens.dart` | `Space`, `OaaControl`, `OaaRadius`, `OaaStroke`, `OaaColors`, `OaaType`. |
 | `src/theme.dart` | `OaaTheme` (an `InheritedWidget`) and a derived Material theme. |
-| `src/module_frame.dart` | `ModuleFrame` — the chrome all thirteen modules sit inside. |
+| `src/module_frame.dart` | `ModuleFrame` — the chrome all fourteen modules sit inside. |
 | `src/meter_painter.dart` | The base every module painter extends. It exists to make `hitTest` return false; see the rules below. |
 | `src/readout.dart` | `ReadoutPainter` (cached paragraph layout) and `ReadingState`. |
 | `src/text_cache.dart` | `layoutParagraph` for static labels and `ValueParagraph` for changing ones — the cache that re-lays out only when a *formatted string* differs. |

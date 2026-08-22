@@ -126,6 +126,19 @@ enum ModuleKind {
     minBodyWidth: 80,
     minBodyHeight: 40,
   ),
+  oscilloscope(
+    'oscilloscope',
+    'Oscilloscope',
+    minColumns: 8,
+    // Three, because two lanes need room to be two lanes. A stereo waveform
+    // drawn in one row is two four-pixel strips separated by a gutter, which
+    // reads as a rendering fault rather than as a small meter.
+    minRows: 3,
+    defaultColumns: 12,
+    defaultRows: 5,
+    minBodyWidth: 120,
+    minBodyHeight: 48,
+  ),
   phaseScope(
     'phase_scope',
     'Phase Scope',
@@ -204,7 +217,7 @@ enum ModuleKind {
   /// Deliberately larger than the minimum. Placing a module at its own minimum
   /// means every module arrives looking cramped and the first thing anybody
   /// does after adding one is resize it, which is a small failure repeated
-  /// thirteen times.
+  /// fourteen times.
   final int defaultColumns;
   final int defaultRows;
 
@@ -355,11 +368,74 @@ enum SpectrumResponse {
   }
 }
 
+/// How much time the oscilloscope's display spans, left edge to right.
+///
+/// A 1-2-5 sequence, because that is the sequence every time-base knob has ever
+/// had and somebody who has used a scope reaches for the next detent rather
+/// than reading the menu.
+///
+/// **The setting also decides how the window is found**, and that is not a
+/// second control because there is only one right answer at each end. Below
+/// [_rollAbove] the display is *triggered*: the module looks back through the
+/// samples it has kept for the most recent rising zero crossing and draws
+/// forward from there, so a periodic signal stands still. Above it the display
+/// *rolls*: measurements are accumulated into columns and scrolled right to
+/// left, the way a DAW draws a waveform.
+///
+/// The boundary is where each stops working. A rolling display advances by one
+/// published measurement — 21 ms of audio — per step, so at 200 ms a fifth of
+/// the width arrives at once and the picture lurches; and a triggered display
+/// has to hold the whole span in memory *plus* somewhere to search, which is
+/// the other reason not to let the fast mode run to seconds. Between 200 ms and
+/// 500 ms either would do, and the split is put there rather than left to the
+/// reader.
+enum ScopeTimeBase {
+  ms5('5ms', '5 ms', 0.005),
+  ms10('10ms', '10 ms', 0.010),
+  ms20('20ms', '20 ms', 0.020),
+  ms50('50ms', '50 ms', 0.050),
+  ms100('100ms', '100 ms', 0.100),
+  ms200('200ms', '200 ms', 0.200),
+  ms500('500ms', '500 ms', 0.500),
+  s1('1s', '1 s', 1.0),
+  s2('2s', '2 s', 2.0),
+  s5('5s', '5 s', 5.0);
+
+  const ScopeTimeBase(this.id, this.label, this.seconds);
+
+  /// Stable identifier for presets. Never change one of these; add a new base
+  /// instead.
+  final String id;
+
+  /// What the module's menu says, and what the display prints in its corner.
+  final String label;
+
+  /// Seconds from the left edge of the display to the right.
+  final double seconds;
+
+  /// The first span that rolls instead of triggering.
+  static const double _rollAbove = 0.2;
+
+  /// Whether the window is found by a trigger rather than scrolled into view.
+  bool get isTriggered => seconds <= _rollAbove;
+
+  /// The longest span a triggered display has to hold, which is what sizes the
+  /// module's sample buffer.
+  static double get longestTriggered => _rollAbove;
+
+  static ScopeTimeBase? fromId(String id) {
+    for (final base in ScopeTimeBase.values) {
+      if (base.id == id) return base;
+    }
+    return null;
+  }
+}
+
 /// One module on a tab.
 ///
 /// [options] is an untyped map on purpose. Every module has its own settings —
 /// the spectrogram's scroll direction, the VU's face, the digital meter's decay
-/// — and threading a sealed class hierarchy for all thirteen through the preset
+/// — and threading a sealed class hierarchy for all fourteen through the preset
 /// serialiser buys type safety in exactly one place while making it impossible
 /// to load a preset written by a newer version. An unknown key here is
 /// ignored and preserved; an unknown subclass would be a parse failure.
@@ -393,6 +469,18 @@ class ModuleSpec {
   SpectrumResponse get spectrumResponse =>
       SpectrumResponse.fromId(options['response'] as String? ?? '') ??
       SpectrumResponse.normal;
+
+  /// How much time the oscilloscope shows at once.
+  ///
+  /// Defaults to a second, which is the setting the module was asked for: long
+  /// enough that the shape of a phrase and the spacing of its transients are
+  /// the picture, rather than one cycle of the fundamental. The scope speeds
+  /// below 200 ms are one menu away and are what the module is called after,
+  /// but a display that opens on 20 ms shows a stranger a stationary squiggle
+  /// and tells them nothing about their mix.
+  ScopeTimeBase get scopeTimeBase =>
+      ScopeTimeBase.fromId(options['timeBase'] as String? ?? '') ??
+      ScopeTimeBase.s1;
 
   /// What a LUFS module's integration counts from.
   ///

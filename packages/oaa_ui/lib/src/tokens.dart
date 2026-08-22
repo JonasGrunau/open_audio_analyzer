@@ -236,7 +236,7 @@ class OaaColors {
   /// palette was a compile-time constant, identity was equality and the
   /// comparison was free. Skins end that: the palette is now built from a
   /// document, and without this a rebuild that produced an identical palette
-  /// would re-rasterise all thirteen modules — and `OaaTheme.updateShouldNotify`
+  /// would re-rasterise all fourteen modules — and `OaaTheme.updateShouldNotify`
   /// would notify the whole tree on every skin *re-read*, not every skin
   /// change.
   @override

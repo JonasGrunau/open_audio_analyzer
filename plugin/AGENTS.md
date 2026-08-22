@@ -7,7 +7,7 @@ A metering plugin that draws nothing. It takes the DAW's buffer, pushes it into
 to the Open Audio Analyzer desktop app over a TCP socket. The app draws.
 
 That division is not a limitation being worked around. Flutter cannot be a
-plugin GUI, and the alternative — reimplementing thirteen meter modules in C++ so
+plugin GUI, and the alternative — reimplementing fourteen meter modules in C++ so
 the plugin could draw them itself — would give this project two implementations
 of every measurement's *presentation*, which would drift, and one of them would
 be wrong in a way nobody noticed for months.

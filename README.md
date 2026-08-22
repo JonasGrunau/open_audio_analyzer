@@ -61,7 +61,7 @@ approximating.
 
 **📄 This README** —
 [✅ Status](#-status) ·
-[📊 The thirteen modules](#-the-thirteen-modules) ·
+[📊 The fourteen modules](#-the-fourteen-modules) ·
 [⚡ Why it is built this way](#-why-it-is-built-this-way) ·
 [📐 Measurement](#-measurement) ·
 [🧩 Layout](#-layout) ·
@@ -83,7 +83,7 @@ approximating.
 
 | | What ships today |
 |:-:|---|
-| 🎚️ | **All thirteen modules exist and measure something.** Open Audio Analyzer opens on a working meter bridge — loudness, super, digital, VU, validator, histogram, alert — with the analyser, spectrogram, phase scope and stereo cloud on a second tab. |
+| 🎚️ | **All fourteen modules exist and measure something.** Open Audio Analyzer opens on a working meter bridge — loudness, super, digital, VU, validator, histogram, alert — with the analyser, oscilloscope, spectrogram, phase scope and stereo cloud on a second tab. |
 | 🧩 | **The canvas is arrangeable**: add, move, resize, duplicate, delete, tabs, undo. |
 | 📐 | **Loudness and true peak are verified** against the EBU Tech 3341/3342 cases, and the spectrum against a sine of known amplitude on a bin centre, on Linux, macOS and Windows on every push. |
 | 💾 | **What you set up is remembered** — the layout, the delivery target, the skin and the capture device — and reopens with the window. Settings, presets, your own delivery targets and your own skins are plain JSON files in a documented directory; see [Configuration](#-configuration). |
@@ -99,7 +99,7 @@ was approved.
 
 ---
 
-## 📊 The thirteen modules
+## 📊 The fourteen modules
 
 Every one of them is [`ModuleFrame`](packages/oaa_ui/lib/src/module_frame.dart)
 plus a painter, reads the same `MeterSource`, and repaints from the same clock.
@@ -117,6 +117,7 @@ plus a painter, reads the same `MeterSource`, and repaints from the same clock.
 | **Loudness Distribution** | How much of the programme was spent at each loudness. |
 | **Spectrum Analyzer** | Level against frequency, log-spaced, with a peak hold. |
 | **Spectrogram** | Frequency against time, with level as brightness. |
+| **Oscilloscope** | The waveform itself, one lane per channel: triggered at scope speeds, rolling from half a second up. |
 | **Phase Scope** | A goniometer: left against right, rotated so mono stands upright. |
 | **Stereo Cloud** | Where each frequency sits in the stereo image, accumulated over time. |
 
@@ -153,9 +154,15 @@ nothing.
 
 Three consequences worth naming, because they are what usually goes wrong:
 
-- **One clock, not thirteen.** Independent tickers drift, and two meters showing
+- **One clock, not fourteen.** Independent tickers drift, and two meters showing
   the same quantity could then disagree within a single frame. On a measurement
   tool that is a correctness bug, not a cosmetic one.
+- **Measurements are consumed at the rate they are published; pixels are drawn
+  at the rate you asked for.** The two are separate channels on that one clock.
+  Dropping to 30 fps halves the rasterising and changes nothing about what the
+  meters have seen — which matters because the engine's snapshot has one slot,
+  so a measurement nobody reads in time is gone, and a display whose axis is
+  time would have holes in it rather than a coarser picture.
 - **Text is cached by formatted string.** A value changes continuously; the
   string rounded to one decimal changes about ten times a second. Laying out a
   `ui.Paragraph` on the other fifty frames is pure waste, so
@@ -516,7 +523,7 @@ width, tracking and cap height all differ between macOS, Windows and Linux, and
 a layout tuned on one is subtly wrong on the other two. Both are SIL OFL 1.1 and
 their licences ship in `assets/fonts/`.
 
-Every one of the thirteen modules is [`ModuleFrame`](packages/oaa_ui/lib/src/module_frame.dart)
+Every one of the fourteen modules is [`ModuleFrame`](packages/oaa_ui/lib/src/module_frame.dart)
 plus a painter. That is the whole reuse strategy: a module that also owns its
 own border and title treatment is a module that will drift from the other
 eleven.

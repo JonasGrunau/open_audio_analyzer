@@ -615,7 +615,7 @@ void main() {
     expect(added.kind, ModuleKind.spectrumAnalyzer);
     expect(added.rect.row, greaterThanOrEqualTo(3));
 
-    // And it is a real analyser, not a placeholder. Every one of the thirteen
+    // And it is a real analyser, not a placeholder. Every one of the fourteen
     // kinds the menu offers now draws something.
     expect(find.byType(SpectrumAnalyzerModule), findsOneWidget);
   });
@@ -706,7 +706,7 @@ void main() {
     // painter that throws on its first frame — a null label cache, a division
     // by a zero-height module — so every kind is placed and painted here.
     //
-    // One tab per kind, because thirteen modules at their default sizes do not
+    // One tab per kind, because fourteen modules at their default sizes do not
     // fit on one and the canvas would correctly refuse half of them.
     final container = await _pump(tester);
     final controller = container.read(workspaceProvider.notifier);

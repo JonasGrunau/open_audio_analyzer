@@ -8,7 +8,7 @@ import 'tokens.dart';
 
 /// The chrome every meter module sits inside.
 ///
-/// All thirteen modules are this frame plus a painter. That is the whole reuse
+/// All fourteen modules are this frame plus a painter. That is the whole reuse
 /// strategy, and it is deliberate: a module that also owns its own border, its
 /// own title treatment and its own menu affordance is a module that will drift
 /// from the other eleven, and eleven near-identical borders is exactly how an

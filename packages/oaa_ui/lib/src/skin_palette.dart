@@ -10,7 +10,7 @@ import 'tokens.dart';
 /// It is a free function in its own file rather than a constructor on
 /// [OaaColors] so that `tokens.dart` — which every module painter imports —
 /// keeps importing nothing but `dart:ui`. The domain model knows what a skin
-/// *is*; this knows what a skin *looks like*; and the thirteen painters need
+/// *is*; this knows what a skin *looks like*; and the fourteen painters need
 /// neither.
 ///
 /// **Call this once per skin, not once per build.** `OaaColors` has value

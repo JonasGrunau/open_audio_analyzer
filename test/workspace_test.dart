@@ -55,7 +55,7 @@ void main() {
     });
 
     test('every module kind is on it somewhere', () {
-      // The preset is also the only place all thirteen kinds are exercised
+      // The preset is also the only place all fourteen kinds are exercised
       // together, so a kind that exists but nobody has laid out is worth
       // catching here: the alternative is that it ships never having been
       // drawn at a real size.

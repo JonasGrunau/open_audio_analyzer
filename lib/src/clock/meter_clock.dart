@@ -10,7 +10,7 @@ import 'package:flutter/foundation.dart';
 /// tickers, do not own timers, and do not subscribe to streams. There are three
 /// reasons, in increasing order of how much they matter:
 ///
-///   1. Thirteen tickers is thirteen callbacks per frame doing the same work.
+///   1. Fourteen tickers is fourteen callbacks per frame doing the same work.
 ///   2. Independent tickers drift, so two meters showing the same measurement
 ///      can show *different* values in the same frame. On a metering tool that
 ///      is not a cosmetic problem, it is a correctness problem — a user
@@ -50,6 +50,7 @@ class MeterClock extends ChangeNotifier {
     if (identical(value, _source)) return;
     _source = value;
     _seenGeneration = -1;
+    _measuredGeneration = -1;
   }
 
   late final Ticker _ticker;
@@ -130,19 +131,51 @@ class MeterClock extends ChangeNotifier {
   /// 120 fps, something is notifying that should not be.
   int get framesSkipped => _framesSkipped;
 
+  /// Fires once per **published measurement**, never throttled.
+  ///
+  /// [notifyListeners] is what repaints, and it is throttled to [effectiveFps]
+  /// because that is what the setting is for — a laptop on battery does not
+  /// need 120 rasterisations a second. But a module that keeps a *record* of
+  /// what the signal did cannot be throttled with the pixels, because the
+  /// record is not redrawable from a later frame: the engine's snapshot is a
+  /// seqlock with one slot, so a measurement nobody read before the next
+  /// publish is gone.
+  ///
+  /// At 30 fps the reader asks every 33 ms and the engine publishes every
+  /// 21 ms, so **one publish in three is lost** — and the oscilloscope, whose
+  /// whole axis is time, would draw a third of its width as holes and refuse
+  /// to fill a window longer than one buffer at all. The clock's tick runs at
+  /// the display's refresh rate, which is 60 or 120 and therefore always
+  /// faster than 47, so consuming here and drawing later is the difference
+  /// between a complete record and a sampled one.
+  ///
+  /// What crosses this is the *acquisition*, not a repaint: a listener folds
+  /// the new measurement into whatever it is accumulating and does not mark
+  /// anything dirty. Pixels still arrive at the rate the user asked for.
+  Listenable get measurements => _measurements;
+  final ChangeNotifier _measurements = ChangeNotifier();
+
   static Duration _intervalFor(int fps) =>
       Duration(microseconds: (1000000 / fps).floor() - 1);
 
   void _onTick(Duration elapsed) {
+    final engine = _source;
+
+    // The single FFI call on the frame path, and **above the throttle on
+    // purpose** — see [measurements]. It is a memcpy of one snapshot; running
+    // it at the display's rate rather than at the meter's costs a few hundred
+    // kilobytes a second and is what keeps a time axis from losing time.
+    engine.refresh();
+
+    if (engine.generation != _measuredGeneration) {
+      _measuredGeneration = engine.generation;
+      _measurements.notifyListeners();
+    }
+
     if (elapsed - _lastPublished < _minimumInterval) {
       return;
     }
     _lastPublished = elapsed;
-
-    final engine = _source;
-
-    // The single FFI call on the frame path.
-    engine.refresh();
 
     // Whether there is anything new is decided by comparing generations, not by
     // trusting what `refresh` returned. That looks like a pointless extra field
@@ -169,9 +202,15 @@ class MeterClock extends ChangeNotifier {
   /// source that published exactly once must still get that frame painted.
   int _seenGeneration = -1;
 
+  /// The same, for [measurements]. Two counters rather than one, because a
+  /// throttled tick consumes the measurement and must not thereby persuade the
+  /// next unthrottled one that it has already been seen.
+  int _measuredGeneration = -1;
+
   @override
   void dispose() {
     _ticker.dispose();
+    _measurements.dispose();
     overrun.dispose();
     super.dispose();
   }

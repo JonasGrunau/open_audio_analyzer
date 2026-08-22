@@ -333,7 +333,7 @@ final skinProvider = Provider<Skin>((ref) {
 /// **One instance per skin, and that matters.** Every module painter's
 /// `shouldRepaint` compares its palette; building a fresh `OaaColors` inside a
 /// widget's `build` would allocate thirteen colours per rebuild and — before
-/// `OaaColors` gained value equality — would have re-rasterised all thirteen
+/// `OaaColors` gained value equality — would have re-rasterised all fourteen
 /// modules every time anything in the tree changed. A `Provider` caches until
 /// its dependencies change, which is exactly the lifetime wanted.
 final paletteProvider = Provider<OaaColors>(

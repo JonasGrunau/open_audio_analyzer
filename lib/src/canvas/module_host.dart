@@ -11,6 +11,7 @@ import '../modules/histogram.dart';
 import '../modules/loudness_distribution.dart';
 import '../modules/lufs_meter.dart';
 import '../modules/number_box.dart';
+import '../modules/oscilloscope.dart';
 import '../modules/phase_scope.dart';
 import '../modules/spectrogram.dart';
 import '../modules/spectrum_analyzer.dart';
@@ -24,7 +25,7 @@ import '../modules/vu_meter.dart';
 /// The single place that knows which module kinds exist as code. Everything
 /// else in the canvas works in terms of rectangles and ids and does not care
 /// what is inside them, which is what keeps the drag, resize and selection
-/// logic from acquiring thirteen special cases.
+/// logic from acquiring fourteen special cases.
 ///
 /// The frame is built here rather than by each module, so that the title, the
 /// border, the menu affordance and the selection state are written once.
@@ -92,7 +93,7 @@ class ModuleHost extends StatelessWidget {
   }
 
   Widget _meter() {
-    // Exhaustive on purpose: no default arm. When the fourteenth module kind is
+    // Exhaustive on purpose: no default arm. When the fifteenth module kind is
     // added the compiler names this switch, rather than the new module silently
     // rendering as "not built" for however long it takes somebody to notice.
     return switch (spec.kind) {
@@ -148,6 +149,11 @@ class ModuleHost extends StatelessWidget {
         response: spec.spectrumResponse,
       ),
       ModuleKind.spectrogram => SpectrogramModule(engine: engine, clock: clock),
+      ModuleKind.oscilloscope => OscilloscopeModule(
+        engine: engine,
+        clock: clock,
+        timeBase: spec.scopeTimeBase,
+      ),
       ModuleKind.phaseScope => PhaseScopeModule(engine: engine, clock: clock),
       ModuleKind.stereoCloud => StereoCloudModule(engine: engine, clock: clock),
     };

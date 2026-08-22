@@ -9,7 +9,7 @@ The application. GPL-3.0-or-later.
 | `src/canvas/` | The grid canvas, the tab strip and the layout controller. See its own `AGENTS.md`. |
 | `src/clock/` | `MeterClock` — the only `Ticker` in the app. |
 | `src/data/` | Riverpod providers (configuration only) and `metric_reader.dart`. |
-| `src/modules/` | One file per meter module, all thirteen. Bodies only — the frame is the canvas's. |
+| `src/modules/` | One file per meter module, all fourteen. Bodies only — the frame is the canvas's. |
 | `src/panels/` | Settings, presets, the delivery-target editor, the report. See its own `AGENTS.md`. |
 | `src/storage/` | Where configuration lives and how it is read and written. See its own `AGENTS.md`. |
 | `src/remote/` | Both ends of the remote display — the desktop host and the tablet client — plus mDNS. See its own `AGENTS.md`. |
@@ -24,11 +24,20 @@ The application. GPL-3.0-or-later.
 - **One clock.** Modules do not create tickers, timers or stream subscriptions.
   Independent tickers drift, and two meters showing the same quantity could then
   disagree within a single frame — a correctness bug, not a cosmetic one.
+- **A module that keeps a record of time reads `MeterClock.measurements`, not
+  `paint`.** `notifyListeners` is throttled to the user's fps setting, and the
+  engine's snapshot is a seqlock with one slot — so at 30 fps against a 47 Hz
+  publish rate, one measurement in three is gone before anybody looks at it. A
+  module whose display is *per published frame* (the spectrogram's columns, the
+  phase trail) loses resolution and no more. A module whose display is *per
+  second* — the oscilloscope — loses the audio, and draws holes. `measurements`
+  fires on every tick that carried a new generation and marks nothing dirty;
+  pixels still arrive at the rate that was asked for.
 - **A module is `ModuleFrame` + a painter, and the painter takes
   `repaint: clock`.** That constructor argument is the whole render strategy: it
   re-rasters without rebuilding the widget. The module widget supplies the
   **body only**; `ModuleHost` wraps it in the frame, so the title, border, menu
-  affordance and selection state are written once for all thirteen.
+  affordance and selection state are written once for all fourteen.
 - **Every module painter extends `MeterPainter`, never `CustomPainter`
   directly.** `CustomPainter.hitTest` returns null and `RenderCustomPaint` reads
   that as *true*, so a plain painter silently swallows every pointer event that
@@ -58,8 +67,8 @@ The application. GPL-3.0-or-later.
   diameter) and clamp it, taking the *width* into the minimum wherever a long
   reading could run off the side. What stays fixed is everything that is not a
   measurement: a scale's tick labels, a column heading, a unit, PASS and FAIL.
-  Those are the same size in all thirteen modules, and scaling them is how thirteen
-  modules end up with thirteen type scales.
+  Those are the same size in all fourteen modules, and scaling them is how fourteen
+  modules end up with fourteen type scales.
 - **A module never guards its own minimum size.** Declare it as
   `minBodyWidth`/`minBodyHeight` on `ModuleKind` and let the frame substitute
   the placeholder. A painter that returns early draws nothing, and nothing with

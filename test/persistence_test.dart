@@ -247,7 +247,7 @@ void main() {
     test('the palette is one instance per skin, not one per read', () async {
       // Load-bearing: every module painter compares its palette in
       // shouldRepaint, and a fresh instance per read would re-rasterise all
-      // thirteen modules on any rebuild.
+      // fourteen modules on any rebuild.
       final container = _container(await _store());
 
       expect(
