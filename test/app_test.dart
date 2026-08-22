@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:oaa/src/app/window_chrome.dart';
 import 'package:oaa_ui/oaa_ui.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 Widget _wrap(Widget child) => MaterialApp(
@@ -85,12 +86,33 @@ void main() {
     // click with a zoom, and a `DoubleTapGestureRecognizer` holds the gesture
     // arena until `kDoubleTapTimeout` expires — so nothing underneath could
     // resolve a tap for 300 ms and the whole row felt like an application that
-    // was busy. Only the pan is left, and a pan does not hold.
+    // was busy. The gesture is back and the recogniser is not: what the bar
+    // recognises is a single tap, which resolves on the pointer up like the
+    // buttons' own do, and the pair is counted in `MainFlutterWindow.swift`.
     //
     // **Real on macOS and vacuous everywhere else**, because the widget is its
     // own child off macOS. That is the right way round: the defect only ever
-    // existed on the platform where the test means something.
-    testWidgets('a control under it answers on release', (tester) async {
+    // existed on the platform where the tests mean something — so the two
+    // expectations below are the platform's rather than a constant.
+    const chrome = MethodChannel('oaa/window_chrome');
+    late List<String> calls;
+
+    setUp(() {
+      calls = <String>[];
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(chrome, (call) async {
+            calls.add(call.method);
+            return null;
+          });
+      addTearDown(
+        () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(chrome, null),
+      );
+    });
+
+    testWidgets('a control under it answers on release, and alone', (
+      tester,
+    ) async {
       var pressed = false;
       await tester.pumpWidget(
         _wrap(
@@ -105,6 +127,30 @@ void main() {
       await tester.pump();
 
       expect(pressed, isTrue);
+      // The other half of it: a click a control took is not also a click on
+      // the title bar, or double-clicking RESET would zoom the window.
+      expect(calls, isEmpty);
+    });
+
+    testWidgets('a click the bar itself wins is a click on a title bar', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _wrap(
+          const WindowDragArea(
+            // The status bar reduced to the part that matters here: a filled
+            // box, which is opaque to a hit test. `deferToChild` sees a click
+            // only where something under it does, and the bar's own fill is
+            // what answers for it between the controls.
+            child: ColoredBox(color: Color(0xFF121417)),
+          ),
+        ),
+      );
+
+      await tester.tapAt(const Offset(200, 20));
+      await tester.pump();
+
+      expect(calls, Platform.isMacOS ? ['titleBarClick'] : isEmpty);
     });
   });
 

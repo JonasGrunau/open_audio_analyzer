@@ -37,7 +37,7 @@ is still not built, and `docs/PLAN.md` for what was planned.
 | `plugin/host/src/FakeDawEngine.cpp` | The fake DAW: file → transport → plugin → monitor, driven either by an audio device or by a loop with no device at all. The second one is what makes the plugin's whole path testable without a DAW or a person. |
 | `packages/oaa_ui/lib/src/tokens.dart` | `Space`, `OaaControl`, `OaaRadius`, `OaaStroke`, `OaaColors`, `OaaType`. Nothing outside this file invents a spatial or colour value. |
 | `packages/oaa_ui/lib/src/scale.dart` | `MeterScale` and `ScaleGraticule`. Five modules draw a dB scale; two side by side whose ticks disagree look like a rendering bug. |
-| `packages/oaa_ui/lib/src/point_buckets.dart` | Marks sorted by the colour they are drawn in, one call per colour. What lets the spectrogram and the stereo cloud redraw their whole history every published frame instead of accumulating it into an image. |
+| `packages/oaa_ui/lib/src/point_buckets.dart` | Marks sorted by the colour they are drawn in, one call per colour. What lets the stereo cloud redraw its whole accumulated grid every published frame instead of accumulating it into an image. The spectrogram drew through it too until its run counts on real material outgrew it — see its header. |
 | `engine/src/oaa_tap.h` | Capturing the system's own output on macOS with no driver — a Core Audio process tap, offered as one reserved device id. The engine's only Objective-C lives beside it in `oaa_tap_macos.m`, and it is the only source not built on every platform. |
 | `engine/src/oaa_spectrum.h` | The Hann STFT: a 4096-point window, zero-padded into a 16384-point transform. The two lengths are not the same thing and the header says why. One set of transforms serves all three frequency modules. |
 | `lib/src/canvas/module_host.dart` | The only place that knows which `ModuleKind`s exist as code. Exhaustive switch, no default arm. |
@@ -157,19 +157,34 @@ is unaffected: it never links JUCE — it talks to the plugin over a socket.
   painted rather than decorated. This cost real debugging time; see the header
   of `packages/oaa_ui/lib/src/module_frame.dart`.
 
-- **Nothing in Open Audio Analyzer recognises a double tap.**
-  `DoubleTapGestureRecognizer` calls `gestureArena.hold` on the first tap and
-  releases it only when `kDoubleTapTimeout` expires 300 ms later, and a held
-  arena is never swept — so every tap recogniser beneath one, anywhere in the
-  subtree, waits a third of a second before it can win. Three gestures were
-  double clicks and each delayed everything under it: the status bar's zoom made
-  every control in the row late on macOS, a tab's rename made switching tabs
-  late, and adding a module on empty canvas made clearing the selection late. It
-  presents as an application that is slow rather than as a gesture that is
-  waiting, which is why it stood for a phase. **Use a long press** — it holds
-  nothing and rejects as soon as the pointer lifts early, it works on a tablet,
-  and it can open the same menu the secondary click does. A pan may share an
-  arena with the buttons under it freely; only the double tap holds.
+- **Nothing in Open Audio Analyzer uses a `DoubleTapGestureRecognizer`.** It
+  calls `gestureArena.hold` on the first tap and releases it only when
+  `kDoubleTapTimeout` expires 300 ms later, and a held arena is never swept — so
+  every tap recogniser beneath one, anywhere in the subtree, waits a third of a
+  second before it can win. Three gestures were double clicks and each delayed
+  everything under it: the status bar's zoom made every control in the row late
+  on macOS, a tab's rename made switching tabs late, and adding a module on
+  empty canvas made clearing the selection late. It presents as an application
+  that is slow rather than as a gesture that is waiting, which is why it stood
+  for a phase. **Use a long press** — it holds nothing and rejects as soon as
+  the pointer lifts early, it works on a tablet, and it can open the same menu
+  the secondary click does. A pan may share an arena with the buttons under it
+  freely; only the double tap holds.
+
+  **A gesture that is the platform's rather than ours is paired by the
+  platform.** The macOS window's top edge is the one double click there is,
+  because a Mac window whose title bar ignores one ignores the system — and it
+  costs no recogniser: `WindowDragArea` recognises a single *tap*, which holds
+  nothing and loses the arena to any control under it, so what crosses the
+  channel is a click on the bar itself and never one a button took.
+  `MainFlutterWindow.swift` decides which two of those are a pair, and it is the
+  only side that can: the interval is the user's "Double-click speed" (half a
+  second by default, not Flutter's 300 ms) and the action is their
+  "double-click a window's title bar to". **Do not read the count off
+  `NSApp.currentEvent`** the way `startDrag` reads the event — a tap resolves in
+  Dart and comes back a frame later, by which time any pointer movement has
+  replaced it, and `NSEvent.clickCount` raises on an event that is not a mouse
+  click.
 
 - **A drag detector takes `supportedDevices: kDragDevices`, always.** The
   companion trap to the one above, and it hides better. A `PanGestureRecognizer`
@@ -284,6 +299,18 @@ is unaffected: it never links JUCE — it talks to the plugin over a socket.
   way and by nothing else. Anchor the boundary above `MaterialApp` or the panel,
   which the `Navigator` builds, is not in the picture — and open the panel from
   a context *below* `OaaTheme`, or `showOaaPanel` asserts.
+
+  **A window gesture is checked by synthesising it.** No widget test can see a
+  zoom — it is the frame moving, not a pixel changing — and no screenshot can be
+  taken. What needs no permission at all is a `swift` script that posts the
+  clicks with `CGEvent(mouseEventSource:…)`, setting `.mouseEventClickState` to
+  1 and then 2 for a double click, and reads the result out of
+  `CGWindowListCopyWindowInfo`: `kCGWindowBounds` is available to anyone, and
+  window images and titles are the only things screen recording gates.
+  `CGPreflightPostEventAccess()` says up front whether the posting is allowed at
+  all, which is what tells a gesture that did nothing apart from a script that
+  was denied. The status bar's double-click zoom, the interval that pairs it and
+  the drag it shares a detector with were all checked this way.
 
 - **A feature that only fails on the device is a feature nobody tested.** Three
   of Open Audio Analyzer's platforms lie about the network in a way a

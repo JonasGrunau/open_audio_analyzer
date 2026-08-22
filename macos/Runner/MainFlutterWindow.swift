@@ -38,6 +38,13 @@ class MainFlutterWindow: NSWindow {
   /// and takes its handler with it — the calls then simply stop arriving.
   private var chrome: FlutterMethodChannel?
 
+  /// When the status bar last reported a click, on the monotonic clock.
+  ///
+  /// The distant past rather than zero: `systemUptime` starts at zero, so a
+  /// click in the first half second after a boot would otherwise be the second
+  /// of a pair that never had a first.
+  private var lastTitleBarClick: TimeInterval = -.greatestFiniteMagnitude
+
   override func awakeFromNib() {
     // The Windows and Linux runners forward the command line to the Dart
     // entrypoint themselves; the stock macOS one builds a bare
@@ -67,11 +74,15 @@ class MainFlutterWindow: NSWindow {
     // `panel` from the top edge down, with the three window buttons sitting
     // inside it on the same row as OAA and the source.
     //
-    // Dragging the window goes with the title bar, and the status bar asks for
-    // it back over the channel below. A window that cannot be moved is not a
-    // style choice. Zoom does not come back that way — it would cost a
-    // double-click recogniser over the status bar, and everything under one of
-    // those answers 300 ms late — so the zoom button keeps that job alone.
+    // Dragging the window goes with the title bar, and so does zooming it by
+    // double-clicking one; the status bar asks for both back over the channel
+    // below. Neither is a style choice — a window that cannot be moved is a
+    // regression, and a Mac window whose top edge ignores a double click is one
+    // that answers a gesture every other window on the machine answers.
+    //
+    // What the status bar sends is one click at a time. Recognising the pair in
+    // Flutter costs a `DoubleTapGestureRecognizer`, and everything under one of
+    // those answers 300 ms late — see `WindowDragArea`.
     self.styleMask.insert(.fullSizeContentView)
     self.titlebarAppearsTransparent = true
     self.titleVisibility = .hidden
@@ -142,10 +153,9 @@ class MainFlutterWindow: NSWindow {
       if let event = NSApp.currentEvent { self.performDrag(with: event) }
       result(nil)
 
-    // There is deliberately no `toggleZoom`. Dart had to recognise a double
-    // click to call it, and that recogniser held the gesture arena over the
-    // whole status bar for 300 ms — see `WindowDragArea`. The zoom button
-    // AppKit still draws is the affordance.
+    case "titleBarClick":
+      titleBarClick()
+      result(nil)
 
     default:
       result(FlutterMethodNotImplemented)
@@ -167,6 +177,53 @@ class MainFlutterWindow: NSWindow {
     // puts a dark focus ring around a light bar. This is the one thing the
     // skin's `light` flag decides that no colour value could.
     self.appearance = NSAppearance(named: isLight ? .aqua : .darkAqua)
+  }
+
+  /// The status bar's own background answered a click.
+  ///
+  /// Dart sends one of these per click the bar wins outright — a click a control
+  /// in the row took is never one of them, which is the division AppKit draws in
+  /// a title bar of its own — and everything else about the gesture is decided
+  /// here, because everything else about it belongs to the system.
+  /// `NSEvent.doubleClickInterval` is the user's "Double-click speed", which is
+  /// half a second by default and nothing like Flutter's fixed 300 ms, and
+  /// `AppleActionOnDoubleClick` is what they asked "double-click a window's
+  /// title bar to" for: a Mac set to Minimize expects this bar to minimise, and
+  /// one set to do nothing expects nothing.
+  ///
+  /// **The click count is not read off the event, and that is not an
+  /// oversight.** `NSApp.currentEvent` is what `startDrag` reads, and it is
+  /// sound there because a drag keeps mouse events in flight for as long as it
+  /// lasts. A click resolves in Dart on the pointer up and arrives back here a
+  /// frame later, by which time any pointer movement at all has replaced the
+  /// event — and `NSEvent.clickCount` raises on an event that is not a mouse
+  /// click, so the gesture would be dead precisely when the hand was not
+  /// perfectly still. One timestamp never misses.
+  private func titleBarClick() {
+    let now = ProcessInfo.processInfo.systemUptime
+    let isPair = now - lastTitleBarClick <= NSEvent.doubleClickInterval
+    // A third click in quick succession opens a new pair rather than completing
+    // a second one, which is how AppKit counts them too.
+    lastTitleBarClick = isPair ? -.greatestFiniteMagnitude : now
+    guard isPair else { return }
+
+    // In full screen there is no frame to zoom out of and no dock to fall into,
+    // and AppKit's own title bar answers a double click with nothing there.
+    // Zooming would leave a zoomed state behind for the window to come out of.
+    guard !styleMask.contains(.fullScreen) else { return }
+
+    // `perform*` rather than `zoom(nil)` / `miniaturize(nil)`: it is the button
+    // being pressed, highlight and disabled state included, which is what a
+    // double click on a title bar has always been a shortcut for.
+    //
+    // An unrecognised value zooms. That is the default when the key has never
+    // been written, and it is what the option has meant each time Apple has
+    // renamed it in System Settings.
+    switch UserDefaults.standard.string(forKey: "AppleActionOnDoubleClick") {
+    case "Minimize": performMiniaturize(nil)
+    case "None": break
+    default: performZoom(nil)
+    }
   }
 
   /// Centres the window buttons in the status bar.

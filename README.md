@@ -295,11 +295,18 @@ to add a module there, **right-click a module** for its options, and
 for add, undo and redo sit in the tab strip as well, because tablets have
 neither a right mouse button nor `⌘Z`.
 
-Nothing in Open Audio Analyzer is a double click. A double-tap recogniser holds
-Flutter's gesture arena for 300 ms before it gives up, and every button
-underneath one waits that long to fire — which is a third of a second of an
-application that feels broken, in exchange for a gesture a long press does
-better on both a mouse and a tablet.
+Nothing on the canvas is a double click. A double-tap recogniser holds Flutter's
+gesture arena for 300 ms before it gives up, and every button underneath one
+waits that long to fire — which is a third of a second of an application that
+feels broken, in exchange for a gesture a long press does better on both a mouse
+and a tablet.
+
+The one double click in the application is the window's own top edge on macOS,
+where the status bar *is* the title bar: double-clicking it does whatever the
+Mac's "double-click a window's title bar to" setting says, because a window that
+ignores that gesture is a window that ignores the system. Flutter still
+recognises nothing but a single click there — AppKit pairs them, in the runner,
+which is also the only side that knows the interval this user set.
 
 ### ⌨️ Keyboard
 

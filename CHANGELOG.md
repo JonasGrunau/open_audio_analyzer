@@ -9,6 +9,15 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### 🐛 Fixed
+- On a remote display, the tab control now sits beside the name of the machine
+  being watched instead of stranded in the middle of the link bar. The bar kept
+  room for the host's playhead whether or not the host had one, so on every host
+  with no DAW behind it — a desktop metering a device or a file, which is most
+  of them — 248 px of nothing stood between the name and the tabs. The slot
+  appears with the playhead and does not move again while the link lasts, so a
+  reading that goes stale does not shift the tabs out from under your finger.
+
 ## [0.4.1] — 2026-08-22
 
 ### 🐛 Fixed

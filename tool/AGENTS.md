@@ -5,7 +5,7 @@ Repository scripts. Nothing here ships. GPL-3.0-or-later.
 | File | Purpose |
 |------|---------|
 | `docs.dart` | Builds the documentation site from the Markdown in this repository, and the mark from `assets/brand/oaa-mark.svg`. `dart run tool/docs.dart --out build/docs`. |
-| `bench_spectrogram.dart` | The measurement behind the recording figures in `lib/src/modules/spectrogram.dart`. `flutter test tool/bench_spectrogram.dart`. |
+| `bench_spectrogram.dart` | The measurements behind the figures in `lib/src/modules/spectrogram.dart`: the run-length strategy against a rect per run, and the run counts on realistic band jitter that retired it in favour of the pixel path. `flutter test tool/bench_spectrogram.dart`. |
 | `fetch_test_audio.dart` | Downloads the Creative Commons music the application is looked at with. `dart run tool/fetch_test_audio.dart`. Writes to `test_audio/`, which is gitignored. |
 
 ## Rules

@@ -117,8 +117,79 @@ void main() {
     // desktop's own widget reused by accident — `TransportReadout` is the one
     // readout both screens build, so a tablet cannot end up with a second
     // opinion about what a missing tempo looks like.
-    expect(find.byType(TransportReadout), findsOneWidget);
+    //
+    // Pumped for rather than asserted outright: the readout appears with the
+    // transport frame, and the hello that carries the name is a frame in front
+    // of it. Whether the two land in one chunk is up to the kernel.
+    await _pumpUntil(
+      tester,
+      () => find.byType(TransportReadout).evaluate().isNotEmpty,
+    );
     expect(find.text('DISCONNECT'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.runAsync(host.stop);
+  });
+
+  testWidgets('a host with no playhead puts the tabs beside its name', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1600, 1000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    // The ordinary case, not an edge one: a desktop metering a sound card or a
+    // file has no DAW behind it, so it never sends a transport frame at all.
+    final host = DisplayHost(
+      source: null,
+      hostName: 'Studio Desktop',
+      abiVersion: 0,
+    );
+    addTearDown(host.dispose);
+
+    await tester.runAsync(() => host.start(port: 0));
+    final port = host.port!;
+
+    // Two tabs, because one draws no tab control — and the control is the thing
+    // that was left stranded in the middle of the bar.
+    host.publishLayout(
+      const PresetSpec(
+        name: 'Two',
+        tabs: [
+          TabSpec(name: 'Master', modules: []),
+          TabSpec(name: 'Detail', modules: []),
+        ],
+      ),
+    );
+
+    await tester.pumpWidget(
+      OaaTheme(
+        colors: OaaColors.precisionInstrument,
+        child: const MaterialApp(home: RemoteDisplayScreen()),
+      ),
+    );
+    await tester.pump();
+
+    await tester.enterText(find.byType(TextField), '127.0.0.1:$port');
+    await tester.pump();
+    await tester.tap(find.text('CONNECT'));
+
+    await _pumpUntil(
+      tester,
+      () => find.byType(SegmentedControl<int>).evaluate().isNotEmpty,
+    );
+
+    // Nothing to draw, so nothing reserved. The readout is absent rather than
+    // present and blank, which is the whole of the fix.
+    expect(find.byType(TransportReadout), findsNothing);
+
+    // And the consequence, measured: the tab control starts one gap after the
+    // name ends. Asserted in pixels because it is a pixel problem — every
+    // widget involved was present and correct while 248 px of nothing sat
+    // between them, so nothing about it is visible in a finder.
+    final name = tester.getRect(find.text('Studio Desktop'));
+    final tabs = tester.getRect(find.byType(SegmentedControl<int>));
+    expect(tabs.left - name.right, closeTo(Space.md, 0.5));
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.runAsync(host.stop);

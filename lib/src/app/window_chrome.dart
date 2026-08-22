@@ -12,12 +12,17 @@
 ///
 ///  * The status bar has to leave the buttons room at its leading edge.
 ///    [statusBarLeading] is that room.
-///  * A window with no title bar cannot be moved by one, so the status bar asks
-///    for the drag itself — [startDrag]. Without it the window could not be
-///    moved at all, which is a regression and not a style. Zoom is *not* asked
-///    for here: it costs a double-tap recogniser, and one of those over the
-///    status bar delays every button in it — see [WindowDragArea]. The green
-///    window button still zooms, because AppKit still draws it.
+///  * A window with no title bar cannot be moved or zoomed by one, so the
+///    status bar asks for both itself — [startDrag] and [titleBarClick].
+///    Without them the window cannot be moved at all and a double click on its
+///    top edge does nothing, and neither of those is a style choice.
+///
+///    **Only the single click crosses the channel; the pair is counted on the
+///    window side.** A `DoubleTapGestureRecognizer` here would hold the
+///    gesture arena over the whole status bar for 300 ms and every button in
+///    the row would answer that late — see [WindowDragArea]. AppKit is also
+///    the only side that knows the double-click interval this user set and
+///    what they asked a title bar's double click to do.
 ///  * The window's background, and the appearance its buttons are drawn in,
 ///    follow the skin — which only Dart knows. [applyPalette].
 ///
@@ -82,6 +87,15 @@ abstract final class WindowChrome {
   /// is up.
   static void startDrag() => _invoke('startDrag');
 
+  /// Reports one click on the strip of window that behaves like a title bar.
+  ///
+  /// Sent for every click the bar wins outright and never for one a control in
+  /// it took — see [WindowDragArea]. Which of them are pairs, how long a pair
+  /// may take and what a pair does are all the window side's, because all
+  /// three are the system's rather than this application's: see
+  /// `titleBarClick` in `macos/Runner/MainFlutterWindow.swift`.
+  static void titleBarClick() => _invoke('titleBarClick');
+
   /// Fire and forget, and deliberately silent.
   ///
   /// Nothing here is load-bearing — a call that fails leaves a window that
@@ -114,15 +128,22 @@ class WindowDragArea extends StatelessWidget {
     // button and a drag that starts on the same button still moves the window,
     // which is exactly what dragging a title bar's controls does.
     //
-    // **A pan may share the arena with the buttons underneath; a double tap may
-    // not.** This detector also answered a double click with a zoom, which put
-    // a `DoubleTapGestureRecognizer` over the whole status bar — and that
-    // recogniser *holds* the arena from the first tap until `kDoubleTapTimeout`
-    // expires, 300 ms later. A held arena is never swept, so the button's own
-    // tap could not win it, and every control in this row fired a third of a
-    // second after the click that pressed it. It read as an application that
-    // was busy rather than as a gesture that was waiting. A pan recogniser does
-    // not hold, which is why the drag can stay.
+    // **A pan and a tap may share the arena with the buttons underneath; a
+    // double tap may not.** This detector answered the double click with a
+    // `DoubleTapGestureRecognizer` once, and that recogniser *holds* the arena
+    // from the first tap until `kDoubleTapTimeout` expires 300 ms later. A held
+    // arena is never swept, so a button's own tap could not win it and every
+    // control in this row fired a third of a second after the click that
+    // pressed it — an application that reads as busy rather than as a gesture
+    // that is waiting.
+    //
+    // A `TapGestureRecognizer` holds nothing, and it loses to them rather than
+    // stealing from them: the arena is swept in favour of its first member, and
+    // hit testing is deepest first, so a control in the row is always entered
+    // before this detector is. What reaches [WindowChrome.titleBarClick] is
+    // therefore a click on the bar itself and never one a control took — the
+    // same division AppKit draws in a title bar of its own — and the window
+    // side is what pairs two of them into a double click.
     return GestureDetector(
       behavior: HitTestBehavior.deferToChild,
       // **And a two-finger gesture may not either.** A trackpad pan is not a
@@ -130,7 +151,10 @@ class WindowDragArea extends StatelessWidget {
       // wins the arena on the start event — a two-finger scroll anywhere over
       // the status bar handed the window to the compositor to drag. See
       // [kDragDevices].
+      // It bounds the tap as well, which costs nothing: a click on a trackpad
+      // is reported as a mouse, and that kind is used for pan and zoom alone.
       supportedDevices: kDragDevices,
+      onTap: WindowChrome.titleBarClick,
       onPanStart: (_) => WindowChrome.startDrag(),
       child: child,
     );

@@ -129,6 +129,18 @@ halves live here.
   its own opinion about what a missing tempo looks like is the beginning of two
   meters that disagree.
 
+  **The link bar gives that readout a slot only while the host has a playhead,
+  and `DisplayClient.hasTransport` is the only part of a transport a widget may
+  watch.** The readout is 232 px wide and draws nothing when there is nothing to
+  draw, so a host with no DAW — a desktop metering a device or a file, which is
+  most of them — left that much blank between its name and the tab control, and
+  a control with nothing on either side of it reads as one that failed to lay
+  out rather than as an empty readout. The bit follows what the host *stated*: a
+  frame saying `Transport.none` takes the slot away, and `_checkStale` clears the
+  reading but deliberately leaves the slot, because dropping it on a timeout
+  would move the tabs out from under the finger of somebody at a tablet on a
+  flaky access point.
+
 - **The host refreshes the source itself and the clock compares generations.**
   A `Ticker` stops when the window is occluded, which is exactly when the tablet
   is the screen being used. `MeterClock` therefore decides "is there something

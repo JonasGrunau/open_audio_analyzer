@@ -18,37 +18,57 @@ import '../clock/meter_clock.dart';
 /// would be worse than either choice.
 ///
 /// ---------------------------------------------------------------------------
-/// Why the history is kept as runs and not as pixels
+/// Why the history is pixels uploaded as an image — and why that is not the
+/// image accumulation that once crashed the application
 ///
-/// The obvious implementation of a scrolling display keeps last frame's image,
-/// blits it back one column and draws only the new one: constant cost, however
-/// long the session runs. That is what this module used to do, through a
-/// `toImageSync` ping-pong, and **it cannot be done in Flutter**. An image from
-/// `toImageSync` is a handle to a display list the engine has not rasterised
-/// yet, and it holds that display list for its whole life — so the image of
-/// frame *n* retains the picture that drew it, which retains the image of frame
-/// *n−1*, back to the first frame. Disposing the Dart handle releases nothing;
-/// the chain owns it. Open Audio Analyzer leaked one full-size image per
-/// published frame this way and died after about seventy seconds, when the
-/// chain was finally dropped and the engine recursed 3,286 destructors deep
-/// through it and overflowed the raster thread's stack.
+/// This module has now had three designs, and each replaced a cost the previous
+/// one measured wrongly.
 ///
-/// So the past is kept as data. Not as levels — re-deriving a column's runs
-/// every frame is width × height work per frame — but as the **run-length
-/// columns themselves**, coalesced once when the column arrives and afterwards
-/// only re-emitted. A column is a few dozen runs rather than a few hundred
-/// pixels, and the whole display is one `drawRawPoints` call per palette step
-/// (see [PointBuckets]). Recording a 1200-column display that way takes about
-/// 0.3 ms of the UI thread against 5.6 ms for a rect per run — and nothing at
-/// all on a repaint that carries no new audio, which is most of them. Both
-/// figures are `tool/bench_spectrogram.dart`, which prints the rasterised pair
-/// beside them on purpose: recording is not the frame, and the number these
-/// replaced was a recording cost that got read as one for a whole phase.
+/// The first kept last frame's picture as a `toImageSync` image and drew it
+/// back one column to the left. **That cannot be done in Flutter**: an image
+/// from `toImageSync` is a handle to a display list the engine has not
+/// rasterised yet, and it holds that display list for its whole life — so the
+/// image of frame *n* retains the picture that drew it, which retains the
+/// image of frame *n−1*, back to the first frame. Open Audio Analyzer leaked
+/// one full-size image per published frame this way and died after about
+/// seventy seconds, when the chain was finally dropped and the engine recursed
+/// 3,286 destructors deep through it and overflowed the raster thread's stack.
 ///
-/// The price is memory proportional to the module's area — three bytes per
-/// logical pixel, about 2 MB for a large spectrogram, allocated once per
-/// resize. The image this replaces was *sixteen* bytes per logical pixel, and
-/// there was one of those per frame, kept forever.
+/// The second kept the history as run-length columns and redrew every stored
+/// run every frame through [PointBuckets]. Bounded and safe — but its cost was
+/// budgeted against *smooth* data, about 25 runs per column, and a real signal
+/// is not smooth: the engine takes the peak bin per band, so broadband
+/// material jitters a step or more between most adjacent rows.
+/// `tool/bench_spectrogram.dart` measures both cases: at ±1–2 dB of band
+/// jitter a 1200×300 display coalesces to 120–190 runs per column — 150,000 to
+/// 230,000 marks re-recorded on the UI thread and re-tessellated on the raster
+/// thread on **every published frame**, 2–4 MB of display list each time. The
+/// cost ramped for the ~25 seconds the ring took to fill after a mount and
+/// then sat there, dragging every module on the shared clock with it — which
+/// read as "the app gets slower the longer I watch it", reset by anything that
+/// remounted the module.
+///
+/// So the past is kept as **pixels**: one byte of palette step per cell (the
+/// measurement record, what a skin change re-renders from) and one RGBA buffer
+/// beside it, shifted left a column per published frame and uploaded as a
+/// `ui.Image` that paint draws with a single `drawImageRect`. Recording is one
+/// op; rasterising is one textured quad. The same benchmark puts the whole of
+/// it — shift, column write, copy out, instantiate — at about a quarter of a
+/// millisecond per published frame for that same 1200×300 display, bounded by
+/// the module's area (~1.4 MB, the bandwidth of a small video) and
+/// **independent of what the signal does**, which neither earlier design was.
+///
+/// Three properties keep this out of the trap the first design died in:
+///
+///   * The images are **pixel-backed** — `ImageDescriptor.raw` over an
+///     `ImmutableBuffer` copy — and hold no display list, no picture, no chain.
+///   * Each image **replaces** the previous one, which is disposed on the
+///     spot. At most two are alive: the one on screen and the one being built.
+///   * The build is asynchronous, so at most one is in flight; frames that
+///     arrive while it runs coalesce into one rebuild of the newest buffer.
+///     The buffer itself never skips a column — only the picture of it can lag
+///     one published frame (~21 ms) behind, which on a scrolling record is
+///     invisible.
 class SpectrogramModule extends StatefulWidget {
   const SpectrogramModule({
     required this.engine,
@@ -61,60 +81,6 @@ class SpectrogramModule extends StatefulWidget {
 
   @override
   State<SpectrogramModule> createState() => _SpectrogramModuleState();
-}
-
-class _SpectrogramModuleState extends State<SpectrogramModule> {
-  final _history = _ColumnHistory();
-
-  /// Every stored column, emitted as runs and sorted by brightness step.
-  final _marks = PointBuckets(_steps);
-
-  /// One [Paint] per brightness step. Fine enough that the steps are invisible,
-  /// coarse enough that there are few enough draw calls for the sorting to be
-  /// worth it.
-  List<Paint> _palette = const [];
-  Color? _builtFor;
-
-  /// Generation 0 is "nothing has been measured yet", not "a measurement that
-  /// happens to be zero" — and the arrays behind a fresh source are zeroed,
-  /// which as dB is full scale on every band. Starting here rather than at −1
-  /// is what stops a column of maximum level being the first thing the
-  /// spectrogram ever records, where it then sits until it scrolls off.
-  int lastGeneration = 0;
-
-  /// The size [_marks] was filled at. Runs are emitted in pixels, so a resize
-  /// invalidates them even when no new audio has arrived.
-  Size builtFor = Size.zero;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = OaaTheme.of(context);
-
-    if (_builtFor != colors.accent) {
-      _builtFor = colors.accent;
-      _palette = [
-        for (var step = 0; step < _steps; step++)
-          Paint()
-            ..color = _rampColor(step / (_steps - 1), colors)
-            ..strokeWidth = _SpectrogramPainter.columnWidth
-            // The columns tile the display exactly, so there is no edge for
-            // antialiasing to soften — only cost, on every run of every
-            // column, and a seam wherever two runs of the same colour meet.
-            ..isAntiAlias = false,
-      ];
-    }
-
-    return MeterBody(
-      painter: _SpectrogramPainter(
-        engine: widget.engine,
-        colors: colors,
-        history: _history,
-        marks: _marks,
-        state: this,
-        repaint: widget.clock,
-      ),
-    );
-  }
 }
 
 const int _steps = 48;
@@ -133,85 +99,188 @@ Color _rampColor(double level, OaaColors colors) {
   return Color.lerp(colors.accent, colors.warn, (level - 0.55) / 0.45)!;
 }
 
-/// The spectrogram's past, as run-length columns.
-///
-/// A ring of [columns] columns, each holding up to [rows] runs as an end row
-/// and a brightness step — a run begins where the previous one ended, so its
-/// start is not stored. Sized for the worst case of every row differing from
-/// the one below it, which costs three bytes per logical pixel and means there
-/// is no overflow case to get wrong.
-class _ColumnHistory {
-  int columns = 0;
-  int rows = 0;
+class _SpectrogramModuleState extends State<SpectrogramModule> {
+  int _columns = 0;
+  int _rows = 0;
 
-  Uint16List _end = Uint16List(0);
-  Uint8List _step = Uint8List(0);
-  Uint16List _runs = Uint16List(0);
+  /// The palette step of every cell, row-major, newest column rightmost. This
+  /// is the record; the RGBA beside it is just the current skin's rendering of
+  /// it, re-derived in place when the skin changes.
+  Uint8List _stepOf = Uint8List(0);
 
-  int _next = 0;
+  /// The same cells as straight RGBA bytes, the layout `ImageDescriptor.raw`
+  /// takes. Written incrementally — a shift and one new column per published
+  /// frame — never re-derived except on a skin change.
+  Uint8List _pixels = Uint8List(0);
 
-  /// How many columns of the ring hold audio. Never more than [columns].
-  int filled = 0;
+  /// What [_upload] hands to `ImmutableBuffer`. A copy, so the working buffer
+  /// can take the next column while a build is still reading this one.
+  Uint8List _staging = Uint8List(0);
 
-  /// Reallocates when the module's size changes, and reports whether it did.
-  ///
-  /// The history is dropped on a resize: the runs are stored in pixel rows, so
-  /// a new height would mean re-deriving every column from levels this class
-  /// does not keep. The previous implementation dropped its history on a resize
-  /// too — a stretched image left a blurred band travelling across the display.
-  bool resize(int columns, int rows) {
-    if (columns == this.columns && rows == this.rows) return false;
-    this.columns = columns;
-    this.rows = rows;
-    _end = Uint16List(columns * rows);
-    _step = Uint8List(columns * rows);
-    _runs = Uint16List(columns);
-    _next = 0;
-    filled = 0;
-    return true;
+  /// RGBA bytes per palette step, rewritten on a skin change.
+  final Uint8List _lut = Uint8List(_steps * 4);
+  Color? _builtFor;
+
+  /// What paint draws. Pixel-backed, at most one predecessor alive while its
+  /// replacement is in flight.
+  ui.Image? _image;
+  bool _building = false;
+  bool _dirty = false;
+  bool _disposed = false;
+
+  /// Bumped on every resize, so a build that was in flight when the buffers
+  /// were reallocated throws its result away instead of publishing an image of
+  /// a size paint no longer draws.
+  int _epoch = 0;
+
+  /// Generation 0 is "nothing has been measured yet", not "a measurement that
+  /// happens to be zero" — and the arrays behind a fresh source are zeroed,
+  /// which as dB is full scale on every band. Starting here rather than at −1
+  /// is what stops a column of maximum level being the first thing the
+  /// spectrogram ever records, where it then sits until it scrolls off.
+  int lastGeneration = 0;
+
+  /// Reallocates when the module's size changes. The history is dropped, as it
+  /// always has been on a resize: the cells are pixel rows, and the same cell
+  /// means a different band once the plot has moved under it.
+  void resize(int columns, int rows) {
+    if (columns == _columns && rows == _rows) return;
+    _columns = columns;
+    _rows = rows;
+    _epoch++;
+    _stepOf = Uint8List(columns * rows);
+    _pixels = Uint8List(columns * rows * 4);
+    _staging = Uint8List(_pixels.length);
+    _image?.dispose();
+    _image = null;
+    _fillWithStepZero();
   }
 
-  /// Coalesces one column of [stepAt] into runs and stores it as the newest.
+  /// Every cell to the panel colour — a blank record, which is what both a
+  /// fresh module and a resized one show until audio arrives.
+  void _fillWithStepZero() {
+    for (var p = 0; p < _pixels.length; p += 4) {
+      _pixels[p] = _lut[0];
+      _pixels[p + 1] = _lut[1];
+      _pixels[p + 2] = _lut[2];
+      _pixels[p + 3] = _lut[3];
+    }
+  }
+
+  /// Shifts the record one column left and writes the newest at the right
+  /// edge. `setRange` on typed data is a `memmove`, so the shift handles its
+  /// own overlap; the seam it smears from each row's start into the previous
+  /// row's end is overwritten by the new column before anything reads it.
   void append(int Function(int row) stepAt) {
-    if (columns == 0 || rows == 0) return;
-    final base = _next * rows;
-    var runs = 0;
-    var current = stepAt(0);
+    if (_columns == 0 || _rows == 0) return;
 
-    for (var row = 1; row <= rows; row++) {
-      // −1 past the end, so the last run is closed by the loop rather than
-      // after it.
-      final step = row < rows ? stepAt(row) : -1;
-      if (step == current) continue;
-      _end[base + runs] = row;
-      _step[base + runs] = current;
-      runs++;
-      current = step;
+    _stepOf.setRange(0, _stepOf.length - 1, _stepOf, 1);
+    _pixels.setRange(0, _pixels.length - 4, _pixels, 4);
+
+    final last = _columns - 1;
+    for (var row = 0; row < _rows; row++) {
+      final step = stepAt(row);
+      _stepOf[row * _columns + last] = step;
+      final p = (row * _columns + last) * 4;
+      final l = step * 4;
+      _pixels[p] = _lut[l];
+      _pixels[p + 1] = _lut[l + 1];
+      _pixels[p + 2] = _lut[l + 2];
+      _pixels[p + 3] = _lut[l + 3];
     }
 
-    _runs[_next] = runs;
-    _next = (_next + 1) % columns;
-    if (filled < columns) filled++;
+    _upload();
   }
 
-  /// Emits every stored column into [marks], newest at the right edge.
-  void emit(PointBuckets marks, double width, double rowHeight) {
-    for (var age = 0; age < filled; age++) {
-      final x = width - (age + 0.5) * _SpectrogramPainter.columnWidth;
-      if (x < 0) break;
-
-      final slot = (_next - 1 - age + columns * 2) % columns;
-      final base = slot * rows;
-      var top = 0;
-
-      for (var run = 0; run < _runs[slot]; run++) {
-        final end = _end[base + run];
-        final step = _step[base + run];
-        // Step 0 is the panel colour, which the painter has already laid down.
-        if (step > 0) marks.run(step, x, top * rowHeight, end * rowHeight);
-        top = end;
-      }
+  /// Re-renders every cell from its recorded step, for a skin change.
+  void _repaintAll() {
+    for (var cell = 0; cell < _stepOf.length; cell++) {
+      final p = cell * 4;
+      final l = _stepOf[cell] * 4;
+      _pixels[p] = _lut[l];
+      _pixels[p + 1] = _lut[l + 1];
+      _pixels[p + 2] = _lut[l + 2];
+      _pixels[p + 3] = _lut[l + 3];
     }
+    _upload();
+  }
+
+  /// Builds a fresh image of the buffer and swaps it in, disposing the one it
+  /// replaces. One in flight at a time; anything that changes the buffer
+  /// meanwhile coalesces into a single rebuild of its newest state.
+  void _upload() {
+    if (_building) {
+      _dirty = true;
+      return;
+    }
+    _building = true;
+    _buildLoop();
+  }
+
+  Future<void> _buildLoop() async {
+    do {
+      _dirty = false;
+      final epoch = _epoch;
+      final columns = _columns;
+      final rows = _rows;
+      _staging.setAll(0, _pixels);
+
+      final buffer = await ui.ImmutableBuffer.fromUint8List(_staging);
+      final descriptor = ui.ImageDescriptor.raw(
+        buffer,
+        width: columns,
+        height: rows,
+        pixelFormat: ui.PixelFormat.rgba8888,
+      );
+      final codec = await descriptor.instantiateCodec();
+      final frame = await codec.getNextFrame();
+      codec.dispose();
+      descriptor.dispose();
+      buffer.dispose();
+
+      if (_disposed || epoch != _epoch) {
+        frame.image.dispose();
+        if (_disposed) break;
+        continue;
+      }
+      _image?.dispose();
+      _image = frame.image;
+    } while (_dirty);
+    _building = false;
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    _image?.dispose();
+    _image = null;
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = OaaTheme.of(context);
+
+    if (_builtFor != colors.accent) {
+      _builtFor = colors.accent;
+      for (var step = 0; step < _steps; step++) {
+        final color = _rampColor(step / (_steps - 1), colors);
+        _lut[step * 4] = (color.r * 255).round();
+        _lut[step * 4 + 1] = (color.g * 255).round();
+        _lut[step * 4 + 2] = (color.b * 255).round();
+        _lut[step * 4 + 3] = (color.a * 255).round();
+      }
+      if (_stepOf.isNotEmpty) _repaintAll();
+    }
+
+    return MeterBody(
+      painter: _SpectrogramPainter(
+        engine: widget.engine,
+        colors: colors,
+        state: this,
+        repaint: widget.clock,
+      ),
+    );
   }
 }
 
@@ -219,20 +288,23 @@ class _SpectrogramPainter extends MeterPainter {
   _SpectrogramPainter({
     required this.engine,
     required this.colors,
-    required this.history,
-    required this.marks,
     required this.state,
     required Listenable repaint,
   }) : _background = (Paint()..color = colors.panel),
+       // Nearest-neighbour on purpose: the columns are 1 logical pixel and the
+       // usual display scales are integer, so filtering would only blur the
+       // newest edge. Antialiasing has no edge to work on either.
+       _bitmap = (Paint()
+         ..filterQuality = FilterQuality.none
+         ..isAntiAlias = false),
        super(repaint: repaint);
 
   final MeterSource engine;
   final OaaColors colors;
-  final _ColumnHistory history;
-  final PointBuckets marks;
   final _SpectrogramModuleState state;
 
   final Paint _background;
+  final Paint _bitmap;
 
   /// One published measurement is one column. At ~47 Hz that is about 21 ms of
   /// audio per column, so a 600 px module holds roughly thirteen seconds.
@@ -246,30 +318,38 @@ class _SpectrogramPainter extends MeterPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (state._palette.isEmpty) return;
-
     final columns = (size.width / columnWidth).floor();
     final rows = size.height.round();
     if (columns <= 0 || rows <= 0) return;
 
-    var stale = history.resize(columns, rows);
+    state.resize(columns, rows);
 
     if (engine.generation != 0 && engine.generation != state.lastGeneration) {
       state.lastGeneration = engine.generation;
       // Silence still scrolls. The display is a record of time, and holding it
       // still while audio runs would misdate everything already on it.
-      history.append(engine.hasSpectrum ? _stepAt : _silence);
-      stale = true;
-    }
-
-    if (stale || size != state.builtFor) {
-      state.builtFor = size;
-      marks.clear();
-      history.emit(marks, size.width, size.height / rows);
+      state.append(engine.hasSpectrum ? _stepAt : _silence);
     }
 
     canvas.drawRect(Offset.zero & size, _background);
-    marks.draw(canvas, ui.PointMode.lines, state._palette);
+
+    final image = state._image;
+    if (image == null || image.width != columns || image.height != rows) {
+      return;
+    }
+    canvas.drawImageRect(
+      image,
+      Rect.fromLTWH(0, 0, columns.toDouble(), rows.toDouble()),
+      // Anchored to the right edge, where the newest column lands. The sliver
+      // the flooring left over stays background, exactly as it always has.
+      Rect.fromLTWH(
+        size.width - columns * columnWidth,
+        0,
+        columns * columnWidth,
+        size.height,
+      ),
+      _bitmap,
+    );
   }
 
   int _silence(int row) => 0;
@@ -277,7 +357,7 @@ class _SpectrogramPainter extends MeterPainter {
   /// The palette step for a pixel row. Row 0 is the top of the display, which
   /// is the top of the frequency range.
   int _stepAt(int row) {
-    final rows = history.rows;
+    final rows = state._rows;
     final band = (rows > 1)
         ? ((rows - 1 - row) / (rows - 1) * (kOaaSpectrumBands - 1))
               .round()

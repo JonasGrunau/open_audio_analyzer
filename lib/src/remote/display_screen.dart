@@ -241,6 +241,11 @@ class _LinkBar extends StatelessWidget {
         // corner is the most awkward place on the screen to put the control the
         // viewer touches most. What stays on the right is the one control nobody
         // wants to hit by accident.
+        //
+        // **Beside means beside**, so anything between the name and the tabs
+        // takes width only while it is showing something. There is one such
+        // thing and it is the transport readout, which is 232 px wide and blank
+        // on any host with no DAW; see the note on it below.
         child: Row(
           children: [
             _StateDot(state: state),
@@ -259,17 +264,35 @@ class _LinkBar extends StatelessWidget {
             // the screen somebody is *reading* — a tablet on a stand across the
             // room, next to the person who needs to say where the session is.
             //
-            // Not wrapped in a `ValueListenableBuilder`: while a DAW rolls,
-            // this changes at the publish rate, and rebuilding the bar thirty
-            // times a second to move a clock is what the painted readout exists
-            // to avoid. It draws nothing at all when the host has no transport,
-            // so a display mirroring a desktop that is metering a sound card
-            // does not gain a row of dashes.
-            const SizedBox(width: Space.md),
-            TransportReadout(
-              transportOf: () => client.transport.value,
-              repaint: clock,
-              width: TransportReadout.fullWidth,
+            // The readout itself is not wrapped in a `ValueListenableBuilder`
+            // over `client.transport`: while a DAW rolls, that changes at the
+            // publish rate, and rebuilding the bar thirty times a second to
+            // move a clock is what the painted readout exists to avoid.
+            //
+            // **The slot goes when the host has no playhead, and the gap in
+            // front of it goes with it.** `client.hasTransport` is the one part
+            // of a transport a widget may watch, because it is what the host
+            // said about itself rather than where its playhead is — see
+            // `DisplayClient.hasTransport`. The readout draws nothing when
+            // there is nothing to draw, which is right, but it was still 232 px
+            // wide while doing it: on every host with no DAW — a desktop
+            // metering a sound card, which is most of them — the tab control
+            // sat 248 px out from the name it belongs to with nothing between
+            // the two, reading as a control that had failed to lay out rather
+            // than as an empty readout. Collapsed, the tabs sit one gap behind
+            // the name, which is where the comment above says they belong.
+            ValueListenableBuilder<bool>(
+              valueListenable: client.hasTransport,
+              builder: (context, hasTransport, _) => !hasTransport
+                  ? const SizedBox.shrink()
+                  : Padding(
+                      padding: const EdgeInsets.only(left: Space.md),
+                      child: TransportReadout(
+                        transportOf: () => client.transport.value,
+                        repaint: clock,
+                        width: TransportReadout.fullWidth,
+                      ),
+                    ),
             ),
 
             if (tabs.length > 1) ...[

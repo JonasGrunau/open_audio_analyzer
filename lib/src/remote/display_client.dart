@@ -89,6 +89,28 @@ class DisplayClient {
   /// clock, the way `TransportReadout` does.
   final ValueNotifier<Transport> transport = ValueNotifier(Transport.none);
 
+  /// Whether the host has a playhead at all — the one part of a transport that
+  /// the widget tree is allowed to watch.
+  ///
+  /// The rule above still holds: nothing that *builds* may listen to
+  /// [transport], which moves at the publish rate. This does not move with it.
+  /// It is what the host has *said about itself* — false on a desktop metering a
+  /// sound card, true from the frame a plugin's session appears in — so it flips
+  /// once or twice in a session, and it changes a layout rather than a reading.
+  /// The link bar gives the readout a slot only while this is true; reserving
+  /// one unconditionally left `TransportReadout.fullWidth` of nothing between
+  /// the host's name and the tab control on every host with no DAW, which reads
+  /// as a control that failed to lay out rather than as an empty readout.
+  /// `MeterClock.overrun` is the same shape, for the same reason.
+  ///
+  /// **It follows what the host stated, not what is currently on screen.** A
+  /// link that has gone quiet clears [transport] — nothing there is current —
+  /// and deliberately leaves this alone. Dropping the slot on a stale link and
+  /// restoring it on recovery would move the tabs out from under the finger of
+  /// somebody standing at a tablet on a flaky access point, which is worse than
+  /// a blank slot on a bar that is already saying the picture is not current.
+  final ValueNotifier<bool> hasTransport = ValueNotifier(false);
+
   /// What the host calls itself, and its engine's ABI — both for display, not
   /// for decisions.
   final ValueNotifier<String?> hostName = ValueNotifier(null);
@@ -211,7 +233,13 @@ class DisplayClient {
             // sends none of it for as long as nobody touches the DAW, and a
             // stale timer that this reset would be a timer a quiet session
             // could hold open with a playhead that has not moved.
-            transport.value = DawTransportCodec.decode(_reader.payload);
+            final decoded = DawTransportCodec.decode(_reader.payload);
+            transport.value = decoded;
+            // The host closing its DAW is a *frame* — the plugin session ends,
+            // the desktop's transport becomes `Transport.none`, and that change
+            // goes out like any other. So the slot is taken away here as well
+            // as given, and neither direction is a guess.
+            hasTransport.value = decoded.isPresent;
           default:
           // An unknown type is skipped rather than fatal — that is what lets a
           // host that has learned to send something this build has never heard
@@ -268,6 +296,10 @@ class DisplayClient {
     // measurements have gone to dashes is the same lie in a different unit, and
     // a worse one here: a parked transport legitimately sends nothing for
     // minutes, so a stopped clock and a lost link look identical.
+    //
+    // The reading goes; the slot it was drawn in stays. This is a timeout, not
+    // a statement by the host that its DAW has gone — see [hasTransport], and
+    // do not clear it here.
     transport.value = Transport.none;
     if (state.value == RemoteLinkState.live) {
       state.value = RemoteLinkState.stale;
@@ -299,7 +331,13 @@ class DisplayClient {
     // machine — or to the same one after its DAW was closed — opened on the
     // previous session's playhead, which is transport sent on change never
     // arriving to contradict it.
+    //
+    // Both halves here, unlike the stale path above: the link is over, so
+    // nothing has said anything about a playhead and the next host has to say
+    // it again. A latch carried across a reattach is a slot reserved on a
+    // machine that never mentioned a DAW.
     transport.value = Transport.none;
+    hasTransport.value = false;
 
     final subscription = _subscription;
     _subscription = null;
@@ -337,6 +375,7 @@ class DisplayClient {
     skin.dispose();
     calibration.dispose();
     transport.dispose();
+    hasTransport.dispose();
     hostName.dispose();
     failure.dispose();
   }

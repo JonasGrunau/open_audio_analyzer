@@ -113,6 +113,22 @@ The shell everything else is mounted in. GPL-3.0-or-later.
   draws those buttons over the top of whatever Flutter paints there, so a bar
   that starts at `Space.md` starts underneath them.
 
+- **The status bar's double click is counted in AppKit, not in Flutter.**
+  Double-clicking it zooms the window, because it is the title bar and a Mac
+  window whose title bar ignores that gesture ignores the system. A
+  `DoubleTapGestureRecognizer` over this row holds the gesture arena for 300 ms
+  and every control in it then answers that late — that shipped in 0.2.0, and it
+  is why the gesture was taken out again in 0.3.0 rather than fixed. `WindowDragArea` recognises a
+  single tap instead: it holds nothing, and it loses the arena to any control
+  under it, so what crosses the channel is a click on the bar itself and never
+  one a button took. `MainFlutterWindow.swift` pairs them, against
+  `NSEvent.doubleClickInterval` and `AppleActionOnDoubleClick` — the interval
+  and the action this Mac was configured with, neither of which Flutter knows.
+  Not off `NSApp.currentEvent`, though `startDrag` two lines above does read the
+  event: a tap resolves in Dart and comes back a frame later, when any pointer
+  movement at all has replaced it, and `clickCount` raises on an event that is
+  not a mouse click.
+
 - **The minimum window size is arithmetic, and it is written down three
   times.** `minimumSize` in `MainFlutterWindow.swift`, `kMinimumWindow` in
   `test/scaling_test.dart`, and the sentence in `CHANGELOG.md`. It follows from

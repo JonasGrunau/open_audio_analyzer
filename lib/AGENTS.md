@@ -76,8 +76,13 @@ The application. GPL-3.0-or-later.
   stereo cloud were all built this way and took the application to 266 GB
   before killing the raster thread with a 3,286-deep destructor recursion.
   There is no way to accumulate into a GPU surface from `dart:ui`: a module
-  that needs history keeps the history as data and redraws it, with
-  `PointBuckets` to keep the redraw to a few dozen calls.
+  that needs history keeps the history as data, and either redraws it — with
+  `PointBuckets` to keep the redraw to a few dozen calls — or renders it to an
+  RGBA buffer uploaded whole as a pixel-backed `ImageDescriptor.raw` image each
+  published frame, which holds bytes and no display list and replaces a
+  predecessor disposed on the spot. The spectrogram takes the second route; its
+  header says why the first one, budgeted on smooth columns, did not survive
+  contact with real material.
 - **Look at the module running before you call it done.** Five defects in the
   first eleven were invisible to `flutter analyze` and to the widget tests, and
   obvious within a second of seeing the app: a right-aligned paragraph offset by

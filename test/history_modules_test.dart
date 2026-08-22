@@ -13,11 +13,17 @@
 // stack overflow, recursing 3,286 destructors deep through the chain as it was
 // finally dropped.
 //
-// The fix is that these modules keep their history as data and redraw it. The
-// first test below is the one that would have caught the crash: while audio is
-// running, these modules must create no images at all. The second is the
-// behaviour that the rewrite had to preserve — the display advances on new
-// audio and on nothing else.
+// The property that prevents the crash is not "no images" — it is **no
+// unbounded retention**. The phase trail and the stereo cloud keep their
+// history as data and redraw it, creating no images at all. The spectrogram
+// keeps its history as pixels and uploads them as an image per published
+// frame — a *pixel-backed* image from `ImageDescriptor.raw`, which holds no
+// display list and no chain, and which replaces a predecessor that is disposed
+// on the spot. The first test below is the one that would have caught the
+// crash: run long enough to have killed the application, the number of images
+// still alive must stay a small constant. The second is the behaviour every
+// rewrite has had to preserve — the display advances on new audio and on
+// nothing else.
 
 import 'dart:typed_data';
 import 'dart:ui' as ui;
@@ -157,17 +163,28 @@ void main() {
     expect(created, hasLength(1));
   });
 
-  testWidgets('the modules that keep a history create no images', (
+  testWidgets('the modules that keep a history retain no images', (
     tester,
   ) async {
     // Every `ui.Image` in the process, from any code. The three modules below
     // are the only things drawing, so anything that lands here was created by
-    // one of them — and a module that creates one image per published frame is
-    // the defect this file exists to prevent.
-    final created = <ui.Image>[];
-    final previous = ui.Image.onCreate;
-    ui.Image.onCreate = created.add;
-    addTearDown(() => ui.Image.onCreate = previous);
+    // one of them. The spectrogram legitimately creates one pixel-backed image
+    // per published frame — what it must never do is keep them: a module whose
+    // alive count grows with the session is the defect this file exists to
+    // prevent.
+    final alive = <ui.Image>{};
+    var createdEver = 0;
+    final previousCreate = ui.Image.onCreate;
+    final previousDispose = ui.Image.onDispose;
+    ui.Image.onCreate = (image) {
+      createdEver++;
+      alive.add(image);
+    };
+    ui.Image.onDispose = alive.remove;
+    addTearDown(() {
+      ui.Image.onCreate = previousCreate;
+      ui.Image.onDispose = previousDispose;
+    });
 
     final source = _Fake();
     await tester.pumpWidget(
@@ -185,20 +202,32 @@ void main() {
     );
 
     // Comfortably longer than the ring buffers, and longer than the seventy
-    // seconds of audio it took to kill the application.
+    // seconds of audio it took to kill the application. The image uploads are
+    // real asynchronous work that a fake-async zone never delivers, so the
+    // pumps are interleaved with `runAsync` gaps that let them land — without
+    // those, nothing would be created and the test would pass vacuously.
     for (var frame = 0; frame < 500; frame++) {
       source.publish();
       await _frame(tester);
+      if (frame % 20 == 0) await _settle(tester);
     }
+    await _settle(tester);
 
     expect(
-      created,
-      isEmpty,
+      createdEver,
+      greaterThan(0),
       reason:
-          'A module kept an image between frames. An image from toImageSync '
-          'retains the display list that drew it, so one per frame retains '
-          'every frame before it — which is the leak that crashed the raster '
-          'thread.',
+          'No image was ever created, so the uploads never ran and the bound '
+          'below was not exercised.',
+    );
+    expect(
+      alive,
+      hasLength(lessThanOrEqualTo(3)),
+      reason:
+          'A module kept images between frames. An image that retains its '
+          'predecessor — the way toImageSync retains the display list that '
+          'drew it — retains every frame before it, which is the leak that '
+          'crashed the raster thread.',
     );
   });
 
@@ -222,6 +251,11 @@ void main() {
       source.publish();
       await _frame(tester);
     }
+    // Let the asynchronous image upload land, then paint it: the columns above
+    // reach the screen on the repaint after their upload completes.
+    await _settle(tester);
+    source.publish();
+    await _frame(tester);
     final scrolled = await _shoot(tester, key);
 
     // Repaints without new audio. A display that aged on these would be
@@ -244,6 +278,13 @@ void main() {
     );
   });
 }
+
+/// Lets real asynchronous work land — the spectrogram's image uploads complete
+/// on the event loop the fake-async zone never returns to. The same trick as
+/// [_shoot], without wanting pixels back.
+Future<void> _settle(WidgetTester tester) => tester.runAsync(
+  () => Future<void>.delayed(const Duration(milliseconds: 20)),
+);
 
 /// The rendered pixels of [key]'s subtree.
 ///

@@ -78,6 +78,10 @@ that decides *what a pointer means* belongs here.
   double clicks, and they made the tabs and the whole macOS status bar feel
   like an application that was busy. A long press is the touch-and-mouse
   gesture that costs nothing: it rejects the moment the pointer lifts early.
+  The macOS window's top edge does answer a double click, and it is not an
+  exception to this: `lib/src/app/window_chrome.dart` recognises single taps and
+  AppKit pairs them. That is available because the gesture belongs to the
+  platform, which nothing on a canvas does.
 
 - **Every `onPan*` detector passes `kDragDevices` to `supportedDevices`.** A
   trackpad pan is not a button press, so `allowedButtonsFilter` — which defaults
