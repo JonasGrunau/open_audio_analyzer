@@ -242,10 +242,26 @@ class _LinkBar extends StatelessWidget {
         // viewer touches most. What stays on the right is the one control nobody
         // wants to hit by accident.
         //
-        // **Beside means beside**, so anything between the name and the tabs
-        // takes width only while it is showing something. There is one such
-        // thing and it is the transport readout, which is 232 px wide and blank
-        // on any host with no DAW; see the note on it below.
+        // **Beside means beside, so nothing that can appear, vanish, or reserve
+        // room it is not using goes in front of the tabs.** They are the only
+        // control on this bar anybody reaches for, and a control placed
+        // downstream of an item like that moves under the finger already on its
+        // way to it. The transport readout is exactly such an item — it arrives
+        // with a DAW, leaves with one, and is a 232 px reservation whichever of
+        // the three counters the host at the other end happens to keep — so it
+        // follows the tabs rather than leading them.
+        //
+        // It led them for a phase, and both halves of that went wrong in the
+        // same way. On a host with no DAW the slot was 232 px of nothing, which
+        // is the collapse the note below describes; with a DAW it was worse,
+        // because the collapse cannot fire and the hole is *inside* the
+        // reservation. A host counting bars draws `1|1.0 120.0 BPM · 4/4` in
+        // 160 px of it and leaves the other 72 unspent, so the tabs stood 88 px
+        // clear of the ink with nothing whatsoever between the two and read as a
+        // control floating in the middle of the bar; on a host reporting only a
+        // clock the gap was 190 px. Behind the tabs the same reserve lands
+        // against the row's slack, where every readout in this application puts
+        // it — see [TransportAlign].
         child: Row(
           children: [
             _StateDot(state: state),
@@ -257,6 +273,18 @@ class _LinkBar extends StatelessWidget {
                 style: OaaType.body.copyWith(color: colors.textPrimary),
               ),
             ),
+
+            if (tabs.length > 1) ...[
+              const SizedBox(width: Space.md),
+              SegmentedControl<int>(
+                value: tab.clamp(0, tabs.length - 1),
+                segments: [
+                  for (final (index, spec) in tabs.indexed)
+                    (value: index, label: spec.name),
+                ],
+                onChanged: onTab,
+              ),
+            ],
 
             // **The playhead of the DAW at the other end, and the full width of
             // it.** The desktop's bar can afford a timecode and nothing else;
@@ -276,11 +304,11 @@ class _LinkBar extends StatelessWidget {
             // `DisplayClient.hasTransport`. The readout draws nothing when
             // there is nothing to draw, which is right, but it was still 232 px
             // wide while doing it: on every host with no DAW — a desktop
-            // metering a sound card, which is most of them — the tab control
-            // sat 248 px out from the name it belongs to with nothing between
-            // the two, reading as a control that had failed to lay out rather
-            // than as an empty readout. Collapsed, the tabs sit one gap behind
-            // the name, which is where the comment above says they belong.
+            // metering a sound card, which is most of them — that put 248 px of
+            // nothing into the bar, reading as a control that had failed to lay
+            // out rather than as an empty readout. Nothing behind it moves when
+            // it goes now, which is the point of it being here rather than in
+            // front of the tabs, and the emptiness is still not worth reserving.
             ValueListenableBuilder<bool>(
               valueListenable: client.hasTransport,
               builder: (context, hasTransport, _) => !hasTransport
@@ -291,21 +319,17 @@ class _LinkBar extends StatelessWidget {
                         transportOf: () => client.transport.value,
                         repaint: clock,
                         width: TransportReadout.fullWidth,
+                        // Leading — the default, and a decision rather than an
+                        // omission. This readout is packed against the tabs to
+                        // its left and the row's slack to its right, so that is
+                        // the edge its fields belong against and the side the
+                        // reserve they do not spend belongs on. The desktop's
+                        // leads a group packed right and is aligned the other
+                        // way for the same reason. See `TransportAlign`.
+                        align: TransportAlign.leading,
                       ),
                     ),
             ),
-
-            if (tabs.length > 1) ...[
-              const SizedBox(width: Space.md),
-              SegmentedControl<int>(
-                value: tab.clamp(0, tabs.length - 1),
-                segments: [
-                  for (final (index, spec) in tabs.indexed)
-                    (value: index, label: spec.name),
-                ],
-                onChanged: onTab,
-              ),
-            ],
 
             // The message is what gives way when the bar is short of room: it is
             // empty whenever the link is healthy, and when it is not, an

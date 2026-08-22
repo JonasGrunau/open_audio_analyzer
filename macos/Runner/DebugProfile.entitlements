@@ -11,6 +11,13 @@
 <dict>
 	<key>com.apple.security.device.audio-input</key>
 	<true/>
+	<!-- The host picker's QR scanner. Required even though this app is
+	     not sandboxed: a Developer ID build is signed with the hardened
+	     runtime, which withholds the camera from a process that has not
+	     asked for it here — and the refusal arrives as a camera that
+	     never produces a frame rather than as an error. -->
+	<key>com.apple.security.device.camera</key>
+	<true/>
 	<key>com.apple.security.cs.allow-jit</key>
 	<true/>
 	<key>com.apple.security.network.server</key>

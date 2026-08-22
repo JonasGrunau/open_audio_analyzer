@@ -17,6 +17,16 @@ way to do that. The build hook handles it — the reason to know is the failure
 if it is ever undone, which is several hundred errors inside Apple's own
 `Foundation` headers naming no file in Open Audio Analyzer.
 
+Four Flutter plugins are pulled in: `desktop_drop` and `file_selector` to get a
+path from a user, `flutter_riverpod` for configuration, and `mobile_scanner`
+(MIT) for the host picker's QR scanner. The last is the one with a native half
+that is not vendored here, and the one that does not ship everywhere — Android,
+iOS and macOS only, which `canScanQrCodes` asks before drawing the row. It
+integrates through Swift Package Manager, so there is still no `Podfile` in
+this repository and nothing to `pod install`. The QR *encoder* on the other
+side of the same feature is written here rather than depended on, in
+`packages/oaa_ui/lib/src/qr.dart`.
+
 There is **no podspec, no `build.gradle` and no per-platform `CMakeLists.txt`**
 for the application. `packages/oaa_engine/hook/build.dart` compiles the C
 through `native_toolchain_c` and bundles it as a code asset. One build
@@ -112,20 +122,37 @@ are MIT and must stay linkable by people who are not writing free software.
 
 ## Installers
 
-One script per platform, under `packaging/`. Each builds the application first
+One script per artefact, under `packaging/`. Each builds the application first
 unless told to skip it, and each says plainly whether what it produced can
 actually be installed.
 
 ```sh
-sh  packaging/macos/make_dmg.sh
-pwsh packaging/windows/make_msix.ps1
-sh  packaging/linux/make_appimage.sh
-sh  packaging/linux/make_flatpak.sh
-sh  packaging/ios/make_ipa.sh        # the iPad build, for TestFlight
-sh  packaging/ios/testflight.sh      # and the upload, separately
+sh   packaging/macos/make_pkg.sh          # carries the VST3 and the AU
+pwsh packaging/windows/make_installer.ps1 # carries the VST3
+sh   packaging/linux/make_installer.sh    # carries the VST3
+sh   packaging/linux/make_appimage.sh     # application only
+sh   packaging/linux/make_flatpak.sh      # application only
+sh   packaging/ios/make_ipa.sh            # the iPad build, for TestFlight
+sh   packaging/ios/testflight.sh          # and the upload, separately
 ```
 
 Everything lands in `build/packaging/`.
+
+**The first three need the plugin bundles and refuse to run without them**, on
+the grounds that an installer quietly missing the thing it exists to install
+looks exactly like one that has it. Build them first, or point the script at an
+unpacked release archive:
+
+```sh
+cmake -B plugin/build -S plugin -DCMAKE_BUILD_TYPE=Release
+cmake --build plugin/build
+sh packaging/macos/make_pkg.sh                      # finds plugin/build itself
+sh packaging/macos/make_pkg.sh --plugins ./unpacked # or an oaa-plugin-*.tar.gz
+```
+
+In CI they take the second route: the `macos-pkg`, `windows-installer` and
+`linux-tarball` jobs `needs: plugin` and unpack the bundles that job already
+signed and notarised, rather than building a second copy of the same code.
 
 Signing is by environment variable, and every script produces an unsigned
 artefact and warns rather than failing when the variables are absent — a fork
@@ -136,24 +163,25 @@ Store export either has a distribution signature or does not exist, so
 
 | Variable | For |
 | --- | --- |
-| `OAA_SIGNING_IDENTITY` | macOS Developer ID, e.g. `Developer ID Application: Name (TEAMID)` |
+| `OAA_SIGNING_IDENTITY` | macOS Developer ID, e.g. `Developer ID Application: Name (TEAMID)`. Signs code — the app, the VST3 and the Audio Unit. It does **not** sign the package that carries them; that is the identity below |
+| `OAA_INSTALLER_IDENTITY` | The *other* macOS Developer ID, e.g. `Developer ID Installer: Name (TEAMID)`. A distinct certificate from the one above and not interchangeable with it — that one signs code, this one signs a `.pkg` and nothing else. `keychain.sh` fails when this names an identity the `.p12` does not contain, rather than letting the run reach `productbuild` and stop there |
 | `OAA_NOTARY_PROFILE` | A `xcrun notarytool store-credentials` profile. Your own machine only — it lives in *that machine's* keychain, so a CI runner given this name finds nothing |
 | `OAA_NOTARY_APPLE_ID`, `OAA_NOTARY_TEAM_ID`, `OAA_NOTARY_PASSWORD` | The same credentials in a form a runner can be handed. The password is an [app-specific password](https://support.apple.com/en-us/102654), not the Apple ID's own |
-| `OAA_SIGNING_CERTIFICATE`, `OAA_SIGNING_CERTIFICATE_PASSWORD` | base64 of a `.p12` and its export password, for a machine whose keychain is empty. `packaging/macos/keychain.sh` imports it; on your own Mac use Keychain Access and skip both |
+| `OAA_SIGNING_CERTIFICATE`, `OAA_SIGNING_CERTIFICATE_PASSWORD` | base64 of a `.p12` and its export password, for a machine whose keychain is empty. One file holds **every** Developer ID identity the release signs with — select them all in Keychain Access → My Certificates and Export Items in a single pass, because a second secret would be a second thing to rotate. `packaging/macos/keychain.sh` imports it; on your own Mac use Keychain Access and skip both |
 | `OAA_IOS_CERTIFICATE`, `OAA_IOS_CERTIFICATE_PASSWORD` | base64 of a `.p12` holding an **Apple Distribution** certificate, and its export password. A different certificate type from the Developer ID above and not interchangeable with it — one signs a Mac app for direct download, the other signs an iOS app for the store. `keychain.sh` imports either |
 | `OAA_IOS_PROFILE` | base64 of an **App Store** `.mobileprovision` for `com.openaudioanalyzer.oaa`. A development or ad-hoc profile exports an IPA that builds, signs and verifies cleanly and is refused at the end of the upload, so `make_ipa.sh` checks the profile before it builds |
 | `OAA_IOS_TEAM_ID`, `OAA_IOS_SIGNING_IDENTITY` | Optional. They default to the team in the Xcode project and to `Apple Distribution`, which matches whichever such certificate the keychain holds. Set the team when the profile was created under a different one from the project's — `make_ipa.sh` compares the two before it builds, because a mismatch presents as Xcode finding no profile at all. Neither takes quotes: the value is written into an xcconfig verbatim, where a stray `"` is part of the setting |
 | `OAA_ASC_KEY_ID`, `OAA_ASC_ISSUER_ID`, `OAA_ASC_KEY` | An App Store Connect **API key** — its id, the issuer uuid, and base64 of the `.p8`. Needed by `testflight.sh` and nothing else. The key needs the **App Manager** role or the upload is refused with a permissions error that names no role |
 | `OAA_BUILD_NUMBER` | Optional. `CFBundleVersion` for the iPad build; unset, `pubspec.yaml`'s `+N` is used. CI passes the workflow run counter, because App Store Connect refuses a build number it has already accepted for the same version string |
-| `OAA_WINDOWS_CERT` | Path to a `.pfx` |
-| `OAA_WINDOWS_CERT_PASS` | Its password |
-| `OAA_WINDOWS_PUBLISHER` | The certificate's subject, **exactly** — e.g. `CN=Jonas Grunau` |
+| `OAA_WINDOWS_CERT` | Path to a `.pfx`. Your own machine — a runner has no file to point at |
+| `OAA_WINDOWS_CERT_BASE64` | base64 of that same `.pfx`, which is the form CI can be handed. Used in preference to the path when both are set |
+| `OAA_WINDOWS_CERT_PASS` | The export password, for either form |
 
-Two things that will otherwise cost you an afternoon:
+Four things that will otherwise cost you an afternoon:
 
 - **A signed but un-notarised download is still refused by Gatekeeper.** The
   quarantine flag needs notarisation, not merely a signature. This is true of
-  the plugin bundles as well as the dmg, and the plugin's version of the
+  the plugin bundles as well as the pkg, and the plugin's version of the
   refusal is worse: a modal with nothing in System Settings to override it,
   because "Open Anyway" is only offered for a blocked launch and loading a
   plugin is a library load. An identity and notarisation credentials, or
@@ -168,11 +196,20 @@ Two things that will otherwise cost you an afternoon:
   finished archive. Run it once by hand, or with `workflow_dispatch`, before
   trusting a tag to it — a dispatch builds and signs the IPA and does not
   upload, which is the useful half of the check.
-- **`OAA_WINDOWS_PUBLISHER` must equal the certificate subject byte for byte.**
-  Not the display name, not a tidied version of it. A mismatch fails at install
-  time with `0x800B0100`, which reads as "the signature is invalid" and sends
-  people to inspect the certificate rather than a string. `certutil -dump`
-  prints the subject.
+- **A pkg needs a `Developer ID Installer` certificate, which is not the one
+  that signs code.** `productbuild --sign` given a `Developer ID Application`
+  identity fails with "no identity found", naming a certificate that is in the
+  keychain and is merely the wrong type. Both live in one `.p12`, and
+  `keychain.sh` now fails if an identity a job names is not in it — an
+  installer certificate never appears in
+  `security find-identity -p codesigning`, so the import used to look correct
+  while being half missing.
+- **Signing the Windows installer does not remove SmartScreen.** An ordinary
+  OV certificate still produces "Windows protected your PC" until the file
+  accumulates download reputation, which takes weeks and resets whenever the
+  certificate does; only EV carries reputation from the first download. Current
+  releases are unsigned and warn, which is a state a user can click through —
+  unlike the macOS plugin refusal, which they cannot.
 
 ### The icon
 
@@ -180,12 +217,13 @@ Two things that will otherwise cost you an afternoon:
 dart run packaging/icon/make_icons.dart
 ```
 
-Regenerates every size and shape the six platforms ask for — the four desktop
-installers, Android's adaptive icon, and the layered `AppIcon.icon` that macOS
-and iOS render for themselves — into the platform directories and `packaging/`. The mark is described once, as geometry,
-in that file; `packaging/icon/oaa.svg` is its vector twin and carries the same
-numbers, and `assets/brand/` is the same mark without its tile. The outputs are
-committed, so a release runner never runs this.
+Regenerates every size and shape the six platforms ask for — the five desktop
+downloads, Android's adaptive icon, and the layered `AppIcon.icon` that macOS
+and iOS render for themselves — into the platform directories and `packaging/`.
+The mark is described once, as geometry, in that file; `packaging/icon/oaa.svg`
+is its vector twin and carries the same numbers, and `assets/brand/` is the
+same mark without its tile. The outputs are committed, so a release runner
+never runs this.
 
 ## The documentation site
 

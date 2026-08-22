@@ -30,8 +30,10 @@
 
 import 'dart:io';
 
+import 'package:oaa/src/app/bar_controls.dart';
 import 'package:oaa/src/app/oaa_app.dart';
 import 'package:oaa/src/app/shortcuts.dart';
+import 'package:oaa/src/app/transport_readout.dart';
 import 'package:oaa/src/canvas/module_host.dart';
 import 'package:oaa/src/clock/meter_clock.dart';
 import 'package:oaa/src/data/providers.dart';
@@ -171,9 +173,9 @@ Future<void> _pumpApp(
 /// The same, with a plugin attached — which is the only state in which the bar
 /// carries a transport readout.
 ///
-/// The readout is 108 px including its gap, the widest single item the bar can
-/// gain, and it is the only one that is not always there: sweeping without a
-/// plugin sweeps a row that is 108 px narrower than the widest one a user can
+/// The readout is 132 px including its two gaps, the widest single item the bar
+/// can gain, and it is the only one that is not always there: sweeping without a
+/// plugin sweeps a row that is 132 px narrower than the widest one a user can
 /// produce. Which is how the *last* status-bar overflow shipped — the sweep was
 /// green at every width because it never rendered the case with the long name in
 /// it.
@@ -242,6 +244,35 @@ Future<void> _pumpAppWithPlugin(
       () => Future<void>.delayed(const Duration(milliseconds: 10)),
     );
   }
+
+  // **And the readout keeps its distance from the item in front of it**, which
+  // an overflow check cannot see: the seam between the bar's `Expanded` group
+  // and its right-hand one is the only one in the row with no `SizedBox` of its
+  // own, so the space there used to be whatever the window was not using. The
+  // source name ellipsises before the row overflows, so from the readout's gate
+  // up to about 1310 px the row fitted perfectly with the sample rate and
+  // channel count printed flush against the playhead, and every width in this
+  // sweep was green while it did.
+  final readout = find.byType(TransportReadout);
+  if (readout.evaluate().isEmpty) return;
+
+  final format = find.textContaining('kHz');
+  expect(
+    format,
+    findsOneWidget,
+    reason:
+        'The readout is on screen at a width where the format readout is not, '
+        'which is backwards: the format opens at a narrower row than the '
+        'transport does.',
+  );
+  expect(
+    tester.getRect(readout).left - tester.getRect(format).right,
+    greaterThanOrEqualTo(Space.lg - precisionErrorTolerance),
+    reason:
+        'The transport readout is closer than one group gap to the format '
+        'readout beside it. The row still fits — the source name gives way '
+        'first — so nothing else in this file will fail.',
+  );
 }
 
 /// One module, alone, at exactly the pixels a grid rect gets on [canvas].
@@ -366,10 +397,12 @@ void main() {
     //
     // **The gate is on the row's width, not the window's**, and on macOS the
     // two differ by 96 px — 80 for the window buttons drawn over the bar and 16
-    // of trailing padding. So the readout appears here from about 1136 px of
-    // window, and a band that stopped at 1200 would sweep it at three widths.
-    // That is the whole reason this goes to 1300.
-    for (var width = 960.0; width <= 1300.0; width += 20) {
+    // of trailing padding. So the readout appears here from about 1321 px of
+    // window, and a band that stopped short of that would never sweep it at
+    // all. That is the whole reason this band's top follows the gate: it moved
+    // from 1064 to 1225 of row when the remote group became three controls, and
+    // this moved with it.
+    for (var width = 960.0; width <= 1460.0; width += 20) {
       testWidgets('at ${width.toInt()} px with a plugin attached', (
         tester,
       ) async {
@@ -381,6 +414,50 @@ void main() {
       tester,
     ) async {
       await _pumpAppWithPlugin(tester, kMinimumWindow, config: _longNames);
+    });
+  });
+
+  // **The bar has to fit in the state it is used in, not only in the state it
+  // starts in, and the sweep above cannot reach the second one.** Every case
+  // there pumps an application that has never published — the service is owned
+  // privately by the workspace and the only way in is a switch that would bind
+  // a real socket — so what a published bar measures is not swept anywhere.
+  //
+  // It used to matter. The remote group was a button whose label *grew* when it
+  // published: `REMOTE` at 73 px became `REMOTE · ON` at 100, and `REMOTE · 12`
+  // at 96. Its gate was therefore measured against a string the running
+  // application replaced, and between roughly 620 and 648 px of row, publishing
+  // to a display overflowed a row this suite swept green for a phase.
+  //
+  // What replaced the growing label is not a wider gate — it is a control whose
+  // width cannot depend on its state at all: a fixed word and a track built
+  // from `Space`. That is a property of one widget rather than of the row, so
+  // it is held here, on the widget, where it can actually be checked.
+  group('a bar switch is the same width in both states', () {
+    testWidgets('its state changes no dimension', (tester) async {
+      Future<Size> sizeAt(bool value) async {
+        await tester.pumpWidget(
+          MaterialApp(
+            home: OaaTheme(
+              colors: OaaColors.precisionInstrument,
+              child: Material(
+                child: Center(
+                  child: BarSwitch(
+                    label: 'PUBLISH',
+                    value: value,
+                    semanticLabel: 'Publish these meters to this network',
+                    onChanged: (_) {},
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        return tester.getSize(find.byType(BarSwitch));
+      }
+
+      expect(await sizeAt(false), await sizeAt(true));
     });
   });
 

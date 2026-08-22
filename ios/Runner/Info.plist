@@ -77,6 +77,8 @@
 	</array>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Open Audio Analyzer measures the audio coming into an input you choose. It analyses the signal and never records, stores or transmits it.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Open Audio Analyzer reads a pairing QR code shown by the machine you want to watch, so that this tablet can find it without anybody typing an address. The camera image is examined for a code and never recorded, stored or sent anywhere.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Open Audio Analyzer finds and connects to Open Audio Analyzer hosts on your local network so that a tablet can display another machine's meters. It never sends audio.</string>
 	<key>NSBonjourServices</key>

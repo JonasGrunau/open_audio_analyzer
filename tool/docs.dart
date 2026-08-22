@@ -85,8 +85,8 @@ const List<Page> pages = [
     slug: 'install',
     title: 'Install',
     blurb:
-        'dmg, msix, AppImage and flatpak — and what each one will and will '
-        'not do.',
+        'pkg, Windows installer, tarball, AppImage and flatpak — which of '
+        'them installs the plugin for you, and what each one will not do.',
     section: 'Using Open Audio Analyzer',
   ),
   Page(

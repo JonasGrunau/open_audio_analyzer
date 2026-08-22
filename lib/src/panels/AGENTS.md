@@ -4,7 +4,7 @@ The panels that sit over the canvas. GPL-3.0-or-later.
 
 | File | Purpose |
 |------|---------|
-| `settings_panel.dart` | Signal and capture device, refresh rate and delivery target, skins, session. The hub the other two open from. |
+| `settings_panel.dart` | Signal and capture device, refresh rate and delivery target, publishing, skins, session. The hub the others open from. Its Publish section is `PublishSection`, composed from `lib/src/remote/` because it reads a live socket. |
 | `preset_browser.dart` | Save the current arrangement; open or delete a saved one. |
 | `calibration_editor.dart` | The six numbers a delivery target is. |
 | `report_panel.dart` | Offline analysis: drop a file, watch it run, cancel it, export the result. |
@@ -22,10 +22,11 @@ drift from the others within a month.
 directory: the shell, the footer convention, which primitive expresses which
 kind of row, `ruled: false` on the first section only, and push-a-second-panel
 rather than swap-your-own-body for anything with a second step. Read it before
-adding a panel anywhere — including in `lib/src/remote/`, whose pairing panel,
-sending panel and host picker live there because they own a socket rather than
-because they are a different kind of thing. Nothing about their structure
-differs from the six here.
+adding a panel anywhere — including in `lib/src/remote/`, whose host picker and
+pairing-code panel live there because they own a socket rather than because they
+are a different kind of thing. The same goes for a *section*: `PublishSection`
+is built there and composed into the settings panel here. Nothing about their
+structure differs from the panels in this directory.
 
 ## Rules
 
@@ -41,6 +42,14 @@ differs from the six here.
 - **There is no OK button.** Every control writes through as it is touched. A
   panel with an OK button can be abandoned in a state the interface has already
   shown, and then the meters and the settings disagree.
+
+  **"As it is touched" is not "on every keystroke", and the difference is one
+  row.** The remote display's name and port are committed on Enter and on losing
+  focus rather than per character, because a port is not a valid port until it
+  is finished — binding to each prefix of one on the way to `5560` would move
+  the socket three times. That is still write-through: an edit commits when the
+  edit ends, and there is nothing left for a button to do. An Apply button was
+  the first shape of it and is the shape this rule forbids.
 
 - **A destructive action confirms in place.** The delete button becomes
   `Delete?` and takes a second press. No modal over a modal, and no undo stack

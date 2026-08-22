@@ -48,15 +48,28 @@ import 'workspace.dart';
 /// ---------------------------------------------------------------------------
 /// Why the drag affordances sit *behind* the module
 ///
-/// Each module is a small stack: a full-size selection catcher, a drag strip
-/// over the title bar, the module itself, and a resize grip at the corner. The
-/// first two are underneath, which is what gives the frame's own menu button
+/// Each module is a small stack of six: a full-size selection catcher, a
+/// touch-only drag band, a drag strip over the title bar, the module itself, a
+/// touch-only resize target and a resize grip at the corner. The first three
+/// are underneath the module, which is what gives the frame's own menu button
 /// priority without any gesture-arena arbitration — a hit test that reaches the
 /// menu button never gets as far as the strip.
 ///
 /// That only works because meter painters do not absorb pointer events. See
 /// [MeterPainter]: Flutter's default is that a `CustomPaint` swallows them,
 /// which would make the entire body of every module dead to the mouse.
+///
+/// The two touch layers are the same rule read the other way round. Each sits
+/// directly *beneath* the affordance it enlarges and is bigger than it, and
+/// `RenderStack.hitTestChildren` walks back to front and stops at the first
+/// child that returns true — so the opaque layer above masks the part of the
+/// touch layer underneath it, and only the margin it adds is ever reached. That
+/// is what keeps one pan recogniser in the arena rather than two identical ones
+/// racing to accept it. Both are `HitTestBehavior.translucent`, so a pointer
+/// they do not admit carries on down to the selection catcher and a mouse click
+/// in the added margin still selects the module exactly as it always did. See
+/// [kTouchDragDevices] for which kinds are admitted, and why they are the only
+/// ones.
 ///
 /// ---------------------------------------------------------------------------
 /// The keyboard is not here
@@ -84,6 +97,15 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
 
   /// Side of the square resize grip at a module's bottom-right corner.
   static const double _gripSize = Space.md;
+
+  /// The same grip for a finger. Nothing is drawn at this size — the ticks stay
+  /// inside [_gripSize] — and only [kTouchDragDevices] may use it.
+  static const double _gripTouchSize = Space.xl;
+
+  /// The title bar's drag handle for a finger. The painted bar stays
+  /// [ModuleFrame.titleBarHeight]; this is only how far down a drag is still
+  /// acknowledged.
+  static const double _handleTouchHeight = Space.lg + Space.md;
 
   @override
   void dispose() {
@@ -369,28 +391,11 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
                   const Positioned.fill(child: IgnorePointer(child: _Empty())),
 
                 for (final module in tab.modules)
-                  Positioned.fromRect(
-                    rect: geometry.rectFor(module.rect),
-                    // Keyed by module id so that moving one preserves its
-                    // State — and with it the laid-out paragraphs its painter
-                    // has cached. Without the key, Flutter matches children
-                    // by position in the list and a move throws that cache
-                    // away.
-                    key: ValueKey<String>(module.id),
-                    child: _ModuleSlot(
-                      module: module,
-                      engine: widget.engine,
-                      clock: widget.clock,
-                      calibration: calibration,
-                      selected: module.id == workspace.selectedModuleId,
-                      gripSize: _gripSize,
-                      onSelect: () => _controller.select(module.id),
-                      onMenu: (position) => _showModuleMenu(position, module),
-                      onDragStart: (resize) =>
-                          _beginDrag(module, resize: resize),
-                      onDragUpdate: (details) => _updateDrag(details, geometry),
-                      onDragEnd: _endDrag,
-                    ),
+                  _slotFor(
+                    module,
+                    geometry,
+                    calibration,
+                    selected: module.id == workspace.selectedModuleId,
                   ),
 
                 // Top: the drag preview. Repaints from its own notifier and
@@ -435,6 +440,63 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
     );
   }
 
+  /// One module's slot, with its touch targets sized to the room it has.
+  ///
+  /// The clamping happens here rather than inside [_ModuleSlot] because it needs
+  /// the module's pixel rect, and the slot only learns its own size at layout.
+  /// **Neither target may grow into the title bar.** The touch grip sits above
+  /// [ModuleHost] in the stack, so on a short module an unclamped square would
+  /// reach the frame's menu button and the move strip and take both; the floor
+  /// is the size each affordance already had, so a module too small for the
+  /// larger target simply keeps today's.
+  ///
+  /// `math.max` and `math.min` rather than `clamp`, deliberately: `clamp` throws
+  /// `ArgumentError` when the bounds cross, and that is a crash out of a build
+  /// on a small window. [_updateDrag] carries the same note for the same reason.
+  Widget _slotFor(
+    ModuleSpec module,
+    GridGeometry geometry,
+    Calibration calibration, {
+    required bool selected,
+  }) {
+    final rect = geometry.rectFor(module.rect);
+    final gripTouch = math.max(
+      _gripSize,
+      math.min(
+        _gripTouchSize,
+        math.min(rect.width, rect.height - ModuleFrame.titleBarHeight),
+      ),
+    );
+    final handleTouch = math.max(
+      ModuleFrame.titleBarHeight,
+      math.min(_handleTouchHeight, rect.height - gripTouch),
+    );
+
+    return Positioned.fromRect(
+      rect: rect,
+      // Keyed by module id so that moving one preserves its State — and with
+      // it the laid-out paragraphs its painter has cached. Without the key,
+      // Flutter matches children by position in the list and a move throws
+      // that cache away.
+      key: ValueKey<String>(module.id),
+      child: _ModuleSlot(
+        module: module,
+        engine: widget.engine,
+        clock: widget.clock,
+        calibration: calibration,
+        selected: selected,
+        gripSize: _gripSize,
+        gripTouchSize: gripTouch,
+        handleTouchHeight: handleTouch,
+        onSelect: () => _controller.select(module.id),
+        onMenu: (position) => _showModuleMenu(position, module),
+        onDragStart: (resize) => _beginDrag(module, resize: resize),
+        onDragUpdate: (details) => _updateDrag(details, geometry),
+        onDragEnd: _endDrag,
+      ),
+    );
+  }
+
   GridRect _rectAt(GridGeometry geometry, Offset local) {
     final (column, row) = geometry.cellAt(local);
     return GridRect(column: column, row: row, columns: 1, rows: 1);
@@ -443,7 +505,7 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
 
 enum _ModuleAction { metric, response, duplicate, delete }
 
-/// One module and the four transparent layers that make it manipulable.
+/// One module and the five transparent layers that make it manipulable.
 class _ModuleSlot extends StatelessWidget {
   const _ModuleSlot({
     required this.module,
@@ -452,6 +514,8 @@ class _ModuleSlot extends StatelessWidget {
     required this.calibration,
     required this.selected,
     required this.gripSize,
+    required this.gripTouchSize,
+    required this.handleTouchHeight,
     required this.onSelect,
     required this.onMenu,
     required this.onDragStart,
@@ -465,6 +529,14 @@ class _ModuleSlot extends StatelessWidget {
   final Calibration calibration;
   final bool selected;
   final double gripSize;
+
+  /// The grip's target for a finger, already clamped out of the title bar by
+  /// `_GridCanvasState._slotFor`. Equal to [gripSize] when there is no room.
+  final double gripTouchSize;
+
+  /// How far down a finger may still start a move, likewise clamped. Equal to
+  /// [ModuleFrame.titleBarHeight] when there is no room.
+  final double handleTouchHeight;
   final VoidCallback onSelect;
   final void Function(Offset globalPosition) onMenu;
   final void Function(bool resize) onDragStart;
@@ -485,10 +557,42 @@ class _ModuleSlot extends StatelessWidget {
           onSecondaryTapUp: (details) => onMenu(details.globalPosition),
         ),
 
+        // The same handle, for a finger. Taller than the bar it enlarges and
+        // masked by the opaque strip above, so it is reached only in the margin
+        // it adds below the bar. Translucent, so that a mouse press here starts
+        // nothing — `supportedDevices` will not admit one — and falls through to
+        // the selection catcher beneath, which selects the module as it always
+        // has. See the header, and [kTouchDragDevices].
+        Positioned(
+          left: 0,
+          right: 0,
+          top: 0,
+          height: handleTouchHeight,
+          child: GestureDetector(
+            behavior: HitTestBehavior.translucent,
+            dragStartBehavior: DragStartBehavior.down,
+            supportedDevices: kTouchDragDevices,
+            onPanStart: (_) => onDragStart(false),
+            onPanUpdate: onDragUpdate,
+            onPanEnd: (_) => onDragEnd(),
+            onPanCancel: onDragEnd,
+          ),
+        ),
+
         // The title bar is the drag handle. Dragging by the body is tempting
         // and wrong: a histogram that can be scrubbed and a spectrum with a
         // cursor both need the body, and a canvas that claims it now is a
         // canvas that has to be unpicked in Phase 3.
+        //
+        // A finger is the one exception, and it is a concession rather than a
+        // reversal — the layer above, which reaches [handleTouchHeight] rather
+        // than these twenty-four pixels. A finger has no cursor to tell it what
+        // it is over and covers the whole bar, and the target cannot grow
+        // outward instead: the slot is a `Positioned.fromRect`, and a
+        // `RenderBox` rejects hits outside its own size, so a box overhanging
+        // the gutter would paint there and never be touched. A module that
+        // later wants its body scrubbed takes those pixels back by shrinking
+        // that layer, not by moving this one.
         Positioned(
           left: 0,
           right: 0,
@@ -529,6 +633,27 @@ class _ModuleSlot extends StatelessWidget {
           onMenu: () => onMenu(_centreOf(context)),
         ),
 
+        // The corner grip's target for a finger, on the same principle as the
+        // band over the title bar and masked the same way by the grip below it.
+        // Sized by `_GridCanvasState._slotFor` rather than here: this layer is
+        // above [ModuleHost], so on a short module an unclamped square would
+        // reach up and take the frame's menu button.
+        Positioned(
+          right: 0,
+          bottom: 0,
+          width: gripTouchSize,
+          height: gripTouchSize,
+          child: GestureDetector(
+            behavior: HitTestBehavior.translucent,
+            dragStartBehavior: DragStartBehavior.down,
+            supportedDevices: kTouchDragDevices,
+            onPanStart: (_) => onDragStart(true),
+            onPanUpdate: onDragUpdate,
+            onPanEnd: (_) => onDragEnd(),
+            onPanCancel: onDragEnd,
+          ),
+        ),
+
         Positioned(
           right: 0,
           bottom: 0,
@@ -539,9 +664,16 @@ class _ModuleSlot extends StatelessWidget {
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
               dragStartBehavior: DragStartBehavior.down,
-              // The grip is eight pixels square and a two-finger gesture that
-              // starts on it would resize the module. See [kDragDevices].
+              // Or a two-finger gesture that starts on the grip resizes the
+              // module. See [kDragDevices].
               supportedDevices: kDragDevices,
+              // Without this the grip is the one place on a module where a tap
+              // does nothing at all: it is opaque, so it takes the hit from the
+              // selection catcher, and it had nothing of its own to spend it
+              // on. Barely noticeable at sixteen pixels; plainly wrong with a
+              // finger's target around it, where tapping two millimetres away
+              // selects the module and tapping the ticks does not.
+              onTap: onSelect,
               onPanStart: (_) => onDragStart(true),
               onPanUpdate: onDragUpdate,
               onPanEnd: (_) => onDragEnd(),

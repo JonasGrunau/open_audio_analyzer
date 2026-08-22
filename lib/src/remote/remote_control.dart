@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import 'package:oaa_core/oaa_core.dart';
 import 'package:oaa_ui/oaa_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -11,39 +10,61 @@ import '../data/providers.dart';
 import 'display_screen.dart';
 import 'host_picker.dart';
 import 'mdns/mdns_service.dart';
+import 'publish_settings.dart';
 import 'remote_display_service.dart';
 
-/// The status-bar entry for the remote display, and the panels behind it.
+/// The application's one connection to [RemoteDisplayService]: what drives it,
+/// and what can reach it.
 ///
-/// **A view onto the service, not its owner.** It used to own one, which was
-/// wrong twice over. The service holds a socket, an mDNS responder and a publish
-/// timer keyed to the engine being measured — so it has to be torn down with the
-/// *engine*, and it has to be told when the engine is replaced. This widget's
-/// lifetime is neither: it is dropped whenever the window is narrower than
-/// 620 px, because the status bar drops whole items rather than squeezing them.
-/// Publishing to a tablet therefore stopped, silently, when somebody resized the
-/// window — and survived a device change while pointing at a destroyed engine.
-/// The service now lives beside the engine, and this row reads it.
-class RemoteDisplayControl extends ConsumerStatefulWidget {
-  const RemoteDisplayControl({required this.service, super.key});
+/// **It is built unconditionally, and that is the whole point of it.** The two
+/// things below were done inside the status-bar control, which the bar *drops*
+/// below a width gate because it drops whole items rather than squeezing them.
+/// The service itself was moved out to the engine's owner when that first bit —
+/// narrowing the window used to tear down an active session — but the code that
+/// feeds the service did not follow, so the second half of the same defect
+/// survived: past the gate the socket went on streaming measurements while
+/// layout, skin and delivery-target changes stopped arriving at the tablet, and
+/// a changed name, port or rate stopped being adopted. Nothing anywhere said
+/// so, and the tablet looked healthy the entire time. Anything that has to keep
+/// happening while publishing is on belongs here, above the bar, and not in a
+/// control the bar is allowed to drop.
+///
+/// It also carries the service down the tree, because the settings panel needs
+/// it and a panel is a route. See [of].
+class RemoteDisplayScope extends ConsumerWidget {
+  const RemoteDisplayScope({
+    required this.service,
+    required this.child,
+    super.key,
+  });
 
   final RemoteDisplayService service;
+  final Widget child;
+
+  /// The service in scope, for a widget below one.
+  ///
+  /// **Read it at the call site, not inside a panel.** A route is built by the
+  /// `Navigator`, which sits above `MaterialApp.home` — so an inherited widget
+  /// installed under `home` is invisible to every panel, and looking for one
+  /// from inside a route finds nothing. `showSettingsPanel` resolves this
+  /// before it pushes and hands the result to the panel, the same shape
+  /// `showOaaPanel` uses to carry the palette across that boundary.
+  static RemoteDisplayService of(BuildContext context) {
+    final scope = context
+        .dependOnInheritedWidgetOfExactType<_RemoteDisplayScope>();
+    assert(scope != null, 'No RemoteDisplayScope in scope.');
+    return scope!.service;
+  }
 
   @override
-  ConsumerState<RemoteDisplayControl> createState() =>
-      _RemoteDisplayControlState();
-}
-
-class _RemoteDisplayControlState extends ConsumerState<RemoteDisplayControl> {
-  RemoteDisplayService get _service => widget.service;
-
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     // The service holds no configuration of its own: name, port and rate live
     // in the settings, are persisted with everything else, and arrive here.
-    // Whether to *publish* is deliberately not among them — see the panel.
+    // Whether to *publish* is deliberately not among them — there is no
+    // "publish at launch", because opening a port with no password on it is
+    // worth asking for every time.
     final settings = ref.watch(settingsProvider);
-    _service.configure(
+    service.configure(
       name: settings.remoteDisplayName,
       port: settings.remoteDisplayPort,
       fps: settings.remoteDisplayFps,
@@ -53,379 +74,204 @@ class _RemoteDisplayControlState extends ConsumerState<RemoteDisplayControl> {
     // the wire, so a rebuild that changed nothing sends nothing. Calling it
     // here rather than from a listener keeps the "what displays see" answer in
     // one place, and it cannot cause a rebuild of its own.
-    _service.publish(
+    service.publish(
       layout: ref.watch(workspaceProvider).preset,
       skin: ref.watch(skinProvider),
       calibration: ref.watch(calibrationProvider),
     );
 
-    // A `BarButton` like the four beside it, not a `TextButton`. A stock
-    // Material button in this row has no border where its neighbours have one,
-    // Material's own minimum size rather than the bar's, an ink ripple nothing
-    // else in Open Audio Analyzer draws, and no keyboard focus ring — five
-    // differences that read as one: the button that does not belong here.
-    return ValueListenableBuilder<bool>(
-      valueListenable: _service.isPublishing,
-      builder: (context, publishing, _) => ValueListenableBuilder<int>(
-        valueListenable: _service.clients,
-        builder: (context, clients, _) => BarButton(
-          // "Listening" and "being watched" are different facts, and both have
-          // to be legible from the bar: publishing on an unauthenticated socket
-          // is something the user has to be able to see without opening
-          // anything. Brightness carries the first and the count carries the
-          // second — see `BarButton.lit` for why neither is a hue.
-          label: publishing
-              ? (clients == 0 ? 'REMOTE · ON' : 'REMOTE · $clients')
-              : 'REMOTE',
-          lit: publishing,
-          tooltip: switch ((publishing, clients)) {
-            (false, _) =>
-              'Send these meters to another screen, or show another '
-                  'machine’s here.',
-            (true, 0) => 'Publishing to this network. No displays attached.',
-            (true, 1) => 'Publishing to this network. 1 display attached.',
-            (true, final n) =>
-              'Publishing to this network. $n displays attached.',
-          },
-          onPressed: () => _open(context),
-        ),
-      ),
-    );
-  }
-
-  void _open(BuildContext context) {
-    // `showOaaPanel`, not `showDialog`. A route is built by the `Navigator`,
-    // which sits above `MaterialApp.home` and therefore above the application's
-    // `OaaTheme` — so a panel that reads the palette the obvious way throws
-    // "No OaaTheme in scope" the moment it opens, in release as well as debug.
-    // This one did, for the whole of Phase 6: the button was unclickable and
-    // nothing said so until somebody pressed it.
-    showOaaPanel<void>(
-      context: context,
-      builder: (context) => _PairingPanel(service: _service),
-    );
+    return _RemoteDisplayScope(service: service, child: child);
   }
 }
 
-/// Which end of the link this machine is.
+class _RemoteDisplayScope extends InheritedWidget {
+  const _RemoteDisplayScope({required this.service, required super.child});
+
+  final RemoteDisplayService service;
+
+  @override
+  bool updateShouldNotify(_RemoteDisplayScope old) =>
+      !identical(service, old.service);
+}
+
+/// The status bar's publish switch.
 ///
-/// **The question is asked before either answer is configured, because the two
-/// answers have nothing in common.** Sending is a socket, a name and a rate on
-/// *this* machine; receiving is a search for somebody else's. They were one
-/// dialog with the receiving half behind a footer button marked "Use as
-/// display" — which put a whole second mode in the row where a panel says "the
-/// ways out of here are", so the tablet half of the feature was reachable only
-/// by pressing the button that looked most like Cancel.
+/// **A view onto the service, and nothing more.** It owns no socket, adopts no
+/// settings and starts nothing when it is built — see [RemoteDisplayScope] for
+/// why none of that may live in a control the bar can drop.
 ///
-/// The second panel is *pushed* rather than this one swapping its own body.
-/// `showOaaPanel` is a `showGeneralDialog` route with a zero-length transition,
-/// so pushing costs nothing on screen, Escape and the system back gesture
-/// return here for free, and each panel stays a plain widget with its own
-/// title. A panel that mutated its own body would have to hand-roll the back
-/// stack the Navigator is already keeping.
-class _PairingPanel extends StatelessWidget {
-  const _PairingPanel({required this.service});
+/// The client count is in the tooltip rather than in the label. The bar has no
+/// room for a number that is usually zero, and the fact it answers — "is
+/// somebody watching" — is one step less urgent than the one the switch itself
+/// carries, which is that an unauthenticated port is open at all. That one is
+/// legible at a glance: `BarSwitch` lights when it is on. The count is written
+/// out in full in Settings → Publish, whose heading note carries it.
+class PublishSwitch extends StatelessWidget {
+  const PublishSwitch({required this.service, super.key});
 
   final RemoteDisplayService service;
 
   @override
   Widget build(BuildContext context) {
-    return PanelScaffold(
-      title: 'Remote',
-      onClose: () => Navigator.of(context).pop(),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          PanelSection(
-            title: 'Send or receive',
-            ruled: false,
-            note:
-                'Open Audio Analyzer can send these meters to another screen, or become a '
-                'screen for an Open Audio Analyzer running somewhere else.',
-            children: [
-              ValueListenableBuilder<bool>(
-                valueListenable: service.isPublishing,
-                builder: (context, publishing, _) =>
-                    ValueListenableBuilder<int>(
-                      valueListenable: service.clients,
-                      builder: (context, clients, _) => PanelListRow(
-                        title: 'Send these meters',
-                        // The two rows are the same shape and say opposite
-                        // things, so the mark is the first thing that tells
-                        // them apart — and it is brightness rather than hue,
-                        // like the bar button, because the signal colour means
-                        // "in spec" and nothing else.
-                        mark: OaaMark.broadcast,
-                        opens: true,
-                        // The row carries the live state, so "am I already
-                        // publishing" is answered on the first screen rather
-                        // than one panel deeper.
-                        note: switch ((publishing, clients)) {
-                          (false, _) =>
-                            'Publish this machine’s measurements to tablets '
-                                'and laptops on this network.',
-                          (true, 0) => 'Publishing. No displays attached.',
-                          (true, 1) => 'Publishing. 1 display attached.',
-                          (true, final n) =>
-                            'Publishing. $n displays attached.',
-                        },
-                        selected: publishing,
-                        onTap: () => showOaaPanel<void>(
-                          context: context,
-                          builder: (context) => _SendPanel(service: service),
-                        ),
-                      ),
-                    ),
-              ),
-              // The two rows are opposite directions rather than two entries in
-              // a list, and at the list's own [Space.xs] they read as one
-              // block of text to choose a line from. A gap the width of the
-              // mark column separates the choices without opening a section.
-              const SizedBox(height: Space.sm),
-              PanelListRow(
-                title: 'Show another machine',
-                mark: OaaMark.display,
-                opens: true,
-                note:
-                    'Turn this screen into a display for an Open Audio Analyzer running '
-                    'elsewhere. It shows only — it cannot change what that '
-                    'machine is measuring.',
-                onTap: () => _receive(context),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Picks a host, then leaves the panels behind for the display itself.
-  ///
-  /// Both panels come off the stack before the screen goes on. A display is
-  /// where a tablet stays, and a modal left open underneath it would put the
-  /// canvas back the first time somebody pressed Escape at the meters.
-  Future<void> _receive(BuildContext context) async {
-    final navigator = Navigator.of(context);
-
-    await showOaaPanel<void>(
-      context: context,
-      builder: (context) => HostPickerPanel(
-        onClose: () => Navigator.of(context).pop(),
-        onConnect: (host, port) {
-          navigator
-            ..pop()
-            ..pop();
-          navigator.push(
-            MaterialPageRoute<void>(
-              builder: (_) => RemoteDisplayScreen(host: host, port: port),
-            ),
-          );
-        },
+    return ValueListenableBuilder<bool>(
+      valueListenable: service.isPublishing,
+      builder: (context, publishing, _) => ValueListenableBuilder<int>(
+        valueListenable: service.clients,
+        builder: (context, clients, _) => BarSwitch(
+          label: 'PUBLISH',
+          value: publishing,
+          semanticLabel: 'Publish these meters to this network',
+          tooltip: switch ((publishing, clients)) {
+            (false, _) =>
+              'Send these meters to displays on this network. There is no '
+                  'password on the connection.',
+            (true, 0) => 'Publishing to this network. No displays attached.',
+            (true, 1) => 'Publishing to this network. 1 display attached.',
+            (true, final n) =>
+              'Publishing to this network. $n displays attached.',
+          },
+          // `setEnabled` reports its own failures through `service.failure`,
+          // which Settings → Publish draws. Nothing is thrown at the bar.
+          onChanged: (value) => service.setEnabled(value),
+        ),
       ),
     );
   }
 }
 
-/// The sending half: the socket, what it is called, and how often it speaks.
-class _SendPanel extends ConsumerStatefulWidget {
-  const _SendPanel({required this.service});
+/// The pairing code, one press from the switch that makes it mean anything.
+///
+/// **Disabled rather than absent while publishing is off.** The code is an
+/// address, and an address nothing is listening at is a tablet that scans,
+/// connects and times out — which reads as a broken feature rather than as a
+/// switch that is not on. Greyed beside the switch it is gated on, it says
+/// "turn that on first" without a sentence; removed, it would say nothing at
+/// all, and somebody would go looking in the settings for a code they had seen
+/// there yesterday.
+///
+/// It is also disabled with no addresses to name. A laptop with every interface
+/// down can publish — the socket binds on loopback — and has nothing to put in
+/// a square.
+class PairingCodeButton extends StatefulWidget {
+  const PairingCodeButton({required this.service, super.key});
 
   final RemoteDisplayService service;
 
   @override
-  ConsumerState<_SendPanel> createState() => _SendPanelState();
+  State<PairingCodeButton> createState() => _PairingCodeButtonState();
 }
 
-class _SendPanelState extends ConsumerState<_SendPanel> {
-  late final TextEditingController _port = TextEditingController(
-    text: '${widget.service.port}',
-  );
-  late final TextEditingController _name = TextEditingController(
-    text: widget.service.hostName,
-  );
-
+class _PairingCodeButtonState extends State<PairingCodeButton> {
   List<String> _addresses = const [];
 
   @override
   void initState() {
     super.initState();
+    _lookUp();
+    // **Re-read them when publishing starts**, rather than trusting the answer
+    // taken at launch. A laptop is opened on no network and joins one; the
+    // moment somebody switches publishing on is both the moment the list
+    // matters and the most likely moment for it to have changed.
+    widget.service.isPublishing.addListener(_onPublishing);
+  }
+
+  @override
+  void dispose() {
+    widget.service.isPublishing.removeListener(_onPublishing);
+    super.dispose();
+  }
+
+  void _onPublishing() {
+    if (widget.service.isPublishing.value) _lookUp();
+  }
+
+  void _lookUp() {
     localIPv4Addresses().then((addresses) {
       if (mounted) setState(() => _addresses = addresses);
     });
   }
 
   @override
-  void dispose() {
-    _port.dispose();
-    _name.dispose();
-    super.dispose();
-  }
-
-  /// Writes the fields to the settings, which is what reaches the service.
-  ///
-  /// Nothing here validates: `setRemoteDisplay` ignores a value it cannot use
-  /// rather than storing it, so a mistyped port leaves the previous one in
-  /// place instead of quietly binding somewhere nobody is looking.
-  void _apply() {
-    ref
-        .read(settingsProvider.notifier)
-        .setRemoteDisplay(
-          name: _name.text,
-          port: int.tryParse(_port.text.trim()),
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<bool>(
+      valueListenable: widget.service.isPublishing,
+      builder: (context, publishing, _) {
+        final ready = publishing && _addresses.isNotEmpty;
+        return BarButton(
+          mark: OaaMark.qr,
+          semanticLabel: 'Pairing code',
+          tooltip: switch ((publishing, _addresses.isEmpty)) {
+            (false, _) =>
+              'Show a pairing code for a tablet to scan. Turn PUBLISH on '
+                  'first — a code nothing is listening at cannot connect.',
+            (true, true) =>
+              'No network address to put in a code. This machine is '
+                  'publishing on loopback only.',
+            (true, false) => 'Show a pairing code for a tablet to scan.',
+          },
+          onPressed: ready
+              ? () => showOaaPanel<void>(
+                  context: context,
+                  builder: (_) => PairingCodePanel(
+                    service: widget.service,
+                    addresses: _addresses,
+                  ),
+                )
+              : null,
         );
-    setState(() {});
+      },
+    );
   }
+}
+
+/// The status bar's way to become somebody else's display.
+///
+/// **It opens the host picker directly.** It used to sit behind a panel that
+/// asked which end of the link this machine was — a question with two answers
+/// that have nothing in common, and one the person pressing the button had
+/// already answered. The two answers are two controls now: this and
+/// [PublishSwitch], side by side, each doing its own half in one press.
+class AttachButton extends StatelessWidget {
+  const AttachButton({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final colors = OaaTheme.of(context);
-    final service = widget.service;
+    return BarButton(
+      label: 'ATTACH',
+      tooltip:
+          'Show another machine’s meters here. This screen becomes a display '
+          'for it — it can watch, and it cannot change what that machine is '
+          'measuring.',
+      onPressed: () => _attach(context),
+    );
+  }
 
-    // Read from the settings rather than from the service: the settings are
-    // what a tap writes, and the service adopts them a rebuild later. Showing
-    // the service's copy would leave the selected rate looking unchanged for a
-    // frame after somebody chose it.
-    final settings = ref.watch(settingsProvider);
-
-    return PanelScaffold(
-      title: 'Send these meters',
-      onClose: () => Navigator.of(context).pop(),
-      footer: Row(
-        children: [
-          const Spacer(),
-          OaaButton(
-            label: 'Done',
-            emphasis: ButtonEmphasis.primary,
-            onPressed: () => Navigator.of(context).pop(),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          PanelSection(
-            title: 'Publishing',
-            ruled: false,
-            note:
-                'Sends these meters to displays on this network. A display can '
-                'only watch — it cannot reset, retarget or reconfigure this '
-                'machine.',
-            children: [
-              ValueListenableBuilder<bool>(
-                valueListenable: service.isPublishing,
-                builder: (context, publishing, _) =>
-                    ValueListenableBuilder<int>(
-                      valueListenable: service.clients,
-                      builder: (context, clients, _) => PanelRow(
-                        label: 'Publish to this network',
-                        note: switch ((publishing, clients)) {
-                          (false, _) => 'Off.',
-                          (true, 0) => 'Publishing. No displays attached.',
-                          (true, 1) => 'Publishing. 1 display attached.',
-                          (true, final n) =>
-                            'Publishing. $n displays attached.',
-                        },
-                        child: OaaToggle(
-                          value: publishing,
-                          semanticLabel: 'Publish to this network',
-                          onChanged: (value) async {
-                            await service.setEnabled(value);
-                            if (context.mounted) setState(() {});
-                          },
-                        ),
-                      ),
-                    ),
+  /// Picks a host, then leaves the panel behind for the display itself.
+  ///
+  /// The picker comes off the stack before the screen goes on. A display is
+  /// where a tablet stays, and a modal left open underneath it would put the
+  /// canvas back the first time somebody pressed Escape at the meters.
+  ///
+  /// `showOaaPanel`, not `showDialog`. A route is built by the `Navigator`,
+  /// which sits above `MaterialApp.home` and therefore above the application's
+  /// `OaaTheme` — so a panel that reads the palette the obvious way throws
+  /// "No OaaTheme in scope" the moment it opens, in release as well as debug.
+  /// This path did, for the whole of Phase 6: the button was unclickable and
+  /// nothing said so until somebody pressed it.
+  Future<void> _attach(BuildContext context) {
+    return showOaaPanel<void>(
+      context: context,
+      builder: (context) => HostPickerPanel(
+        onClose: () => Navigator.of(context).pop(),
+        onConnect: (host, port) {
+          Navigator.of(context)
+            ..pop()
+            ..push(
+              MaterialPageRoute<void>(
+                builder: (_) => RemoteDisplayScreen(host: host, port: port),
               ),
-              PanelRow(
-                label: 'Update rate',
-                note: 'Measurements per second sent to each display.',
-                child: SegmentedControl<int>(
-                  value: settings.remoteDisplayFps,
-                  segments: [
-                    for (final fps in kRemoteFpsOptions)
-                      (value: fps, label: '$fps'),
-                  ],
-                  onChanged: (fps) {
-                    ref
-                        .read(settingsProvider.notifier)
-                        .setRemoteDisplay(fps: fps);
-                    setState(() {});
-                  },
-                ),
-              ),
-              PanelNote(
-                'There is no password on the connection. Anyone on this '
-                'network who can find it can watch these meters, so leave it '
-                'off on a network you do not trust.',
-                tone: colors.warn,
-                mark: OaaMark.warning,
-              ),
-              ValueListenableBuilder<String?>(
-                valueListenable: service.failure,
-                builder: (context, failure, _) => failure == null
-                    ? const SizedBox.shrink()
-                    // Named out loud, because the common cause is a refused
-                    // local-network permission, and the symptom without this
-                    // line is a host nobody can find for no stated reason.
-                    : PanelNote(
-                        'Could not publish: $failure',
-                        tone: colors.over,
-                        mark: OaaMark.warning,
-                      ),
-              ),
-            ],
-          ),
-
-          PanelSection(
-            title: 'Where to find this machine',
-            note:
-                'The name displays list this machine under, and the port it '
-                'listens on.',
-            children: [
-              // One line, because this is one edit. The name and the port are
-              // the same fact — where a display should look — and Apply commits
-              // both at once, so three stacked rows made a two-field form look
-              // like three separate settings and put the button that finishes
-              // it a row away from either field. There is room: the panel is
-              // 620 px wide and the three controls take under 400 of it.
-              //
-              // Unlike the settings panel, the fields do not write through as
-              // they are typed: a port is not a valid port until it is
-              // finished, and binding to each prefix of one as it is entered
-              // would move the socket three times on the way to 5560.
-              PanelRow(
-                label: 'Name and port',
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    OaaTextField(
-                      controller: _name,
-                      width: 200,
-                      onSubmitted: (_) => _apply(),
-                    ),
-                    const SizedBox(width: Space.sm),
-                    OaaTextField(
-                      controller: _port,
-                      width: 88,
-                      numeric: true,
-                      onSubmitted: (_) => _apply(),
-                    ),
-                    const SizedBox(width: Space.sm),
-                    OaaButton(label: 'Apply', onPressed: _apply),
-                  ],
-                ),
-              ),
-              // Shown whether or not discovery is working. A tablet on a
-              // network that blocks multicast needs somewhere to look, and
-              // being told after it has already failed is too late.
-              if (_addresses.isNotEmpty)
-                PanelNote(
-                  'If a display cannot find this machine, type '
-                  '${_addresses.first}:${settings.remoteDisplayPort} into it.',
-                ),
-            ],
-          ),
-        ],
+            );
+        },
       ),
     );
   }

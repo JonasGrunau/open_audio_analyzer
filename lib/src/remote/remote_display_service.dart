@@ -109,11 +109,24 @@ class RemoteDisplayService {
   final ValueNotifier<int> clients = ValueNotifier(0);
 
   /// Why publishing could not start, in a sentence for a person.
-  ///
-  /// The one that matters in practice is a refused local-network permission on
-  /// macOS and iPadOS, which otherwise presents as a host nobody can find and
-  /// no indication why.
   final ValueNotifier<String?> failure = ValueNotifier(null);
+
+  /// Why no display will find this machine, even though it is publishing.
+  ///
+  /// **Separate from [failure], because the two are independently true and the
+  /// difference is the whole of what a person can act on.** Publishing is a
+  /// socket on this machine; announcing is a packet leaving it. A refused
+  /// local-network permission stops the second and not the first, so the port
+  /// stays open, a display handed the address connects and works, and the only
+  /// screen that knows anything is wrong is the tablet — which is the one
+  /// screen with nothing on it to read.
+  ///
+  /// [failure] used to claim it covered this case and never once carried it:
+  /// `MdnsResponder` threw its bind error, its send error and its socket's
+  /// error stream away, so there was nothing to carry. Folding the two into one
+  /// notifier now would be the other half of the same mistake — it would have
+  /// to say publishing had failed when it plainly had not.
+  final ValueNotifier<String?> advertisementFailure = ValueNotifier(null);
 
   PresetSpec? _layout;
   Skin? _skin;
@@ -160,9 +173,16 @@ class RemoteDisplayService {
     final calibration = _calibration;
     if (calibration != null) host.publishCalibration(calibration);
 
-    _responder = MdnsResponder(instanceName: hostName, port: host.port ?? _port)
-      ..txt = _txt();
-    await _responder!.start();
+    final responder = MdnsResponder(
+      instanceName: hostName,
+      port: host.port ?? _port,
+    )..txt = _txt();
+    _responder = responder;
+    // Attached before the bind, which is where the first of the three failures
+    // is raised, and read once afterwards for the case where nothing changed.
+    responder.failure.addListener(_onAdvertisement);
+    await responder.start();
+    _onAdvertisement();
 
     // The advertised format is the one thing in the TXT record that changes
     // while running — an interface switched from 44.1 to 96 kHz, a device that
@@ -180,15 +200,36 @@ class RemoteDisplayService {
 
     final responder = _responder;
     _responder = null;
-    await responder?.stop();
-
     final host = _host;
     _host = null;
-    host?.clientCount.removeListener(_onClients);
-    await host?.stop();
 
+    // **Every state a widget builds from is published here, before the first
+    // suspension, and every listener is dropped here too** — so nothing can put
+    // one of these values back while the sockets are still closing, and nothing
+    // writes to a notifier that has been disposed in the meantime. Closing
+    // either half suspends, [dispose] does not wait for it, and these notifiers
+    // are one statement further down that method: a write after the gap throws
+    // from inside a microtask, where the only thing it reaches is the console.
+    //
+    // It stayed invisible for as long as it did because a write of the value a
+    // notifier already holds does not notify, so nothing asserted unless the
+    // service had actually been publishing — which is never true of a test that
+    // does not open a socket. Clearing the advertisement here is also the
+    // honest order: `stop` sends a goodbye, and a goodbye the OS refuses would
+    // otherwise raise a notice about a service that is already gone.
+    responder?.failure.removeListener(_onAdvertisement);
+    host?.clientCount.removeListener(_onClients);
+    // Before the value is cleared, or a timer that fires after this puts a
+    // notice back for a service that has already stopped.
+    _settling?.cancel();
+    _settling = null;
+    advertisementFailure.value = null;
     isPublishing.value = false;
     clients.value = 0;
+
+    await responder?.stop();
+    responder?.dispose();
+    await host?.stop();
   }
 
   /// Restarts the service so a changed port, name or rate takes effect.
@@ -235,6 +276,54 @@ class RemoteDisplayService {
 
   void _onClients() => clients.value = _host?.clientCount.value ?? 0;
 
+  /// Held back until it has stopped flapping.
+  ///
+  /// **The first announcement of a session very often fails, and then works.**
+  /// The responder sends as soon as the socket is bound, and on macOS a send
+  /// issued before the multicast join has settled is refused with the same
+  /// `EHOSTUNREACH` a denied local-network permission produces — so
+  /// `MdnsResponder.failure` goes non-null a few milliseconds after publishing
+  /// starts and null again on the next announcement a second later. That is the
+  /// correct behaviour for the responder, which reports what the OS just told
+  /// it; it is the wrong thing to put on screen, and it showed as a warning
+  /// banner that appeared and vanished every time somebody flipped the switch —
+  /// which teaches people to ignore the one notice that means a tablet will
+  /// never find this machine.
+  ///
+  /// So a *failure* has to survive the responder's opening burst — three
+  /// announcements at one-second intervals — before it is published, while a
+  /// *clear* is passed through at once. Nothing is lost by waiting: the fault
+  /// this carries is "no display will list this machine", which is not urgent
+  /// and cannot be acted on faster than it takes to read the sentence.
+  Timer? _settling;
+
+  void _onAdvertisement() {
+    final reported = _responder?.failure.value;
+
+    if (reported == null) {
+      _settling?.cancel();
+      _settling = null;
+      advertisementFailure.value = null;
+      return;
+    }
+
+    // Already saying something: keep it current, since the sentence itself can
+    // change while the fault stays true.
+    if (advertisementFailure.value != null) {
+      advertisementFailure.value = reported;
+      return;
+    }
+
+    _settling ??= Timer(_announcementBurst, () {
+      _settling = null;
+      final settled = _responder?.failure.value;
+      if (settled != null) advertisementFailure.value = settled;
+    });
+  }
+
+  /// How long `MdnsResponder` spends on its opening announcements.
+  static const Duration _announcementBurst = Duration(seconds: 3);
+
   /// This machine's name, for when the user has not chosen one.
   ///
   /// The **first label** of it, not the whole thing. macOS hands back
@@ -265,5 +354,6 @@ class RemoteDisplayService {
     isPublishing.dispose();
     clients.dispose();
     failure.dispose();
+    advertisementFailure.dispose();
   }
 }

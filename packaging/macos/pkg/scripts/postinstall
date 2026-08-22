@@ -1,0 +1,18 @@
+#!/bin/sh
+#
+# postinstall — attached to the Audio Unit component only.
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# macOS caches the Audio Unit registry in a process, not on disk that a
+# copy would invalidate. Drop a .component into place while that process is
+# alive and Logic's plugin manager does not see it until the user logs out —
+# which reads as "the installer did not work", and the second install does
+# not help either. AudioComponentRegistrar is relaunched on demand, so
+# killing it is the refresh.
+#
+# Exits 0 whatever happens. A non-zero postinstall fails the whole package,
+# and a stale plugin cache is not worth telling somebody their install broke.
+
+killall -9 AudioComponentRegistrar >/dev/null 2>&1 || true
+exit 0

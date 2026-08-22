@@ -8,24 +8,35 @@ GPL-3.0-or-later.
 | `icon/make_icons.dart` | The mark, as geometry, rendered into every container the six platforms ask for — flat PNGs for the desktops, Android's adaptive icon, and one layered `AppIcon.icon` document per Apple platform. Writes into the platform directories as well as this one. |
 | `icon/oaa.svg` | The same mark as a vector, with the tile and the gradient, for `README.md`. **The one deliberate duplicate here** — its numbers are derived from `make_icons.dart` and are annotated as such. It is *not* installed into Linux's `scalable` hicolor directory: see the comment in the flatpak manifest. |
 | `android/play_store_icon.png` | Generated. 512 px, full bleed, no alpha. The Play Console asks for it by hand at upload; it is not built into the aab. |
-| `macos/make_dmg.sh` | Build, sign, disk image, and hand the result to `notarize.sh`. |
-| `macos/keychain.sh` | Imports a Developer ID `.p12` into a keychain of its own, for a machine that has none — a CI runner. Refuses to run outside CI without `OAA_KEYCHAIN_FORCE`, because it *replaces* the login keychain search list. |
-| `macos/notarize.sh` | Submit, wait, staple, verify. Takes a dmg, a pkg or any number of bundles, and is the only implementation of this — the plugin's macOS bundles go through it too, from `ci.yml`. |
+| `macos/make_pkg.sh` | Build, sign, three component packages, one distribution, and hand the result to `notarize.sh`. Replaced `make_dmg.sh`: a disk image can carry a plug-in but cannot install one. |
+| `macos/pkg/distribution.xml` | The installer's interface — the three rows, which of them is greyed out, and the macOS version gate on the two that are not. |
+| `macos/pkg/scripts/postinstall` | Attached to the Audio Unit component only. Kills `AudioComponentRegistrar` so Logic sees the plug-in without a logout. |
+| `macos/keychain.sh` | Imports a Developer ID `.p12` into a keychain of its own, for a machine that has none — a CI runner. One `.p12` carries both certificates: Application signs code, Installer signs a pkg, and only the first satisfies the codesigning policy — so the script verifies with the *basic* policy and fails when an identity secret names one the file does not hold. Refuses to run outside CI without `OAA_KEYCHAIN_FORCE`, because it *replaces* the login keychain search list. |
+| `macos/notarize.sh` | Submit, wait, staple, verify. Takes a pkg or any number of bundles, and is the only implementation of this — the plugin's macOS bundles go through it too, from `ci.yml`. |
 | `ios/make_ipa.sh` | Build and export the iPad build as an App Store IPA. The only script here whose output nobody downloads — see the rule below. Injects manual signing through `ios/Flutter/Release.xcconfig` so the Xcode project stays on automatic signing for whoever develops here. |
 | `ios/testflight.sh` | Upload that IPA to App Store Connect. Split from the build because `ci.yml` runs it *after* the release is published. |
-| `windows/AppxManifest.xml` | The msix manifest, with two placeholders. |
-| `windows/make_msix.ps1` | Build, stage, `makeappx`, `signtool`. |
-| `windows/images/` | Generated msix logos. |
+| `windows/oaa.iss` | The Inno Setup script: the components, the VST3 destination, the uninstaller. Compiled by the script below, never opened in the IDE — the paths it needs are staged first. |
+| `windows/make_installer.ps1` | Build, stage, `signtool`, `iscc`, `signtool` again. Replaced `make_msix.ps1`: an msix cannot write the shared VST3 directory, so it could not carry the plug-in. |
 | `linux/oaa.desktop` | The desktop entry, shared by the AppImage and the flatpak. |
 | `linux/com.openaudioanalyzer.oaa.metainfo.xml` | AppStream metadata. Required by flatpak, read by GNOME Software and KDE Discover. |
 | `linux/icons/` | Generated hicolor PNGs. |
-| `linux/make_appimage.sh` | Build, AppDir, `appimagetool`. |
+| `linux/make_appimage.sh` | Build, AppDir, `appimagetool`. Application only — an AppImage never installs anything. |
+| `linux/make_installer.sh` | Build, stage the bundle and the VST3, tar. The only Linux artefact that carries the plug-in. |
+| `linux/install.sh` | Ships *inside* that tarball and is what asks the question. Also the uninstaller, kept beside what it installed. |
 | `linux/make_flatpak.sh` | Build, stage, `flatpak-builder`, bundle. |
 | `linux/flatpak/com.openaudioanalyzer.oaa.yml` | The flatpak manifest. Packages a bundle that was already built. |
 
-Output always lands in `build/packaging/`. `ci.yml`'s packaging jobs run
-all four installers, and the IPA, on a tag and on demand; only the upload waits
-for the release.
+Output always lands in `build/packaging/`. `ci.yml`'s packaging jobs run all
+five desktop artefacts, and the IPA, on a tag and on demand; only the upload
+waits for the release.
+
+Three of the five carry the plug-in and install it behind a checkbox — the
+`pkg`, the Windows `.exe` and the Linux tarball. They therefore cannot be
+built from the application alone, and their `ci.yml` jobs — `macos-pkg`,
+`windows-installer` and `linux-tarball` — `needs: plugin` and unpack the
+bundles that job already signed and notarised. The AppImage and the
+flatpak are the application on its own, because neither format can install a
+plug-in into a host DAW's search path; see the header of `linux/install.sh`.
 
 ## Rules
 
@@ -141,10 +152,26 @@ for the release.
   thing on any of the three platforms. A build that implied success would be
   worse than one that failed.
 
-- **A signed but un-notarised dmg is still refused by Gatekeeper.** The
-  quarantine flag needs notarisation, not merely a signature. `make_dmg.sh`
+- **A signed but un-notarised package is still refused by Gatekeeper.** The
+  quarantine flag needs notarisation, not merely a signature. `make_pkg.sh`
   distinguishes all three states in what it prints, because the middle one is
   the surprising one.
+
+- **A pkg is signed by a `Developer ID Installer` certificate, which is not
+  the one that signs code.** `productbuild --sign` handed a `Developer ID
+  Application` identity fails with "no identity found", naming a certificate
+  that is in the keychain and is simply the wrong type. Both travel in one
+  `.p12`; `keychain.sh` verifies that each identity a job names is actually
+  in it, because an installer certificate does not satisfy the codesigning
+  policy and so never appears in `security find-identity -p codesigning`.
+
+- **`pkgbuild` makes every bundle relocatable unless told not to.** The
+  Installer then asks Spotlight where that bundle identifier already lives and
+  writes the payload *there* — so a stale copy of the app in `~/Downloads`
+  receives the update and `/Applications` keeps the old one, and the install
+  reports success. `make_pkg.sh` turns the flag off through a component
+  plist. Verified: without it the app component carries
+  `<relocate><bundle id="com.openaudioanalyzer.oaa"/></relocate>`.
 
 - **A notarisation secret that a runner cannot use looks exactly like one it
   can.** `OAA_NOTARY_PROFILE` names a profile in a *machine's* keychain, so
@@ -154,23 +181,37 @@ for the release.
   credential. `notarize.sh` accepts the runner-shaped form as well and says
   which one it used.
 
-- **`OAA_WINDOWS_PUBLISHER` must equal the certificate's subject byte for
-  byte.** A mismatch fails at *install* time with `0x800B0100`, which reads as
-  "the signature is invalid" and sends people to inspect the certificate rather
-  than a string.
+- **An Authenticode signature does not remove SmartScreen.** A standard OV
+  certificate still produces "Windows protected your PC" until the installer
+  has accumulated download reputation, which takes weeks and resets when the
+  certificate is replaced. Only EV carries reputation from the first download.
+  So an unsigned installer and a freshly-signed one look identical to the
+  first person who runs either — which is why shipping unsigned is a
+  defensible state here and shipping an unsigned *pkg* is not. The warning is
+  overridable by the user in both directions; macOS's plug-in refusal is not.
+
+- **`OAA_WINDOWS_CERT` names a file and a runner has no file.** Same shape as
+  `OAA_NOTARY_PROFILE` above. `make_installer.ps1` takes
+  `OAA_WINDOWS_CERT_BASE64` as well and writes it out, which is the form CI
+  can be given.
 
 - **The Mac App Store is not a target and this is not a gap.** It requires the
   app sandbox, and a sandboxed Open Audio Analyzer has its `HOME` redirected
   into `~/Library/Containers`, which is what put everybody's presets somewhere
   no user goes looking. See the header of `macos/Runner/*.entitlements` and the
-  top of `make_dmg.sh` — that second copy is deliberate, because the signing
+  top of `make_pkg.sh` — that second copy is deliberate, because the signing
   script is where somebody is standing when the question occurs to them.
 
-- **The AppImage is built on the oldest supported runner.** glibc is
+- **Every Linux binary is built on the oldest supported runner.** glibc is
   forward-compatible and not backward-compatible: one built on a newer
   distribution refuses to start on an older one, with a loader error and nothing
-  else. `ci.yml` pins `ubuntu-22.04` for that job, and moving it forward
-  silently narrows who can run Open Audio Analyzer.
+  else. `ci.yml` pins `ubuntu-22.04` for the AppImage, the tarball **and the
+  plugin job's Linux leg** — that last one ran on `ubuntu-latest` for six
+  releases, so the Linux application and the Linux VST3 shipped with different
+  floors and only one of them was chosen. A plug-in the loader refuses is not
+  even a loader error: it is a plug-in absent from the DAW's browser, which is
+  what installing it in the wrong folder also looks like. Moving any of the
+  three forward silently narrows who can run Open Audio Analyzer.
 
 - **The flatpak does not build Flutter.** `flatpak-builder` runs with no
   network, which is the point of it; Flutter's build resolves pub packages and

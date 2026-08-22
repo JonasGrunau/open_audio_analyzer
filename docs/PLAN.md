@@ -1,9 +1,9 @@
 # Open Audio Analyzer — a free, open-source loudness & spectrum analyzer
 
 > **This is the plan as it was approved, kept as the record of intent. It is
-> written in the future tense and most of it has happened.** Phases 0–7 are
-> done and Phase 8 is in progress; `README.md`'s Roadmap is the live status and
-> `CHANGELOG.md` is what actually shipped.
+> written in the future tense and most of it has happened.** Phases 0–8 are
+> done; `README.md`'s Roadmap is the live status and `CHANGELOG.md` is what
+> actually shipped.
 >
 > Where the build and this document disagree, **the build is what exists** — but
 > a divergence is a decision somebody made, so it is recorded here rather than
@@ -278,6 +278,11 @@ Each phase is independently shippable.
   reaches Live, Logic, Pro Tools (via VST3 on the systems that allow it), Reaper, Studio
   One, Bitwig, Cubase and Digital Performer.
 - **Phase 8 — Polish:** keyboard shortcuts, docs site, packaging (dmg / msix / AppImage / flatpak).
+  The dmg and the msix were later replaced by an installer package and an Inno
+  Setup installer, and a Linux tarball was added beside the AppImage and the
+  flatpak, because not one of those four original formats can install a
+  plug-in — see `packaging/AGENTS.md`. Five desktop downloads shipped rather
+  than four, and three of them carry the VST3.
 
 ---
 

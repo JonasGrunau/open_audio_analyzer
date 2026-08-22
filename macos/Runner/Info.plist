@@ -10,6 +10,8 @@
 	     application that triggers a prompt it has no reason for. -->
 	<key>NSAudioCaptureUsageDescription</key>
 	<string>Open Audio Analyzer measures the loudness of your system's own audio output. Audio is analysed on this device and never recorded, stored or sent anywhere.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Open Audio Analyzer reads a pairing QR code shown by another machine so that this one can display its meters. The camera image is examined for a code and never recorded, stored or sent anywhere.</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleExecutable</key>

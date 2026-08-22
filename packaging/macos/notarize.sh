@@ -7,13 +7,14 @@
 # Why this exists, and why it is one script rather than three
 #
 # Signing and notarising are different acts with different failure modes, and
-# until this file existed only the dmg attempted the second one. The plugin
-# bundles did neither, so every macOS release up to 0.5.0 shipped a VST3 and an
-# AU that Gatekeeper refuses on any machine but the one that built them — and
-# the refusal is not the silent one the documentation described. It is a modal
-# with no override, because a plugin is loaded *into* a host process and the
-# "Open Anyway" button in Privacy & Security is only ever populated for a
-# blocked *launch*. A user cannot get past it. They can only delete the plugin.
+# until this file existed only the macOS download attempted the second one —
+# the dmg then, the pkg now. The plugin bundles did neither, so every macOS
+# release up to 0.5.0 shipped a VST3 and an AU that Gatekeeper refuses on any
+# machine but the one that built them — and the refusal is not the silent one
+# the documentation described. It is a modal with no override, because a plugin
+# is loaded *into* a host process and the "Open Anyway" button in Privacy &
+# Security is only ever populated for a blocked *launch*. A user cannot get
+# past it. They can only delete the plugin.
 #
 # One implementation, because two would drift, and this is a path that only
 # runs on a release — the least-exercised code in the repository is the worst
@@ -49,8 +50,8 @@
 #                          A developer's machine. It lives in that machine's
 #                          keychain and cannot be handed to a runner, which is
 #                          why it was the only supported form for three
-#                          releases and why the dmg has never been notarised by
-#                          CI: the secret was read, the profile did not exist,
+#                          releases and why no macOS download was ever notarised
+#                          by CI: the secret was read, the profile did not exist,
 #                          and the step fell through to the ad-hoc branch.
 #
 #   OAA_NOTARY_APPLE_ID    the Apple ID that owns the Developer Program
@@ -60,7 +61,7 @@
 #                          App-Specific Passwords. This trio is what a runner
 #                          can be given, and what `ci.yml` passes.
 #
-# Neither set present is not an error. A contributor builds a plugin and a dmg
+# Neither set present is not an error. A contributor builds a plugin and a pkg
 # without an Apple account at all, and this script says what that costs them
 # rather than failing their build.
 

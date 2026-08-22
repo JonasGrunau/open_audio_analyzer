@@ -13,7 +13,23 @@
 // So the two formatters are public and tested directly. The pixels are checked
 // by looking at the application — see the note in `CLAUDE.md` about running it
 // before calling a module finished.
+//
+// **With one exception, at the bottom: where in its box the readout puts the
+// ink.** The box is a reservation the width of a timecode, and a host that
+// counts bars instead spends 36 px of it. Drawn from the left, that left the
+// desktop's `1|1.0` marooned in the middle of the title bar with 56 px of
+// nothing to its right — a placement defect, invisible to every assertion
+// above, and one no formatter test can reach because the string was correct
+// throughout. It is checked by rendering and reading the pixels back, which is
+// the route `CLAUDE.md` names for exactly this: a layout that is merely wrong
+// to look at.
 
+import 'dart:io';
+import 'dart:ui' as ui;
+
+import 'package:flutter/foundation.dart';
+import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:oaa/src/app/transport_readout.dart';
@@ -179,4 +195,151 @@ void main() {
     await tester.pump();
     expect(tester.takeException(), isNull);
   });
+
+  group('the ink is packed against one edge of the box', () {
+    // The real fonts, because "how much of the box is unspent" is a question
+    // about Google Sans Code and not about the test binding's placeholder,
+    // whose square em box is wide enough to fill the reserve on its own and
+    // would make every case below pass. Read with `readAsBytesSync`: an awaited
+    // real read inside a `testWidgets` body never completes.
+    setUpAll(() async {
+      final loader = FontLoader('Google Sans Code');
+      for (final path in const [
+        'assets/fonts/GoogleSansCode-Regular.ttf',
+        'assets/fonts/GoogleSansCode-Medium.ttf',
+      ]) {
+        loader.addFont(
+          Future<ByteData>.value(
+            ByteData.sublistView(File(path).readAsBytesSync()),
+          ),
+        );
+      }
+      await loader.load();
+    });
+
+    // A host that counts bars and reports a tempo, parked at the top of the
+    // session: `1|1.0`, and a tempo too wide for the desktop's box to hold. The
+    // shortest position this readout can print, and the case that showed the
+    // hole.
+    const barBeat = Transport(
+      flags:
+          Transport.flagHasPpq |
+          Transport.flagHasBarStart |
+          Transport.flagHasTimeSig |
+          Transport.flagHasBpm,
+      timeSigNumerator: 4,
+      timeSigDenominator: 4,
+      bpm: 120,
+    );
+
+    testWidgets('trailing, in the desktop bar', (tester) async {
+      final ink = await _inkBounds(
+        tester,
+        transport: barBeat,
+        width: TransportReadout.defaultWidth,
+        align: TransportAlign.trailing,
+      );
+
+      // Flush against the trailing edge, so the reserve it did not spend lands
+      // on the far side and joins the row's own slack. Anything else puts a
+      // gap between the playhead and the elapsed clock it is read beside.
+      expect(TransportReadout.defaultWidth - ink.right, lessThan(2));
+      expect(
+        ink.left,
+        greaterThan(2),
+        reason:
+            'The position filled the whole box, so this proves nothing about '
+            'which edge it was drawn against.',
+      );
+    });
+
+    testWidgets('leading, in the tablet link bar', (tester) async {
+      final ink = await _inkBounds(
+        tester,
+        transport: barBeat,
+        width: TransportReadout.fullWidth,
+        align: TransportAlign.leading,
+      );
+
+      // The other way on the tablet, where the readout follows the host name
+      // rather than leading a group packed right.
+      expect(ink.left, lessThan(2));
+      expect(TransportReadout.fullWidth - ink.right, greaterThan(2));
+    });
+  });
+}
+
+/// The leftmost and rightmost lit pixel of a rendered readout.
+///
+/// `toImage` inside `runAsync`, off a boundary above the widget: there is no
+/// other way to ask where a `CustomPainter` put something, and a screenshot of
+/// the running application needs a screen-recording permission an agent does
+/// not have. See `CLAUDE.md`.
+Future<({double left, double right})> _inkBounds(
+  WidgetTester tester, {
+  required Transport transport,
+  required double width,
+  required TransportAlign align,
+}) async {
+  final repaint = ValueNotifier<int>(0);
+  addTearDown(repaint.dispose);
+  final key = GlobalKey();
+
+  await tester.pumpWidget(
+    Directionality(
+      textDirection: TextDirection.ltr,
+      child: Align(
+        alignment: Alignment.topLeft,
+        child: RepaintBoundary(
+          key: key,
+          child: ColoredBox(
+            // Black rather than the skin's panel, so "lit" below is a threshold
+            // on the glyph and not on the background it is drawn over.
+            color: const Color(0xFF000000),
+            child: OaaTheme(
+              colors: OaaColors.precisionInstrument,
+              child: TransportReadout(
+                transportOf: () => transport,
+                repaint: repaint,
+                width: width,
+                align: align,
+              ),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+  await tester.pump();
+
+  final boundary =
+      key.currentContext!.findRenderObject()! as RenderRepaintBoundary;
+  final image = (await tester.runAsync(() => boundary.toImage()))!;
+  final bytes = (await tester.runAsync(
+    () => image.toByteData(format: ui.ImageByteFormat.rawRgba),
+  ))!;
+  final pixels = bytes.buffer.asUint8List();
+
+  var left = double.infinity;
+  var right = double.negativeInfinity;
+  for (var y = 0; y < image.height; y++) {
+    for (var x = 0; x < image.width; x++) {
+      final i = (y * image.width + x) * 4;
+      // Any channel clear of the black ground. The muted text colour a parked
+      // playhead is drawn in is well above this, and antialiasing at the edge
+      // of a glyph is not.
+      if (pixels[i] > 24 || pixels[i + 1] > 24 || pixels[i + 2] > 24) {
+        if (x < left) left = x.toDouble();
+        if (x + 1 > right) right = x + 1.0;
+      }
+    }
+  }
+  image.dispose();
+
+  expect(
+    right.isFinite,
+    isTrue,
+    reason: 'Nothing was drawn, so there is no placement to check.',
+  );
+  return (left: left, right: right);
 }

@@ -15,10 +15,11 @@ exactly once.
 | `src/grid_geometry.dart` | Grid cells to pixels. The one place the 24×16 canvas becomes a rectangle. |
 | `src/point_buckets.dart` | Marks sorted by the colour they are drawn in, so a display of tens of thousands of them is a few dozen `drawRawPoints` calls. Behind the stereo cloud; the spectrogram drew through it too until real material's run counts outgrew it. |
 | `src/panel.dart` | `PanelScaffold` and the controls panels are assembled from, plus `showOaaPanel`. |
+| `src/qr.dart` | `QrCode` — just enough QR to carry one address, byte mode at error level M — and `OaaQrCode`, which paints it. The one widget here that does not take its colours from the skin: a code is read by thresholding a camera image, and dark-on-light is a property of the format rather than a choice. Held against ZXing by `test/qr_test.dart`. |
 | `src/glyph.dart` | `OaaMark` and `OaaGlyph` — the closed set of marks the interface draws, as paths. There is no icon font, and a mark that is a codepoint is a mark that can go missing. |
 | `src/skin_palette.dart` | The one adapter between a `Skin` (data, in `oaa_core`) and a `OaaColors`. |
 | `src/focusable.dart` | `OaaFocusable` — keyboard focus, Enter/Space activation and the screen-reader identity every control Open Audio Analyzer paints itself would otherwise be missing. |
-| `src/drag_devices.dart` | `kDragDevices` — the `supportedDevices` every drag detector needs, and why a trackpad is not one of them. |
+| `src/drag_devices.dart` | `kDragDevices` — the `supportedDevices` every drag detector needs, and why a trackpad is not one of them — and `kTouchDragDevices`, the narrower set that an enlarged, invisible hit target is admitted to. |
 
 ## Rules
 
@@ -98,6 +99,21 @@ they were open, which is precisely when skins are chosen.
   shape that fixes it, and the way it is kept honest is
   `test/scaling_test.dart`, which fails if the sheet ever needs to scroll at the
   smallest window the application supports.
+- **A panel makes room for the software keyboard, and asks its own context how
+  much room.** `PanelScaffold` pads its bottom by
+  `MediaQuery.viewInsetsOf(context).bottom`, which is the keyboard's height in
+  an overlay route and *zero* inside a `Scaffold` body — the default
+  `resizeToAvoidBottomInset` has already taken the keyboard out of that body's
+  height and hands it a MediaQuery with the inset removed, and the remote
+  display screen builds the host picker straight into one. Reading the window
+  instead breaks both mountings: the body's panel loses the height twice, and
+  the route's panel never moves at all, because `View.of` establishes no
+  dependency to rebuild on when the metrics change. Moving the panel is only
+  half of it — the scroll view is what then puts the *field* in front of
+  whoever is typing, which `EditableText` asks it to do on the same metrics
+  change. Only a tablet has a keyboard to be covered by, so nothing on a desk
+  can show you this; the three cases are in `test/panels_test.dart`.
+
 - **A panel wider than the window is a panel the window shrinks.** `width:` is a
   maximum, so a layout that only works at that maximum breaks quietly below it —
   text wraps, which is fine, and boxed controls do not, which is not. The sheet
@@ -159,9 +175,13 @@ of the fallback stack, and the first build of `PanelMenu` put a tofu box where
 the caret should be, on both menus, on every platform. Draw it — `src/glyph.dart`
 holds the set, `_Caret` is the one that predates it.
 
-**The set of marks is closed, and it is six.** `OaaMark.broadcast`,
-`display`, `chevron`, `warning`, `undo` and `redo`. A vocabulary that gains a
-mark per panel is one nobody learns — the reader stops to decode each one, which
+**The set of marks is closed, and it is eight.** `OaaMark.broadcast`,
+`display`, `chevron`, `qr`, `scan`, `warning`, `undo` and `redo`. `display` has
+had no call site since the remote display's chooser panel became two controls in
+the status bar; it is kept rather than deleted because it is half of a pair
+— "this machine sends" against "this machine shows" — and the set is a
+vocabulary rather than an inventory of what is currently drawn. A vocabulary
+that gains a mark per panel is one nobody learns — the reader stops to decode each one, which
 is slower than the word it replaced — so a new mark is a decision to make in
 `glyph.dart`, with a sentence saying what it tells the reader that the text
 beside it does not. There is no icon font here and there is not going to be one.
@@ -173,9 +193,17 @@ paragraph it reads as belonging to the first line rather than to the note, which
 is what the remote panel's password warning looked like against its two lines of
 orange.
 
+**A shape whose proportions are the point is cut, not stroked.** `OaaMark.qr`
+is drawn on the 24-unit grid Material Symbols uses, and its three finders are
+rings made by an even-odd fill rather than by stroking a square. A stroke keeps
+one weight whatever the mark is drawn at, so the hole closes as the glyph
+shrinks and three grey blobs are left where the one feature a QR code is
+recognised by should be. This is the exception that proves the weight rule
+below: the ring's thickness is part of the symbol, not a line drawn around it.
+
 **A mark's stroke weight is a property of the mark, not of its size.**
-`_MarkPainter._weight`, and it is `OaaStroke.mark` for all six: every one of
-them sits beside the words that name the thing, and a mark heavier than the
+`_MarkPainter._weight`, and it is `OaaStroke.mark` for every one of them: they
+all sit beside the words that name the thing, and a mark heavier than the
 graticules a few pixels away is a second idea of "thin" in one interface.
 Nothing scales the stroke with `size` — a mark beside a caption and a mark
 beside a title are the same line. `undo` and `redo` were briefly set at

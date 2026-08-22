@@ -83,6 +83,18 @@ drawing the same modules with the same painters from measurements arriving over
 a socket. The protocol is [documented normatively](wire.html) and is MIT, so a
 third-party display does not have to be GPL to speak it.
 
+The two find each other three ways, and the order is the order they cost you.
+The tablet lists whatever is publishing on the network. Failing that, the
+sending machine shows a **pairing code** — the code button beside PUBLISH in
+its status bar, or Settings → Publish — and the tablet reads it with its camera
+under Scan a QR code, on the screen it opens with. Failing both, you type the
+address Settings → Publish prints. The second and third exist because multicast is the first thing a guest
+or venue network blocks, and a feature that only worked on a network you
+control would not work in the rooms it is for. Scanning needs a camera, so it
+is offered on Android, iPadOS and macOS and not on Windows or Linux. A code
+carries an address and nothing else: a display that scans one can still only
+watch.
+
 **A DAW.** A headless VST3 and Audio Unit plugin measures what your host is
 playing and streams it — with the transport — to the application. The plugin
 measures; the app displays. That split is what stops there being two

@@ -10,6 +10,17 @@ in:
 | pull request | `checks`, `engine`, `docs` |
 | push to `main` | the same, plus `pages` |
 | `workflow_dispatch` | the same, plus `plugin`, every installer and `ipa` |
+
+Three of the installer jobs — `macos-pkg`, `windows-installer` and
+`linux-tarball` — additionally `needs: plugin`, because each of them carries
+the VST3 (and on macOS the Audio Unit) and installs it behind a checkbox. They
+download the bundles that job already built, signed and notarised rather than
+building a second copy: fifteen minutes of JUCE per platform, a second trip
+through Apple's notary, and two binaries meant to be identical that could
+differ. The condition on those jobs is the one `plugin` already had, so nothing
+here costs a push anything — what it costs is a release's wall clock, which now
+starts the installers when the slowest JUCE build ends.
+
 | tag `v*` | the same, plus `publish`, and `testflight` after it |
 
 It was three files — `ci.yml`, `docs.yml`, `release.yml` — split on the argument
@@ -160,6 +171,25 @@ The jobs are split by what they need, and that split is deliberate:
   and runs first. Keep both: the second one is what makes a failure the log can
   answer rather than a guessing exercise against the manifest.
 
+- **A packaging job is named for what a person downloads, and its id names the
+  platform first.** The five desktop jobs are `macos-pkg`,
+  `windows-installer`, `linux-tarball`, `linux-appimage` and `linux-flatpak`,
+  each uploading the artefact of the same name with an `oaa-` prefix. They
+  were `pkg`, `windows`, `tarball`, `appimage` and `flatpak` — a format, a
+  platform, a container and two brand names, five schemes for five jobs that
+  do one thing each — and `publish`'s `needs:` list read as an inventory of
+  unrelated work. Keep the pattern when a sixth is added: the id is what a
+  failure is reported under and the only name anybody greps for.
+
+- **An artefact is named by `runner.os`, never by `matrix.os`.** `matrix.os` is
+  a runner *image* and the image is pinned: `oaa-plugin-ubuntu-22.04` was the
+  name three installer jobs downloaded by, so the day that pin moves — and the
+  glibc rule below is the argument about when, not whether — three
+  `download-artifact` steps fail on a name that no longer exists, in jobs
+  nobody touched, on the first release after the change. `runner.os` is
+  `Linux`, `macOS` or `Windows` and matches the filename inside the archive,
+  which is what somebody unpacking it sees.
+
 - **Every installer this repository builds has spaces in its name, so no
   filename may be word-split.** The publish step collects assets NUL-delimited
   into an array; `$(find ...)` unquoted turns
@@ -182,23 +212,44 @@ The jobs are split by what they need, and that split is deliberate:
   a fork that could not build at all would be worse than both.
 - **A secret this workflow reads is not the same as a secret it can use, and
   both failures were silent.** Two of them, found together while chasing a
-  user's report that a DAW called the plugin harmful. The
-  `dmg` job passed `OAA_SIGNING_IDENTITY` to `codesign --sign` on a runner whose
-  keychain was empty and where **nothing imported a certificate** — the identity
-  was a name with nothing behind it. And `OAA_NOTARY_PROFILE` names a profile
-  stored in a *machine's* keychain, which a fresh runner cannot have, so the
-  notarisation branch could never be taken. Neither failed a job, because the
-  secrets had never been set either and the scripts' no-credential branches ran
-  instead: each gap kept the other invisible. `packaging/macos/keychain.sh`
-  now runs before anything signs, in both the `plugin` and `dmg` jobs, and the
-  notary credentials are passed in the runner-shaped form.
-- **The IPA is built and deliberately not published.** It is the one artefact
-  in this workflow that is not attached to the release: an App Store signature
+  user's report that a DAW called the plugin harmful. The `dmg` job — now
+  `macos-pkg` — passed `OAA_SIGNING_IDENTITY` to `codesign --sign` on a runner
+  whose keychain was empty and where **nothing imported a certificate**: the
+  identity was a name with nothing behind it. And `OAA_NOTARY_PROFILE` names a
+  profile stored in a *machine's* keychain, which a fresh runner cannot have,
+  so the notarisation branch could never be taken. Neither failed a job,
+  because the secrets had never been set either and the scripts' no-credential
+  branches ran instead: each gap kept the other invisible.
+  `packaging/macos/keychain.sh` now runs before anything signs, in both the
+  `plugin` and `macos-pkg` jobs, and the notary credentials are passed in the
+  runner-shaped form. The third instance of the same shape is
+  `OAA_WINDOWS_CERT`, which names a *path* to a `.pfx`; `make_installer.ps1`
+  takes `OAA_WINDOWS_CERT_BASE64` as well, which is the form a runner can
+  actually be given.
+- **The `plugin` job's Linux leg runs on `ubuntu-22.04`, not `ubuntu-latest`.**
+  It is the same glibc floor the `linux-appimage` and `linux-tarball` jobs are
+  pinned to, and for six releases it was not: the Linux application was built
+  against 22.04's glibc and the Linux VST3 beside it against whatever
+  `ubuntu-latest` meant that month. Only one of those floors was chosen. The
+  failure it produces is worse than the application's, too — a plug-in the
+  loader refuses is not a loader error a user sees, it is a plug-in absent from
+  the DAW's browser, which is what installing it in the wrong folder also looks
+  like.
+- **The IPA is built and deliberately not published.** An App Store signature
   provisions no devices, so nobody who downloaded it could install it. The
   publish step excludes `testflight-ipa` by path rather than narrowing its
   download to a name pattern, so a future artefact nobody thought about is
   attached by mistake rather than omitted by mistake — of the two, only the
   second is silent.
+- **The documentation site is the second exclusion, and it is the first one
+  the policy above caught.** `download-artifact` with no `name` takes every
+  artefact in the run, not the ones `publish` lists in `needs`, so the `docs`
+  job's artefact arrives even though `docs` is not a dependency;
+  `upload-pages-artifact` always calls its payload `artifact.tar`. Every
+  release from v0.3.0 to v0.6.0 therefore carried an unlabelled tarball of the
+  website in among the installers, and whether it carried one at all was a
+  race that the docs job — being the fastest job in the workflow — won five
+  times. `artifacts/github-pages/*` is now excluded beside the IPA.
 - **`testflight` is gated on an output of `ipa`, not just on the tag.** An App
   Store IPA has no unsigned form, so with no credentials `make_ipa.sh` produces
   nothing at all — which is the correct outcome and not a failure. But a job

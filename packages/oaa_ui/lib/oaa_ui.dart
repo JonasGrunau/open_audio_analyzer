@@ -28,6 +28,7 @@ export 'src/meter_painter.dart';
 export 'src/module_frame.dart';
 export 'src/panel.dart';
 export 'src/point_buckets.dart';
+export 'src/qr.dart';
 export 'src/readout.dart';
 export 'src/scale.dart';
 export 'src/skin_palette.dart';

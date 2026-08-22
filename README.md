@@ -88,10 +88,10 @@ approximating.
 | 📐 | **Loudness and true peak are verified** against the EBU Tech 3341/3342 cases, and the spectrum against a sine of known amplitude on a bin centre, on Linux, macOS and Windows on every push. |
 | 💾 | **What you set up is remembered** — the layout, the delivery target, the skin and the capture device — and reopens with the window. Settings, presets, your own delivery targets and your own skins are plain JSON files in a documented directory; see [Configuration](#-configuration). |
 | 🔍 | **Files are analysed offline** by the app and by the [`oaa` CLI](#-analysing-files). |
-| 📱 | **A tablet [mirrors the canvas](#-roadmap)** over Wi-Fi. |
+| 📱 | **A tablet [mirrors the canvas](#-roadmap)** over Wi-Fi. Flip **PUBLISH** in the desktop's status bar; the tablet finds it by itself, or reads a **pairing code** off its screen, or takes an address typed by hand — three routes, because the first one is what a venue's Wi-Fi blocks. |
 | 🎛️ | **A headless [VST3 / AU plugin](#-in-a-daw)** meters what your DAW is playing. |
 | 🔊 | **Your system's own output is metered with nothing to install** — WASAPI loopback on Windows, a Core Audio process tap on macOS 14.2+, a monitor source on Linux. No driver, and on macOS the audio still reaches your speakers while it is measured. |
-| 📦 | **There is a dmg, an msix, an AppImage and a flatpak** — see [Installing](#-installing) — and a [documentation site](https://jonasgrunau.github.io/open_audio_analyzer/index.html). |
+| 📦 | **The installers carry the plugin and install it for you**, behind a checkbox that starts ticked — a macOS pkg, a Windows installer and a Linux tarball, plus an AppImage and a flatpak for the application alone. See [Installing](#-installing), and the [documentation site](https://jonasgrunau.github.io/open_audio_analyzer/index.html). |
 | 🚧 | **What is *not* built** is listed under [Known gaps](#-known-gaps-stated-plainly), and the list is honest rather than short. |
 
 See [Roadmap](#-roadmap), and [docs/PLAN.md](docs/PLAN.md) for the plan as it
@@ -295,6 +295,13 @@ to add a module there, **right-click a module** for its options, and
 for add, undo and redo sit in the tab strip as well, because tablets have
 neither a right mouse button nor `⌘Z`.
 
+A finger gets a larger target than the one that is drawn. The title bar accepts
+a drag 40 px down from a module's top edge rather than the 24 px it paints, and
+the corner grip accepts one from a 32 px square rather than a 16 px one — both
+invisible, and both admitted to touch and stylus alone, so a mouse still moves
+and resizes exactly what it can see. A cursor has a hotspot one pixel across and
+says what it is over; a fingertip has neither.
+
 Nothing on the canvas is a double click. A double-tap recogniser holds Flutter's
 gesture arena for 300 ms before it gives up, and every button underneath one
 waits that long to fire — which is a third of a second of an application that
@@ -406,7 +413,7 @@ presets somewhere you would never find them and stop either override from
 pointing anywhere outside it — defeating the point of keeping configuration in
 files you can edit, mail and version. The trade is that Open Audio Analyzer
 cannot ship on the Mac App Store, which it was never going to; notarisation for
-the dmg does not require the sandbox. See `macos/Runner/Release.entitlements`,
+the installer package does not require the sandbox. See `macos/Runner/Release.entitlements`,
 which says so at the top.
 
 ```
@@ -572,7 +579,7 @@ MIT is one-way compatible with GPL, so the combination composes cleanly.
 
 ## 📥 Installing
 
-Every release publishes four installers and the CLI on the [releases
+Every release publishes five desktop downloads and the CLI on the [releases
 page](https://github.com/JonasGrunau/open_audio_analyzer/releases). The CLI is
 an archive rather than one file — `bin/oaa` beside the engine as a shared
 library — and needs no Flutter runtime either way.
@@ -580,25 +587,36 @@ Full instructions, including how to meter your own system's output on each
 platform, are on the [documentation
 site](https://jonasgrunau.github.io/open_audio_analyzer/install.html).
 
-| | Platform | Artefact | |
-|:-:|---|---|---|
-| 🍎 | macOS 11+ | `Open.Audio.Analyzer-<version>-macos-<arch>.dmg` | Universal — Apple silicon and Intel. |
-| 🪟 | Windows 10 1809+ | `Open.Audio.Analyzer-<version>-windows-x64.msix` | |
-| 🐧 | Linux | `Open.Audio.Analyzer-<version>-<arch>.AppImage` | One file, no root, GTK from the host. |
-| 🐧 | Linux | `Open.Audio.Analyzer-<version>-<arch>.flatpak` | Sandboxed, carries its own runtime. |
-| ⌨️ | Any | `oaa-cli-<platform>.tar.gz` / `.zip` | The analyser. No Flutter runtime. |
+| | Platform | Artefact | Plugin | |
+|:-:|---|---|:-:|---|
+| 🍎 | macOS 11+ | `Open.Audio.Analyzer-<version>-macos.pkg` | VST3 + AU | Universal — Apple silicon and Intel. |
+| 🪟 | Windows 10 1809+ | `Open.Audio.Analyzer-<version>-windows-x64.exe` | VST3 | Uninstaller in Installed apps. |
+| 🐧 | Linux | `Open.Audio.Analyzer-<version>-linux-<arch>.tar.gz` | VST3 | `./install.sh`, no root. |
+| 🐧 | Linux | `Open.Audio.Analyzer-<version>-<arch>.AppImage` | — | One file, no root, GTK from the host. |
+| 🐧 | Linux | `Open.Audio.Analyzer-<version>-<arch>.flatpak` | — | Sandboxed, carries its own runtime. |
+| ⌨️ | Any | `oaa-cli-<platform>.tar.gz` / `.zip` | — | The analyser. No Flutter runtime. |
+
+> [!TIP]
+> **The first three install the plugin as well, and the checkbox starts
+> ticked.** Untick it and you get the application on its own. The AppImage and
+> the flatpak cannot offer the choice at all: an AppImage never installs
+> anything, and a flatpak's plugin would be built against the sandbox's
+> libraries while the DAW that must load it runs against the host's.
 
 > [!NOTE]
 > **There is no Mac App Store build and there will not be one.** The store
 > requires the app sandbox, and a sandboxed application has its home directory
 > redirected into `~/Library/Containers` — which put every preset, skin and
 > delivery target somewhere no user goes looking and no override could escape.
-> Open Audio Analyzer is distributed directly instead. The dmg is signed with a
-> Developer ID and notarised when a release is built with the credentials for
-> both — `packaging/macos/make_dmg.sh` prints which of its three states it was
-> in, because "signed" and "a user can double-click it" are not the same thing.
-> See `macos/Runner/*.entitlements`, which carries the sandbox reasoning, and
-> that script, which repeats it where somebody signing a build will be standing.
+>
+> Open Audio Analyzer is distributed directly instead. The pkg is signed with a
+> Developer ID **Installer** certificate — a different one from the Developer ID
+> Application certificate that signs the code, and not interchangeable with it —
+> and notarised when a release is built with the credentials for both.
+> `packaging/macos/make_pkg.sh` prints which of its three states it was in,
+> because "signed" and "a user can double-click it" are not the same thing. See
+> `macos/Runner/*.entitlements`, which carries the sandbox reasoning, and that
+> script, which repeats it where somebody signing a build will be standing.
 
 > [!NOTE]
 > **The iPad build goes to TestFlight, and is not on the releases page.** A
@@ -610,7 +628,7 @@ site](https://jonasgrunau.github.io/open_audio_analyzer/install.html).
 > [Building](#-building) and needs no credentials at all.
 
 The scripts that build these live in [`packaging/`](packaging/AGENTS.md), one
-per platform, and `ci.yml`'s packaging jobs run all four installers and the iPad
+per artefact, and `ci.yml`'s packaging jobs run all five installers and the iPad
 build on a tag and on demand — only the TestFlight upload waits for the
 release. Each produces an unsigned artefact and says so rather than failing when
 the signing secrets are absent — a fork has none, and a build that stopped there
@@ -634,6 +652,15 @@ backend is: it configures an `AVAudioSession` there, and iOS offers no C way to
 do that. `hook/build.dart` handles it. This is worth knowing only because of how
 it fails if it is ever undone — several hundred errors inside Apple's own
 `Foundation` headers, not one of which names a file in Open Audio Analyzer.
+
+Four Flutter plugins are pulled in: `desktop_drop` and `file_selector` to get a
+path from a user, `flutter_riverpod` for configuration, and `mobile_scanner`
+(MIT) for the host picker's QR scanner. The last is the one dependency here
+with a native half that is not vendored, and the one that does not ship
+everywhere — Android, iOS and macOS only. It integrates through Swift Package
+Manager, so there is still no `Podfile` in this repository. The QR *encoder* on
+the other side of that feature is written here rather than depended on:
+`packages/oaa_ui/lib/src/qr.dart`, held against ZXing by `test/qr_test.dart`.
 
 The app needs **no podspec, no `build.gradle` and no per-platform
 `CMakeLists.txt`**. `packages/oaa_engine/hook/build.dart` compiles the C
@@ -783,9 +810,11 @@ would mean the DAW you have open is now running a binary you did not knowingly
 install. JUCE is fetched and pinned, not vendored, so a fresh clone builds
 without checking out a framework by hand.
 
-**Installing it.** Copy the *bundle*, not the directory holding it, into the
-folder your DAW scans. On a machine that has never had a plugin installed, that
-folder does not exist yet:
+**Installing it.** This is the manual route, for a plugin you built or an
+archive you unpacked — the macOS pkg, the Windows installer and the Linux
+tarball do all of it for you, behind a checkbox that starts ticked. Copy the
+*bundle*, not the directory holding it, into the folder your DAW scans. On a
+machine that has never had a plugin installed, that folder does not exist yet:
 
 ```sh
 # macOS
@@ -827,8 +856,10 @@ and `packaging/macos/notarize.sh` is what then gets a download past Gatekeeper
 without the user doing anything — a signature on its own does not, which is the
 step people skip.
 
-The bundles are universal and load on **macOS 11 and later**, the same floor the
-dmg claims. Releases up to 0.5.0 were neither: CMake defaults both the
+The bundles are universal and load on **macOS 11 and later**. That is one
+version above the application's own floor of 10.15, which is why the pkg greys
+out its two plugin rows on Catalina rather than installing something that would
+never load. Releases up to 0.5.0 were neither: CMake defaults both the
 architecture and the deployment target to whatever machine did the build, so
 the runner shipped an arm64-only bundle that no Intel Mac and no older macOS
 could load — and a bundle whose slice does not match is, to a DAW, the same
@@ -956,7 +987,7 @@ that branch exists.
 | **5** | Offline file analysis, report panel, exports, `oaa` CLI | ✅ done |
 | **6** | Remote display: mDNS discovery, wire protocol, tablet mode | ✅ done² |
 | **7** | VST3 and Audio Unit plugin, DAW transport and timecode | ✅ done¹ |
-| **8** | Keyboard shortcuts, docs site, packaging (dmg / msix / AppImage / flatpak) | ✅ done³ |
+| **8** | Keyboard shortcuts, docs site, packaging (installers for all three desktops, AppImage, flatpak) | ✅ done³ |
 
 ¹ The plugin, the transport and the timecode ship. The **Elapsed and Timecode
 LUFS modes do not** — see below.
@@ -964,7 +995,7 @@ LUFS modes do not** — see below.
 ² The display ships, and discovery now works on all five platforms.
 **Tab-per-display targeting is not built** — see below.
 
-³ All four installers build and are published on a tag. **None of them is signed
+³ All five installers build and are published on a tag. **None of them is signed
 in this repository** — signing needs certificates that are not ours to commit,
 so a release built from a fork is unsigned and every script says so. See
 [Installing](#-installing).
@@ -1043,12 +1074,24 @@ so a release built from a fork is unsigned and every script says so. See
   the restriction the device enforces, and a `flutter test` on macOS is refused
   the local network for a reason that has nothing to do with the code. Both
   tablet paths are checked by hand on hardware, and the unit tests hold only
-  what happens once a packet is in. Typing an address is supported everywhere
+  what happens once a packet is in. What each end can do is say when it is not
+  working, which is the whole difference between a feature that is off and one
+  that is broken: the searching half has said so since Phase 8 and the
+  advertising half now does too — a Mac refused local network permission
+  announced nothing, reported nothing, and kept its port open the whole time.
+  Typing an address is supported everywhere
   and always will be, because multicast is also the first thing a guest network
-  blocks.
+  blocks — and so, now, is pointing the tablet's camera at a code on the
+  desktop's screen, which is the same address without the typing. That route
+  needs a camera: Android, iPadOS and macOS have one through `mobile_scanner`,
+  Windows and Linux have no implementation, and the row is absent there rather
+  than present and refusing.
 - 📡 **Publishing is never remembered, on purpose.** The display's name, port
-  and update rate persist like every other setting; whether to publish does not,
-  and starts off at every launch. There is no password on that port, and a
+  and update rate persist like every other setting — they are in Settings under
+  **Publish** — but whether to publish does not, and starts off at every launch.
+  The switch is **PUBLISH** in the status bar, deliberately not in the panel:
+  an unauthenticated port that is open needs to be visible without opening
+  anything. There is no password on that port, and a
   remembered "yes" means a laptop carried to a café starts advertising itself
   without anybody deciding to.
 - 🖥️ **A remote display shows every tab, not a chosen one.** `TabSpec` carries a

@@ -111,7 +111,7 @@ void main() {
     expect(find.text('TEST TONE'), findsOneWidget);
 
     // And no playhead, because a sound card does not have one. The readout is
-    // absent rather than blank: it is 108 px of a bar that drops whole items
+    // absent rather than blank: it is 132 px of a bar that drops whole items
     // rather than squeezing them.
     expect(find.byType(TransportReadout), findsNothing);
 

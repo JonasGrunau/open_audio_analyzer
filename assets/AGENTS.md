@@ -20,13 +20,13 @@ publishes. GPL-3.0-or-later, except the two font families, which are SIL OFL
 - **`brand/` is not declared in `pubspec.yaml`, and must not be.** The
   application has no SVG renderer — there is no `flutter_svg` in the dependency
   list and nothing here asks for one — so an `assets:` entry would copy eight
-  kilobytes of artwork into every dmg, msix, AppImage and flatpak for code that
-  cannot read it. These files are for the README, the documentation site and
-  anywhere else the project is shown; the artwork the *application* ships is
-  `packaging/icon/`, which is rendered to PNG at build time and reaches the
-  platforms through their own icon slots. `fonts/` is the opposite case and is
-  declared — in the application's pubspec rather than in `oaa_ui`, for a reason
-  written down beside the declaration.
+  kilobytes of artwork into every pkg, Windows installer, tarball, AppImage and
+  flatpak for code that cannot read it. These files are for the README, the
+  documentation site and anywhere else the project is shown; the artwork the
+  *application* ships is `packaging/icon/`, which is rendered to PNG at build
+  time and reaches the platforms through their own icon slots. `fonts/` is the
+  opposite case and is declared — in the application's pubspec rather than in
+  `oaa_ui`, for a reason written down beside the declaration.
 
 - **The mark belongs to `packaging/icon/make_icons.dart`.** `brand/` holds a
   third and fourth copy of the same four bars, which is one more duplicate than

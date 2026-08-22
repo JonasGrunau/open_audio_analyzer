@@ -8,25 +8,46 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../clock/meter_clock.dart';
 import '../data/providers.dart';
+import '../remote/publish_settings.dart';
+import '../remote/remote_control.dart';
+import '../remote/remote_display_service.dart';
 import '../storage/config_store.dart';
 import 'calibration_editor.dart';
 import 'preset_browser.dart';
 
 /// Opens the settings panel.
+///
+/// **The service is resolved here, before the route is pushed.** A panel is
+/// built by the `Navigator`, which sits above `MaterialApp.home`, so a
+/// `RemoteDisplayScope` installed under `home` is invisible from inside one —
+/// the same boundary that made every panel unable to follow a skin change for
+/// eight phases. Reading it at the call site is what `showOaaPanel` does with
+/// the palette, and it keeps this function's signature the one three callers
+/// already use.
 Future<void> showSettingsPanel(BuildContext context) => showOaaPanel<void>(
   context: context,
-  builder: (context) => const SettingsPanel(),
+  builder: (_) => SettingsPanel(remote: RemoteDisplayScope.of(context)),
 );
 
 /// Everything Open Audio Analyzer remembers, in the order somebody sets it up.
 ///
 /// Signal first, because a meter with nothing going into it is not measuring
-/// anything; then the meters themselves; then how they look; then what is kept
-/// between launches. Every control here writes through to disk immediately —
-/// there is no OK button, because a settings panel with one is a settings panel
-/// that can be abandoned in a state the interface already showed you.
+/// anything; then the meters themselves; then where those meters go; then how
+/// they look; then what is kept between launches. Every control here writes
+/// through to disk immediately — there is no OK button, because a settings
+/// panel with one is a settings panel that can be abandoned in a state the
+/// interface already showed you. The one exception is the remote display's name
+/// and port, which are committed together by an Apply button; `PublishSection`
+/// says why.
 class SettingsPanel extends ConsumerStatefulWidget {
-  const SettingsPanel({super.key});
+  const SettingsPanel({required this.remote, super.key});
+
+  /// Publishing, for the section that configures it.
+  ///
+  /// Required rather than nullable: a null service would let a mis-wired build
+  /// drop the whole Publish section with nothing anywhere saying it had, which
+  /// is the class of silence this application is written against.
+  final RemoteDisplayService remote;
 
   @override
   ConsumerState<SettingsPanel> createState() => _SettingsPanelState();
@@ -84,6 +105,7 @@ class _SettingsPanelState extends ConsumerState<SettingsPanel> {
         children: [
           _signal(settings),
           _meters(settings),
+          PublishSection(service: widget.remote),
           _appearance(settings),
           _session(settings, store),
         ],

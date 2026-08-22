@@ -6,9 +6,9 @@
 // ---------------------------------------------------------------------------
 // Why this is a program and not a folder of PNGs
 //
-// A dmg, an msix, an AppImage, a flatpak, an iOS asset catalogue and an Android
-// res tree each want the icon at a different set of sizes, in a different
-// container, under a different filename — sixty-odd files in total. Exported by
+// A pkg, a Windows installer, an AppImage, a flatpak, an iOS asset catalogue
+// and an Android res tree each want the icon at a different set of sizes, in a
+// different container, under a different filename — sixty-odd files in total. Exported by
 // hand from a drawing they drift: somebody changes the mark, updates the four
 // sizes they were looking at, and the icon in the Windows Start menu stays a
 // year behind the one in the Dock. Generated, there is one description of the
@@ -497,21 +497,16 @@ void main() {
   _writeAppleIcon('macos/Runner');
   _writeAppleIcon('ios/Runner');
 
-  // Windows: the runner's icon resource, and the msix logos.
+  // Windows: the runner's icon resource, which Inno Setup also uses as the
+  // installer's own icon. The msix logos were generated here until the Inno
+  // installer replaced that package — an msix cannot write the shared VST3
+  // directory, so it could never have carried the plug-in.
   _write(
     'windows/runner/resources/app_icon.ico',
     _ico({
       for (final size in [16, 32, 48, 64, 128, 256]) size: _pngOf(size),
     }),
   );
-  const msix = {
-    'Square44x44Logo.png': 44,
-    'Square150x150Logo.png': 150,
-    'StoreLogo.png': 50,
-  };
-  for (final entry in msix.entries) {
-    _write('packaging/windows/images/${entry.key}', _pngOf(entry.value));
-  }
 
   // Linux: hicolor sizes for the flatpak, and the one the AppImage puts at the
   // root of its AppDir.

@@ -132,9 +132,45 @@ class _PanelScaffoldState extends State<PanelScaffold> {
   Widget build(BuildContext context) {
     final colors = OaaTheme.of(context);
 
+    // **A panel gets out of the way of the software keyboard, and asks this
+    // context how far rather than asking the window.** A tablet's keyboard
+    // covers the bottom third of the screen, and the address a remote display
+    // is reached by is typed in the section furthest down the host picker — so
+    // a panel that stayed centred on the whole screen put the field somebody
+    // was typing into behind the keyboard, along with the caret and every
+    // character they entered. It presents as a dialog that ignores the
+    // keyboard, which is exactly what it was.
+    //
+    // `MediaQuery.viewInsetsOf` is the right source *because* it is not the
+    // window's: a `Scaffold` whose `resizeToAvoidBottomInset` is on — the
+    // default — hands its body a `MediaQuery` with the bottom inset already
+    // removed, and the remote display screen builds this panel straight into
+    // one. So the same line adds the keyboard's height in an overlay route,
+    // where nothing else will, and adds nothing where the `Scaffold` has
+    // already shrunk the space — rather than taking the height out twice,
+    // which at an iPad's proportions leaves a 64 px panel sitting high in a
+    // space it should have been centred in.
+    //
+    // Deliberately not animated. The engine delivers this inset once per frame
+    // for the length of the platform's own keyboard animation, on iOS and
+    // Android alike, so plain padding already moves with it; an
+    // `AnimatedPadding` over the top of that would chase a target that moved
+    // every frame and arrive after the keyboard had stopped.
+    //
+    // Moving the panel is half of it. The other half is the scroll view below:
+    // once the panel is above the keyboard, `EditableText` reveals the caret
+    // through it on the same metrics change, which is what puts the *field*
+    // rather than the panel's middle in front of whoever is typing.
+    final keyboard = MediaQuery.viewInsetsOf(context).bottom;
+
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(Space.xl),
+        padding: EdgeInsets.only(
+          left: Space.xl,
+          right: Space.xl,
+          top: Space.xl,
+          bottom: Space.xl + keyboard,
+        ),
         child: ConstrainedBox(
           constraints: BoxConstraints(maxWidth: widget.width, maxHeight: 760),
           child: ClipRRect(

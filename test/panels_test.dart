@@ -19,12 +19,16 @@ import 'package:oaa/src/data/providers.dart';
 import 'package:oaa/src/panels/calibration_editor.dart';
 import 'package:oaa/src/panels/preset_browser.dart';
 import 'package:oaa/src/panels/settings_panel.dart';
+import 'package:oaa/src/remote/host_picker.dart';
+import 'package:oaa/src/remote/mdns/host_discovery.dart';
+import 'package:oaa/src/remote/pair_link.dart';
 import 'package:oaa/src/remote/remote_control.dart';
 import 'package:oaa/src/remote/remote_display_service.dart';
 import 'package:oaa/src/storage/config_store.dart';
 import 'package:oaa/src/storage/startup_config.dart';
 import 'package:oaa_core/oaa_core.dart';
 import 'package:oaa_ui/oaa_ui.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -209,20 +213,65 @@ PresetSpec _preset(String name) => PresetSpec(
   ],
 );
 
+/// A publish service for a panel that has to be handed one.
+///
+/// The settings panel takes one because its Publish section reads live state
+/// off it. Nothing in these cases publishes: it is constructed, never started,
+/// and disposed with the test — a case that bound a socket and an mDNS
+/// responder would be testing the network rather than the panel.
+RemoteDisplayService _remoteService() {
+  final service = RemoteDisplayService(const _SilentSource(), abiVersion: 1);
+  addTearDown(service.dispose);
+  return service;
+}
+
 void main() {
   group('the settings panel', () {
-    testWidgets('opens with its four sections', (tester) async {
-      await _open(tester, await _container(tester), const SettingsPanel());
+    testWidgets('opens with its five sections', (tester) async {
+      await _open(
+        tester,
+        await _container(tester),
+        SettingsPanel(remote: _remoteService()),
+      );
 
+      // Signal in, then the meters, then where those meters go, then how they
+      // look, then what is kept between launches.
       expect(find.text('SIGNAL'), findsOneWidget);
       expect(find.text('METERS'), findsOneWidget);
+      expect(find.text('PUBLISH'), findsOneWidget);
       expect(find.text('APPEARANCE'), findsOneWidget);
       expect(find.text('SESSION'), findsOneWidget);
     });
 
+    // The switch is in the status bar and nowhere else, so the section says
+    // where it is rather than offering a second one that could disagree with
+    // it. What it does carry is the live state, which the bar has no room to
+    // print.
+    testWidgets('the publish section states where the switch is', (
+      tester,
+    ) async {
+      final service = _remoteService();
+      await _open(
+        tester,
+        await _container(tester),
+        SettingsPanel(remote: service),
+      );
+
+      expect(
+        find.text('Off. The switch is PUBLISH, in the status bar.'),
+        findsOneWidget,
+      );
+
+      service.isPublishing.value = true;
+      service.clients.value = 2;
+      await tester.pumpAndSettle();
+
+      expect(find.text('Publishing. 2 displays attached.'), findsOneWidget);
+    });
+
     testWidgets('choosing a skin changes the palette', (tester) async {
       final container = await _container(tester);
-      await _open(tester, container, const SettingsPanel());
+      await _open(tester, container, SettingsPanel(remote: _remoteService()));
 
       await _tap(tester, find.text('Daylight'));
 
@@ -234,7 +283,7 @@ void main() {
       tester,
     ) async {
       final container = await _container(tester);
-      await _open(tester, container, const SettingsPanel());
+      await _open(tester, container, SettingsPanel(remote: _remoteService()));
 
       final before = _panelPalette(tester);
       await _tap(tester, find.text('Daylight'));
@@ -270,7 +319,11 @@ void main() {
     });
 
     testWidgets('a tap on the scrim still closes it', (tester) async {
-      await _open(tester, await _container(tester), const SettingsPanel());
+      await _open(
+        tester,
+        await _container(tester),
+        SettingsPanel(remote: _remoteService()),
+      );
       expect(find.byType(PanelScaffold), findsOneWidget);
 
       // The dimming is painted inside the page now rather than by the route's
@@ -285,7 +338,7 @@ void main() {
 
     testWidgets('choosing a frame rate changes it', (tester) async {
       final container = await _container(tester);
-      await _open(tester, container, const SettingsPanel());
+      await _open(tester, container, SettingsPanel(remote: _remoteService()));
 
       // Uppercase: a segment sets its own label the way a button does.
       await _tap(tester, find.text('30 FPS'));
@@ -295,7 +348,7 @@ void main() {
 
     testWidgets('the restore toggle writes through', (tester) async {
       final container = await _container(tester);
-      await _open(tester, container, const SettingsPanel());
+      await _open(tester, container, SettingsPanel(remote: _remoteService()));
 
       expect(container.read(settingsProvider).restoreSession, isTrue);
       await _tap(tester, find.byType(OaaToggle));
@@ -306,7 +359,11 @@ void main() {
     testWidgets('it says so when there is nowhere to save', (tester) async {
       // The state a user in a stripped environment is in. Silence would be
       // worse: they would find out when they quit.
-      await _open(tester, _containerWithoutStorage(), const SettingsPanel());
+      await _open(
+        tester,
+        _containerWithoutStorage(),
+        SettingsPanel(remote: _remoteService()),
+      );
       expect(find.textContaining('Nothing is being saved'), findsOneWidget);
     });
   });
@@ -549,6 +606,165 @@ void main() {
     });
   });
 
+  // The keyboard, which is a thing only a tablet has and therefore a thing no
+  // desktop run can show you. The host picker is the panel this was reported
+  // against and the worst case in the application: its address field is the
+  // last row above the footer, so a panel centred on the whole screen puts it
+  // and the caret behind an iPad's keyboard — everything typed is invisible.
+  //
+  // Both mountings are here because the fix reads the inset from the context
+  // and the two contexts disagree on purpose: a route sees the keyboard, and a
+  // `Scaffold` body has already been shrunk by it and is handed a MediaQuery
+  // with the inset removed. One of those has to add the height and the other
+  // must not, or the panel is squashed to nothing.
+  group('a panel and the software keyboard', () {
+    // An iPad Pro in landscape, and the keyboard iPadOS puts up on it.
+    const view = Size(1194, 834);
+    const keyboard = 353.0;
+
+    /// The bottom of the space the keyboard leaves.
+    final above = view.height - keyboard;
+
+    Widget picker({int found = 0}) => HostPickerPanel(
+      onConnect: (_, _) {},
+      discovery: _StaticDiscovery(
+        found: [
+          for (var i = 0; i < found; i++)
+            DiscoveredHost(
+              instanceName: 'studio-$i',
+              address: '192.168.1.2$i',
+              port: 45678,
+              txt: const {'name': 'Studio', 'sr': '48000', 'ch': '2'},
+              seenAt: DateTime.utc(2026),
+            ),
+        ],
+      ),
+    );
+
+    /// The panel's own bordered surface.
+    ///
+    /// Not `PanelScaffold`'s box, which is the `Center` at its root and so is
+    /// whatever it was handed — the whole screen over the canvas, and the
+    /// whole body inside the display screen's `Scaffold`. Measuring that one
+    /// passes every assertion below while the panel sits behind the keyboard.
+    Rect surface(WidgetTester tester) => tester.getRect(
+      find
+          .descendant(
+            of: find.byType(PanelScaffold),
+            matching: find.byType(ClipRRect),
+          )
+          .first,
+    );
+
+    void sizeTablet(WidgetTester tester) {
+      tester.view.physicalSize = view;
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+    }
+
+    Future<void> raiseKeyboard(WidgetTester tester) async {
+      tester.view.viewInsets = const FakeViewPadding(bottom: keyboard);
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('a panel over the canvas moves above it', (tester) async {
+      sizeTablet(tester);
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: oaaThemeData(OaaColors.precisionInstrument),
+          builder: (context, child) =>
+              OaaTheme(colors: OaaColors.precisionInstrument, child: child!),
+          home: const _Opener(),
+        ),
+      );
+      _Opener.panel = picker();
+      await tester.tap(find.text('open the panel'));
+      await tester.pumpAndSettle();
+
+      // Where it was before: the full height it is allowed, centred, with its
+      // lower half in the space the keyboard is about to take.
+      expect(surface(tester).bottom, greaterThan(above));
+
+      await raiseKeyboard(tester);
+
+      final panel = surface(tester);
+      expect(panel.bottom, lessThanOrEqualTo(above));
+      // Moved rather than crushed. A panel that answered the keyboard by
+      // shrinking to a title bar would satisfy the line above.
+      expect(panel.height, greaterThan(300));
+
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('and the field being typed into comes with it', (tester) async {
+      sizeTablet(tester);
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: oaaThemeData(OaaColors.precisionInstrument),
+          builder: (context, child) =>
+              OaaTheme(colors: OaaColors.precisionInstrument, child: child!),
+          home: const _Opener(),
+        ),
+      );
+      // With hosts in the list, which is where the address row actually sits
+      // on a network that has any: an empty picker is short enough that the
+      // field clears the keyboard by a few pixels even unfixed, and a
+      // regression test that only just fails is one that will pass again for
+      // the wrong reason.
+      _Opener.panel = picker(found: 2);
+      await tester.tap(find.text('open the panel'));
+      await tester.pumpAndSettle();
+
+      // Tapped, the way somebody who is about to type an address taps it.
+      await tester.ensureVisible(find.byType(OaaTextField));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(OaaTextField));
+      await tester.pumpAndSettle();
+
+      await raiseKeyboard(tester);
+
+      // The panel moving is not the point on its own — the point is that the
+      // row somebody is typing into ends up in front of them, which the
+      // panel's own scroll view is what delivers.
+      final field = tester.getRect(find.byType(OaaTextField));
+      expect(field.bottom, lessThanOrEqualTo(above));
+
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('a panel that is a screen does not subtract it twice', (
+      tester,
+    ) async {
+      sizeTablet(tester);
+      // The remote display screen's arrangement: the picker *is* the screen
+      // while there is no host, inside a `Scaffold` whose
+      // `resizeToAvoidBottomInset` has already taken the keyboard out of the
+      // body's height — and which therefore hands the body a MediaQuery with
+      // the inset removed, so the panel's own padding adds nothing here.
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: oaaThemeData(OaaColors.precisionInstrument),
+          home: OaaTheme(
+            colors: OaaColors.precisionInstrument,
+            child: Scaffold(body: SafeArea(child: picker())),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await raiseKeyboard(tester);
+
+      final panel = surface(tester);
+      expect(panel.bottom, lessThanOrEqualTo(above));
+      // Centred in the space the Scaffold left, at the height that space
+      // allows. A panel that took the keyboard out of it a second time would
+      // be 64 px tall and sit high, which is what these two pin.
+      expect(panel.height, greaterThan(300));
+      expect(panel.center.dy, closeTo(above / 2, 1));
+
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+  });
+
   // The remote control is the one panel not opened through `_open`, because the
   // thing worth testing is the button: it is what pushes the route, and it
   // pushed it with `showDialog` for a whole phase. A route built that way is
@@ -556,16 +772,19 @@ void main() {
   // threw "No OaaTheme in scope" the moment anybody pressed it — in release as
   // well as debug, since `OaaTheme.of` ends in a `!`.
   group('remote display', () {
-    Future<void> mount(WidgetTester tester, ProviderContainer container) async {
+    Future<RemoteDisplayService> mount(
+      WidgetTester tester,
+      ProviderContainer container,
+    ) async {
       const colors = OaaColors.precisionInstrument;
       tester.view.physicalSize = const Size(1200, 1800);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
 
-      // The service is constructed here rather than by the control, which is
-      // now a view onto one: it holds a socket and a publish timer keyed to the
-      // engine, and the row that shows it is dropped whenever the window is
-      // narrow. See `RemoteDisplayControl`.
+      // The service is constructed here rather than by the controls, which are
+      // views onto one: it holds a socket and a publish timer keyed to the
+      // engine, and the controls that show it are dropped whenever the window
+      // is narrow. See `RemoteDisplayScope`.
       final service = RemoteDisplayService(
         const _SilentSource(),
         abiVersion: 1,
@@ -580,54 +799,155 @@ void main() {
             home: OaaTheme(
               colors: colors,
               child: Material(
-                child: Center(child: RemoteDisplayControl(service: service)),
+                child: Center(
+                  // The three the status bar builds, in the order it builds
+                  // them. Not the whole bar: this group is about what the
+                  // controls do, and `test/scaling_test.dart` is what holds
+                  // whether they fit.
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      PublishSwitch(service: service),
+                      PairingCodeButton(service: service),
+                      const AttachButton(),
+                    ],
+                  ),
+                ),
               ),
             ),
           ),
         ),
       );
       await tester.pumpAndSettle();
+      return service;
     }
 
-    /// Opens the bar button's panel. The label and the panel's own title are
-    /// both the word REMOTE, so the finder has to name the one in the bar.
-    Future<void> openPairing(WidgetTester tester) async {
-      await tester.tap(find.byType(BarButton));
+    /// The pairing code's button, which carries a mark rather than a word and
+    /// so cannot be found by its text.
+    Finder pairingCodeButton() => find.byWidgetPredicate(
+      (widget) => widget is BarButton && widget.mark == OaaMark.qr,
+    );
+
+    /// Opens the host picker the way the bar does.
+    Future<void> openPicker(WidgetTester tester) async {
+      await tester.tap(find.text('ATTACH'));
       await tester.pumpAndSettle();
     }
 
-    testWidgets('the bar button opens the pairing panel', (tester) async {
+    /// Lets `localIPv4Addresses` land.
+    ///
+    /// It is real I/O, and a `testWidgets` body runs in a fake-async zone the
+    /// disk never returns to — so the answer only arrives if the test
+    /// alternates `runAsync` with a pump to drain the continuation. Without
+    /// this the pairing code is permanently unavailable and every assertion
+    /// about it would be testing the fake-async zone instead.
+    Future<void> settleAddresses(
+      WidgetTester tester,
+      bool Function() done,
+    ) async {
+      for (var attempt = 0; attempt < 20 && !done(); attempt++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 10)),
+        );
+        await tester.pump();
+      }
+    }
+
+    // Both ends of the link are offered at once, without being asked which end
+    // this machine is. They used to be two rows on a panel behind one button,
+    // which put the tablet half two presses deep behind a question the person
+    // pressing had already answered.
+    testWidgets('the bar offers both ends of the link', (tester) async {
       final container = await _container(tester);
       await mount(tester, container);
-      await openPairing(tester);
 
-      // Both ends of the link are offered before either is configured. The
-      // receiving half used to be a footer button on the sending half's dialog,
-      // which is the row a panel reserves for the ways out of it.
-      expect(find.text('Send these meters'), findsOneWidget);
-      expect(find.text('Show another machine'), findsOneWidget);
+      expect(find.text('PUBLISH'), findsOneWidget);
+      expect(find.text('ATTACH'), findsOneWidget);
+      expect(pairingCodeButton(), findsOneWidget);
     });
 
-    testWidgets('sending opens the publishing panel', (tester) async {
+    // Brightness, not hue — see `BarSwitch`. What this holds is the wiring:
+    // the switch reports the service rather than a copy of it, so a session
+    // started from anywhere else shows here too.
+    testWidgets('the switch follows the service', (tester) async {
       final container = await _container(tester);
-      await mount(tester, container);
-      await openPairing(tester);
-      await _tap(tester, find.text('Send these meters'));
+      final service = await mount(tester, container);
+
+      expect(tester.widget<BarSwitch>(find.byType(BarSwitch)).value, isFalse);
+
+      service.isPublishing.value = true;
       await tester.pumpAndSettle();
 
-      expect(find.text('SEND THESE METERS'), findsOneWidget);
-      expect(find.text('Publish to this network'), findsOneWidget);
-      expect(find.text('Off.'), findsOneWidget);
+      expect(tester.widget<BarSwitch>(find.byType(BarSwitch)).value, isTrue);
+    });
+
+    // Present and inert rather than absent: a code nothing is listening at is a
+    // tablet that scans, connects and times out, which reads as a broken
+    // feature rather than as a switch that is not on.
+    testWidgets('the pairing code is disabled until publishing', (
+      tester,
+    ) async {
+      final container = await _container(tester);
+      final service = await mount(tester, container);
+
+      expect(tester.widget<BarButton>(pairingCodeButton()).onPressed, isNull);
+
+      service.isPublishing.value = true;
+      await tester.pumpAndSettle();
+      await settleAddresses(
+        tester,
+        () => tester.widget<BarButton>(pairingCodeButton()).onPressed != null,
+      );
+
+      // A machine with no non-loopback address — a runner with the network
+      // down — legitimately has nothing to encode, and the button stays
+      // disabled and says why. Both outcomes are correct; what may not happen
+      // is a panel with an empty square in it.
+      final button = tester.widget<BarButton>(pairingCodeButton());
+      if (button.onPressed == null) {
+        expect(button.tooltip, contains('No network address'));
+        return;
+      }
+
+      await _tap(tester, pairingCodeButton());
+      await tester.pumpAndSettle();
+
+      expect(find.text('PAIRING CODE'), findsOneWidget);
+      expect(find.byType(OaaQrCode), findsOneWidget);
+    });
+
+    // Publishing and unfindable, which is the state a refused local-network
+    // permission leaves behind: the port is open, a display handed the address
+    // connects to it and works, and the only screen that knows is the tablet.
+    // The notifiers are driven directly for the same reason the source here is
+    // never read — a test that bound a socket and an mDNS responder would be
+    // testing the network rather than the place this has to appear.
+    testWidgets('a host that cannot announce itself says so', (tester) async {
+      final container = await _container(tester);
+      final service = _remoteService();
+
+      service.isPublishing.value = true;
+      service.advertisementFailure.value =
+          'macOS is not letting Open Audio Analyzer announce itself on the '
+          'local network. Allow it under System Settings › Privacy & Security '
+          '› Local Network.';
+
+      await _open(tester, container, SettingsPanel(remote: service));
+
+      expect(find.textContaining('Privacy & Security'), findsOneWidget);
+      // Not "could not publish": publishing is exactly what did work.
+      expect(find.textContaining('Could not publish'), findsNothing);
+      // And the heading still reports the state that is true, rather than the
+      // fault standing in for it.
+      expect(find.text('Publishing. No displays attached.'), findsOneWidget);
     });
 
     testWidgets('the update rate is a segmented control over the options', (
       tester,
     ) async {
       final container = await _container(tester);
-      await mount(tester, container);
-      await openPairing(tester);
-      await _tap(tester, find.text('Send these meters'));
-      await tester.pumpAndSettle();
+      final service = _remoteService();
+      await _open(tester, container, SettingsPanel(remote: service));
 
       for (final fps in kRemoteFpsOptions) {
         expect(find.text('$fps'), findsOneWidget);
@@ -637,12 +957,10 @@ void main() {
       expect(container.read(settingsProvider).remoteDisplayFps, 15);
     });
 
-    testWidgets('receiving opens the host picker', (tester) async {
+    testWidgets('ATTACH opens the host picker', (tester) async {
       final container = await _container(tester);
       await mount(tester, container);
-      await openPairing(tester);
-      await _tap(tester, find.text('Show another machine'));
-      await tester.pumpAndSettle();
+      await openPicker(tester);
 
       expect(find.text('SHOW ANOTHER MACHINE'), findsOneWidget);
       // The typed address is not a fallback for completeness — it is the only
@@ -654,7 +972,148 @@ void main() {
       // the test rather than after it.
       await tester.pumpWidget(const SizedBox.shrink());
     });
+
+    // The camera is a capability, not a preference: `mobile_scanner` has no
+    // Windows or Linux implementation, so the row is absent there rather than
+    // disabled. A row that can never be pressed is a promise the product does
+    // not keep, and a row that throws `UnimplementedError` when it is pressed
+    // is worse.
+    for (final (platform, offered) in const [
+      (TargetPlatform.iOS, true),
+      (TargetPlatform.android, true),
+      (TargetPlatform.macOS, true),
+      (TargetPlatform.windows, false),
+      (TargetPlatform.linux, false),
+    ]) {
+      testWidgets(
+        'the picker offers the camera on ${platform.name}: $offered',
+        (tester) async {
+          // Reset before the body ends rather than in a tear-down: the test
+          // binding checks that no foundation debug variable is still set, and
+          // it checks before tear-downs run.
+          debugDefaultTargetPlatformOverride = platform;
+          try {
+            final container = await _container(tester);
+            await mount(tester, container);
+            await openPicker(tester);
+
+            expect(
+              find.text('Scan a QR code'),
+              offered ? findsOneWidget : findsNothing,
+            );
+            // Whatever the answer, the address is still there. It is the route
+            // that has to work in the rooms the feature exists for.
+            expect(find.text('Host'), findsOneWidget);
+
+            await tester.pumpWidget(const SizedBox.shrink());
+          } finally {
+            debugDefaultTargetPlatformOverride = null;
+          }
+        },
+      );
+    }
+
+    // Strictness with no feedback is a Connect button that swallows the press.
+    testWidgets('an address the parser refuses says so', (tester) async {
+      final container = await _container(tester);
+      await mount(tester, container);
+      await openPicker(tester);
+
+      await tester.enterText(find.byType(OaaTextField), '192.168.1.20:70000');
+      await tester.pumpAndSettle();
+      await _tap(tester, find.text('CONNECT'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('is not an address'), findsOneWidget);
+
+      // And it marks the attempt rather than the field, so the next keystroke
+      // takes it away.
+      await tester.enterText(find.byType(OaaTextField), '192.168.1.20:5555');
+      await tester.pumpAndSettle();
+      expect(find.textContaining('is not an address'), findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('the section offers a pairing code, carrying the address', (
+      tester,
+    ) async {
+      final container = await _container(tester);
+      final service = _remoteService();
+      await _open(tester, container, SettingsPanel(remote: service));
+
+      // The row is there whether or not this machine has an address; what it
+      // does depends on whether it has one.
+      expect(find.text('Show a QR code'), findsOneWidget);
+
+      // `localIPv4Addresses` is real I/O, and a `testWidgets` body runs in a
+      // fake-async zone the disk never returns to — so the panel's answer only
+      // arrives if the test alternates `runAsync` with a pump to drain the
+      // continuation. Without this the row is permanently inert and the
+      // assertions below would be testing the fake-async zone.
+      const nothingYet = 'No network address to publish yet.';
+      await settleAddresses(
+        tester,
+        () => find.text(nothingYet).evaluate().isEmpty,
+      );
+
+      // A machine with no non-loopback address — a runner with the network
+      // down — legitimately has nothing to encode, and the row says so and
+      // does nothing. Both outcomes are correct; what may not happen is a
+      // panel with an empty square in it.
+      if (find.text(nothingYet).evaluate().isNotEmpty) return;
+
+      await _tap(tester, find.text('Show a QR code'));
+      await tester.pumpAndSettle();
+
+      // What the code says is printed under it, so somebody without a camera
+      // can read it — and so this test can check the code is of the address
+      // rather than merely of something.
+      final printed = tester
+          .widgetList<SelectableText>(find.byType(SelectableText))
+          .map((text) => text.data)
+          .whereType<String>()
+          .firstWhere((text) => text.startsWith('oaa://'));
+      final link = PairLink.parse(printed);
+      expect(link, isNotNull);
+      expect(link!.port, container.read(settingsProvider).remoteDisplayPort);
+      expect(find.byType(OaaQrCode), findsOneWidget);
+
+      // Nothing is listening yet, and the panel that hands the address out is
+      // where that has to be said: a scan against a closed socket is a
+      // connection refused with no explanation anywhere.
+      expect(find.textContaining('Publishing is off'), findsOneWidget);
+    });
   });
+}
+
+/// A search that finds nothing and holds nothing.
+///
+/// The picker owns a browser and the real one owns a socket, an mDNS query
+/// timer and — on Android — a platform lock. None of that is what these cases
+/// are about, and a widget test that opened a multicast socket would be a test
+/// of the network.
+class _StaticDiscovery implements HostDiscovery {
+  _StaticDiscovery({List<DiscoveredHost> found = const []})
+    : hosts = ValueNotifier(found);
+
+  @override
+  final ValueNotifier<List<DiscoveredHost>> hosts;
+
+  @override
+  final ValueNotifier<bool> isBrowsing = ValueNotifier(false);
+
+  @override
+  final ValueNotifier<String?> failure = ValueNotifier(null);
+
+  @override
+  Future<void> start() async {}
+
+  @override
+  Future<void> stop() async {}
+
+  @override
+  void dispose() {}
 }
 
 /// A [MeterSource] that is never read.

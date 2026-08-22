@@ -1,18 +1,28 @@
 # Install
 
-Every release publishes four installers, a command-line binary and the DAW
-plugin. Pick the one for your machine; there is nothing else to set up. The iPad
-display is the exception and goes through TestFlight — see
+Every release publishes five desktop downloads, a command-line binary and the
+DAW plugin on its own. Pick the one for your machine; there is nothing else to
+set up. The iPad display is the exception and goes through TestFlight — see
 [iPadOS](#ipados) for why there is nothing to download.
 
-| Platform | Download | Notes |
-| --- | --- | --- |
-| macOS 11+ | `Open.Audio.Analyzer-<version>-macos-<arch>.dmg` | Universal — Apple silicon and Intel. |
-| Windows 10 1809+ | `Open.Audio.Analyzer-<version>-windows-x64.msix` | |
-| Linux | `Open.Audio.Analyzer-<version>-<arch>.AppImage` | One file, no root. |
-| Linux | `Open.Audio.Analyzer-<version>-<arch>.flatpak` | Sandboxed, updates in place. |
-| Any | `oaa-cli-<platform>.tar.gz` / `.zip` | The command-line analyser. No Flutter runtime. |
-| Any | `oaa-plugin-<platform>.tar.gz` / `.zip` | The VST3 and Audio Unit. Not an installer — see [In a DAW](#in-a-daw). |
+**Three of them install the plugin for you**, behind a checkbox that starts
+ticked. If you use a DAW, those are the ones to take.
+
+| Platform | Download | Plugin | Notes |
+| --- | --- | --- | --- |
+| macOS 11+ | `Open.Audio.Analyzer-<version>-macos.pkg` | ✅ VST3 + AU | Universal — Apple silicon and Intel. |
+| Windows 10 1809+ | `Open.Audio.Analyzer-<version>-windows-x64.exe` | ✅ VST3 | |
+| Linux | `Open.Audio.Analyzer-<version>-linux-<arch>.tar.gz` | ✅ VST3 | Unpack and run `./install.sh`. No root needed. |
+| Linux | `Open.Audio.Analyzer-<version>-<arch>.AppImage` | — | One file, no root. Application only. |
+| Linux | `Open.Audio.Analyzer-<version>-<arch>.flatpak` | — | Sandboxed, updates in place. Application only. |
+| Any | `oaa-cli-<platform>.tar.gz` / `.zip` | — | The command-line analyser. No Flutter runtime. |
+| Any | `oaa-plugin-<platform>.tar.gz` / `.zip` | — | The bare bundles, for installing by hand. See [In a DAW](#in-a-daw). |
+
+The AppImage and the flatpak cannot install a plugin, and that is a property of
+the formats rather than something left undone: an AppImage never installs
+anything, and a flatpak's plugin would be built against the sandbox's libraries
+while the DAW that has to load it runs on the host's. If you want the plugin on
+Linux, take the tarball.
 
 Releases are on the
 [releases page](https://github.com/JonasGrunau/open_audio_analyzer/releases).
@@ -24,13 +34,63 @@ yourself is not.
 
 ## macOS
 
-Open the dmg and drag **Open Audio Analyzer** to Applications.
+Open the pkg and follow it through. It opens on its customisation pane, with
+three rows:
+
+| Row | Installs to | Default |
+| --- | --- | --- |
+| Open Audio Analyzer | `/Applications` | ticked, and cannot be unticked |
+| VST3 plug-in | `/Library/Audio/Plug-Ins/VST3` | ticked |
+| Audio Unit | `/Library/Audio/Plug-Ins/Components` | ticked |
+
+Untick either plug-in row if you do not want it. The application row is fixed
+because the plug-ins have nothing to talk to without it — they stream what they
+measure to the app over loopback, on the same machine.
+
+On macOS 10.15 the two plug-in rows are greyed out: the plug-ins need macOS 11.
+The application runs on 10.15 either way.
+
+The installer needs an administrator password, because `/Library/Audio/Plug-Ins`
+is shared by every user and every DAW on the machine.
+
+**There is no uninstaller.** macOS packages do not come with one. To remove
+everything:
+
+```sh
+sudo rm -rf "/Applications/Open Audio Analyzer.app" \
+  "/Library/Audio/Plug-Ins/VST3/Open Audio Analyzer.vst3" \
+  "/Library/Audio/Plug-Ins/Components/Open Audio Analyzer.component"
+```
+
+Your presets, skins and settings live in `~/Library/Application Support` and are
+left alone by that.
 
 **Open Audio Analyzer will ask for microphone permission the first time you
 choose a capture device.** macOS treats any audio input as the microphone,
 including a loopback device carrying your DAW's output. Declining it leaves Open
 Audio Analyzer with the test tone and silence, and the reason is shown rather
 than logged.
+
+**Open Audio Analyzer will ask for local network permission the first time you
+publish to a tablet,** and it needs it to announce itself. Declining leaves the
+port open and the advertisement blocked, so the desktop says it is publishing
+and no tablet ever lists it — the panel names this now, but the two facts are
+genuinely separate: a display given the address by hand still connects and
+works.
+
+**Open Audio Analyzer will ask for camera permission the first time you scan a
+pairing code,** and only then — nothing else in the application uses a camera.
+The image is examined for a code and is never recorded, stored or sent
+anywhere. Declining leaves the other two ways of finding a host untouched, and
+the panel names the setting to change rather than showing a black rectangle.
+
+**Upgrading from 0.5.0 or earlier revokes that permission,** because 0.6.0
+changed the application's bundle identifier from `dev.openaudioanalyzer.oaa` to
+`com.openaudioanalyzer.oaa`, and macOS keys the permission to the identifier.
+The old entry under **System Settings → Privacy & Security → Local Network**
+belongs to an application that no longer exists; allow the new one. Nothing else
+about the upgrade needs anything — presets, skins and paired hosts are keyed by
+name rather than by identifier and are all still there.
 
 **There is no Mac App Store build and there will not be one.** The store
 requires the app sandbox, and a sandboxed application has its home directory
@@ -82,11 +142,25 @@ it takes the buffer directly and brings the transport with it.
 
 ## Windows
 
-Double-click the msix.
+Run the `.exe`. On the Select Components page:
 
-**An unsigned msix will not install.** Windows refuses one outright, with a
-message that does not say so clearly. Release builds are signed; if you built
-your own, see [Building](building.html#installers).
+| Component | Installs to | Default |
+| --- | --- | --- |
+| Open Audio Analyzer | `C:\Program Files\Open Audio Analyzer` | ticked, and cannot be unticked |
+| VST3 plug-in | `C:\Program Files\Common Files\VST3` | ticked |
+
+The installer needs administrator rights for both of those, and it registers an
+uninstaller under **Settings → Apps → Installed apps**, which removes the
+plug-in too.
+
+**Windows will warn you before it runs.** SmartScreen shows *"Windows protected
+your PC"*; click **More info → Run anyway**. Windows may also flag the download
+in your browser first. That is the current state of the installer and not a
+sign that something is wrong with the file — releases are not yet signed with an
+Authenticode certificate, and an ordinary certificate would not remove the
+warning immediately anyway, since SmartScreen goes by a reputation the download
+has to accumulate. Verify the file against the checksums on the release page if
+you want certainty.
 
 Open Audio Analyzer asks for microphone permission on first use of a capture
 device, and Windows may also need it enabled under **Settings → Privacy →
@@ -96,6 +170,33 @@ For system audio, use a WASAPI loopback-capable device or a virtual cable such
 as [VB-Audio Cable](https://vb-audio.com/Cable/).
 
 ## Linux
+
+### Tarball
+
+The only Linux download that carries the plugin, and the one to take if you use
+a DAW.
+
+```sh
+tar -xzf Open.Audio.Analyzer-0.6.0-linux-x86_64.tar.gz
+cd "Open Audio Analyzer-0.6.0-linux-x86_64"
+./install.sh
+```
+
+It asks one question — whether to install the VST3 into `~/.vst3` as well —
+and the default is yes. Nothing here needs root: the application goes to
+`~/.local/share`, the desktop entry and icons to `~/.local/share`, and every
+DAW searches `~/.vst3` without being told to.
+
+```sh
+./install.sh --no-vst3        # application only, no question asked
+./install.sh --vst3           # both, no question asked
+sudo ./install.sh --system    # /opt and /usr/lib/vst3, for every user
+./install.sh --uninstall      # removes what it installed
+```
+
+Piped or run from a script it takes the default rather than waiting for an
+answer that is never coming. The uninstaller is a copy of the same script, left
+next to what it installed.
 
 ### AppImage
 
@@ -130,6 +231,11 @@ The iPad build is a **display**, not a second analyser: it draws another
 machine's meters over the local network, with the desktop application doing the
 measuring. [Remote display](index.html) covers how the two find each other.
 
+The quickest of the three ways is the camera: on the desktop, the code button
+beside PUBLISH in the status bar; on the iPad, Scan
+a QR code. iPadOS asks for camera permission the first time, and refusing it
+leaves the host list and the typed address exactly as they were.
+
 It is distributed through **TestFlight** rather than from the releases page, and
 that is not an oversight. An App Store signature provisions no devices, so an
 IPA you downloaded could not be installed on your iPad by you or by anybody
@@ -150,6 +256,12 @@ the buffer your DAW gives them and stream it to the desktop application, which
 displays it — so the app has to be running, and the plugin finds it by itself on
 `127.0.0.1:47822` whichever of the two you start first.
 
+**The installers above do this for you** — the macOS pkg, the Windows `.exe`
+and the Linux tarball each carry the plugin and put it where your DAW looks, so
+everything in this section is the manual route. Take it if you are installing
+the plugin on a machine that already has the application, or if you deliberately
+took the AppImage or the flatpak.
+
 `oaa-plugin-<platform>` is an archive, not an installer. Copy the *bundle* — the
 `.vst3` or `.component` itself, not the directory holding it — into the folder
 your DAW scans. On a machine that has never had a plugin installed, that folder
@@ -160,6 +272,11 @@ does not exist yet:
 | macOS | `~/Library/Audio/Plug-Ins/VST3` | `~/Library/Audio/Plug-Ins/Components` |
 | Windows | `%CommonProgramFiles%\VST3` | — |
 | Linux | `~/.vst3` | — |
+
+The installers use the machine-wide equivalents of those — `/Library/Audio/…`
+on macOS, `C:\Program Files\Common Files\VST3` on Windows — which every DAW
+scans as well. The per-user paths above are what you can write without a
+password.
 
 ```sh
 # macOS
@@ -194,6 +311,10 @@ does not clear the flag, which is the part that surprises people. Whether a
 given release is notarised depends on whether the project's signing credentials
 were present when it was built; `packaging/macos/notarize.sh` documents them,
 and `xattr` works either way.
+
+**None of this applies to the pkg.** Files placed by an installer are not
+quarantined, so a plugin installed that way carries no flag to remove — which
+is the second reason the pkg exists.
 
 **Ableton Live also has to be told to look there** — Preferences → Plug-Ins →
 *Use VST3 Plug-In System Folders*. It then appears under **Open Audio

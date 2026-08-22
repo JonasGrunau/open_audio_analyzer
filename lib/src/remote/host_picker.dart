@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 
 import 'display_host.dart';
 import 'mdns/host_discovery.dart';
+import 'pair_link.dart';
+import 'qr_scanner.dart';
 
 /// Choosing a host to attach to: what discovery found, and the address you type
 /// when discovery cannot work.
@@ -23,6 +25,15 @@ import 'mdns/host_discovery.dart';
 /// thing a guest network blocks and the first thing a corporate image turns
 /// off, so a display that could only be reached by discovery would fail in
 /// exactly the rooms — venues, rehearsal spaces, shared studios — it exists for.
+///
+/// There are three ways in and they are offered in the order they cost the
+/// person holding the tablet: tap a host discovery found, point the camera at
+/// the code the desk is showing, or type the address. The middle one is the
+/// answer to the room the third one exists for — a venue that blocks multicast
+/// leaves somebody reading four numbers off a laptop across the stage and
+/// typing them into a tablet, which is the point at which a feature stops
+/// being used. It is offered only where there is a camera to offer; see
+/// [canScanQrCodes], and note that the typed field below it never goes away.
 class HostPickerPanel extends StatefulWidget {
   const HostPickerPanel({
     required this.onConnect,
@@ -64,6 +75,16 @@ class _HostPickerPanelState extends State<HostPickerPanel> {
   /// the host list underneath it.
   bool _typed = false;
 
+  /// Whether the last press of Connect was refused by the parser.
+  ///
+  /// **A button that does nothing is worse than one that says no.** `PairLink`
+  /// is strict — a mistyped port is a refusal rather than a host name with a
+  /// colon in it, because the alternative is a name lookup that fails several
+  /// seconds later for a reason nobody can read — and strictness with no
+  /// feedback is a Connect button that swallows the press. Cleared on the next
+  /// keystroke, so it marks the attempt and not the field.
+  bool _refused = false;
+
   @override
   void initState() {
     super.initState();
@@ -77,24 +98,37 @@ class _HostPickerPanelState extends State<HostPickerPanel> {
     super.dispose();
   }
 
+  /// The typed address, through the same parser the camera's answer goes
+  /// through. `PairLink` is where `host`, `host:port` and a bracketed IPv6 are
+  /// understood, and it is one file rather than two so that the field and the
+  /// scanner cannot come to differ about what a bare host name means.
   void _submit() {
-    final text = _address.text.trim();
-    if (text.isEmpty) return;
-
-    // `host`, `host:port` or a bare IPv6 in brackets. The port defaults rather
-    // than being demanded: almost nobody has changed it, and asking for it
-    // turns a working default into a thing to get wrong.
-    var host = text;
-    var port = DisplayHost.defaultPort;
-    final colon = text.lastIndexOf(':');
-    if (colon > 0 && !text.endsWith(']')) {
-      final parsed = int.tryParse(text.substring(colon + 1));
-      if (parsed != null && parsed > 0 && parsed <= 65535) {
-        host = text.substring(0, colon);
-        port = parsed;
-      }
+    final link = PairLink.parse(_address.text);
+    if (link == null) {
+      setState(() => _refused = true);
+      return;
     }
-    widget.onConnect(host, port);
+    widget.onConnect(link.host, link.port);
+  }
+
+  /// The camera, and then out of it by the same door a tapped host leaves by.
+  ///
+  /// The scanner pops itself and hands the address to [HostPickerPanel.onConnect]
+  /// unchanged, so what happens next is the caller's business exactly as it is
+  /// for a discovered host — the desktop pushes a display screen, the tablet
+  /// connects the client it already has. A scanner that knew which of those it
+  /// was in would be the second implementation of "choose a host".
+  Future<void> _scan() async {
+    await showOaaPanel<void>(
+      context: context,
+      builder: (context) => QrScannerPanel(
+        onClose: () => Navigator.of(context).pop(),
+        onConnect: (host, port) {
+          Navigator.of(context).pop();
+          widget.onConnect(host, port);
+        },
+      ),
+    );
   }
 
   @override
@@ -198,6 +232,29 @@ class _HostPickerPanelState extends State<HostPickerPanel> {
             },
           ),
 
+          // Above the typed address rather than below it, because it is the
+          // easier of the two and a panel is read top to bottom. Absent
+          // entirely on a machine with no camera implementation — see
+          // `canScanQrCodes` — which is a whole section going rather than a
+          // disabled row, since a row that can never be pressed is a promise
+          // the product does not keep.
+          if (canScanQrCodes)
+            PanelSection(
+              title: 'By camera',
+              children: [
+                PanelListRow(
+                  title: 'Scan a QR code',
+                  mark: OaaMark.scan,
+                  opens: true,
+                  note:
+                      'The machine you want to watch shows one under '
+                      'Settings → Publish, or from the code button beside '
+                      'PUBLISH in its status bar.',
+                  onTap: _scan,
+                ),
+              ],
+            ),
+
           PanelSection(
             title: 'By address',
             note:
@@ -213,11 +270,23 @@ class _HostPickerPanelState extends State<HostPickerPanel> {
                   hintText: '192.168.1.20',
                   onChanged: (text) {
                     final typed = text.trim().isNotEmpty;
-                    if (typed != _typed) setState(() => _typed = typed);
+                    if (typed != _typed || _refused) {
+                      setState(() {
+                        _typed = typed;
+                        _refused = false;
+                      });
+                    }
                   },
                   onSubmitted: (_) => _submit(),
                 ),
               ),
+              if (_refused)
+                PanelNote(
+                  'That is not an address. A name or an IP, and a port after a '
+                  'colon if this machine does not use ${DisplayHost.defaultPort}.',
+                  tone: colors.warn,
+                  mark: OaaMark.warning,
+                ),
               const PanelNote(
                 'This screen displays only. It cannot reset, retarget or '
                 'reconfigure the machine it is watching.',

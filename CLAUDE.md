@@ -20,8 +20,10 @@ amplitude. Layouts, settings, delivery targets and skins persist as JSON under
 the platform's configuration directory. Files are analysed offline by the app
 and by the `oaa` CLI, a tablet mirrors the canvas over the wire protocol, and a
 headless VST3 / AU plugin streams the DAW's audio and transport to the app. The
-canvas is driven from the keyboard, there is a dmg, an msix, an AppImage and a
-flatpak, and the documentation site is generated from this repository. See the
+canvas is driven from the keyboard, the macOS, Windows and Linux installers
+carry the plugin and install it behind a checkbox, there is also an AppImage and
+a flatpak for the application alone, and the documentation site is generated
+from this repository. See the
 Roadmap in `README.md` for what each phase covered, its **Known gaps** for what
 is still not built, and `docs/PLAN.md` for what was planned.
 
@@ -35,6 +37,8 @@ is still not built, and `docs/PLAN.md` for what was planned.
 | `engine/CMakeLists.txt` | The same compile, for consumers that are not Dart. A plugin CI runner has no Flutter SDK. **Add a new engine source to both, or `plugin/test/sources_match.sh` fails the build.** |
 | `plugin/src/OaaWire.h` | The wire protocol, producer side. `docs/WIRE.md` is the specification; this and `packages/oaa_wire/` are two implementations of it that must agree byte for byte. |
 | `plugin/host/src/FakeDawEngine.cpp` | The fake DAW: file → transport → plugin → monitor, driven either by an audio device or by a loop with no device at all. The second one is what makes the plugin's whole path testable without a DAW or a person. |
+| `packages/oaa_ui/lib/src/qr.dart` | Just enough QR to carry one address, and the widget that paints it. Held against ZXing — the decoder inside the scanner on the other end — by `test/qr_test.dart`, because a wrong mask produces something that looks exactly like a QR code and that no camera will read. |
+| `lib/src/remote/pair_link.dart` | `oaa://host:port`. The one parser behind the pairing code, the scanned code and the address somebody types. |
 | `packages/oaa_ui/lib/src/tokens.dart` | `Space`, `OaaControl`, `OaaRadius`, `OaaStroke`, `OaaColors`, `OaaType`. Nothing outside this file invents a spatial or colour value. |
 | `packages/oaa_ui/lib/src/scale.dart` | `MeterScale` and `ScaleGraticule`. Five modules draw a dB scale; two side by side whose ticks disagree look like a rendering bug. |
 | `packages/oaa_ui/lib/src/point_buckets.dart` | Marks sorted by the colour they are drawn in, one call per colour. What lets the stereo cloud redraw its whole accumulated grid every published frame instead of accumulating it into an image. The spectrogram drew through it too until its run counts on real material outgrew it — see its header. |
@@ -76,7 +80,7 @@ is still not built, and `docs/PLAN.md` for what was planned.
 | `plugin/` | Headless VST3 / AU. Measures the DAW's audio, streams it to the app. Contains `host/`, the fake DAW that drives it. | **AGPL-3.0-or-later** |
 | `docs/` | `PLAN.md`, `METRICS.md`, `WIRE.md`, and `site/` — the pages with no other home. | |
 | `tool/` | Repository scripts. Nothing here ships. | GPL-3.0-or-later |
-| `packaging/` | dmg, msix, AppImage, flatpak, and the app icon they all need. | GPL-3.0-or-later |
+| `packaging/` | pkg, Windows installer, Linux tarball, AppImage, flatpak, and the app icon they all need. The first three carry the VST3 (and on macOS the AU) and so are built from the plugin job's artefacts, not from the app alone. | GPL-3.0-or-later |
 | `assets/` | The fonts the application bundles, and the logo the repository publishes. | GPL-3.0-or-later; fonts SIL OFL 1.1 |
 
 **`plugin/` is the one AGPL directory**, because JUCE 7 and 8 are
@@ -217,6 +221,20 @@ is unaffected: it never links JUCE — it talks to the plugin over a socket.
   cannot see is a palette a route cannot follow. `showOaaPanel` reads it from
   there and falls back to the call site's for a tree that wraps only its home.
 
+- **A panel answers the software keyboard, and asks its own context how far to
+  move.** `PanelScaffold` pads its bottom by
+  `MediaQuery.viewInsetsOf(context)`, which is the keyboard's height in an
+  overlay route and *zero* inside a `Scaffold` body — the default
+  `resizeToAvoidBottomInset` has already taken the keyboard out of that body and
+  hands it a MediaQuery with the inset removed. Both mountings are real: the
+  remote display screen builds `HostPickerPanel` straight into a `Scaffold`, and
+  the pairing panel pushes the same widget as a route. Read the *window* instead
+  and the route's panel never moves at all, because `View.of` establishes no
+  dependency to rebuild on when the metrics change. Only a tablet has a keyboard
+  to be hidden behind, so no desktop run shows you any of it: the host picker's
+  address field, the last row above its footer, sat under an iPad's keyboard with
+  the caret and everything typed into it.
+
 - **Nothing on the settings path may write to disk synchronously,** and nothing
   reads back from disk to find out what the state is. A user action calls a
   controller, the controller updates its state and asks the store to persist it.
@@ -328,7 +346,13 @@ is unaffected: it never links JUCE — it talks to the plugin over a socket.
   test` or a bare `Open Audio Analyzer.app/Contents/MacOS/Open Audio Analyzer`
   — a discovery test that opens a real socket fails on a machine where the
   feature works, and `EHOSTUNREACH` on a multicast send
-  is what that denial looks like from inside. On **Android**, receiving needs a
+  is what that denial looks like from inside. **The same permission is keyed to
+  the bundle identifier**, so 0.6.0's move from `dev.openaudioanalyzer.oaa` to
+  `com.openaudioanalyzer.oaa` revoked it on every Mac that upgraded and left the
+  old grant in System Settings naming an application that no longer exists —
+  treat an identifier as a permission grant, and moving one as a release note
+  telling users to re-allow every TCC permission the app holds. On **Android**,
+  receiving needs a
   `WifiManager.MulticastLock` — a platform call, now `OaaMulticastLock.kt` — and
   the socket opens, joins and queries perfectly without one while every answer
   is discarded below it; the **emulator cannot show you the fix working**
@@ -372,7 +396,7 @@ is unaffected: it never links JUCE — it talks to the plugin over a socket.
   ever populated for a blocked *launch*; a plugin is loaded into a DAW's
   process, which is a library load, so macOS 15 and later put up a modal whose
   only other button is Move to Trash. `packaging/macos/notarize.sh` is the one
-  implementation of submit-wait-staple, used by the plugin bundles and the dmg,
+  implementation of submit-wait-staple, used by the plugin bundles and the pkg,
   and `ci.yml` runs it **between `Build` and `Archive`** because the ticket is a
   file inside the bundle. Two things that make this easy to get wrong: a
   Developer ID signature needs `--timestamp --options runtime` or Apple rejects
@@ -439,6 +463,7 @@ claim something about it:
 | A file added to or removed from any package | That directory's `AGENTS.md` file table. They are enumerations, not samples; a missing row reads as "this file does not exist" |
 | A new directory | Its own `AGENTS.md`, plus the parent's table and `CLAUDE.md`'s Subdirectories table |
 | A new dependency | `CLAUDE.md` Dependencies, `README.md`, and the licence column if it is not permissive |
+| An installer, or what it installs | `packaging/AGENTS.md` file table and rules, `docs/site/install.md` (the download table **and** the per-platform section), `README.md`'s Installing table, `docs/site/building.md` Installers, `CHANGELOG.md` ✨ or ⚡, and the install page's **blurb** in `tool/docs.dart` — it names the formats in prose, nothing regenerates it and no test reads it, so it is the copy that goes stale unseen: it still offered a dmg and an msix after both had been replaced everywhere else. An installer that gained or lost a checkbox is a user-visible change, not an internal one |
 | A test gate, or `.github/workflows/ci.yml` | `CLAUDE.md` Testing Requirements, `README.md` Tests, `.github/AGENTS.md`. **A gate named in a document and absent from `ci.yml` is a lie the whole team believes.** `ci.yml` is the only workflow — tests, docs, installers and the release are jobs in it, gated by event |
 | A keyboard shortcut | Nothing by hand — regenerate with `UPDATE_DOCS=1 flutter test test/shortcuts_test.dart` and commit `docs/site/keyboard.md` in the same change. `README.md`'s Layout → Keyboard names a handful of them and is prose, not a list |
 | **When** the plugin sets a transport flag, without any byte moving | `docs/WIRE.md`'s prose for that bit, `CHANGELOG.md` 🐛, and a case in `packages/oaa_wire/test/plugin_e2e_test.dart`. The row above covers the wire's *layout*; this is the other half. A consumer depends on when a producer sets a bit as much as on where the bit lives, and none of that is visible in a byte table — the discontinuity bit was being set every block while the transport sat parked, and delivered on almost none of the blocks where it mattered, with the layout perfectly correct throughout |
@@ -641,6 +666,18 @@ remote display has no native library at all.
   to accept a dropped file and to choose where an export goes. Keep the list
   this short: anything else that wants to be a dependency should be weighed
   against writing it, and nothing on the frame path may acquire one at all.
+
+  `mobile_scanner` (MIT) is the fourth and the only one with a native half that
+  is not vendored — the camera behind "Scan a QR code" in the host picker. It
+  was weighed against writing it and is the one that lost: finding a symbol at
+  an angle in a moving camera frame is a research problem, not a closed one.
+  The **encoder** on the other side of the same feature *was* written, in
+  `packages/oaa_ui/lib/src/qr.dart`, because that half is closed and published.
+  It is also the only dependency that does not ship everywhere — Android, iOS
+  and macOS have it, Windows and Linux do not — which is what `canScanQrCodes`
+  in `lib/src/remote/qr_scanner.dart` exists to say before a row is drawn.
+  Adding it costs four platform declarations; they are enumerated under
+  **Platform notes** in `lib/src/remote/AGENTS.md`.
 - **CLI:** `args`, plus `oaa_core` and `oaa_engine`. **No Flutter binding** —
   that is what keeps `dart build cli` working and the CLI usable in CI. Not
   `dart compile exe` — that refuses a package whose dependencies have build

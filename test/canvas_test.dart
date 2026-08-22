@@ -25,6 +25,7 @@ import 'package:oaa_core/oaa_core.dart';
 import 'package:oaa_engine/oaa_engine.dart';
 import 'package:oaa_ui/oaa_ui.dart';
 import 'package:flutter/gestures.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -184,6 +185,10 @@ Offset _titleBarOf(WidgetTester tester, String title) {
   );
 }
 
+/// How far below a module's top edge to aim for the touch-only part of the
+/// move handle: past the painted bar, inside the target under it.
+const double _belowTheBar = ModuleFrame.titleBarHeight + Space.sm;
+
 ModuleSpec _spec(ProviderContainer container, Metric metric) => container
     .read(workspaceProvider)
     .tab
@@ -305,6 +310,28 @@ void main() {
     await tester.pump();
 
     expect(container.read(workspaceProvider).tab.moduleById(id)!.rect.rows, 3);
+
+    // And the two touch layers beneath them, which admit an even narrower set.
+    // A trackpad is not in `kTouchDragDevices` by construction rather than by
+    // exclusion, but this is the test that would catch somebody widening it.
+    final rect = tester.getRect(_moduleTitled('LUFS-M'));
+    for (final point in [
+      Offset(rect.left + rect.width / 3, rect.top + _belowTheBar),
+      rect.bottomRight - const Offset(Space.lg, Space.lg),
+    ]) {
+      final touch = await tester.createGesture(
+        kind: PointerDeviceKind.trackpad,
+      );
+      await touch.panZoomStart(point);
+      await touch.panZoomUpdate(point, pan: Offset(0, rows * 3));
+      await tester.pump();
+      await touch.panZoomEnd();
+      await tester.pump();
+    }
+
+    final unmoved = container.read(workspaceProvider).tab.moduleById(id)!.rect;
+    expect(unmoved.row, 0);
+    expect(unmoved.rows, 3);
   });
 
   testWidgets('alt-dragging leaves the original behind and drops a copy', (
@@ -375,6 +402,193 @@ void main() {
     expect(after.rows, 6);
     expect(after.column, 0);
     expect(after.row, 0);
+  });
+
+  // --- The targets a finger gets, and the ones it does not ------------------
+  //
+  // Both affordances draw less than they accept, for touch and stylus only. The
+  // pairs below are the whole contract: the finger case proves the enlarged
+  // target exists, and the mouse case beside it proves it was not handed to a
+  // pointer that never needed it. See `kTouchDragDevices`.
+
+  testWidgets('a finger resizes from outside the painted grip', (tester) async {
+    final container = await _pumpSparse(tester);
+    final rows = _rowStride(tester);
+    final rect = tester.getRect(_moduleTitled('LUFS-M'));
+    final id = _spec(container, Metric.lufsMomentary).id;
+
+    // Clear of the sixteen pixels the ticks live in, inside the thirty-two a
+    // finger gets. Nothing is drawn here.
+    await tester.dragFrom(
+      rect.bottomRight - const Offset(Space.lg, Space.lg),
+      Offset(0, rows * 3),
+      kind: PointerDeviceKind.touch,
+    );
+    await tester.pump();
+
+    expect(container.read(workspaceProvider).tab.moduleById(id)!.rect.rows, 6);
+  });
+
+  testWidgets('a mouse outside the painted grip resizes nothing', (
+    tester,
+  ) async {
+    final container = await _pumpSparse(tester);
+    final rows = _rowStride(tester);
+    final rect = tester.getRect(_moduleTitled('LUFS-M'));
+    final id = _spec(container, Metric.lufsMomentary).id;
+
+    await tester.dragFrom(
+      rect.bottomRight - const Offset(Space.lg, Space.lg),
+      Offset(0, rows * 3),
+      kind: PointerDeviceKind.mouse,
+    );
+    await tester.pump();
+
+    expect(container.read(workspaceProvider).tab.moduleById(id)!.rect.rows, 3);
+    // A resize selects what it picks up, so an untouched selection is the other
+    // half of "nothing began".
+    expect(container.read(workspaceProvider).selectedModuleId, isNull);
+  });
+
+  testWidgets('a finger moves the module from below the title bar', (
+    tester,
+  ) async {
+    final container = await _pumpSparse(tester);
+    final rows = _rowStride(tester);
+    final rect = tester.getRect(_moduleTitled('LUFS-M'));
+    final id = _spec(container, Metric.lufsMomentary).id;
+
+    await tester.dragFrom(
+      Offset(rect.left + rect.width / 3, rect.top + _belowTheBar),
+      Offset(0, rows * 3),
+      kind: PointerDeviceKind.touch,
+    );
+    await tester.pump();
+
+    final after = container.read(workspaceProvider).tab.moduleById(id)!.rect;
+    expect(after.row, 3);
+    expect(after.rows, 3);
+  });
+
+  testWidgets('a mouse below the title bar moves nothing', (tester) async {
+    final container = await _pumpSparse(tester);
+    final rows = _rowStride(tester);
+    final rect = tester.getRect(_moduleTitled('LUFS-M'));
+    final id = _spec(container, Metric.lufsMomentary).id;
+
+    // The body stays reserved for the pointer that can hit a title bar. See
+    // the note on the drag strip in grid_canvas.dart.
+    await tester.dragFrom(
+      Offset(rect.left + rect.width / 3, rect.top + _belowTheBar),
+      Offset(0, rows * 3),
+      kind: PointerDeviceKind.mouse,
+    );
+    await tester.pump();
+
+    expect(container.read(workspaceProvider).tab.moduleById(id)!.rect.row, 0);
+    expect(container.read(workspaceProvider).selectedModuleId, isNull);
+  });
+
+  testWidgets('a tap on the grip selects the module', (tester) async {
+    final container = await _pumpSparse(tester);
+    final rect = tester.getRect(_moduleTitled('LUFS-M'));
+
+    // The grip is opaque, so it takes this hit from the selection catcher
+    // underneath it. Before it had an onTap of its own, the corner of every
+    // module was the one place a tap did nothing at all.
+    await tester.tapAt(rect.bottomRight - const Offset(Space.sm, Space.sm));
+    await tester.pump();
+
+    expect(
+      container.read(workspaceProvider).selectedModuleId,
+      _spec(container, Metric.lufsMomentary).id,
+    );
+  });
+
+  testWidgets('the cursor still admits only what a mouse can grab', (
+    tester,
+  ) async {
+    await _pumpSparse(tester);
+    final rect = tester.getRect(_moduleTitled('LUFS-M'));
+
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: Offset.zero);
+    addTearDown(mouse.removePointer);
+
+    Future<MouseCursor> cursorAt(Offset point) async {
+      await mouse.moveTo(point);
+      await tester.pump();
+      return RendererBinding.instance.mouseTracker.debugDeviceActiveCursor(1)!;
+    }
+
+    // The painted affordances keep their cursors.
+    expect(
+      await cursorAt(_titleBarOf(tester, 'LUFS-M')),
+      SystemMouseCursors.move,
+    );
+    expect(
+      await cursorAt(rect.bottomRight - const Offset(Space.sm, Space.sm)),
+      SystemMouseCursors.resizeDownRight,
+    );
+
+    // The touch-only margins around them do not, and that is the point: a
+    // cursor that promised a drag the mouse cannot start would be a worse lie
+    // than the small target it replaced. Neither touch layer takes a
+    // `MouseRegion`, and this is what says so.
+    expect(
+      await cursorAt(
+        Offset(rect.left + rect.width / 3, rect.top + _belowTheBar),
+      ),
+      SystemMouseCursors.basic,
+    );
+    expect(
+      await cursorAt(rect.bottomRight - const Offset(Space.lg, Space.lg)),
+      SystemMouseCursors.basic,
+    );
+  });
+
+  testWidgets('the touch targets are clamped out of the title bar', (
+    tester,
+  ) async {
+    final container = await _pumpSparse(tester);
+
+    // Short enough that an unclamped thirty-two pixel grip would reach the
+    // title bar, where it sits above the frame and would take both the menu
+    // button and the move strip — a drag by the bar would resize.
+    tester.view.physicalSize = const Size(960, 360) * 3;
+    await tester.pump();
+
+    final rect = tester.getRect(_moduleTitled('LUFS-M'));
+
+    // Four pixels below where an unclamped grip's top edge would fall, and left
+    // of the frame's own menu button. The clamp is what keeps this in the title
+    // bar rather than in the corner target.
+    final aim = Offset(
+      rect.right - Space.lg,
+      rect.bottom - Space.xl + Space.xs,
+    );
+    expect(
+      aim.dy - rect.top,
+      lessThan(ModuleFrame.titleBarHeight),
+      reason:
+          'this case is vacuous unless an unclamped touch grip would reach '
+          'into the title bar; make the window shorter, not the assertion '
+          'weaker',
+    );
+
+    final rows = _rowStride(tester);
+    final id = _spec(container, Metric.lufsMomentary).id;
+
+    await tester.dragFrom(
+      aim,
+      Offset(0, rows * 3),
+      kind: PointerDeviceKind.touch,
+    );
+    await tester.pump();
+
+    final after = container.read(workspaceProvider).tab.moduleById(id)!.rect;
+    expect(after.row, 3, reason: 'the bar should still move the module');
+    expect(after.rows, 3, reason: 'and never resize it');
   });
 
   testWidgets('right-clicking empty canvas adds a module where you clicked', (

@@ -73,7 +73,42 @@ Future<(RawDatagramSocket?, Object?)> _bindMulticast() async {
 }
 
 /// Why discovery is not working, in a sentence for a person.
-String describeDiscoveryFailure(Object? error) {
+String describeDiscoveryFailure(Object? error) => _describeMulticastFailure(
+  error,
+  refused:
+      'macOS is not letting Open Audio Analyzer search the local network. Allow it '
+      'under System Settings › Privacy & Security › Local Network, or '
+      'enter an address below.',
+  unusable:
+      'This device cannot search the network for hosts. Enter an address '
+      'below.',
+);
+
+/// The same failure from the advertising end: why nothing will find this host.
+///
+/// A sentence of its own rather than the one above, because **the two ends do
+/// not have the same way out.** A display that cannot search is handed a field
+/// to type an address into; a host that cannot announce itself has no field to
+/// offer, because it is the thing being looked for. All it can say is that the
+/// address will have to be carried to the tablet by hand.
+String describeAdvertisementFailure(Object? error) => _describeMulticastFailure(
+  error,
+  refused:
+      'macOS is not letting Open Audio Analyzer announce itself on the local '
+      'network, so no display will list this machine. Allow it under System '
+      'Settings › Privacy & Security › Local Network, or type the address of '
+      'this machine into the display instead.',
+  unusable:
+      'This machine cannot announce itself on the network, so no display will '
+      'list it. Type its address into the display instead.',
+);
+
+/// The one reading of a multicast failure, said twice — see the two callers.
+String _describeMulticastFailure(
+  Object? error, {
+  required String refused,
+  required String unusable,
+}) {
   if (error is SocketException) {
     final osError = error.osError;
     // **`EHOSTUNREACH` on a multicast send is what a refused local-network
@@ -84,18 +119,13 @@ String describeDiscoveryFailure(Object? error) {
     // with "no route to host". Nothing else about the machine looks wrong,
     // which is why this needs saying in words rather than reporting an errno.
     if (Platform.isMacOS && osError != null && osError.errorCode == 65) {
-      return 'macOS is not letting Open Audio Analyzer search the local network. Allow it '
-          'under System Settings › Privacy & Security › Local Network, or '
-          'enter an address below.';
+      return refused;
     }
     return osError == null
         ? error.message
         : '${error.message} (${osError.message})';
   }
-  if (error == null) {
-    return 'This device cannot search the network for hosts. Enter an address '
-        'below.';
-  }
+  if (error == null) return unusable;
   return error.toString();
 }
 
@@ -107,6 +137,10 @@ String describeDiscoveryFailure(Object? error) {
 /// image disables, and a metering tool that refused to publish because it could
 /// not announce itself would be broken in exactly the rooms it is needed in.
 /// The UI always offers a typed address as well.
+///
+/// **Best-effort is not the same as silent, and this class was both.** Every
+/// one of those paths now ends in a sentence on [failure]; what they used to
+/// end in was nothing at all.
 class MdnsResponder {
   MdnsResponder({required this.instanceName, required this.port});
 
@@ -131,6 +165,28 @@ class MdnsResponder {
   /// signal nobody is measuring any more. Assigning re-announces.
   Map<String, String> get txt => _txt;
   Map<String, String> _txt = const {};
+
+  /// Why nothing will find this host, in a sentence for a person, or null while
+  /// the advertisement is going out.
+  ///
+  /// **The advertising end had no way to say this, and it is the end that goes
+  /// wrong.** [MdnsBrowser] has reported its failures since Phase 8; this one
+  /// discarded all three of its own — the bind error, a send that threw, and
+  /// the socket's error stream, which is the path a refused local-network
+  /// permission actually takes. So a Mac that had been denied the permission
+  /// showed *Publishing* in green over an announcement that reached nothing,
+  /// and every tablet in the building silently stopped listing it.
+  ///
+  /// Nothing else on the machine looks wrong, which is what makes it so hard to
+  /// place: the permission gates *outgoing* multicast and not an inbound
+  /// connection, so the display port stays open and a display given the address
+  /// by hand connects to it and works perfectly. The symptom is only ever
+  /// visible from the tablet, which is the one screen with no diagnostics on
+  /// it.
+  ///
+  /// A permission granted while the app is running clears this on the next
+  /// announcement that leaves.
+  final ValueNotifier<String?> failure = ValueNotifier(null);
 
   RawDatagramSocket? _socket;
   Timer? _announceTimer;
@@ -192,9 +248,10 @@ class MdnsResponder {
     _locked = true;
     await MulticastLock.acquire();
 
-    final (socket, _) = await _bindMulticast();
+    final (socket, error) = await _bindMulticast();
     if (socket == null) {
       _unlock();
+      _fail(error);
       return;
     }
     _socket = socket;
@@ -203,7 +260,7 @@ class MdnsResponder {
       if (event != RawSocketEvent.read) return;
       final datagram = socket.receive();
       if (datagram != null) _handle(datagram);
-    }, onError: (Object _) {});
+    }, onError: _fail);
 
     // RFC 6762 §8.3: announce more than once, a second apart, because the first
     // one is the one that gets lost.
@@ -241,6 +298,15 @@ class MdnsResponder {
     _locked = false;
     MulticastLock.release();
   }
+
+  /// A failure to announce is not a tick to try again on; it is the reason no
+  /// tablet lists this host. All three paths in end here, and the one that
+  /// carries a refused local-network permission is the least obvious of them:
+  /// **Dart reports a datagram socket's send errors through the stream rather
+  /// than from `send`**, so the `onError` this responder used to leave empty
+  /// was where the whole failure went.
+  void _fail(Object? error) =>
+      failure.value = describeAdvertisementFailure(error);
 
   void _announce() {
     final socket = _socket;
@@ -321,11 +387,30 @@ class MdnsResponder {
         additionals: records.skip(1).toList(),
       );
       socket.send(packet, InternetAddress(_multicastAddress), _multicastPort);
-    } on Object {
-      // Nothing to do about a send that failed; the next announcement or query
-      // will try again.
+      // Whatever was in the way is not any more. Clearing here rather than only
+      // in [start] is what lets a permission granted mid-session take the
+      // notice away, and it cannot clear one that is still true: a send the OS
+      // is about to refuse returns normally and reports through the stream a
+      // moment later, so `_fail` simply puts it back.
+      failure.value = null;
+    } on Object catch (error) {
+      _fail(error);
     }
   }
+
+  /// Lets go of the notifier. The socket and the goodbye are [stop]'s to give
+  /// back, and a responder is stopped before it is disposed.
+  void dispose() => failure.dispose();
+
+  /// Feeds the responder the error a refused send would have produced.
+  ///
+  /// The same seam, and for the same reason, as [MdnsBrowser.handleDatagram]:
+  /// the path from "the OS refused the packet" to "the panel says why" is
+  /// otherwise reachable only through a real multicast socket, and on macOS a
+  /// test that opens one fails on a machine where the feature works — the
+  /// permission is attributed to the terminal that started the test.
+  @visibleForTesting
+  void handleSendError(Object error) => _fail(error);
 }
 
 /// Watches the network for hosts advertising [oaaServiceType].

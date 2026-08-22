@@ -63,6 +63,11 @@ class ModuleFrame extends StatelessWidget {
 
   /// Height of the title bar. Modules subtract this when deciding whether they
   /// have room to draw.
+  ///
+  /// It is the *painted* height, and on the canvas it is no longer the whole of
+  /// the drag target: `_ModuleSlot` lays a taller invisible one under the bar
+  /// for a finger, which has no cursor and covers all twenty-four pixels of
+  /// this. Nothing here changes size — see `lib/src/canvas/grid_canvas.dart`.
   static const double titleBarHeight = 24;
 
   @override
@@ -197,7 +202,9 @@ class _TitleBar extends StatelessWidget {
         child: Row(
           children: [
             // The title bar is a drag handle everywhere except the menu button,
-            // and text absorbs pointer events — see this file's header.
+            // and text absorbs pointer events — see this file's header. The
+            // canvas extends that handle below the bar for touch, which changes
+            // nothing here: the frame stays inert either way.
             Expanded(
               child: IgnorePointer(
                 child: Text(

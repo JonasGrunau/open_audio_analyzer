@@ -5,7 +5,7 @@ The arrangeable canvas. GPL-3.0-or-later.
 | File | Purpose |
 |------|---------|
 | `workspace.dart` | `Workspace` state, the Riverpod controller every layout edit goes through, undo/redo, and the default preset. |
-| `grid_canvas.dart` | The canvas: positioning, drag, resize, selection, the drag preview overlay. |
+| `grid_canvas.dart` | The canvas: positioning, drag, resize, selection, the drag preview overlay, and the six-layer stack per module that decides what a pointer over one means. |
 | `canvas_notice.dart` | The one line the canvas says out loud. Refusals only. |
 | `module_host.dart` | The only place that knows which `ModuleKind`s exist as code, and where "too small" is decided — in cells *and* in pixels. |
 | `tab_strip.dart` | Tabs, inline rename, and the add/undo/redo buttons. Three of the four are a word with a `OaaMark` or a `+` beside it; only the tab plus stands alone. |
@@ -91,6 +91,25 @@ that decides *what a pointer means* belongs here.
   dragged the module, and since a two-finger tap is how a trackpad sends a right
   click on macOS, opening a module's menu flashed the placement grid. The grip
   had it too, and so did the window drag area in `lib/src/app/`.
+
+- **An affordance smaller than a fingertip carries a touch layer *beneath* it,
+  never a second recogniser on top.** The title bar paints 24 px and the corner
+  grip 16, both under the 44 pt and 48 dp the platforms ask for, and neither can
+  grow outward: a slot is a `Positioned.fromRect`, and a `RenderBox` rejects
+  hits outside its own size, so a box overhanging the gutter would paint there
+  and never be touched. So `_ModuleSlot` puts a larger, invisible
+  `HitTestBehavior.translucent` detector *under* each one, admitting
+  `kTouchDragDevices` alone. Two properties make that work and both are easy to
+  lose. **Translucent, so the layer is added to the hit-test result and returns
+  false** — a mouse, which it admits no drag from, carries on down to the
+  selection catcher and still selects the module. **Underneath, so the opaque
+  affordance above masks the part of it they share**: `RenderStack.hitTestChildren`
+  walks back to front and stops at the first child that returns true, which
+  leaves exactly one pan recogniser in the arena rather than two identical ones
+  racing to accept. Put the touch layer on top instead and both are live at
+  once. Size them in `GridCanvas`, where the module's pixel rect is known — the
+  touch grip sits above `ModuleHost`, so on a short module an unclamped square
+  reaches the frame's menu button and the move strip and takes both.
 
 - **`pumpAndSettle` does not work in tests here.** The meter clock schedules a
   frame forever by design, so the tree never settles. Pump a fixed duration.

@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  distribution.xml — the installer's interface, and the three checkboxes.
+
+  SPDX-License-Identifier: GPL-3.0-or-later
+
+  ==========================================================================
+  Why the application row cannot be unticked
+
+  The plugins do not analyse anything on their own. They measure the buffer
+  the DAW hands them and stream it to the application over 127.0.0.1:47822 —
+  loopback, not the network, so the application is always on the same machine
+  as the plugin that feeds it. A plugin-only install is a plugin that connects
+  to nothing, forever, with no error a DAW would show. So `app` is
+  start_selected and start_enabled="false": ticked, and greyed out.
+
+  ==========================================================================
+  Why the plugin rows are gated on 11.0 rather than simply offered
+
+  plugin/CMakeLists.txt sets CMAKE_OSX_DEPLOYMENT_TARGET to 11.0; the
+  application's is 10.15. So there is a band of macOS versions that can run
+  the application and cannot load its plugins, and on Catalina a DAW given
+  this VST3 does not report an error — the plugin is silently absent from the
+  browser, which is indistinguishable from having installed it in the wrong
+  folder. An installer that can know this and stays quiet is an installer that
+  manufactures that support question. `system.compareVersions` is the
+  supported way to ask; a string compare on ProductVersion gets '10.15' and
+  '9.0' the wrong way round.
+
+  ==========================================================================
+  customize="always"
+
+  The default install pane has no checkboxes on it — the user has to find the
+  Customise button first. `always` opens on the customisation pane instead,
+  which is the whole point of shipping a pkg rather than a folder.
+-->
+<installer-gui-script minSpecVersion="2">
+    <title>Open Audio Analyzer</title>
+
+    <options customize="always" hostArchitectures="arm64,x86_64"/>
+
+    <!-- /Library and /Applications, so every user of the machine gets it and
+         every DAW looks in one place. Not the home directory: a plugin folder
+         under ~/Library is invisible to a DAW another account launched. -->
+    <domains enable_anywhere="false" enable_currentUserHome="false"
+             enable_localSystem="true"/>
+
+    <volume-check>
+        <allowed-os-versions>
+            <os-version min="10.15"/>
+        </allowed-os-versions>
+    </volume-check>
+
+    <license file="LICENSE.txt"/>
+
+    <choices-outline>
+        <line choice="app"/>
+        <line choice="vst3"/>
+        <line choice="au"/>
+    </choices-outline>
+
+    <choice id="app"
+            title="Open Audio Analyzer"
+            description="The application, in /Applications. Required — the plug-ins stream what they measure to it over loopback, so it has to be on this machine."
+            start_selected="true" start_enabled="false" visible="true">
+        <pkg-ref id="com.openaudioanalyzer.oaa.app"/>
+    </choice>
+
+    <choice id="vst3"
+            title="VST3 plug-in"
+            description="Installs into /Library/Audio/Plug-Ins/VST3, where every VST3 host looks. Needs macOS 11 or later."
+            start_selected="oaaPluginsRun()" start_enabled="oaaPluginsRun()" visible="true">
+        <pkg-ref id="com.openaudioanalyzer.oaa.vst3"/>
+    </choice>
+
+    <choice id="au"
+            title="Audio Unit"
+            description="Installs into /Library/Audio/Plug-Ins/Components, for Logic, GarageBand and other AU hosts. Needs macOS 11 or later."
+            start_selected="oaaPluginsRun()" start_enabled="oaaPluginsRun()" visible="true">
+        <pkg-ref id="com.openaudioanalyzer.oaa.au"/>
+    </choice>
+
+    <script><![CDATA[
+function oaaPluginsRun() {
+    return system.compareVersions(system.version.ProductVersion, '11.0') >= 0;
+}
+    ]]></script>
+
+    <pkg-ref id="com.openaudioanalyzer.oaa.app"  onConclusion="none">app.pkg</pkg-ref>
+    <pkg-ref id="com.openaudioanalyzer.oaa.vst3" onConclusion="none">vst3.pkg</pkg-ref>
+    <pkg-ref id="com.openaudioanalyzer.oaa.au"   onConclusion="none">au.pkg</pkg-ref>
+</installer-gui-script>

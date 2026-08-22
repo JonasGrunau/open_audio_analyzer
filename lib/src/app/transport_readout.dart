@@ -22,10 +22,41 @@
 // A value whose presence bit is clear is not printed at all: "120.0 BPM" under a
 // host that never mentioned a tempo is exactly the invented measurement this
 // project forbids, and 4/4 is the most plausible-looking of all of them.
+//
+// **The box is a reservation and the ink is packed against one edge of it.**
+// The width is fixed so that the row does not move when the position does: a
+// host that starts rolling goes from `--:--:--` to a timecode, and a readout
+// that resized on that would shove every control beside it sideways the moment
+// somebody pressed play. But what the box reserves is room for a *timecode*,
+// and a host that counts bars instead fills 36 px of it — so the fields are
+// drawn against the edge the readout's row packs against, [TransportAlign], and
+// the unspent reserve joins the row's own slack instead of sitting between two
+// items as a hole. Left-aligned in the desktop's bar, `1|1.0` had 56 px of
+// nothing to its right and whatever the window was not using to its left, and
+// read as a number floating in the middle of the title bar.
 
 import 'package:flutter/widgets.dart';
 import 'package:oaa_core/oaa_core.dart';
 import 'package:oaa_ui/oaa_ui.dart';
+
+/// Which edge of the box the fields are drawn against.
+///
+/// A readout belongs to the group it is packed with, and the reserve it is not
+/// using belongs on the far side of it — which is a different edge on the two
+/// screens. In the desktop's status bar the readout is the first item of the
+/// right-hand group, so it is [trailing] and its ink sits one gap from the
+/// elapsed clock, exactly as `ElapsedReadout` right-aligns inside its own 72 px
+/// box for the same reason. In the tablet's link bar it is the last item before
+/// the row's slack, so it is [leading] and its ink sits one gap from the tab
+/// control.
+///
+/// **Which edge is right follows from where the slack is, so a readout that
+/// moves in its row is a readout whose alignment has to be looked at again.**
+/// The tablet's sat between the host name and the tabs at first, and [leading]
+/// there put the unspent reserve between the ink and a control — the same hole
+/// this enum exists to prevent, in the one place neither value could have
+/// removed it.
+enum TransportAlign { leading, trailing }
 
 /// A readout of a DAW's transport, repainting on a clock.
 class TransportReadout extends StatefulWidget {
@@ -33,6 +64,7 @@ class TransportReadout extends StatefulWidget {
     required this.transportOf,
     required this.repaint,
     this.width = defaultWidth,
+    this.align = TransportAlign.leading,
     super.key,
   });
 
@@ -47,6 +79,10 @@ class TransportReadout extends StatefulWidget {
   final Listenable repaint;
 
   final double width;
+
+  /// The edge the fields are packed against inside [width]. See
+  /// [TransportAlign].
+  final TransportAlign align;
 
   /// Room for a drop-frame timecode and nothing more — `01:00:03;12` at
   /// [OaaType.readingSmall]. What the desktop bar can afford.
@@ -83,6 +119,7 @@ class _TransportReadoutState extends State<TransportReadout> {
         painter: _TransportPainter(
           transportOf: widget.transportOf,
           colors: OaaTheme.of(context),
+          align: widget.align,
           state: this,
           repaint: widget.repaint,
         ),
@@ -95,12 +132,14 @@ class _TransportPainter extends MeterPainter {
   _TransportPainter({
     required this.transportOf,
     required this.colors,
+    required this.align,
     required this.state,
     required Listenable repaint,
   }) : super(repaint: repaint);
 
   final Transport Function() transportOf;
   final OaaColors colors;
+  final TransportAlign align;
   final _TransportReadoutState state;
 
   @override
@@ -129,31 +168,52 @@ class _TransportPainter extends MeterPainter {
       transportPosition(transport),
       OaaType.readingSmall.copyWith(color: positionColour),
     );
+
+    // The tempo is laid out before anything is drawn, because whether it is
+    // drawn decides how wide the group is and therefore where the *position*
+    // starts. Drawn only if it fits, rather than ellipsised: half a tempo is
+    // not a tempo, and the caller that gave this box its width has already
+    // decided how much of the truth it has room for.
+    final tempo = transportTempo(transport);
+    final tempoLine = tempo == null
+        ? null
+        : state._tempo.of(
+            tempo,
+            OaaType.readingSmall.copyWith(color: colors.textFaint),
+          );
+    final drawTempo =
+        tempoLine != null &&
+        position.longestLine + Space.md + tempoLine.longestLine <= size.width;
+
+    final extent = drawTempo
+        ? position.longestLine + Space.md + tempoLine.longestLine
+        : position.longestLine;
+
+    // The reserve the fields are not using goes to one side of them rather
+    // than between them and the next item — see the note at the top of this
+    // file. `size.width` is what the caller reserved for a timecode; `extent`
+    // is what this host's counters actually came to.
+    final origin = switch (align) {
+      TransportAlign.leading => 0.0,
+      TransportAlign.trailing => size.width - extent,
+    };
+
     canvas.drawParagraph(
       position,
       // Centred in the box the way `ElapsedReadout` is, and for the reason
       // written there: a painted line drawn at the origin sits high by whatever
       // slack the box has, and every label beside it in the row is a `Text`
       // that centres itself.
-      Offset(0, (size.height - position.height) / 2),
+      Offset(origin, (size.height - position.height) / 2),
     );
 
-    final tempo = transportTempo(transport);
-    if (tempo == null) return;
-
-    final paragraph = state._tempo.of(
-      tempo,
-      OaaType.readingSmall.copyWith(color: colors.textFaint),
-    );
-
-    final left = position.longestLine + Space.md;
-    // Drawn only if it fits, rather than ellipsised. Half a tempo is not a
-    // tempo, and the caller that gave this box its width has already decided
-    // how much of the truth it has room for.
-    if (left + paragraph.longestLine <= size.width) {
+    if (drawTempo) {
       canvas.drawParagraph(
-        paragraph,
-        Offset(left, (size.height - paragraph.height) / 2),
+        tempoLine,
+        Offset(
+          origin + position.longestLine + Space.md,
+          (size.height - tempoLine.height) / 2,
+        ),
       );
     }
   }
@@ -162,7 +222,7 @@ class _TransportPainter extends MeterPainter {
   /// Positions arrive through `repaint` and never reach this.
   @override
   bool shouldRepaint(_TransportPainter oldDelegate) =>
-      oldDelegate.colors != colors;
+      oldDelegate.colors != colors || oldDelegate.align != align;
 }
 
 /// Where the playhead is, in the most precise unit the host gave.

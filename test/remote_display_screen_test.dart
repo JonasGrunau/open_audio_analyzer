@@ -94,6 +94,18 @@ void main() {
       timeSigDenominator: 8,
     );
 
+    // Two tabs, so the bar holds both of the things whose order is the point of
+    // the assertions at the bottom.
+    host.publishLayout(
+      const PresetSpec(
+        name: 'Two',
+        tabs: [
+          TabSpec(name: 'Master', modules: []),
+          TabSpec(name: 'Detail', modules: []),
+        ],
+      ),
+    );
+
     await tester.pumpWidget(
       OaaTheme(
         colors: OaaColors.precisionInstrument,
@@ -126,6 +138,28 @@ void main() {
       () => find.byType(TransportReadout).evaluate().isNotEmpty,
     );
     expect(find.text('DISCONNECT'), findsOneWidget);
+
+    // **And the readout is behind the tabs, not in front of them.** The tab
+    // control is the one thing on this bar somebody touches, so its distance
+    // from the name it belongs to is fixed by the name and by nothing else: a
+    // host that gains or loses a DAW, or reports two counters where another
+    // reports three, must not move it. In front of the tabs it did both — the
+    // readout is a 232 px reservation and this host's counters come to 182 of
+    // them, so the control stood 66 px clear of the ink with nothing between the
+    // two. A host counting bars leaves 88 px, and one reporting a clock and no
+    // tempo 190.
+    //
+    // Measured rather than read off the tree, because a finder cannot see this:
+    // every widget in that bar was present and correct throughout, and the hole
+    // was the width one of them had reserved and not used. See the tail of
+    // `transport_readout_test.dart` for the same argument about the ink inside
+    // the box.
+    final name = tester.getRect(find.text('Studio Desktop'));
+    final tabs = tester.getRect(find.byType(SegmentedControl<int>));
+    final readout = tester.getRect(find.byType(TransportReadout));
+
+    expect(tabs.left - name.right, closeTo(Space.md, 0.5));
+    expect(readout.left - tabs.right, closeTo(Space.md, 0.5));
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.runAsync(host.stop);

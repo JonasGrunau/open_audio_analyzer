@@ -9,7 +9,186 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### ✨ Added
+- Pairing a display by camera. The sending machine shows a QR code under
+  the code button beside PUBLISH in its status bar, and a tablet reads it
+  under Scan a QR code on the screen it opens with. It carries the address and
+  the port and nothing else, so a display that scans one can still only watch.
+  This is the route that works where discovery does not — a venue or a guest
+  network that blocks multicast previously left somebody reading four numbers
+  off a laptop across the room and typing them into a tablet.
+- The pairing code names which network interface it is for, on a machine with
+  more than one. A laptop on Wi-Fi with a dock has two addresses and only one
+  of them may be reachable from the tablet, which is not knowable from the
+  sending side.
+- Scanning is offered on Android, iPadOS and macOS. Windows and Linux have no
+  camera implementation, so the row is absent there rather than present and
+  refusing; the typed address is offered on every platform, as before.
+- The macOS, Windows and Linux downloads now install the plug-in for you, with
+  a checkbox that starts ticked. macOS offers the VST3 and the Audio Unit as
+  separate rows, Windows and Linux the VST3; unticking leaves the application
+  on its own. Previously the plug-in was a bare archive and the instructions
+  for placing it by hand ran to a screenful, most of which existed because a
+  bundle in the wrong folder and a bundle that failed to load look identical
+  from inside a DAW.
+- A plug-in installed by the macOS package needs no `xattr` step. Files placed
+  by an installer are not quarantined, so the Gatekeeper refusal that has no
+  override — the one a DAW reports as "could not verify … is free of malware" —
+  does not arise.
+- The Windows installer registers an uninstaller under Settings → Apps, which
+  removes the plug-in as well as the application.
+- A third Linux download, a tarball, beside the AppImage and the flatpak. It
+  is the only one of the three that carries the VST3: unpack it and run
+  `./install.sh`, which needs no root and writes under your home directory
+  unless you ask it for `--system`.
+- The Linux tarball's `install.sh` is its uninstaller too, and takes `--vst3`,
+  `--no-vst3`, `--system` and `--uninstall` for use without a prompt.
+
+### ⚡ Changed
+- **The remote display is reached from the status bar in one press, from
+  either end.** `REMOTE` and the panel behind it are gone. In their place the
+  bar carries a **PUBLISH** switch, a button beside it showing the pairing
+  code, and **ATTACH**, which opens *Show another machine* directly. Publishing
+  no longer takes three presses and a question about which end of the link this
+  machine is — a question anybody pressing the button had already answered.
+- The remote display's name, port, update rate and pairing code are now in
+  Settings under **Publish**, with the rest of what the application remembers,
+  instead of in a modal of their own. The section also states whether it is
+  publishing and how many displays are attached, which the switch has no room
+  to print.
+- The name and port commit when the edit ends — on Enter or on leaving the
+  field — rather than from an Apply button. Nothing else in the settings panel
+  has one.
+- The pairing code's button is disabled, rather than absent, while publishing
+  is off. A code nothing is listening at is a display that scans, connects and
+  times out, which reads as a broken feature rather than as a switch that is
+  not on.
+- The pairing-code mark is redrawn on Material's `qr_code` geometry: three
+  finders and a scatter of data cells. The previous mark was five filled cells
+  in a 3x3 grid, which reads as a dice face.
+- A module's title bar and its corner resize grip now accept a finger from a
+  larger area than they draw: 40 px down from the top edge instead of the
+  24 px bar, and a 32 px corner square instead of a 16 px one. Both were well
+  under the 44 pt and 48 dp the platforms ask for, which made a module fiddly
+  to move and harder still to resize on a tablet. Nothing on screen changed
+  size, and neither did anything for a mouse, a trackpad or a stylus-free
+  pointer — the larger targets are admitted to touch and stylus only.
+- A tap on a module's resize grip selects the module. It previously did
+  nothing: the grip is opaque, so it took the tap from the module underneath
+  it and had nothing of its own to do with it.
+- A typed address that is not an address now says so, instead of the Connect
+  button appearing to do nothing. A mistyped port — `192.168.1.20:70000` — was
+  previously read as a host name with a colon in it and dialled, which failed
+  several seconds later as a name lookup, and an unbracketed IPv6 literal was
+  split at its last colon into a host and a port that could never connect.
+- The macOS download is an installer package rather than a disk image, and the
+  Windows download is an installer executable rather than an msix. Neither
+  original format can install a plug-in: a disk image has no install step at
+  all, and an msix's virtualised filesystem cannot write the shared VST3
+  directory.
+- The Windows installer is not yet signed, so Windows shows "Windows protected
+  your PC" and the user clicks More info → Run anyway. The msix it replaces was
+  refused outright when unsigned, so this is a state a user can get past rather
+  than one they cannot.
+
+### 🐛 Fixed
+- **Publishing to a tablet no longer stops following the desk when the window
+  is narrowed.** The status bar drops whole items rather than squeezing them,
+  and everything that fed the display host ran inside the item it dropped — so
+  past that width the socket went on streaming measurements while layout, skin
+  and delivery-target changes stopped arriving, and a changed name, port or
+  rate was never adopted. Nothing said so, and the tablet looked healthy
+  throughout.
+- The status bar no longer overflows its own row while publishing at narrow
+  window widths. The remote button's label grew from `REMOTE` to `REMOTE · ON`
+  when it was switched on — 27 px the width gate below it had never been
+  measured against, because the sweep that proves the bar fits never published.
+  The switch that replaced it is the same width in both states.
+- A warning that no display will find this machine no longer flashes on screen
+  for a second every time publishing is switched on. The first announcement of
+  a session is often refused before the multicast join settles and succeeds on
+  the next one a second later; the notice now waits for the responder's opening
+  burst to finish before it says anything, and clears immediately.
+- Publishing that could not start — the usual cause is a second copy of Open
+  Audio Analyzer already running — now says so on screen. The switch flicked on
+  and back off under the pointer with the reason recorded nowhere anybody was
+  looking.
+- A desktop that cannot announce itself on the network now says so, on the
+  Remote row and in the panel behind it, instead of reading *Publishing* while
+  no tablet ever lists it. The advertisement had no error reporting at all: its
+  bind error, its send error and its socket's error stream were all discarded,
+  and the last of those is the one a refused local-network permission arrives
+  on. Nothing about the machine looked wrong either, because the permission
+  blocks the announcement and not the port — a display given the address by hand
+  connected and worked perfectly throughout.
+- **macOS users upgrading from 0.5.0 or earlier have to allow local network
+  access again.** 0.6.0 changed the bundle identifier from
+  `dev.openaudioanalyzer.oaa` to `com.openaudioanalyzer.oaa`, and macOS keys the
+  permission to the identifier — so the entry granted to the old application no
+  longer applies to this one and tablets stop finding the desk. Allow Open Audio
+  Analyzer under System Settings → Privacy & Security → Local Network. Presets,
+  skins and paired hosts are unaffected; they are keyed by name, not by
+  identifier.
+- A panel now moves clear of a tablet's software keyboard. Every panel stayed
+  centred on the whole screen while the keyboard covered the bottom third of it,
+  so the address field in Show another machine — the last row above the footer —
+  was behind the keyboard together with the caret and everything typed into it.
+  Panels make room for the keyboard now, and the field being typed into is
+  scrolled in front of whoever is typing.
+- The DAW's playhead no longer floats loose in the middle of the status bar. Its
+  box reserves the width of a timecode, so a host that counts bars and beats
+  instead — `1|1.0` — filled a third of it and left the rest as a hole on the
+  right, while on the left the sample rate and channel count printed flush
+  against the reading at every window between about 1160 px and 1310 px. The
+  playhead now sits one gap from the elapsed clock it is read beside, and a
+  group's width away from the format readout at every window size.
+- A tablet's page tabs now sit beside the name of the machine they belong to.
+  The playhead was in front of them, and it reserves room for a timecode, a
+  tempo and a time signature whether or not the host at the other end keeps all
+  three — so on a host counting bars the tabs stood 88 px clear of the reading
+  with nothing between the two, and on one reporting a clock and no tempo 190 px,
+  reading as a control floating in the middle of the bar. The tabs come first
+  now, and nothing that appears, vanishes or reserves unused room can move them.
+- The Linux VST3 now loads on the same distributions as the Linux application.
+  It was built against a newer glibc than everything shipped beside it, so on an
+  older distribution it was simply absent from the DAW's plug-in browser with
+  nothing logged — indistinguishable from having installed it in the wrong
+  place. Affects every release that shipped a Linux plug-in.
+
+### 🔥 Removed
+- The **Remote** panel, and the *Send these meters* panel behind it. Both ends
+  of the link are controls in the status bar now, and what those panels
+  configured is in Settings → Publish.
+- The macOS `.dmg` and the Windows `.msix`. Their replacements are above, and
+  each installs a superset of what the one it replaces did.
+
 ### 🚧 Internal
+- Turning the remote display off publishes its state before it closes its
+  sockets rather than after. Both closes suspend and `dispose` does not wait for
+  them, so a service that had been publishing wrote to a disposed
+  `ValueNotifier` from inside a microtask — visible only in the console, and
+  only ever reached by a service that had actually been switched on.
+- A release no longer carries `artifact.tar`, an unlabelled tarball of the
+  documentation site that has been attached to every release since 0.3.0. The
+  publish step downloads every artefact the run produced, and the Pages action
+  gives its payload that fixed name.
+- The signing keychain accepts a `.p12` carrying both Developer ID
+  certificates, grants `productbuild` and `productsign` use of the key, and
+  verifies what it imported against the identities the job asked for instead
+  of printing a summary that could not show an installer certificate at all.
+- The macOS package turns off bundle relocation. Left on, the Installer asks
+  Spotlight where the application already lives and writes the update *there* —
+  so a stale copy in `~/Downloads` would receive it while `/Applications` kept
+  the old version, and the install would report success.
+- The five packaging jobs in `ci.yml` are named for the platform and the
+  artefact they produce — `macos-pkg`, `windows-installer`, `linux-tarball`,
+  `linux-appimage` and `linux-flatpak` — where a format, a platform and a
+  container had been three naming schemes for one family of jobs.
+- The plugin and CLI artefacts are named by platform rather than by runner
+  image. Three installer jobs download the plugin bundles by name, and the
+  name was `oaa-plugin-ubuntu-22.04` — the image is pinned for glibc reasons
+  and moving it would have failed those downloads rather than the job that
+  moved it.
 - `OAA_IOS_TEAM_ID` now reaches the iPad build. The Runner target's Release
   configuration set its own `DEVELOPMENT_TEAM`, which outranks the xcconfig
   `make_ipa.sh` writes, so a profile created under any other team was installed

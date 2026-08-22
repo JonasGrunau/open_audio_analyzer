@@ -5,7 +5,7 @@ The shell everything else is mounted in. GPL-3.0-or-later.
 | File | Purpose |
 |------|---------|
 | `oaa_app.dart` | `MaterialApp`, the widget that owns the engine and the clock, the status bar, and the notices. |
-| `bar_controls.dart` | `BarButton` and `BarChip` — the two shapes the status bar is built from. Public because the bar is not assembled in one file: `RemoteDisplayControl` owns a socket and lives in `lib/src/remote/`. |
+| `bar_controls.dart` | `BarButton`, `BarChip` and `BarSwitch` — the three shapes the status bar is built from. Public because the bar is not assembled in one file: `PublishSwitch`, `PairingCodeButton` and `AttachButton` own a socket between them and live in `lib/src/remote/`. |
 | `shortcuts.dart` | **Every keyboard shortcut Open Audio Analyzer has, as one table**, plus the widget that installs it and the generator for `docs/site/keyboard.md`. |
 | `transport_readout.dart` | The DAW's playhead, painted: position, tempo and meter, and the rules about which of the three a host has actually earned the right to have drawn. Built by the status bar and by the tablet's link bar, which is why it lives here rather than in `lib/src/remote/`. |
 | `launch_options.dart` | `--config-dir` and `--open-panel`, parsed by hand. |
@@ -32,8 +32,11 @@ The shell everything else is mounted in. GPL-3.0-or-later.
   ellipsis, as the source and calibration pickers do, and drop whole items at
   narrow widths through the `LayoutBuilder` rather than squeezing them.
 
-- **Adding anything to the bar means re-checking the five drop-out gates, and
-  re-checking them means measuring.** The row is a sum of fixed widths, so it
+- **Adding anything to the bar means re-checking every drop-out gate, and
+  re-checking them means measuring.** There are seven — transport, format,
+  wordmark, analyse, attach, pairing code, publish — plus help, and they are
+  arithmetic on each other rather than independent numbers: one control becoming
+  three moved every gate above it by 165 px. The row is a sum of fixed widths, so it
   does not shrink — it overflows, which is a striped warning in debug and
   silently clipped controls in release. One gate at 860 px was carried for a
   phase on the strength of looking right at every window anybody had opened,
@@ -43,18 +46,66 @@ The shell everything else is mounted in. GPL-3.0-or-later.
   are cliffs, so sampling round numbers is not enough. The order items leave in
   is stated in `_StatusBar` and is a design decision, not a fitting exercise.
 
-- **Everything in the status bar is a `BarButton` or a `BarChip`.** Not a
-  `TextButton`, and not `OaaButton` either — `oaa_ui`'s buttons are sized for a
-  panel, where a control has a row to itself, and these are sized for a 40 px
-  bar that also holds the source, the clock, the calibration and the frame
-  rate. Both take their height from `_barControlHeight` rather than adding one
-  up out of a text style and a padding — `OaaControl.height`'s argument applied
+- **An overflow is not the only thing an item can do to that row, and the other
+  thing is silent.** The bar's left group is the `Expanded`, and its children
+  pack left, so the space between it and the first item of the right-hand group
+  is whatever the window is not using — zero from the moment the row is full,
+  which is most of the band above a new item's gate. The source name ellipsises
+  before the row overflows, so nothing fails: the sample rate and channel count
+  simply printed flush against the transport readout at every width from about
+  1160 px to 1310 px, with a green sweep the whole time. Anything placed at that
+  seam states its own gap and counts it into its gate; `test/scaling_test.dart`
+  measures the gap at every swept width now, and a `SizedBox` outside the
+  `Expanded` is what makes it a gap rather than a wish.
+
+- **A readout's box is a reservation, so decide which edge the ink sits
+  against.** A painted readout is given a fixed width so the row does not move
+  when the reading does — `ElapsedReadout` reserves 72 px, `TransportReadout`
+  92 — and whatever a shorter string leaves over has to go somewhere. It goes on
+  the far side of the ink from the group the readout belongs to, so that it
+  joins the row's own slack instead of becoming a hole between two items. Both
+  readouts on the right of the bar are therefore packed right. The playhead was
+  packed left, and under a host that counts bars rather than frames its five
+  characters sat in the middle of the title bar with 56 px of nothing beside
+  them.
+
+  **Which edge that is depends on where the slack is, so a reservation has to be
+  placed next to some, and moving one in its row means choosing its edge again.**
+  Neither value of `TransportAlign` can help a box with a hard item on both
+  sides: the tablet's link bar had the same readout between the host name and the
+  tab control, and its unspent reserve — 66 px under a host reporting a clock and
+  a tempo, 190 under one reporting a clock alone — could only ever be a hole
+  beside one of the two. It is behind the tabs now, where the row's own slack
+  follows it. `test/remote_display_screen_test.dart` measures both gaps, with a
+  playhead and without one.
+
+- **Everything in the status bar is a `BarButton`, a `BarChip` or a
+  `BarSwitch`.** Not a `TextButton`, and not `OaaButton` either — `oaa_ui`'s
+  buttons are sized for a panel, where a control has a row to itself, and these
+  are sized for a 40 px bar that also holds the source, the clock, the
+  calibration and the frame rate. `BarSwitch` is the third because a state you
+  set is not a state you press, and it is not `OaaToggle` for a reason that is
+  about colour rather than size: `OaaToggle` fills with `accent`, and `accent`
+  in this row means "in spec". All three take their height from
+  `_barControlHeight` rather than adding one up out of a text style and a
+  padding — `OaaControl.height`'s argument applied
   to this bar, and for the same reason: the two styles differ, so the chip stood
   3.4 px taller than the buttons and its border crossed theirs in a row where
   the borders are the only horizontal line.
-  The bar is not assembled in one file, which is how `RemoteDisplayControl`
+  The bar is not assembled in one file, which is how the remote display's entry
   spent a phase putting a borderless, ink-rippled, keyboard-unreachable Material
   button between four bordered ones.
+
+- **A control the bar may drop is a control nothing may depend on running.**
+  The publish service used to be configured, and its layout, skin and delivery
+  target published, from inside the status-bar widget's `build` — so narrowing
+  the window past that item's gate left the socket streaming measurements while
+  everything else about them stopped arriving, and settings written in a panel
+  with no gate at all were never adopted. The service moved out to
+  `_WorkspaceState` when a narrow window used to tear the session down; what
+  drives it did not follow until `RemoteDisplayScope`, which is built
+  unconditionally above the bar. Anything that has to keep happening belongs
+  there.
 
 - **A shortcut is one row in `oaaShortcuts` and nothing else.** The bindings,
   the sheet `?` opens, and the documentation page are all derived from that

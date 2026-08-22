@@ -9,6 +9,13 @@
          NEARBY_WIFI_DEVICES is deliberately not declared: it covers scanning
          and managing Wi-Fi networks, which this application never does. -->
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE"/>
+    <!-- The host picker's QR scanner. Declared here as well as in
+         mobile_scanner's own manifest, which the merger would supply
+         anyway: a permission a user is asked for at runtime should be
+         findable in the manifest of the application that asks. Runtime,
+         so there is a dialog, and a refusal is a sentence in the panel
+         rather than a camera that shows nothing. -->
+    <uses-permission android:name="android.permission.CAMERA"/>
     <application
         android:label="OAA"
         android:name="${applicationName}"

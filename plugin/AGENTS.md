@@ -187,7 +187,10 @@ window and no sound card. Between releases nothing else does; see
 all three, AU where JUCE builds one — **on a tag or a manual run, not on every
 push**, because three parallel JUCE builds is the most expensive thing in that
 workflow by an order of magnitude. The release attaches the bundles as one
-archive per platform. They are not inside the desktop installers yet.
+archive per platform, and three of the installers carry them: the `macos-pkg`,
+`windows-installer` and `linux-tarball` jobs `needs: plugin` and unpack what
+it built rather than building a second copy. The archive stays a release asset
+for anyone installing by hand.
 
 It is the only thing in CI that compiles the *plugin*. Every push does now
 configure this directory with `-DOAA_BUILD_PLUGIN=OFF` — no JUCE, no fetch, no

@@ -83,7 +83,7 @@
 #                                     private key. Read by
 #                                     packaging/macos/keychain.sh, which
 #                                     `ci.yml` runs before this — the same
-#                                     script the dmg uses, handed a different
+#                                     script the pkg uses, handed a different
 #                                     certificate. A Developer ID certificate
 #                                     signs a Mac app and is rejected here:
 #                                     iOS App Store distribution is its own

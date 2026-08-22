@@ -10,9 +10,12 @@ halves live here.
 | `display_host.dart` | The server. Publishes measurements to attached displays. |
 | `display_client.dart` | The client. Decodes them into a `WireSnapshot`. |
 | `display_screen.dart` | The tablet's UI: the host picker until there is a host, then that host's layout. |
-| `host_picker.dart` | Choosing a host — what discovery found, and the address you type when it found nothing. One panel, pushed by the desktop's pairing panel and shown by the display screen itself. |
+| `host_picker.dart` | Choosing a host — what discovery found, the code a camera reads, and the address you type when neither worked. One panel, pushed by the desktop's ATTACH button and shown by the display screen itself. |
 | `remote_display_service.dart` | The socket and the mDNS advertisement as one switch. |
-| `remote_control.dart` | The status-bar entry, the pairing panel behind it and the sending half. Phase 6's whole footprint in the desktop app. |
+| `pair_link.dart` | `oaa://host:port` — what a pairing code carries, and the one parser behind both it and the address somebody types. |
+| `qr_scanner.dart` | The camera half of pairing: a viewfinder over `mobile_scanner`, and `canScanQrCodes`, which is why the row is absent on Windows and Linux rather than disabled. |
+| `remote_control.dart` | `RemoteDisplayScope`, which drives the service and carries it, and the three controls the status bar shows: `PublishSwitch`, `PairingCodeButton`, `AttachButton`. |
+| `publish_settings.dart` | `PublishSection` — everything about publishing except the switch — and `PairingCodePanel` behind it. |
 | `mdns/dns_message.dart` | Just enough DNS to advertise and find one service. |
 | `mdns/mdns_service.dart` | The responder, and the browser every platform but iOS uses. |
 | `mdns/host_discovery.dart` | `DiscoveredHost`, the `HostDiscovery` interface the picker draws, and which of the two searches this platform is allowed to run. |
@@ -25,8 +28,9 @@ halves live here.
 ## Rules
 
 - **This directory owns a socket, not a design system.** `remote_control.dart`
-  is the one widget in `lib/src/remote/` that a desktop user looks at, and it
-  was written twice over as stock Material — a `TextButton` in a row of
+  and `publish_settings.dart` are what a desktop user looks at — three controls
+  in the status bar and one section of the settings panel — and the first of
+  them was written twice over as stock Material — a `TextButton` in a row of
   `BarButton`s and an `AlertDialog` where every other panel is a
   `PanelScaffold`. The second one did not merely look wrong: a route pushed
   with `showDialog` is built by the `Navigator`, above `MaterialApp.home` —
@@ -45,21 +49,89 @@ halves live here.
   feature exists for. It is `host_picker.dart` now, and it is a `PanelScaffold`
   like everything else. **A screen is not exempt because it is not a dialog.**
 
-- **Which end this machine is gets asked before either end is configured.**
-  Sending is a socket, a name and a rate on *this* machine; receiving is a
-  search for somebody else's. They have nothing in common, and they were one
-  dialog with the receiving half behind a footer button marked "Use as
-  display" — which put a whole second mode in the row where a panel says "the
-  ways out of here are", so the tablet half of the feature was reachable only
-  by pressing the button that looked most like Cancel. `_PairingPanel` asks
-  first and pushes one of the two, and its Send row carries the live publishing
-  state so that "am I already publishing" is answered without opening anything.
+- **Which end this machine is is not a question, because it is never asked of
+  somebody who does not already know the answer.** Sending is a socket, a name
+  and a rate on *this* machine; receiving is a search for somebody else's. They
+  have nothing in common, and the first attempt made them one dialog with the
+  receiving half behind a footer button marked "Use as display" — which put a
+  whole second mode in the row where a panel says "the ways out of here are", so
+  the tablet half of the feature was reachable only by pressing the button that
+  looked most like Cancel. The second attempt asked the question on a panel of
+  its own and pushed one of two answers, which fixed the footer and left both
+  halves two presses deep behind a word.
+
+  They are two controls in the status bar now — **PUBLISH**, a switch, and
+  **ATTACH**, a button — and each does its whole half in one press. What the
+  panel's Send row existed to carry, the switch carries better: publishing is
+  legible from the bar without opening anything, because it is the bar.
+
+  **The count of attached displays is not on the bar, and that is a decision
+  with a cost.** It is in the switch's tooltip and written out in
+  Settings → Publish. The bar has no room for a number that is usually zero,
+  but "somebody is watching" is now a fact you hover or open a panel for, where
+  "an unauthenticated port is open" is still a fact you glance at.
 
 - **There is one implementation of "choose a host".** `HostPickerPanel` is what
   the desktop pushes and what the display screen shows whenever it has no host,
   including after a Disconnect. Two of them would be two ideas about what to do
   when discovery is blocked, and that answer — always offer a typed address —
   is the whole reason the feature works in the rooms it was built for.
+
+  It offers three ways in, in the order they cost the person holding the
+  tablet: a host discovery found, a code the camera reads, and an address typed
+  by hand. **All three end at the same `onConnect`** — the scanner pops itself
+  and hands back a host and a port exactly as a tapped row does, and knows
+  nothing about whether the caller will push a display screen or connect a
+  client it already has. A scanner that knew which of those it was in would be
+  the second implementation of the thing the rule above says there is one of.
+
+- **A pairing code is an address, and `PairLink` is the only thing that reads
+  one.** The field and the camera are the same question asked twice, and two
+  parsers would be two opinions about whether a bare `studio-mac.local` means
+  the default port — an answer a user discovers by the tablet either connecting
+  or not.
+
+  Three things about the format are load-bearing, and all three are refusals:
+
+  - **The `oaa://` scheme.** A QR code is read by whatever camera is pointed at
+    it, so the payload has to say what it is. Without a scheme, a phone's own
+    camera app offers to web-search `192.168.1.20:5555`, and this scanner
+    cannot tell a pairing code from the Wi-Fi code taped to the wall beside the
+    desk — it finds a colon in `WIFI:S:Studio;T:WPA;…` and dials a host called
+    `WIFI`.
+  - **A host that does not look like a host is refused**, which is the other
+    half of the same trap: `WIFI:…` carries no `://` for the scheme check to
+    catch it by.
+  - **A port that is not a port is a refusal, not a host name with a colon in
+    it.** `192.168.1.20:70000` is a typo, and keeping the whole string as a
+    name turns it into a lookup that fails several seconds later for a reason
+    nobody can read. The picker says so instead — strictness with no feedback
+    is a Connect button that swallows the press.
+
+  It is **not** part of `docs/WIRE.md` and must not become part of it. The wire
+  is what two machines say to each other once they are connected; this is one
+  of the three ways a person points one at the other, and it belongs beside
+  mDNS rather than beside the byte tables. Nothing in a code may ever configure
+  anything: a display that scans one can still do nothing but watch.
+
+- **The camera is a capability, and the row is absent where there is none.**
+  `mobile_scanner` covers Android, iOS and macOS; Windows and Linux have no
+  implementation and every call into it throws `UnimplementedError` from the
+  platform interface. `canScanQrCodes` is asked before the section is built, so
+  those two see the panel they always saw. A disabled row would be a feature
+  that exists in the interface and not in the product, and a row that throws
+  when pressed is worse.
+
+- **A viewfinder is not a panel surface, so it does not take the skin's
+  colours.** Every other surface here is one the palette chose, so a hairline
+  at 3:1 against the panel is 3:1 wherever it lands. A camera image is a lit
+  studio, a black rack, or somebody's white laptop lid filling the frame — a
+  bracket in the light skin's `hairlineStrong` over the last of those is
+  invisible at exactly the moment it is being used. The scrim and the brackets
+  are fixed, the way a viewfinder's are, and the accent appears only for the
+  moment a code has been accepted. `OaaQrCode` is the same rule from the other
+  end and for a harder reason: dark-on-light is what a decoder thresholds for,
+  so a code painted in a dark skin's panel colours is a picture of a QR code.
 
 - **There is no tablet rendering path, and there must never be one.** The
   display hands a `MeterSource` and a `PresetSpec` to the same `ModuleHost` the
@@ -133,13 +205,27 @@ halves live here.
   and `DisplayClient.hasTransport` is the only part of a transport a widget may
   watch.** The readout is 232 px wide and draws nothing when there is nothing to
   draw, so a host with no DAW — a desktop metering a device or a file, which is
-  most of them — left that much blank between its name and the tab control, and
-  a control with nothing on either side of it reads as one that failed to lay
-  out rather than as an empty readout. The bit follows what the host *stated*: a
-  frame saying `Transport.none` takes the slot away, and `_checkStale` clears the
-  reading but deliberately leaves the slot, because dropping it on a timeout
-  would move the tabs out from under the finger of somebody at a tablet on a
-  flaky access point.
+  most of them — left that much blank in the bar, reading as a control that had
+  failed to lay out rather than as an empty readout. The bit follows what the
+  host *stated*: a frame saying `Transport.none` takes the slot away, and
+  `_checkStale` clears the reading but deliberately leaves the slot, because a
+  parked transport on a flaky access point would otherwise reflow the bar every
+  time the link went quiet.
+
+  **The tab control comes before the readout in that row, and nothing that can
+  appear, vanish or reserve room it is not using may be put in front of it.** It
+  is the only control on a display anybody touches, so what fixes its distance
+  from the host name is the name and nothing else. The readout is all three of
+  those things at once: 232 px is room for a timecode, a tempo and a meter, and
+  a host keeping fewer counters than that spends less of it — 182 px for a clock
+  and a tempo, 160 for bars and beats, 58 for a clock alone. In front of the
+  tabs, the remainder became a hole between the ink and the control, 66 px wide
+  in the first case and 190 in the last, and the tabs read as floating in the
+  middle of the bar. Behind them the same remainder lands against the row's
+  slack, which is where every readout in this application puts it — see
+  `TransportAlign` in `lib/src/app/transport_readout.dart`. `hasTransport`
+  collapsing the slot is still right, and it is now the smaller half of the
+  problem rather than the whole of it.
 
 - **The host refreshes the source itself and the clock compares generations.**
   A `Ticker` stops when the window is occluded, which is exactly when the tablet
@@ -197,6 +283,23 @@ halves live here.
   corporate image disables. Every failure path ends in "discovery does not work
   here", and the typed-address field is always offered — a display that only
   worked when discovery worked would fail in exactly the rooms it exists for.
+
+  **Best-effort is not silent, and both ends say so.** `MdnsBrowser.failure` has
+  carried the searching half since Phase 8; `MdnsResponder.failure` and
+  `RemoteDisplayService.advertisementFailure` carry the advertising half, which
+  had nothing and is the half that goes wrong. All three of the responder's
+  failure paths were discarded — the bind error, a send that threw, and the
+  socket's `onError`, which was an empty closure and is where a refused
+  local-network permission actually arrives, because **Dart reports a datagram
+  socket's send errors through the stream rather than from `send`**.
+
+  Two sentences rather than one, because the two ends do not have the same way
+  out: a display that cannot search is handed a field to type an address into,
+  and a host that cannot announce itself *is* the thing being looked for.
+  `describeAdvertisementFailure` is the second of them. And
+  `advertisementFailure` is deliberately not folded into
+  `RemoteDisplayService.failure`: publishing is a socket on this machine,
+  announcing is a packet leaving it, and only the second one failed.
 
 - **Best-effort is not the same as silent, and for eight phases it was.** Every
   send sat in a `catch` that discarded the error, the socket's `onError` was an
@@ -268,6 +371,24 @@ halves live here.
 
 ## Platform notes
 
+- **The camera is asked for in four places and refused in three ways.** iOS and
+  macOS each want an `NSCameraUsageDescription` in their `Info.plist`, macOS
+  wants `com.apple.security.device.camera` in *both* entitlement files, and
+  Android wants `android.permission.CAMERA` — which `mobile_scanner`'s own
+  manifest would supply, and which is declared in the application's as well so
+  that a permission a user is asked for at runtime is findable in the manifest
+  of the application that asks.
+
+  The macOS entitlement is the one that looks unnecessary and is not: this
+  application is deliberately **not** sandboxed, but a Developer ID build is
+  signed with the hardened runtime, and the hardened runtime withholds the
+  camera from a process that has not asked for it. It is the same trap as
+  `com.apple.security.device.audio-input` beside it, and it fails the same way —
+  a camera that produces no frame, with nothing logged. All three refusals look
+  identical from inside the process, which is why `QrScannerPanel` names the
+  platform's own settings path in the sentence it prints rather than reporting
+  that the camera did not start.
+
 - **macOS needs both entitlements and a usage string.** The same binary listens
   and connects, so `com.apple.security.network.server` *and* `.client` are set
   in both entitlement files. `NSLocalNetworkUsageDescription` and
@@ -280,8 +401,29 @@ halves live here.
   the Wi-Fi address, the routing table has a route for 224.0.0/4, and every
   send is refused with `EHOSTUNREACH` — errno 65, "No route to host", on a
   machine that plainly has one. That errno on a multicast send is the
-  signature; `describeDiscoveryFailure` turns it into the sentence that names
-  System Settings.
+  signature; `describeDiscoveryFailure` and `describeAdvertisementFailure` turn
+  it into the sentence that names System Settings.
+
+  **The permission is keyed to the bundle identifier, so changing that revokes
+  it — and 0.6.0 changed it.** `dev.openaudioanalyzer.oaa` became
+  `com.openaudioanalyzer.oaa`, and every Mac that upgraded became, to TCC, a
+  machine running an application it had never been asked about; the entry
+  granted to the old identifier still sits in System Settings naming an
+  application that no longer exists. Nothing prompts loudly enough to notice and
+  nothing is logged. Treat an identifier as a permission grant: **moving one
+  means telling users to re-allow every TCC permission the app holds**, which
+  here is Local Network and the microphone.
+
+  It is hard to place because **the permission gates outgoing multicast and not
+  an inbound connection.** The display port stays open, `nc` reaches it from
+  another machine, a display handed the address by hand connects and draws
+  meters perfectly — and only the announcement is gone. So the desk looks
+  healthy from the desk and the failure is visible only from the tablet, which
+  is the one screen with no diagnostics on it. What splits it in two from
+  outside is `dns-sd -B _oaa._tcp local` on any Mac on the network: Apple's
+  responder sees the whole segment, so a host it cannot see is a host that is
+  not announcing, and registering a decoy with `dns-sd -R` proves the browsing
+  end and the network separately.
 
   **It is also how a terminal poisons a test.** macOS attributes the permission
   to the *responsible* process, so a build launched from a shell inherits the

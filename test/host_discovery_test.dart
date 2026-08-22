@@ -10,6 +10,8 @@
 // showed "Looking for hosts on this network…" for as long as anybody was
 // willing to wait.
 
+import 'dart:io';
+
 import 'package:oaa/src/remote/host_picker.dart';
 import 'package:oaa/src/remote/mdns/bonjour_discovery.dart';
 import 'package:oaa/src/remote/mdns/dns_message.dart';
@@ -252,6 +254,68 @@ void main() {
     test('a plain machine name is left alone', () {
       final responder = MdnsResponder(instanceName: 'studio-mac', port: 1);
       expect(responder.instanceLabel, 'studio-mac');
+    });
+  });
+
+  // The advertising end of discovery had no `failure` at all, and it is the end
+  // that goes wrong. `MdnsResponder` discarded its bind error, its send error
+  // and — the path a refused local-network permission actually takes — its
+  // socket's error stream. So a Mac that had been denied the permission showed
+  // *Publishing* in green while every tablet in the building quietly stopped
+  // listing it, and nothing anywhere said why.
+  //
+  // What exposed it was a bundle identifier. macOS keys the permission to the
+  // identifier, 0.6.0 moved from `dev.openaudioanalyzer.oaa` to
+  // `com.openaudioanalyzer.oaa`, and the same code on the same network became
+  // an app with no permission overnight. The display port kept answering
+  // throughout — the permission gates outgoing multicast and not an inbound
+  // connection — so the desk looked healthy from the desk.
+  group('what the responder says when nothing will find it', () {
+    /// `EHOSTUNREACH`: the signature of a refused local-network permission from
+    /// inside the process, and the only thing about the machine that looks
+    /// wrong at all.
+    const refused = SocketException(
+      'Send failed',
+      osError: OSError('No route to host', 65),
+    );
+
+    test('a responder nobody has refused says nothing', () {
+      final responder = MdnsResponder(instanceName: 'studio-mac', port: 47821);
+      expect(responder.failure.value, isNull);
+      responder.dispose();
+    });
+
+    test('a refused send is the reason, not a tick to try again on', () {
+      final responder = MdnsResponder(instanceName: 'studio-mac', port: 47821);
+      responder.handleSendError(refused);
+
+      expect(responder.failure.value, isNotNull);
+      // The sentence names the setting on the platform that has one. Elsewhere
+      // the errno is all there is to report, and reporting it beats the silence
+      // this replaces.
+      if (Platform.isMacOS) {
+        expect(responder.failure.value, contains('Privacy & Security'));
+      } else {
+        expect(responder.failure.value, contains('No route to host'));
+      }
+      responder.dispose();
+    });
+
+    test('the two ends of the link do not offer the same way out', () {
+      // A display that cannot search is handed a field to type an address into.
+      // A host that cannot announce itself *is* the thing being looked for, so
+      // telling it to enter an address is telling it to fix the other machine.
+      expect(
+        describeAdvertisementFailure(refused),
+        isNot(describeDiscoveryFailure(refused)),
+      );
+      if (Platform.isMacOS) {
+        expect(describeDiscoveryFailure(refused), contains('enter an address'));
+        expect(
+          describeAdvertisementFailure(refused),
+          isNot(contains('enter an address')),
+        );
+      }
     });
   });
 

@@ -36,6 +36,18 @@ dependencies:
   desktop_drop: ^0.7.1
   file_selector: ^1.1.0
 
+  # The camera behind "Scan a QR code" in the host picker, and the decoder that
+  # reads one. The only dependency in this repository with a native half that
+  # is not vendored, and the only one that does not ship everywhere: Android,
+  # iOS and macOS have it; Windows and Linux do not, which is why
+  # `canScanQrCodes` exists and why the row is absent rather than disabled
+  # there. Writing this one was weighed and rejected — a decoder has to find a
+  # symbol at an angle in a moving camera frame before any of the arithmetic in
+  # `oaa_ui`'s encoder becomes relevant, and that is a research problem, not a
+  # closed one. The encoder it reads *is* written here: see
+  # `packages/oaa_ui/lib/src/qr.dart`.
+  mobile_scanner: ^7.4.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

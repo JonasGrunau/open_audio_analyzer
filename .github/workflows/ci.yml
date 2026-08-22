@@ -253,7 +253,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        # ubuntu-22.04 and not latest, for the reason the AppImage job is
+        # pinned: a binary built against a newer glibc does not start on an
+        # older one, it reports a version mismatch and nothing else. The
+        # difference here is that nobody sees even that — a VST3 the loader
+        # refuses is a plug-in absent from the DAW's browser, which is what
+        # having installed it in the wrong folder also looks like. This leg
+        # ran on ubuntu-latest for six releases while the AppImage beside it
+        # was pinned, so the Linux app and the Linux plug-in shipped with
+        # different floors and only one of them was deliberate.
+        os: [ubuntu-22.04, macos-latest, windows-latest]
 
     steps:
       - uses: actions/checkout@v4
@@ -415,9 +424,16 @@ jobs:
             -Path 'plugin\build\OaaPlugin_artefacts\Release\VST3\*.vst3' `
             -DestinationPath oaa-plugin-Windows.zip
 
+      # `runner.os` and not `matrix.os`, so the artefact is named for the
+      # platform rather than for the runner image: `oaa-plugin-Linux` and not
+      # `oaa-plugin-ubuntu-22.04`. Three installer jobs download this by name
+      # and the image above is pinned, so moving that pin would have broken
+      # three downloads in jobs nobody touched — on a release, a fortnight
+      # later. It also matches the filename inside the archive, which is what
+      # a person unpacking it sees.
       - uses: actions/upload-artifact@v4
         with:
-          name: oaa-plugin-${{ matrix.os }}
+          name: oaa-plugin-${{ runner.os }}
           path: |
             oaa-plugin-*.tar.gz
             oaa-plugin-*.zip
@@ -501,9 +517,24 @@ jobs:
   # code that fails its own tests is not a release candidate.
   # -------------------------------------------------------------------------
 
-  dmg:
-    name: dmg
-    needs: checks
+  # -------------------------------------------------------------------------
+  # The installers, and why they wait for the plugin job
+  #
+  # Each of the three carries the VST3 (and on macOS the Audio Unit) and
+  # installs it behind a checkbox, so none of them can be built from the
+  # application alone. They take the bundles the plugin job already produced
+  # rather than building their own: a second JUCE build is fifteen minutes,
+  # and on macOS a second notarisation of the same code — and two copies of a
+  # binary that are supposed to be identical are two copies that can differ.
+  #
+  # The condition on each is the one the plugin job already had, so nothing
+  # here costs a push anything. What it does cost is wall clock on a release:
+  # the installers now start when the slowest JUCE build finishes.
+  # -------------------------------------------------------------------------
+
+  macos-pkg:
+    name: macOS pkg
+    needs: [checks, plugin]
     if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     runs-on: macos-latest
     steps:
@@ -514,35 +545,55 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Signing certificate
+      - uses: actions/download-artifact@v4
+        with:
+          name: oaa-plugin-macOS
+          path: plugin-artifact
+
+      # The tarball holds VST3/ and AU/ at its root, which is the layout
+      # make_pkg.sh's --plugins expects and the same one the build tree has.
+      - name: Unpack the plug-ins
+        run: |
+          mkdir -p plugins
+          tar -xzf plugin-artifact/oaa-plugin-macOS.tar.gz -C plugins
+          ls -R plugins | head -20
+
+      # Both identities are passed here, not just to the build. keychain.sh
+      # verifies that the .p12 actually contains what these name, and this is
+      # the only place it can — twenty minutes before productbuild would
+      # otherwise be the first to notice.
+      - name: Signing certificates
         env:
           OAA_SIGNING_CERTIFICATE: ${{ secrets.OAA_SIGNING_CERTIFICATE }}
           OAA_SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.OAA_SIGNING_CERTIFICATE_PASSWORD }}
+          OAA_SIGNING_IDENTITY: ${{ secrets.OAA_SIGNING_IDENTITY }}
+          OAA_INSTALLER_IDENTITY: ${{ secrets.OAA_INSTALLER_IDENTITY }}
         run: sh packaging/macos/keychain.sh
 
       # OAA_NOTARY_PROFILE is deliberately *not* here. It names an
       # `xcrun notarytool store-credentials` profile in a machine's keychain, so
-      # a runner reading it finds nothing — which is how this job read a
-      # notarisation secret for three releases and shipped an unnotarised dmg
-      # without failing. The trio below is the form a runner can be given; see
-      # packaging/macos/notarize.sh.
+      # a runner reading it finds nothing — which is how the `dmg` job this
+      # one replaced read a notarisation secret for three releases and shipped
+      # an unnotarised download without failing. The trio below is the form a
+      # runner can be given; see packaging/macos/notarize.sh.
       - name: Build and package
         env:
           OAA_SIGNING_IDENTITY: ${{ secrets.OAA_SIGNING_IDENTITY }}
+          OAA_INSTALLER_IDENTITY: ${{ secrets.OAA_INSTALLER_IDENTITY }}
           OAA_NOTARY_APPLE_ID: ${{ secrets.OAA_NOTARY_APPLE_ID }}
           OAA_NOTARY_TEAM_ID: ${{ secrets.OAA_NOTARY_TEAM_ID }}
           OAA_NOTARY_PASSWORD: ${{ secrets.OAA_NOTARY_PASSWORD }}
-        run: sh packaging/macos/make_dmg.sh
+        run: sh packaging/macos/make_pkg.sh --plugins plugins
 
       - uses: actions/upload-artifact@v4
         with:
-          name: oaa-macos-dmg
-          path: build/packaging/*.dmg
+          name: oaa-macos-pkg
+          path: build/packaging/*.pkg
           if-no-files-found: error
 
-  msix:
-    name: msix
-    needs: checks
+  windows-installer:
+    name: Windows installer
+    needs: [checks, plugin]
     if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     runs-on: windows-latest
     steps:
@@ -553,22 +604,77 @@ jobs:
           channel: stable
           cache: true
 
+      - uses: actions/download-artifact@v4
+        with:
+          name: oaa-plugin-Windows
+          path: plugin-artifact
+
+      # The zip holds the .vst3 bundle at its root — the plugin job archives
+      # the bundle rather than the directory containing it, so that nobody
+      # unpacking it by hand gets MSVC's stray .lib and .exp as well. The
+      # installer script wants the build tree's shape, so put it back.
+      - name: Unpack the plug-in
+        shell: pwsh
+        run: Expand-Archive plugin-artifact\oaa-plugin-Windows.zip -DestinationPath plugins\VST3
+
       - name: Build and package
         shell: pwsh
         env:
-          OAA_WINDOWS_CERT: ${{ secrets.OAA_WINDOWS_CERT }}
+          OAA_WINDOWS_CERT_BASE64: ${{ secrets.OAA_WINDOWS_CERT_BASE64 }}
           OAA_WINDOWS_CERT_PASS: ${{ secrets.OAA_WINDOWS_CERT_PASS }}
-          OAA_WINDOWS_PUBLISHER: ${{ secrets.OAA_WINDOWS_PUBLISHER }}
-        run: pwsh packaging/windows/make_msix.ps1
+        run: pwsh packaging/windows/make_installer.ps1 -Plugins plugins
 
       - uses: actions/upload-artifact@v4
         with:
-          name: oaa-windows-msix
-          path: build/packaging/*.msix
+          name: oaa-windows-installer
+          path: build/packaging/*.exe
           if-no-files-found: error
 
-  appimage:
-    name: AppImage
+  linux-tarball:
+    name: Linux tarball
+    needs: [checks, plugin]
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    # The same pin as the AppImage job and now as the plugin job. All three
+    # ship binaries that have to start on the oldest distribution this
+    # supports, and this one ships two of them in the same file.
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            clang cmake ninja-build pkg-config \
+            libgtk-3-dev liblzma-dev libstdc++-12-dev libasound2-dev
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: oaa-plugin-Linux
+          path: plugin-artifact
+
+      - name: Unpack the plug-in
+        run: |
+          mkdir -p plugins
+          tar -xzf plugin-artifact/oaa-plugin-Linux.tar.gz -C plugins
+          ls -R plugins | head -20
+
+      - name: Build and package
+        run: sh packaging/linux/make_installer.sh --plugins plugins
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: oaa-linux-tarball
+          path: build/packaging/*.tar.gz
+          if-no-files-found: error
+
+  linux-appimage:
+    name: Linux AppImage
     needs: checks
     if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     # Pinned, and not to latest. See the header.
@@ -600,8 +706,8 @@ jobs:
           path: build/packaging/*.AppImage
           if-no-files-found: error
 
-  flatpak:
-    name: flatpak
+  linux-flatpak:
+    name: Linux flatpak
     needs: checks
     if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
@@ -740,7 +846,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: oaa-cli-${{ matrix.os }}
+          name: oaa-cli-${{ runner.os }}
           path: |
             cli/oaa-cli-*.tar.gz
             cli/oaa-cli-*.zip
@@ -760,7 +866,7 @@ jobs:
   # rather than happening and leaving TestFlight a version behind with nothing
   # to explain it.
   #
-  # `keychain.sh` is the dmg's script, handed a different certificate. iOS App
+  # `keychain.sh` is the pkg's script, handed a different certificate. iOS App
   # Store distribution needs an **Apple Distribution** certificate; a Developer
   # ID signs a Mac app and is refused here. Two secrets rather than one for
   # that reason — the two certificates are not interchangeable and a single
@@ -768,7 +874,7 @@ jobs:
   # -------------------------------------------------------------------------
 
   ipa:
-    name: ipa
+    name: iPad IPA
     needs: checks
     if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     runs-on: macos-latest
@@ -838,7 +944,8 @@ jobs:
 
   publish:
     name: Publish
-    needs: [checks, engine, plugin, dmg, msix, appimage, flatpak, cli, ipa]
+    needs: [checks, engine, plugin, macos-pkg, windows-installer, linux-tarball,
+            linux-appimage, linux-flatpak, cli, ipa]
     runs-on: ubuntu-latest
     # Only a tag becomes a release. A manual run is a check that the scripts
     # still work, and it leaves its artefacts on the run rather than publishing
@@ -875,12 +982,28 @@ jobs:
       # step died on `no matches found for artifacts/oaa-linux-appimage/Open`,
       # with all seven builds green and nothing else left to do.
       #
-      # `testflight-ipa` is excluded, and it is the only exclusion. An App
-      # Store IPA provisions no devices, so nobody who downloaded it could
-      # install it — it exists to be uploaded, which the job after this does.
-      # The exclusion is by path rather than the download being narrowed to a
-      # pattern, deliberately: a future artefact whose name nobody thought
+      # Two artefacts are excluded, for the same reason in both cases: a file
+      # on a release page is a file somebody will download, and neither of
+      # these is one they could use.
+      #
+      # `testflight-ipa` is an App Store IPA. It provisions no devices, so
+      # nobody who downloaded it could install it — it exists to be uploaded,
+      # which the job after this does.
+      #
+      # `github-pages` is the documentation site, and it is here because
+      # `download-artifact` with no `name` takes every artefact in the run
+      # rather than the ones this job's `needs` lists — `docs` is not among
+      # them and its artefact arrives anyway. `upload-pages-artifact` always
+      # names its payload `artifact.tar`, so v0.3.0 through v0.6.0 each
+      # published an unlabelled tarball of the website in among the
+      # installers, and whether it appeared at all was a race the docs job
+      # happened to win five times running.
+      #
+      # Both exclusions are by path rather than the download being narrowed to
+      # a pattern, deliberately: a future artefact whose name nobody thought
       # about is then attached rather than silently left off the release.
+      # `artifact.tar` is what that policy looks like when it fires, and
+      # attaching one file too many is the failure it was chosen for.
       - name: Release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -889,7 +1012,9 @@ jobs:
           while IFS= read -r -d '' file; do
             assets+=("$file")
             echo "attaching $file"
-          done < <(find artifacts -type f -not -path 'artifacts/testflight-ipa/*' -print0 | sort -z)
+          done < <(find artifacts -type f \
+            -not -path 'artifacts/testflight-ipa/*' \
+            -not -path 'artifacts/github-pages/*' -print0 | sort -z)
           [ "${#assets[@]}" -gt 0 ] || { echo 'no artefacts to attach' >&2; exit 1; }
           gh release create "${GITHUB_REF_NAME}" \
             --title "Open Audio Analyzer ${GITHUB_REF_NAME}" \
