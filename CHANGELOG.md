@@ -147,6 +147,14 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the constant describing it always said. The tick itself is unchanged.
 
 ### 🚧 Internal
+- `flutter analyze` no longer walks `website/tools/`. The two Flutter web
+  targets that render the real modules for the site now share the mock
+  `MeterSource` as a package rather than each holding a copy, and a
+  `package:oaa_mock` import needs package resolution where the relative one it
+  replaced needed none — so on any machine that had not run `pub get` inside
+  each of them, which is every CI runner, the repository's analyze gate failed
+  on eight unresolved references in code that no gate builds. They are excluded
+  in `analysis_options.yaml` and analysed by their own.
 - The remote display's skin frame is rate-limited to one every 150 ms, with the
   last value always delivered. Dragging a colour in the new editor produces a
   palette per pointer move, and those frames are queued rather than dropped —

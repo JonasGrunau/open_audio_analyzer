@@ -26,3 +26,17 @@ linter:
 
 # Additional information about this file can be found at
 # https://dart.dev/guides/language/analysis-options
+
+# `website/tools/` is three Dart packages that are deliberately outside the root
+# workspace: two Flutter web targets that render the real modules for the site,
+# and the mock `MeterSource` they share. They resolve their own dependencies, so
+# on any machine that has not run `pub get` inside each of them — which is every
+# CI runner, because nothing in `ci.yml` builds the site — each
+# `package:oaa_mock` import is an unresolved URI and `flutter analyze` fails the
+# whole gate on code no gate builds. They were analysed by accident until the
+# mock moved into a package of its own: a relative import needs no package
+# resolution, so the same files passed for as long as they held their own copy.
+# Each carries its own `analysis_options.yaml` and is analysed there.
+analyzer:
+  exclude:
+    - website/tools/**
