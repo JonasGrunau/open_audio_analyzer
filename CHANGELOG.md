@@ -9,6 +9,8 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.8.0] — 2026-08-22
+
 ### ✨ Added
 - An **Oscilloscope** module: the waveform itself, in a lane per channel. Its
   one control is a time base, from 5 ms to 5 s, and it sets both how much time
@@ -1945,7 +1947,8 @@ meters do not exist yet. See the [roadmap](README.md#roadmap).
 - Licensing is split: MIT for `engine/`, `oaa_engine` and `oaa_core`;
   GPL-3.0-or-later for the application, UI, CLI and plugin.
 
-[unreleased]: https://github.com/JonasGrunau/open_audio_analyzer/compare/v0.7.0...HEAD
+[unreleased]: https://github.com/JonasGrunau/open_audio_analyzer/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/JonasGrunau/open_audio_analyzer/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/JonasGrunau/open_audio_analyzer/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/JonasGrunau/open_audio_analyzer/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/JonasGrunau/open_audio_analyzer/compare/v0.4.1...v0.5.0

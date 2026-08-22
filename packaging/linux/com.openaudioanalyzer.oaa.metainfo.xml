@@ -75,6 +75,22 @@
   <content_rating type="oars-1.1"/>
 
   <releases>
+    <release version="0.8.0" date="2026-08-22">
+      <description>
+        <p>
+          A fourteenth meter: an oscilloscope, showing the waveform itself with
+          a lane per channel. Its time base runs from 5 ms to 5 seconds and
+          sets how the window is found as well as how much of it there is —
+          below 200 ms the display is triggered on a rising zero crossing, so a
+          periodic signal stands still and can be read, and above it the
+          display rolls right to left the way a waveform is drawn in an editor.
+          Anything that reached full scale is drawn in the over colour. The
+          meters also no longer lose a measurement to the frame-rate setting:
+          at 30 frames a second they still see everything the engine published,
+          they simply redraw it less often.
+        </p>
+      </description>
+    </release>
     <release version="0.7.0" date="2026-08-22">
       <description>
         <p>

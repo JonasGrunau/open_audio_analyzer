@@ -414,28 +414,28 @@ packages:
       path: "packages/oaa_core"
       relative: true
     source: path
-    version: "0.7.0"
+    version: "0.8.0"
   oaa_engine:
     dependency: "direct main"
     description:
       path: "packages/oaa_engine"
       relative: true
     source: path
-    version: "0.7.0"
+    version: "0.8.0"
   oaa_ui:
     dependency: "direct main"
     description:
       path: "packages/oaa_ui"
       relative: true
     source: path
-    version: "0.7.0"
+    version: "0.8.0"
   oaa_wire:
     dependency: "direct main"
     description:
       path: "packages/oaa_wire"
       relative: true
     source: path
-    version: "0.7.0"
+    version: "0.8.0"
   package_config:
     dependency: transitive
     description:

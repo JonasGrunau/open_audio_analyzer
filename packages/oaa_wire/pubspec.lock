@@ -183,7 +183,7 @@ packages:
       path: "../oaa_core"
       relative: true
     source: path
-    version: "0.7.0"
+    version: "0.8.0"
   package_config:
     dependency: transitive
     description:
