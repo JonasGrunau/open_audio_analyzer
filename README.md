@@ -8,7 +8,7 @@
 
 <p>
   <a href="https://github.com/JonasGrunau/open_audio_analyzer/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/JonasGrunau/open_audio_analyzer/ci.yml?branch=main&label=CI&style=flat-square"></a>
-  <a href="https://jonasgrunau.github.io/open_audio_analyzer/index.html"><img alt="Documentation" src="https://img.shields.io/badge/%F0%9F%93%96_docs-open%20audio%20analyzer-1F2328?style=flat-square"></a>
+  <a href="https://open-audio-analyzer.com/docs"><img alt="Documentation" src="https://img.shields.io/badge/%F0%9F%93%96_docs-open%20audio%20analyzer-1F2328?style=flat-square"></a>
   <a href="#-the-correctness-gate"><img alt="EBU R128 verified in CI" src="https://img.shields.io/badge/EBU_R128-verified_in_CI-1F2328?style=flat-square"></a>
 </p>
 
@@ -18,13 +18,13 @@
 </p>
 
 <p>
-  <a href="https://jonasgrunau.github.io/open_audio_analyzer/index.html"><strong>📖 Documentation</strong></a>
+  <a href="https://open-audio-analyzer.com/docs"><strong>📖 Documentation</strong></a>
   ·
   <a href="https://github.com/JonasGrunau/open_audio_analyzer/releases">⬇️ Download</a>
   ·
-  <a href="https://jonasgrunau.github.io/open_audio_analyzer/keyboard.html">⌨️ Keyboard</a>
+  <a href="https://open-audio-analyzer.com/docs/keyboard">⌨️ Keyboard</a>
   ·
-  <a href="https://jonasgrunau.github.io/open_audio_analyzer/metrics.html">📐 Metrics</a>
+  <a href="https://open-audio-analyzer.com/docs/metrics">📐 Metrics</a>
   ·
   <a href="#-roadmap">🧭 Roadmap</a>
   ·
@@ -51,13 +51,13 @@ approximating.
 ## 📑 Contents
 
 **📖 Documentation site** —
-[Install](https://jonasgrunau.github.io/open_audio_analyzer/install.html) ·
-[Keyboard](https://jonasgrunau.github.io/open_audio_analyzer/keyboard.html) ·
-[Analysing files](https://jonasgrunau.github.io/open_audio_analyzer/analysing-files.html) ·
-[Metrics](https://jonasgrunau.github.io/open_audio_analyzer/metrics.html) ·
-[Wire protocol](https://jonasgrunau.github.io/open_audio_analyzer/wire.html) ·
-[Changelog](https://jonasgrunau.github.io/open_audio_analyzer/changelog.html) ·
-[Building](https://jonasgrunau.github.io/open_audio_analyzer/building.html)
+[Install](https://open-audio-analyzer.com/docs/install) ·
+[Keyboard](https://open-audio-analyzer.com/docs/keyboard) ·
+[Analysing files](https://open-audio-analyzer.com/docs/analysing-files) ·
+[Metrics](https://open-audio-analyzer.com/docs/metrics) ·
+[Wire protocol](https://open-audio-analyzer.com/docs/wire) ·
+[Changelog](https://open-audio-analyzer.com/docs/changelog) ·
+[Building](https://open-audio-analyzer.com/docs/building)
 
 **📄 This README** —
 [✅ Status](#-status) ·
@@ -91,7 +91,7 @@ approximating.
 | 📱 | **A tablet [mirrors the canvas](#-roadmap)** over Wi-Fi. Flip **PUBLISH** in the desktop's status bar; the tablet finds it by itself, or reads a **pairing code** off its screen, or takes an address typed by hand — three routes, because the first one is what a venue's Wi-Fi blocks. |
 | 🎛️ | **A headless [VST3 / AU plugin](#-in-a-daw)** meters what your DAW is playing. |
 | 🔊 | **Your system's own output is metered with nothing to install** — WASAPI loopback on Windows, a Core Audio process tap on macOS 14.2+, a monitor source on Linux. No driver, and on macOS the audio still reaches your speakers while it is measured. |
-| 📦 | **The installers carry the plugin and install it for you**, behind a checkbox that starts ticked — a macOS pkg, a Windows installer and a Linux tarball, plus an AppImage and a flatpak for the application alone. See [Installing](#-installing), and the [documentation site](https://jonasgrunau.github.io/open_audio_analyzer/index.html). |
+| 📦 | **The installers carry the plugin and install it for you**, behind a checkbox that starts ticked — a macOS pkg, a Windows installer and a Linux tarball, plus an AppImage and a flatpak for the application alone. See [Installing](#-installing), and the [documentation site](https://open-audio-analyzer.com/docs). |
 | 🚧 | **What is *not* built** is listed under [Known gaps](#-known-gaps-stated-plainly), and the list is honest rather than short. |
 
 See [Roadmap](#-roadmap), and [docs/PLAN.md](docs/PLAN.md) for the plan as it
@@ -358,7 +358,7 @@ design.
 `⌫` deletes the selection, arrow keys nudge it a cell and `⇧`+arrows resize it,
 `⌘Z` / `⌘⇧Z` undo and redo, `⌘D` duplicates, `1`–`9` switch tabs, `⌘R` restarts
 the measurement, `⌘O` analyses a file. The full list is on the
-[documentation site](https://jonasgrunau.github.io/open_audio_analyzer/keyboard.html),
+[documentation site](https://open-audio-analyzer.com/docs/keyboard),
 and it is not written twice: the page, the in-app sheet and the bindings
 themselves all come from one table in `lib/src/app/shortcuts.dart`, and a test
 fails if the page has drifted from it.
@@ -636,7 +636,7 @@ an archive rather than one file — `bin/oaa` beside the engine as a shared
 library — and needs no Flutter runtime either way.
 Full instructions, including how to meter your own system's output on each
 platform, are on the [documentation
-site](https://jonasgrunau.github.io/open_audio_analyzer/install.html).
+site](https://open-audio-analyzer.com/docs/install).
 
 | | Platform | Artefact | Plugin | |
 |:-:|---|---|:-:|---|
@@ -1205,6 +1205,6 @@ GPL-3.0-or-later for the application; MIT for the engine and domain model. See
 
 <img src="assets/brand/oaa-icon.png" alt="" width="44" height="44">
 
-<p><sub>📖 <a href="https://jonasgrunau.github.io/open_audio_analyzer/index.html">jonasgrunau.github.io/open_audio_analyzer</a></sub></p>
+<p><sub>📖 <a href="https://open-audio-analyzer.com/docs">open-audio-analyzer.com/docs</a></sub></p>
 
 </div>

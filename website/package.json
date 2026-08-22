@@ -6,6 +6,7 @@
   "scripts": {
     "measure": "node scripts/measure.mjs",
     "dev": "astro dev",
+    "prebuild": "node scripts/clean-content-cache.mjs",
     "build": "astro build",
     "preview": "astro preview",
     "deploy": "npm run analyzer && npm run build && wrangler deploy",

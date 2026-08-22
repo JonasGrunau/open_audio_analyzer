@@ -147,6 +147,11 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the constant describing it always said. The tick itself is unchanged.
 
 ### 🚧 Internal
+- The skin editor's suite waits for the *effect* of a save rather than for the
+  file. Its helper stopped as soon as the skin's file existed, which is one
+  event-loop turn before the editor is told the write finished — so the four
+  assertions about what saving then selects raced the disk, and won on a Mac and
+  lost on the Linux runner every time.
 - `flutter analyze` no longer walks `website/tools/`. The two Flutter web
   targets that render the real modules for the site now share the mock
   `MeterSource` as a package rather than each holding a copy, and a

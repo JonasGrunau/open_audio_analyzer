@@ -29,7 +29,7 @@
 #
 # What runs when:
 #
-#   pull request        checks, engine, docs
+#   pull request        checks, engine, docs redirects
 #   push to main        the same, plus the Pages deployment
 #   workflow_dispatch   the same, plus the plugin, every installer and the ipa
 #   tag v*              the same, plus publish and then testflight
@@ -440,23 +440,26 @@ jobs:
           if-no-files-found: error
 
   # -------------------------------------------------------------------------
-  # The documentation site
+  # The old documentation URLs
   #
-  # It builds on every event and publishes only from main. The pages are
-  # generated from Markdown that lives beside the code — docs/METRICS.md and
-  # docs/WIRE.md are normative documents held by tests — so a change that
-  # breaks the site is a change to the repository's documentation, and the
-  # place to find out is the pull request rather than after the merge.
-  # `tool/docs.dart` exits non-zero when a page it is asked to publish does not
-  # exist, which is the failure that actually happens: somebody renames a
-  # document and the site loses a page silently.
+  # The documentation is part of the website now — open-audio-analyzer.com/docs
+  # renders the same Markdown from this repository, so `docs/METRICS.md` and
+  # `docs/WIRE.md` are still the normative documents the tests hold. What this
+  # job publishes is a redirect per page, because
+  # `jonasgrunau.github.io/open_audio_analyzer/install.html` is in released
+  # READMEs and in issue threads that cannot be edited now.
   #
-  # There is no Flutter here. `tool/docs.dart` imports nothing but `dart:io`
-  # and `dart:convert` on purpose, so this job is a Dart SDK and forty seconds.
+  # It stays here rather than being deleted with the renderer: a Pages site that
+  # is not redeployed keeps serving whatever it last had, which would be the old
+  # documentation, silently going stale beside the real one. Publishing the
+  # redirects replaces those pages with something that cannot rot.
+  #
+  # There is no Flutter here. `tool/docs.dart` imports nothing but `dart:io`,
+  # so this job is a Dart SDK and a few seconds.
   # -------------------------------------------------------------------------
 
   docs:
-    name: Docs
+    name: Docs redirects
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -467,16 +470,15 @@ jobs:
       - name: Generate
         run: dart run tool/docs.dart --out build/docs
 
-      # The keyboard page is generated from the shortcut table in the
-      # application, and `flutter test` is what proves it is not stale. Saying
-      # so here means somebody reading this file knows the check exists and is
-      # somewhere else, rather than assuming this job covers it.
-      - name: Check every page was written
+      # That every old address still resolves, and that each one names where it
+      # went. A redirect that writes an empty file is a redirect nobody notices
+      # is broken until a link in a release goes nowhere.
+      - name: Check every old address still redirects
         run: |
-          test -s build/docs/index.html
-          test -s build/docs/keyboard.html
-          test -s build/docs/metrics.html
-          test -s build/docs/wire.html
+          for page in index install keyboard analysing-files metrics wire changelog building; do
+            test -s "build/docs/$page.html"
+            grep -q 'open-audio-analyzer.com/docs' "build/docs/$page.html"
+          done
           test -s build/docs/style.css
 
       - uses: actions/upload-pages-artifact@v3
@@ -484,7 +486,7 @@ jobs:
           path: build/docs
 
   pages:
-    name: Publish docs
+    name: Publish docs redirects
     needs: docs
     # Separate from the build so that a fork's pull request, which has no Pages
     # permission, builds the site and does not try to deploy it. A tag is not a

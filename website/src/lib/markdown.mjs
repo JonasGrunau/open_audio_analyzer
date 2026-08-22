@@ -94,7 +94,7 @@ export const headingAnchors = defineHastPlugin({
         properties: {
           className: ['h-anchor'],
           href: `#${id}`,
-          'aria-label': 'PROBE-XYZ',
+          'aria-label': 'Link to this section',
         },
         /* No text node. Astro derives the table of contents from this tree
            after the plugins have run, so a `#` inside the heading becomes part

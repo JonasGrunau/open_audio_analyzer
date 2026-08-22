@@ -16,7 +16,7 @@ import still from '../data/analyzer-still.json';
 const hasDemo = existsSync(join(process.cwd(), 'public/analyzer/index.html'));
 
 const REPO = 'https://github.com/JonasGrunau/open_audio_analyzer';
-const DOCS = 'https://jonasgrunau.github.io/open_audio_analyzer';
+const DOCS = '/docs';
 
 /* The catalogue. Every one of these is one ModuleFrame plus a painter in the
    application, reading the same MeterSource and repainting from the same
@@ -136,92 +136,53 @@ const PLATFORMS = [
   path="/"
 >
   <!-- ===================== hero ===================== -->
-  <section class="hero shell">
+  <!--
+    The first screen is the instrument, not a description of it.
+
+    It was a column of prose beside a five-row table of platforms and licences.
+    The table was the problem: everything on it is true, none of it is what
+    somebody wants in the first ten seconds, and it is all stated properly in
+    the download section further down — where a table with four columns can
+    actually say which installer carries the plugin. It has become one line,
+    and the space it held is now the thing this project makes.
+
+    The live analyzer used to be a section of its own under a heading. It is
+    here instead, so that the page opens on a canvas of working meters with the
+    real one a press away, and so that the reader passes one screen to reach it
+    rather than three.
+  -->
+  <section class="hero shell" id="analyzer">
     <p class="eyebrow num">
       <a class="link-quiet" href={REPO} rel="noopener">github.com/JonasGrunau/open_audio_analyzer</a>
     </p>
 
     <h1>Open Audio Analyzer</h1>
 
-    <div class="hero-say">
-      <div class="stack-24">
-        <p class="prose">
-          A free and open-source loudness and spectrum analyzer for desktop and tablets. It is a
-          modular metering suite: a canvas of resizable meter modules — loudness, true peak, VU,
-          spectrum, spectrogram, phase scope, histogram — organised into tabs, driven by presets,
-          delivery targets and skins, with offline file analysis and a companion display that
-          mirrors a tab to a tablet over Wi-Fi.
-        </p>
-        <p class="prose">
-          Every quantity is defined against a published spec — ITU-R BS.1770-4 and EBU R128 — and
-          the EBU Tech 3341 and 3342 reference cases run on Linux, macOS and Windows on every push,
-          failing the build if a reading falls outside the standard’s stated tolerance.
-        </p>
-        <p class="prose">
-          It is a reimplementation of the ideas in <a class="link" href="https://process.audio/products/decibel" rel="noopener">Decibel</a>
-          by process.audio, whose modular canvas is the best interaction model anybody has found for
-          this problem. The measurement work, the architecture and the visual language are our own,
-          and where Open Audio Analyzer cannot honestly match Decibel it says so rather than
-          approximating.
-        </p>
-        <div class="cta">
-          <a class="btn btn-primary" href="https://github.com/JonasGrunau/open_audio_analyzer/releases/latest" rel="noopener">Download 0.10.0</a>
-          <a class="btn" href={REPO} rel="noopener">Source</a>
-          <a class="btn" href={`${DOCS}/index.html`} rel="noopener">Documentation</a>
-          {hasDemo && <a class="btn" href="#analyzer">Try it in the browser</a>}
-        </div>
+    <div class="hero-lede">
+      <p class="prose hero-deck">
+        A free and open-source loudness and spectrum analyzer. Fourteen meter modules on a canvas
+        you arrange — on the desktop, inside your DAW, and on a tablet beside the desk — measuring
+        against <strong>ITU-R BS.1770-4</strong> and <strong>EBU R 128</strong>, held to the
+        reference cases on every push.
+      </p>
+
+      <div class="cta">
+        <a class="btn btn-primary" href={RELEASES} rel="noopener">Download {VERSION}</a>
+        <a class="btn" href={REPO} rel="noopener">Source</a>
+        <a class="btn" href={DOCS}>Documentation</a>
       </div>
 
-      <div class="aside">
-        <dl class="plate">
-          <div>
-            <dt class="label">Desktop</dt>
-            <dd class="num">macOS · Windows · Linux</dd>
-          </div>
-          <div>
-            <dt class="label">Tablet</dt>
-            <dd class="num">iPadOS · Android</dd>
-          </div>
-          <div>
-            <dt class="label">Plugin</dt>
-            <dd class="num">VST3 · Audio Unit</dd>
-          </div>
-          <div>
-            <dt class="label">Command line</dt>
-            <dd class="num">oaa</dd>
-          </div>
-          <div>
-            <dt class="label">Licence</dt>
-            <dd class="num">GPL-3.0 · MIT · AGPL-3.0</dd>
-          </div>
-        </dl>
-      </div>
+      <!-- What the plate said, in the space of a line. Anything a reader has to
+           act on — which installer carries the plugin, what each one will not
+           do — is in the download section, which has room to say it. -->
+      <p class="hero-meta">
+        <span class="num">macOS · Windows · Linux · iPadOS · Android</span>
+        <span class="hero-sep" aria-hidden="true">/</span>
+        <span class="num">VST3 · Audio Unit · CLI</span>
+        <span class="hero-sep" aria-hidden="true">/</span>
+        <span class="num">Free, <a class="link-quiet" href={`${REPO}#licence`} rel="noopener">GPL-3.0</a></span>
+      </p>
     </div>
-  </section>
-
-  <!-- ===================== the live analyzer ===================== -->
-  <section class="section shell" id="analyzer">
-    <div class="section-head">
-      <div>
-        <p class="label">Live</p>
-        <h2>The application itself,<br />in this page</h2>
-      </div>
-      <p class="label section-note">Flutter web · mock MeterSource</p>
-    </div>
-
-    <p class="prose analyzer-say">
-      The picture below is a photograph of the real canvas, and pressing it replaces the photograph
-      with the running application: the same eight modules, the same <code>ModuleFrame</code>, the
-      same painters, laid out on the same <code>GridGeometry</code> and repainting from one
-      <code>MeterClock</code>. It is compiled from the same sources the desktop build is.
-    </p>
-    <p class="prose analyzer-say">
-      What is not real is where the numbers come from. There is no engine here — <code>dart:ffi</code>
-      has no web implementation — so a mock <code>MeterSource</code> plays a plausible programme
-      instead, the third implementation of that interface beside the native one and the socket the
-      tablet reads. Nothing on the canvas knows the difference, which is the point of the interface.
-      The readings are invented; the meters are not.
-    </p>
 
     <figure class="facade" data-facade>
       <img
@@ -229,7 +190,7 @@ const PLATFORMS = [
         alt="Eight meter modules on one canvas: loudness bars, three concentric arcs, a spectrum analyser, a minute of loudness against time, a delivery verdict reading NOT READY, per-channel peak bars, a waveform and a latched true-peak alert."
         width={still.width}
         height={still.height}
-        loading="lazy"
+        fetchpriority="high"
         decoding="async"
       />
       {
@@ -245,15 +206,14 @@ const PLATFORMS = [
       }
     </figure>
 
-    <p class="prose analyzer-foot">
+    <p class="prose facade-cap">
       {
         hasDemo
-          ? 'None of it is fetched until you press the button, so arriving here costs a photograph. There is no engine behind it and no audio \u2014 it is the interface itself, running, with a plausible programme played into it.'
-          : 'The live version is built by npm run analyzer, which needs a Flutter toolchain. This build does not have it, so the still is all there is here.'
+          ? 'That is a photograph of the real canvas. Press it and the same eight modules load into this page and run — the same painters on the same grid, compiled from the same sources as the desktop build. What is not real is where the numbers come from: dart:ffi has no web implementation, so a mock MeterSource plays a programme into it in place of the engine. The readings are invented; the meters are not.'
+          : 'That is a photograph of the real canvas. The live version is built by npm run analyzer, which needs a Flutter toolchain; this build did not have one, so the still is all there is here.'
       }
     </p>
   </section>
-
 
   <section class="section shell" id="modules">
     <div class="section-head">
@@ -399,7 +359,7 @@ const PLATFORMS = [
           cannot drift, and printed once in a report rather than twice under different headings.
         </p>
         <p>
-          <a class="link" href={`${DOCS}/metrics.html`} rel="noopener">Read the metrics document</a>
+          <a class="link" href={`${DOCS}/metrics`}>Read the metrics document</a>
         </p>
       </div>
 

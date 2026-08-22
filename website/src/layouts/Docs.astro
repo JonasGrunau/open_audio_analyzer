@@ -26,6 +26,13 @@ const { page, description, headings = [] } = Astro.props;
 
 const toc = headings.filter((h) => h.depth === 2 || h.depth === 3);
 
+/* The overview's own title is the project's name, and "Open Audio Analyzer —
+   Open Audio Analyzer" in a tab strip is a page that cannot say what it is. */
+const tab =
+  page.title === 'Open Audio Analyzer'
+    ? 'Documentation — Open Audio Analyzer'
+    : `${page.title} — Open Audio Analyzer`;
+
 /* Previous and next in manifest order, so the manual can be read straight
    through by somebody who has not decided yet what they are looking for. */
 const order = PAGES.findIndex((p) => p.slug === page.slug);
@@ -34,7 +41,7 @@ const next = PAGES[order + 1];
 ---
 
 <Base
-  title={`${page.title} — Open Audio Analyzer`}
+  title={tab}
   description={description}
   path={href(page.slug)}
   slimFooter

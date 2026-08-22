@@ -120,6 +120,25 @@ Future<void> _untilStored(
     );
     await tester.pump();
   }
+
+  // **The file appearing is one event-loop turn ahead of anything reacting to
+  // it, so the condition being met is not the end of the wait.** `save` awaits
+  // the store and only then selects what it wrote, moves the panel onto it and
+  // updates the draft — all of that is the continuation of an `await` on real
+  // I/O, and a continuation is delivered only inside `runAsync`. `existsSync`
+  // goes true on the store's rename, which is *before* the future that rename
+  // completes has been handed back to the editor: stop on the condition alone
+  // and every assertion about selection races the disk. It won four times out
+  // of four on a Mac and lost four times out of four on the Linux runner, which
+  // is as clean a demonstration as this class of bug ever gives. Three further
+  // turns cost 15 ms and are what make the *effect* of the write observable
+  // rather than only its trace on disk.
+  for (var i = 0; i < 3; i++) {
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 5)),
+    );
+    await tester.pump();
+  }
   await tester.pumpAndSettle();
   // Saving selects what it saved, which schedules a settings write. Leaving
   // that timer outstanding fails the test at teardown.
