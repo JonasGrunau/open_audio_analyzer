@@ -9,6 +9,16 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### ✨ Added
+- Double-clicking the status bar on macOS zooms the window again, as
+  double-clicking a title bar does everywhere else on the Mac — the status bar
+  is this window's title bar, and it had answered nothing since 0.3.0. It obeys
+  the system's "double-click a window's title bar to" setting, so a Mac set to
+  minimise minimises and one set to do nothing does nothing, and it waits the
+  double-click interval that Mac was configured with. No control in the row
+  answers any later for it: what Flutter recognises there is still a single
+  click, and the pair is counted in the runner.
+
 ### 🐛 Fixed
 - The canvas no longer gets slower the longer a spectrogram is on screen. The
   spectrogram redrew its whole history as run-length marks on every published
