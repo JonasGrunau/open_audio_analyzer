@@ -127,7 +127,7 @@ plug-in into a host DAW's search path; see the header of `linux/install.sh`.
   appearance from the same file. A flat PNG is composited already, so there is
   nothing left to light and nothing to re-tint. Crucially `actool` also emits
   the flat renditions an older OS wants — a `.icns` at macOS 10.15, sized PNGs
-  at iOS 13 — so `AppIcon.icon` *replaces* the appiconset rather than sitting
+  at iOS 15 — so `AppIcon.icon` *replaces* the appiconset rather than sitting
   beside it, and two assets both named AppIcon would be a build error. Writing
   dark and tinted PNGs by hand as well would be a second source for pixels
   `actool` already derives, which is the drift this directory exists to prevent.

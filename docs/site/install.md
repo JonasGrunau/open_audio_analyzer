@@ -231,6 +231,12 @@ The iPad build is a **display**, not a second analyser: it draws another
 machine's meters over the local network, with the desktop application doing the
 measuring. [Remote display](index.html) covers how the two find each other.
 
+It needs **iPadOS 15 or later**, which costs no device: iPadOS 13, 14 and 15
+run on the same iPads — every model back to the Air 2 and the mini 4 — so if
+yours could run the display before, it can still run it after updating. The
+floor is 15 because Apple stops accepting uploads built against anything lower
+in Spring 2027, and a build nobody can upload is a build nobody can install.
+
 The quickest of the three ways is the camera: on the desktop, the code button
 beside PUBLISH in the status bar; on the iPad, Scan
 a QR code. iPadOS asks for camera permission the first time, and refusing it

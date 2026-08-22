@@ -9,6 +9,15 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### ⚡ Changed
+- The iPad display needs iPadOS 15 or later, where it previously needed 13.
+  Apple stops accepting uploads built against anything below 15 in Spring 2027
+  and warns on every one until then, so the floor moves now rather than in the
+  release that would otherwise have been refused. **No iPad loses the display
+  by this.** iPadOS 13, 14 and 15 support exactly the same devices — every model
+  back to the iPad Air 2 and the mini 4 — so what this excludes is an iPad that
+  has not been updated, not an iPad that cannot be.
+
 ## [0.8.0] — 2026-08-22
 
 ### ✨ Added
