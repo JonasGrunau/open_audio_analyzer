@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MIT
 
+import 'dart:math' as math;
+
 import 'metric.dart';
 import 'transport.dart';
 
@@ -368,6 +370,74 @@ enum SpectrumResponse {
   }
 }
 
+/// How much the Histogram averages its two bands over before drawing them.
+///
+/// **A window in seconds, not in columns.** The module folds measurements into
+/// 100 ms columns and that rate lives in `histogram.dart`; a setting expressed
+/// in columns would mean something different the day that changed, and would
+/// mean nothing at all to anybody reading a preset.
+///
+/// **A centred window, not a one-pole.** [SpectrumResponse] smooths a *live*
+/// value, where only the past exists, so a lagging filter is the only kind
+/// available. This module draws *history*: every column but the newest has a
+/// future as well as a past, so the mean can be symmetric — and it has to be,
+/// because a one-pole would slide the whole curve to the right against a time
+/// axis labelled `1m15s`. That would make the display wrong about *when* a
+/// section was loud, which is the one question it exists to answer. What the
+/// symmetry costs instead is at the right edge, where there is no future yet:
+/// the newest column is a mean of the newest half-window only, so it sits a
+/// little behind the live meters and settles as columns age past it.
+///
+/// **Nothing goes past two seconds.** Short-term loudness is a 3 s window
+/// already; a smoother approaching that draws the momentary band and the
+/// short-term curve as one line, and the gap between them is the reading.
+enum HistogramSmoothing {
+  /// Every column exactly as measured. What the module did before this setting
+  /// existed, and still the right choice for finding the single loudest 100 ms
+  /// in a programme.
+  off('off', 'Off', 0),
+
+  /// Enough to take the sampling jitter off the momentary band and no more.
+  light('light', 'Light', 0.5),
+
+  /// Calm enough that the shape of the programme is what you see first.
+  normal('normal', 'Normal', 1.0),
+
+  /// For the arc of a whole master rather than the arc of a phrase.
+  broad('broad', 'Broad', 2.0);
+
+  const HistogramSmoothing(this.id, this.label, this.seconds);
+
+  /// Stable identifier for presets and the wire protocol. Never change one of
+  /// these; add a new setting instead.
+  final String id;
+
+  /// What the module's menu says.
+  final String label;
+
+  /// The full width of the averaging window, in seconds of measured signal.
+  /// Zero draws the columns untouched.
+  final double seconds;
+
+  /// The window's half-width in columns, given [secondsPerColumn].
+  ///
+  /// Lives here so that the rounding is decided once. A window that rounds to
+  /// zero would leave a setting in the menu that does nothing, so anything
+  /// non-zero is at least one column either side.
+  int radiusInColumns(double secondsPerColumn) {
+    if (seconds == 0) return 0;
+    final radius = (seconds / 2 / secondsPerColumn).round();
+    return radius < 1 ? 1 : radius;
+  }
+
+  static HistogramSmoothing? fromId(String id) {
+    for (final smoothing in HistogramSmoothing.values) {
+      if (smoothing.id == id) return smoothing;
+    }
+    return null;
+  }
+}
+
 /// How much time the oscilloscope's display spans, left edge to right.
 ///
 /// A 1-2-5 sequence, because that is the sequence every time-base knob has ever
@@ -431,44 +501,72 @@ enum ScopeTimeBase {
   }
 }
 
-/// What the analyser's peak-hold line is a hold *of*.
+/// How far the analyser rotates its drawn curve, in dB per octave.
 ///
-/// The curve is averaged over [SpectrumResponse.timeConstant] and the hold is
-/// not, and the two used to disagree about more than one thing. Both are fixed
-/// here, but only one of them can be:
+/// Real programme material is not flat and never was: energy falls with
+/// frequency at something like 3 to 4.5 dB an octave across almost every mix
+/// anyone has made. An untilted analyser therefore draws every one of them as
+/// the same ramp down to the right, with the bottom two octaves against the
+/// ceiling and the top four crushed into the floor where there is no vertical
+/// room left to show anything happening. The slope is the loudest thing in the
+/// picture and it is the one part of it that carries no information.
 ///
-///   - **Motion.** The hold snapped to a new peak while the curve eased towards
-///     it, so on Slow the two moved as if they belonged to different plots.
-///     The drawn hold now follows the same pole at every setting, whichever of
-///     these is chosen. That is not a mode; it is the fix.
-///   - **Shape.** A maximum of a noisy band is spiky where an average of it is
-///     smooth, so the line above a Slow curve is a comb even once it moves in
-///     step. Removing *that* means holding the curve instead of the band, and
-///     it costs something real — which is why it is a choice and not the
-///     default.
+/// A tilt adds a fixed per-band offset to the *drawn* level — nothing else —
+/// which rotates the curve about [pivotHz] and puts a typical mix roughly
+/// horizontal across the plot. What is left is the deviation, which is the
+/// thing being looked for: a bump reads as a bump rather than as a kink in a
+/// slope. [db4p5] is the default for the same reason FabFilter's is.
 ///
-/// [peaks] is what the engine measured: a hold over the raw band levels, taken
-/// on every 1024-sample hop, so it catches transients between two published
-/// frames that the display never saw. [envelope] is the highest the *drawn*
-/// curve has been, which is smooth wherever the curve is and is the line to
-/// pick when the hold is being read as a shape — and which, on a slow response,
-/// sits below a peak the programme really reached, because the curve it is
-/// holding never went there.
-enum SpectrumHold {
-  peaks('peaks', 'Peaks'),
-  envelope('envelope', 'Envelope');
+/// **The vertical scale is then true at [pivotHz] and rotated everywhere
+/// else,** so the module prints the tilt it is drawing at. A dB axis quietly
+/// rotated by 45 dB across its width is the one thing worse than no axis at
+/// all. Per *octave* rather than per decade because that is the unit every
+/// noise slope has ever been quoted in — pink noise is −3 dB/oct, and 3 dB/oct
+/// is the setting that draws it as a straight line.
+///
+/// Nothing measured changes. `Spectrum` and `Spectrum peak` are published,
+/// reported and sent over the wire exactly as the engine measured them at
+/// every setting, and every other module reading those bands — the
+/// spectrogram, the stereo cloud — is untouched by this.
+enum SpectrumTilt {
+  db0('0', '0 dB/oct', 0),
+  db1p5('1.5', '1.5 dB/oct', 1.5),
+  db3('3', '3 dB/oct', 3),
+  db4p5('4.5', '4.5 dB/oct', 4.5),
+  db6('6', '6 dB/oct', 6);
 
-  const SpectrumHold(this.id, this.label);
+  const SpectrumTilt(this.id, this.label, this.dbPerOctave);
 
-  /// Stable identifier for presets and the wire protocol.
+  /// Stable identifier for presets and the wire protocol. Never change one of
+  /// these; add a new tilt instead.
   final String id;
 
-  /// What the module's menu says.
+  /// What the module's menu says, and what the analyser prints in its corner.
   final String label;
 
-  static SpectrumHold? fromId(String id) {
-    for (final hold in SpectrumHold.values) {
-      if (hold.id == id) return hold;
+  /// Decibels added per octave above [pivotHz], and subtracted per octave
+  /// below it.
+  final double dbPerOctave;
+
+  /// The frequency the rotation turns about, and therefore the one place the
+  /// analyser's dB scale reads true at any tilt.
+  ///
+  /// 1 kHz, which is where every other reference in audio is taken and what
+  /// the engine's own test tone sits at. The geometric centre of the analyser's
+  /// 20 Hz to 20 kHz span is 632 Hz and would keep the picture a shade better
+  /// centred; it would also mean the one honest point on the scale was a
+  /// frequency nobody thinks in.
+  static const double pivotHz = 1000;
+
+  /// The offset this tilt adds to a level drawn at [hz].
+  ///
+  /// Zero at [pivotHz] whatever the setting, so switching tilts pivots the
+  /// curve rather than moving it up or down the scale.
+  double dbAt(double hz) => dbPerOctave * math.log(hz / pivotHz) / math.ln2;
+
+  static SpectrumTilt? fromId(String id) {
+    for (final tilt in SpectrumTilt.values) {
+      if (tilt.id == id) return tilt;
     }
     return null;
   }
@@ -642,6 +740,140 @@ enum ScopeStereo {
   }
 }
 
+/// What decides where a free-running oscilloscope window starts.
+///
+/// [auto] is the display this module was born with, and it is a scope's auto
+/// trigger: below 200 ms it looks back for the most recent rising zero crossing
+/// so a periodic signal stands still, above it the window rolls, and either way
+/// something is always on screen. It needs nothing from the user, which is why
+/// it is the default.
+///
+/// [transient] is the sweep, and it is the mode for looking at *one event*. The
+/// display waits, armed, until the signal rises through [ScopeThreshold]; from
+/// that sample it draws forward across the whole width once and then holds what
+/// it drew until the next crossing. So a kick starts at the left edge every
+/// time, at every time base — the roll above 200 ms is replaced by the sweep
+/// rather than left in place — and a threshold nothing reaches leaves the last
+/// capture on screen instead of drawing a picture of the noise floor.
+///
+/// The two differ in what they do when there is no trigger, which is the same
+/// distinction a bench scope's Auto and Normal make: [auto] free-runs and shows
+/// whatever the newest audio was, [transient] holds. That is the whole reason
+/// both exist — a free-running window is unreadable for a transient and a held
+/// one is useless for a continuous tone.
+///
+/// **A tempo-locked window has no trigger.** [ScopeSync.tempo] already decides
+/// where the window starts, from the host's bar line, and a second answer to
+/// the same question would either be ignored or fight it. The trigger is
+/// offered where the time base is, and for the same reason.
+enum ScopeTrigger {
+  auto('auto', 'Off'),
+  transient('transient', 'Transient');
+
+  const ScopeTrigger(this.id, this.label);
+
+  /// Stable identifier for presets and the wire protocol.
+  final String id;
+
+  /// What the module's menu says.
+  final String label;
+
+  /// Whether the display sweeps from a trigger rather than rolling or
+  /// free-running.
+  bool get sweeps => this == transient;
+
+  static ScopeTrigger? fromId(String id) {
+    for (final trigger in ScopeTrigger.values) {
+      if (trigger.id == id) return trigger;
+    }
+    return null;
+  }
+}
+
+/// The level [ScopeTrigger.transient] fires at, in dBFS.
+///
+/// A range and not a set of steps, because the useful setting is "just under
+/// the transient" and where that falls is a property of the material rather
+/// than of the instrument. The oscilloscope draws it as a slider with the level
+/// printed beside it and a line across the lane at the height it is set to, so
+/// the number, the control and the picture are the same statement.
+///
+/// dBFS rather than a fraction of full scale for the reason every other number
+/// in this application is in dB: −12 is a place somebody can find on a mix,
+/// 0.25 is arithmetic. The floor is low enough to catch anything above the
+/// noise, and at the very bottom of the range the trigger is within a hair of
+/// the rising zero crossing [ScopeTrigger.auto] uses.
+abstract final class ScopeThreshold {
+  static const double minDb = -60;
+  static const double maxDb = 0;
+
+  /// Under a mastered mix's peaks and over its sustain, which is where a
+  /// transient trigger has something to lock to on the first try.
+  static const double defaultDb = -12;
+
+  /// One press of an arrow key.
+  static const double stepDb = 1;
+
+  /// The amplitude a sample has to reach, from a level in dBFS.
+  static double amplitude(double db) => math.pow(10, db / 20).toDouble();
+
+  /// A dragged level, to the tenth of a decibel the module prints.
+  ///
+  /// So that the number on screen, the line drawn at it and the number written
+  /// into the preset are the same one. A control that stores more precision
+  /// than it shows is a control whose readout is a rounding of something else,
+  /// and a preset file people are invited to read is not the place for
+  /// `-11.732394366197184`.
+  static double quantise(double db) =>
+      (db.clamp(minDb, maxDb) * 10).roundToDouble() / 10;
+
+  /// What the module prints beside the control.
+  static String label(double db) => '${db.toStringAsFixed(1)} dB';
+
+  /// How far under the loudest transient `Auto` sets the level.
+  ///
+  /// **Not *at* the peak**, which is what "set it to the loudest transient"
+  /// sounds like and which would draw the wrong picture. The trigger fires on a
+  /// rising crossing, so a level at the top of the attack starts the sweep at
+  /// the peak and the display holds the decay with the transient itself off the
+  /// left edge — and nothing quieter than the loudest sample in the programme
+  /// would ever fire it again. Six decibels is half the amplitude, which is
+  /// still inside the attack: the sweep starts before the transient and the
+  /// picture contains it.
+  static const double autoMarginDb = 6;
+
+  /// The level `Auto` sets, from the loudest the signal has been.
+  ///
+  /// [peak] is an amplitude, and it is the largest value the *trigger's own*
+  /// quantity reached — the mid of the two channels, not either channel and not
+  /// its absolute value. A level derived from anything else can sit above
+  /// everything the trigger ever compares against, which presents as a control
+  /// that found a number and a display that never sweeps again.
+  ///
+  /// Rounded to [stepDb] rather than to [quantise]'s tenth, because this one
+  /// follows the audio: a level that moved by a tenth of a decibel per published
+  /// block would rebuild the strip forty-seven times a second to redraw a line
+  /// nobody can see move.
+  ///
+  /// Null when there is nothing there to trigger on — silence, or a programme
+  /// whose loudest transient is under [minDb] + [autoMarginDb]. The caller
+  /// keeps the level it had: a passage nobody played is not a measurement, and
+  /// slamming the level to the floor during one would arm the trigger on the
+  /// noise underneath it.
+  static double? autoAt(double peak) {
+    if (!(peak > 0)) return null;
+    final db = 20 * math.log(peak) / math.ln10 - autoMarginDb;
+    if (db < minDb || db.isNaN) return null;
+    return (db.clamp(minDb, maxDb) / stepDb).roundToDouble() * stepDb;
+  }
+
+  /// Reads the stored value, clamped. Anything that is not a number is the
+  /// default rather than a failure — an option map is written by other versions
+  /// of this application and by hand.
+  static double fromJson(Object? raw) =>
+      raw is num ? raw.toDouble().clamp(minDb, maxDb) : defaultDb;
+}
+
 /// How tall the oscilloscope draws full scale.
 ///
 /// A vertical zoom, not a gain: nothing about the measurement changes and the
@@ -650,29 +882,65 @@ enum ScopeStereo {
 /// decibels apart, and a waveform drawn to the same full scale for both leaves
 /// the second one a line. What runs past the lane is clipped by the lane, which
 /// is what a zoom means — the picture says so by being cut off at the edge.
-enum ScopeZoom {
-  x1('1', '1x', 1),
-  x2('2', '2x', 2),
-  x4('4', '4x', 4),
-  x8('8', '8x', 8);
+///
+/// **A number rather than a set of steps, and the module's own slider rather
+/// than a menu.** Thirty decibels is the range this has to cover and a menu of
+/// four multipliers covered eighteen of them in jumps of six, so the setting
+/// that fits the material was usually between two rows. What replaced the menu
+/// is a control on the module, dragged with the picture under it, which is the
+/// only way to choose a view of something that is moving.
+///
+/// [steps] is what the *slider* is even in — one octave per step of 1, so half
+/// the travel is the first four multipliers and the other half the next four.
+/// Nothing snaps to it.
+abstract final class ScopeZoom {
+  static const double min = 1;
+  static const double max = 32;
 
-  const ScopeZoom(this.id, this.label, this.scale);
+  /// Full scale is the lane, where the height of the trace is a reading rather
+  /// than a view and nothing can run off the edge.
+  static const double defaultScale = 1;
 
-  /// Stable identifier for presets and the wire protocol.
-  final String id;
+  /// One press of an arrow key: a quarter of an octave.
+  static const double stepOctaves = 0.25;
 
-  /// What the module's menu says.
-  final String label;
+  /// The slider's travel, in octaves above [min].
+  static double get octaves => _log2(max);
 
-  /// What a sample is multiplied by before it is drawn.
-  final double scale;
-
-  static ScopeZoom? fromId(String id) {
-    for (final zoom in ScopeZoom.values) {
-      if (zoom.id == id) return zoom;
-    }
-    return null;
+  /// The scale a slider at [position] octaves is set to, to the hundredth of a
+  /// multiplier. See [ScopeThreshold.quantise] — same reason, and at this range
+  /// a hundredth is a good deal finer than the pixel it moves.
+  static double scaleAt(double position) {
+    final scale = math.pow(2, position.clamp(0.0, octaves)).toDouble();
+    return (scale * 100).roundToDouble() / 100;
   }
+
+  /// Where a scale sits on the slider, in octaves.
+  static double positionOf(double scale) => _log2(scale.clamp(min, max));
+
+  /// What the module prints beside the control.
+  static String label(double scale) => '${scale.toStringAsFixed(1)}x';
+
+  /// Reads the stored value, clamped.
+  ///
+  /// **A string is read as a number, which is not a fallback but the
+  /// migration.** The four steps this replaced were stored under the ids `1`,
+  /// `2`, `4` and `8` — the multipliers themselves, spelled — so every preset
+  /// and every session written before the zoom was continuous names a scale
+  /// this still understands, and none of them needs a version number to say
+  /// so.
+  static double fromJson(Object? raw) {
+    final value = raw is num
+        ? raw.toDouble()
+        : raw is String
+        ? double.tryParse(raw)
+        : null;
+    return value == null || !value.isFinite
+        ? defaultScale
+        : value.clamp(min, max);
+  }
+
+  static double _log2(double value) => math.log(value) / math.ln2;
 }
 
 /// One module on a tab.
@@ -708,20 +976,37 @@ class ModuleSpec {
   /// .fast], which is what every analyser did before the setting existed. At
   /// 47 transforms a second the untouched curve flickers hard enough that the
   /// shape of the balance is difficult to read at all, and a display nobody can
-  /// read is not a more honest one — the peak-hold line above it still carries
-  /// every maximum either way.
+  /// read is not a more honest one. What it costs is stated where the hold line
+  /// is described: that line is the envelope of the drawn curve, so a slower
+  /// response holds a smoothed transient rather than the one the engine
+  /// measured. [SpectrumResponse.fast] is still the setting for finding a
+  /// click.
   SpectrumResponse get spectrumResponse =>
       SpectrumResponse.fromId(options['response'] as String? ?? '') ??
       SpectrumResponse.normal;
 
-  /// What the analyser's peak-hold line holds. See [SpectrumHold].
+  /// How far the analyser rotates what it draws. See [SpectrumTilt].
   ///
-  /// Defaults to [SpectrumHold.peaks], because that is the measurement: a hold
-  /// that can only be as high as the drawn curve went is a hold that reads low
-  /// on exactly the material a hold exists for.
-  SpectrumHold get spectrumHold =>
-      SpectrumHold.fromId(options['hold'] as String? ?? '') ??
-      SpectrumHold.peaks;
+  /// Defaults to [SpectrumTilt.db4p5], which is the tilt that draws a mix as
+  /// roughly horizontal — an untilted analyser spends most of its height on a
+  /// slope every piece of music has.
+  SpectrumTilt get spectrumTilt =>
+      SpectrumTilt.fromId(options['tilt'] as String? ?? '') ??
+      SpectrumTilt.db4p5;
+
+  /// How much the Histogram averages its bands over. See [HistogramSmoothing].
+  ///
+  /// Defaults to [HistogramSmoothing.normal] rather than to
+  /// [HistogramSmoothing.off], which is what the module did before the setting
+  /// existed — the same call [spectrumResponse] makes and for the same reason.
+  /// The momentary band is a maximum per 100 ms column, so at one pixel a
+  /// column it combs hard enough on real material that the gap between the two
+  /// bands, which is the whole reading, is difficult to see at all. A display
+  /// nobody can read is not a more honest one, and the raw picture is one menu
+  /// row away.
+  HistogramSmoothing get histogramSmoothing =>
+      HistogramSmoothing.fromId(options['smoothing'] as String? ?? '') ??
+      HistogramSmoothing.normal;
 
   /// How much time the oscilloscope shows at once.
   ///
@@ -761,13 +1046,35 @@ class ModuleSpec {
       ScopeStereo.fromId(options['stereo'] as String? ?? '') ??
       ScopeStereo.lanes;
 
+  /// What starts a free-running oscilloscope window. See [ScopeTrigger].
+  ///
+  /// Defaults to [ScopeTrigger.auto], which is what the module did before the
+  /// setting existed: always something on screen, and nothing to set up.
+  ScopeTrigger get scopeTrigger =>
+      ScopeTrigger.fromId(options['trigger'] as String? ?? '') ??
+      ScopeTrigger.auto;
+
+  /// The level [ScopeTrigger.transient] fires at, in dBFS. See
+  /// [ScopeThreshold].
+  double get scopeThresholdDb => ScopeThreshold.fromJson(options['threshold']);
+
+  /// Whether that level follows the material instead of being dragged.
+  ///
+  /// The only boolean in `options`, and the one value here that is read
+  /// strictly: anything that is not `true` is off, which is what every preset
+  /// written before this existed meant and what a hand-edited `"yes"` should
+  /// mean rather than crashing a canvas. The level itself stays under
+  /// `threshold` and is written back the moment this is switched off, so
+  /// turning it off keeps the number Auto had found rather than snapping to
+  /// whatever was dragged before it was switched on.
+  bool get scopeAutoThreshold => options['autoThreshold'] == true;
+
   /// How tall the oscilloscope draws full scale. See [ScopeZoom].
   ///
-  /// Defaults to [ScopeZoom.x1], where the lane is full scale and nothing can
-  /// run past it — the only setting at which the *height* of the trace is a
-  /// reading rather than a view.
-  ScopeZoom get scopeZoom =>
-      ScopeZoom.fromId(options['zoom'] as String? ?? '') ?? ScopeZoom.x1;
+  /// Defaults to [ScopeZoom.defaultScale], where the lane is full scale and
+  /// nothing can run past it — the only setting at which the *height* of the
+  /// trace is a reading rather than a view.
+  double get scopeZoom => ScopeZoom.fromJson(options['zoom']);
 
   /// What a LUFS module's integration counts from.
   ///

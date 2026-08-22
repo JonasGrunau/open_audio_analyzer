@@ -1,0 +1,41 @@
+name: oaa_module_renderer
+description: Renders the application's own modules to images for the website.
+publish_to: 'none'
+version: 0.1.0
+
+environment:
+  sdk: ^3.12.2
+
+dependencies:
+  flutter:
+    sdk: flutter
+  # The application itself, so the fourteen modules are the real ones and there
+  # is nothing to keep in sync.
+  oaa:
+    path: ../../..
+  oaa_core:
+    path: ../../../packages/oaa_core
+  oaa_ui:
+    path: ../../../packages/oaa_ui
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+flutter:
+  uses-material-design: true
+  fonts:
+    - family: Inter
+      fonts:
+        - asset: ../../../assets/fonts/Inter-Regular.ttf
+          weight: 400
+        - asset: ../../../assets/fonts/Inter-Medium.ttf
+          weight: 500
+        - asset: ../../../assets/fonts/Inter-SemiBold.ttf
+          weight: 600
+    - family: Google Sans Code
+      fonts:
+        - asset: ../../../assets/fonts/GoogleSansCode-Regular.ttf
+          weight: 400
+        - asset: ../../../assets/fonts/GoogleSansCode-Medium.ttf
+          weight: 500

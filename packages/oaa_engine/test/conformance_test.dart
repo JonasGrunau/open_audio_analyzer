@@ -10,9 +10,12 @@
 // a stated level, or a sequence of them, so it can be constructed exactly in a
 // few lines — which means the suite runs on a headless CI runner with no
 // fixtures, no network and no WAV decoder, and the "expected" values are
-// derived from the standard rather than copied from somebody's output. Phase 5
-// adds the official WAV vectors as an independent second check once there is a
-// decoder to read them with.
+// derived from the standard rather than copied from somebody's output.
+//
+// The official WAV vectors are the independent second check, in
+// `vectors_test.dart` beside this file. They are not a gate — the material
+// cannot be redistributed — so anything they caught that a generated signal can
+// also express is asserted here as well, or CI would not see it come back.
 //
 // Why the expected values are what they are, since every one of them is
 // checkable by hand:
@@ -252,6 +255,46 @@ void main() {
       expect(
         surround.lufsIntegrated - front.lufsIntegrated,
         closeTo(1.4923, 0.05),
+      );
+    });
+
+    test('7.1 weights the surround pair and not the rear pair', () {
+      // The +1.5 dB belongs to the two surround channels of the 5.1 layout, not
+      // to any channel behind the listener: Report ITU-R BS.2217's channel
+      // table gives 7.1 (L R C LFE Lss Rss Lrs Rrs) as
+      // 1.00 / 1.00 / 1.00 / N/A / 1.41 / 1.41 / 1.00 / 1.00.
+      //
+      // This case is here because the ITU's own two 7.1 files read 0.35 LU high
+      // until it was true — and those files cannot be committed, so nothing in
+      // CI would notice it coming back.
+      OaaEngine only(int channel) {
+        final engine = _pushEngine(channels: 8);
+        addTearDown(engine.dispose);
+        _pushSegments(
+          engine,
+          const [_Segment(10, -23.0)],
+          channels: 8,
+          channelGainsDb: List<double>.generate(
+            8,
+            (c) => c == channel ? 0 : -200,
+          ),
+        );
+        return engine;
+      }
+
+      final front = only(0); // L
+      final side = only(4); // Lss
+      final rear = only(6); // Lrs
+
+      expect(
+        side.lufsIntegrated - front.lufsIntegrated,
+        closeTo(1.4923, 0.05),
+        reason: 'the side surround is not carrying +1.5 dB',
+      );
+      expect(
+        rear.lufsIntegrated - front.lufsIntegrated,
+        closeTo(0.0, 0.05),
+        reason: 'the rear surround is carrying a weight it should not have',
       );
     });
   });

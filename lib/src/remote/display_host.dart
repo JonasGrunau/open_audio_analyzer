@@ -36,10 +36,15 @@ import 'package:flutter/foundation.dart';
 /// make on the user's behalf while they are not looking.
 class DisplayHost {
   DisplayHost({
-    required this.source,
+    required MeterSource? source,
     required this.hostName,
     required this.abiVersion,
-  });
+  }) {
+    // Assigned in the body rather than through the initialiser list, because
+    // the field is private and a named parameter may not be. Not through the
+    // setter either: there is nothing yet for it to drop.
+    _source = source;
+  }
 
   /// What is being measured. Read-only from here — a remote display never
   /// starts, stops or resets anything.
@@ -51,7 +56,23 @@ class DisplayHost {
   /// sending it to a tablet as a measurement. Null is the honest state between
   /// an engine failing to open and one opening: nothing is being measured, so
   /// nothing is published.
-  MeterSource? source;
+  ///
+  /// **Setting it drops what the previous source left behind**, the same rule
+  /// and for the same reason as `MeterClock.engine`. Two things carry over
+  /// otherwise: the audio already collected into [_run], which would be sent as
+  /// the *new* source's — one programme's waveform spliced onto another's on a
+  /// tablet that has no way to know — and [_collected], a generation from a
+  /// counter that restarts at zero for every engine, so the frame it happened
+  /// to match would be skipped.
+  MeterSource? get source => _source;
+  MeterSource? _source;
+
+  set source(MeterSource? value) {
+    if (identical(value, _source)) return;
+    _source = value;
+    _collected = -1;
+    _runFrames = 0;
+  }
 
   /// The DAW's playhead behind [source], or [Transport.none] when whatever is
   /// being measured has no host — a device, a file, or a plugin in a host that

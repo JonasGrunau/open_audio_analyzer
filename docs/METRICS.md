@@ -32,19 +32,48 @@ pixel column on any real display. It is taken from the same population as the
 LRA number, so a distribution drawn from it cannot disagree with the readout
 beside it.
 
-The **Loudness Distribution** module draws it, with the two percentiles marked
-— see `lib/src/modules/loudness_distribution.dart`. Note that the *Histogram*
-module is a different picture of the same measurement: short-term loudness
-against time rather than against how often. The names are Decibel's and only
-one of them is a histogram.
+The **Loudness Distribution** module draws it, bracketed between the two
+percentiles with `LRA` printed on the bracket — see
+`lib/src/modules/loudness_distribution.dart`. Every bin is drawn at the height
+it was published; where the module is narrower than 120 pixels a column takes
+the **loudest bin it covers** rather than their mean, which is the same choice,
+for the same reason, that the engine makes mapping transform bins into spectrum
+bands: a mean at a coarser resolution hides a spike, and a spike here is a
+section of the programme that sat at one level.
+
+Note that the *Histogram* module is a different picture of the same
+measurement: short-term loudness against time rather than against how often.
+The names are Decibel's and only one of them is a histogram.
+
+The Histogram **draws an average of its two bands** rather than each 100 ms
+column as measured, and says which in its own menu: `Smoothing` is Off (no
+averaging), Light (0.5 s), Normal (1.0 s) or Broad (2.0 s), and Normal is the
+default. Both bands take the same window, because the gap between them is the
+reading and smoothing one of them would make that gap a difference between two
+filters. The window is **centred**, not trailing: the module draws history, so a
+lagging filter would slide the whole curve along a time axis labelled in seconds
+before now and be wrong about *when* — what a symmetric window costs instead is
+that the newest column, which has no future yet, is an average of the newest
+half-window and settles as it ages. Nothing goes past 2 s, because short-term
+loudness is a 3 s window already and a smoother approaching it draws the
+momentary band and the short-term curve as one line.
+
+The measurement is untouched by any of it: the module's ring holds the columns
+as they were measured and the averaging is applied when they are read, so the
+setting redraws the whole programme so far and `Off` is the measured columns
+exactly. `LUFS-M`, `LUFS-S` and every other module reading them are unaffected.
 
 K-weighting is the BS.1770-4 two-stage filter: a high-frequency shelf followed
 by an RLB high-pass. Coefficients are computed from the analog prototype **at
 the stream's actual sample rate**, not read from a 48 kHz table, so 44.1, 88.2,
 96 and 192 kHz are correct rather than approximately correct.
 
-Channel weights are BS.1770-4: L, R, C at 1.0, and the surround channels at
-1.41. The LFE channel is excluded from loudness, as the standard requires.
+Channel weights are BS.1770-4: L, R, C at 1.0, and the surround pair at 1.41
+(+1.5 dB). The LFE channel is excluded from loudness, as the standard requires.
+**Everything past 5.1 is unweighted** — the rear surrounds of a 7.1 layout weigh
+the same as the front, which is what Report ITU-R BS.2217's channel table states
+and what its two 7.1 files measure; weighting them 1.41 read those files 0.35 LU
+high.
 
 An interleaved buffer does not say which channel is which, so the layout is
 inferred from the channel count — see `oaa_channel_weight` for the table. The
@@ -119,18 +148,28 @@ one published, and says which in its own menu: `Response` is Fast (no
 averaging), Normal (120 ms) or Slow (500 ms), and Normal is the default. The
 averaging is one pole per band on the dB value being drawn — a display
 ballistic, in the sense a VU movement is one, not a power average of the signal.
-The peak-hold line follows the same pole, so that it moves with the curve
-rather than snapping to a peak the curve is still easing towards — and `Peak
-hold` in the same menu says what it is a hold *of*. `Peaks`, the default, is
-`Spectrum peak` above: the level the engine measured, latched on every hop.
-`Envelope` is instead the highest the *drawn* curve has been, which is smooth
-wherever the curve is and reads lower than `Peaks` on a transient a slow
-response smoothed away.
+The line above the curve is the **envelope of that curve**: the highest it has
+been, held for 1.5 s and then let down at 12 dB/s, which is the schedule the
+engine's own `Spectrum peak` follows. It therefore moves with the curve instead
+of snapping to a peak the curve is still easing towards, and on a slow response
+it sits below a peak the programme really reached, because the curve it is
+holding never went there. Fast is the setting that catches a click.
+
+`Tilt` in the same menu rotates the drawn curve about **1 kHz**, at 0, 1.5, 3,
+4.5 or 6 dB per octave, and 4.5 dB/oct is the default. It adds a fixed offset
+per band — nothing else — and exists because programme material falls with
+frequency at roughly 3 to 4.5 dB an octave, so an untilted analyser draws every
+mix as the same ramp and spends its height on the one part of the picture that
+carries no information. At 4.5 dB/oct the ends of the range are rotated 44.8 dB
+apart: 20 Hz is drawn 25.4 dB lower than it measures and 20 kHz 19.4 dB higher.
+**The dB scale on the right is therefore true at 1 kHz and rotated away from
+it**, which is why the module prints the tilt it is drawing at, and why 0 dB/oct
+— where the scale is true everywhere — prints nothing.
 
 The measurement above is untouched by any of it: `Spectrum` and `Spectrum peak`
-are what a report and the wire protocol carry whatever a module is set to, and
-every other module reading these bands — the spectrogram, the stereo cloud —
-draws them as published.
+are what the wire protocol carries whatever a module is set to, and every other
+module reading these bands — the spectrogram, the stereo cloud — draws them as
+published.
 
 Spectrum pan needs a front pair. A one-channel source reports every band at `0`,
 for the same reason correlation reports `+1` — mono is dead centre, and it is
@@ -179,6 +218,12 @@ modules cannot disagree about where a peak is.
 - **Elapsed time is counted in samples, never in wall clock.** A file analysed
   at 200× real time must produce exactly the same numbers as the same file
   played back live — that identity is how offline analysis is verified.
+- **Every loudness window is built from 10 ms sub-blocks**, so `LUFS-M` and
+  `LUFS-S` advance every 10 ms and the `Max` of either resolves a transient to
+  within 0.054 LU wherever it falls. The two *gated* windows still step 100 ms —
+  the 75% overlap BS.1770 specifies for the 400 ms blocks behind `LUFS-I`, and
+  the same rate for the 3 s blocks behind `LRA` — so the sub-block is finer than
+  the standard's grid without changing what the standard computes.
 
 ## Conformance
 
@@ -208,12 +253,55 @@ directly but which no correct implementation can violate:
   and it is asserted rather than assumed — see
   `packages/oaa_engine/test/decode_test.dart`.
 
-The official BS.2217 WAV vectors are **still not used.** There is now a decoder
-that could read them, so the remaining obstacle is not technical: the EBU and
-ITU test material is not licensed for redistribution in this repository, and
-fetching it in CI would put a network dependency in front of the one suite that
-must never be flaky. Running them locally against `oaa` is worthwhile and the
-CLI makes it a one-liner; they are not a gate.
+### The official vectors
+
+Both official sets are run, and they are **not a gate.** The obstacle was never
+technical: neither body licenses its test material for redistribution here, and
+fetching 811 MB in CI would put a network dependency in front of the one suite
+that must never be flaky. So `packages/oaa_engine/test/vectors_test.dart` skips
+per group, unless told where an unzipped copy is:
+
+```sh
+cd packages/oaa_engine
+OAA_VECTORS=~/ebu-loudness-test-set \
+OAA_VECTORS_ITU=~/bs2217 \
+  dart test test/vectors_test.dart
+```
+
+| Set | Where | Cases |
+|---|---|---|
+| **EBU Loudness Test Set** v05 | [tech.ebu.ch](https://tech.ebu.ch/publications/ebu_loudness_test_set) | 68. Table 1 of Tech 3341 entire — 1–8 integrated (both authentic programme segments included), 9–11 short-term, 12–14 momentary, 15–23 true peak — and Table 1 of Tech 3342, 1–6, for LRA. |
+| **Report ITU-R BS.2217** | [48 archives](https://www.itu.int/oth/R1102000001/en) linked from the report | 44. Twelve tones from 25 Hz to 10 kHz, the constant-loudness sweep, the absolute and relative gate tests, the 5.1 channel and summing checks, both LFE checks, 7.1, and ten programme files in mono, stereo and 5.1. |
+
+**All 112 pass.** Tolerances are the standards' own: ±0.1 LU, +0.2/−0.4 dBTP,
+±1 LU for LRA, ±0.1 LKFS for the ITU set.
+
+Six ITU files are wider than 7.1 — 10, 12 and 24 channels — and the engine
+carries eight. Those are asserted to be **refused**: it has no weights for those
+layouts, and a number produced without them would be read as if it meant
+something.
+
+**The run was worth doing, because it found two defects the generated cases could
+not.** Both are in `CHANGELOG.md` with their magnitudes:
+
+- **Momentary loudness advanced only every 100 ms.** Tech 3341's tests 13 and 14
+  take a 400 ms tone — exactly one momentary window — and slide it through twenty
+  files in 20 ms steps, so the tone lies inside exactly one window and no other.
+  On a 100 ms grid sixteen of the twenty read up to 0.45 LU low, and test 14 up
+  to 0.70. The sub-block is 10 ms now; both gating windows are still filed every
+  100 ms, so nothing integrating moved.
+- **7.1 carried the surround weight on its rear pair.** The ITU's channel table
+  gives 7.1 as 1.00 / 1.00 / 1.00 / N/A / 1.41 / 1.41 / 1.00 / 1.00, and its two
+  7.1 files read 0.35 LU high until that was true. They now read −23.000 and
+  −24.000 exactly.
+
+Neither could have come from a suite that writes its own signals: one needs a
+tone that does not start at sample zero, the other needs a layout wider than the
+one the author was thinking about. That is the argument for material somebody
+else made — and equally the argument for not treating it as a replacement. The
+generated cases gate every push on three platforms and carry the sample-rate and
+block-size properties no shipped vector file asserts, so anything the official
+files caught that a generated signal can also express is asserted there too.
 
 ---
 

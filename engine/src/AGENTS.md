@@ -12,8 +12,8 @@
 | `oaa_spectrum.h/.c` | The Hann STFT behind the analyser, the spectrogram and the stereo cloud — a 4096-point window zero-padded into a 16384-point transform. One set of transforms serves all three. |
 | `oaa_ring.h/.c` | The SPSC ring between the audio callback and analysis. Drops are **counted and published**, never silently overwritten. |
 | `oaa_device.h/.c` | miniaudio, cut down to enumeration and capture. The only file that includes miniaudio.h. Also the dispatcher: one reserved device id opens a process tap instead. |
-| `oaa_tap.h` | The system-output tap's C interface, and the only place the policy for a changing output device is written down. Declares its handle everywhere, its functions on macOS only. |
-| `oaa_tap_macos.m` | Core Audio process taps, macOS 14.2+. **The engine's only Objective-C**, and its only source not built on every platform — `CATapDescription` is an Objective-C class and the SDK hides the tapping API behind `#ifdef __OBJC__`. |
+| `oaa_tap.h` | The system-output tap's C interface, the only place the policy for a changing output device is written down, and the assertion that fails the build below a macOS 14.2 deployment target — see its header for why a lower one made the whole engine library unloadable. Declares its handle everywhere, its functions on macOS only. |
+| `oaa_tap_macos.m` | Core Audio process taps, macOS 14.2+ — which is the engine's deployment floor rather than a runtime check, because that class reference is strong. **The engine's only Objective-C**, and its only source not built on every platform — `CATapDescription` is an Objective-C class and the SDK hides the tapping API behind `#ifdef __OBJC__`. |
 | `oaa_decode.c` | dr_libs, as `oaa_file_open/read/seek/close`. The only file that does I/O, and the only one that includes dr_wav/dr_flac/dr_mp3. No analysis: the caller pushes what it reads. |
 | `oaa_analysis.c` | One pass over a block: the simple meters inline, the two standards-defined ones driven. |
 | `oaa_engine.c` | Lifecycle, the analysis thread, and the OS shims. |
@@ -90,11 +90,12 @@
   carry it in a field.** A cursor kept beside the array it indexes is the same
   number stored twice, and the copy has to be *trusted* every time it is
   dereferenced. `oaa_loudness`'s sub-block ring had one; something outside that
-  file put a float bit pattern in it, and a 100 ms boundary became an 8-byte
+  file put a float bit pattern in it, and a sub-block boundary became an 8-byte
   store 229 GB past the engine, in reserved address space. The row is now
   `subblocks_done % OAA_SHORTTERM_SUBBLOCKS`, computed at the point of use, so
   the store is in range whatever the counter holds. `window_energy` was already
-  written this way and was never exposed. One modulo per 100 ms.
+  written this way and was never exposed. One modulo per sub-block, which is
+  every 10 ms.
 - **Ballistics constants are named and commented with their standard.** A magic
   `0.0651f` in a VU meter is unreviewable.
 - **Anything with a standard cites it, by clause.** The magic numbers in
@@ -105,6 +106,16 @@
   under the 📐 section.** Users make delivery decisions from these numbers; a
   reading that moves without being announced silently invalidates somebody's
   master.
+
+  For anything in `oaa_loudness.*`, `oaa_kweight.*` or `oaa_truepeak.*` the
+  conformance run means both suites: the generated cases that gate every push,
+  *and* the official vectors in
+  `packages/oaa_engine/test/vectors_test.dart`, which need the EBU and ITU
+  material and skip without it. They are worth the download — the momentary
+  sub-block was 100 ms and the 7.1 rear surrounds carried the surround weight,
+  and the gated suite could see neither, because a signal you write yourself
+  starts where you expect it to and has the channel count you were thinking
+  about.
 - **When an approximation is used, say so and say what is missing.** The VU used
   to be a one-pole, which matched the 300 ms figure and had none of the
   overshoot that makes a VU meter feel like one; the comment saying so is what
@@ -114,6 +125,10 @@
 - **Display ballistics belong here, display *choices* do not.** The spectrum's
   peak hold is in the engine because a transform runs every hop and a publish
   carries only the last one, so a hold computed downstream would miss whatever
-  landed between them. The goniometer's 45° rotation is not, because it is a
-  convention one module has and the CLI does not — and baking it into the ABI
-  would make every other consumer undo it.
+  landed between them: `spectrum_peak` is a measurement, and it is on the wire
+  and in a report whether anything draws it or not. What the analyser draws
+  above its curve is *not* that — it is the envelope of the curve it has drawn,
+  held on the same schedule, which is a choice about a picture and lives in the
+  module. The goniometer's 45° rotation is the same kind of thing, and is not
+  here either, because it is a convention one module has and the CLI does not —
+  and baking it into the ABI would make every other consumer undo it.

@@ -25,10 +25,15 @@ loudness range as the difference of the 10th and 95th percentiles of the gated
 short-term distribution, and true peak by four-times oversampling rather than
 sample peak.
 
-Those numbers are held against the **EBU Tech 3341 and 3342 conformance
-vectors** on Linux, macOS and Windows on every push. A red conformance run is a
-red build. The spectrum is held against a sine of known amplitude on a bin
-centre in the same way.
+Those numbers are held against the **EBU Tech 3341 and 3342 conformance cases**
+on Linux, macOS and Windows on every push, from signals the suite generates
+itself. A red conformance run is a red build. The spectrum is held against a
+sine of known amplitude on a bin centre in the same way.
+
+The **official vector files** — the EBU Loudness Test Set and the compliance
+material of Report ITU-R BS.2217 — are run by hand, because 811 MB nobody may
+redistribute cannot be a build step. All 112 cases pass, and running them found
+two defects that generated signals could not express.
 
 [The metrics reference](metrics.html) gives the definition, the standard and
 the current availability of every quantity Open Audio Analyzer reports.
@@ -56,13 +61,21 @@ tabs as you like.
 | **VU Meter** | A real second-order movement, not a one-pole approximation. |
 | **Alert Meter** | One quantity, its worst case, and whether it passed. |
 | **Validator** | Every delivery criterion and a verdict per line. |
-| **Histogram** | Short-term loudness over time, banded up to momentary, against the delivery target. |
-| **Loudness Distribution** | How often the programme sat at each loudness, with the two percentiles LRA is the distance between. |
-| **Spectrum Analyzer** | 512 log-spaced bands from a 4096-point Hann window, zero-padded to a 16384-point transform. |
+| **Histogram** | Short-term loudness over time, banded up to momentary, against the delivery target. `Smoothing` averages both bands over a centred window of 0.5, 1 or 2 seconds, or draws every 100 ms column as measured. |
+| **Loudness Distribution** | How often the programme sat at each loudness, bracketed between the two percentiles LRA is the distance between, with LRA printed on the bracket. |
+| **Spectrum Analyzer** | 512 log-spaced bands from a 4096-point Hann window, zero-padded to a 16384-point transform. Drawn tilted — 0 to 6 dB per octave about 1 kHz, 4.5 by default — so a mix reads as roughly flat and what is left to see is the deviation. |
 | **Spectrogram** | The same transform over time. |
-| **Oscilloscope** | The waveform itself, a lane per channel or both channels around one centre line. Free-running, with a time base from 5 ms to 5 seconds — triggered on a rising zero crossing below 200 ms so a periodic signal stands still, rolling above it — or locked to the DAW's tempo, where the width is a musical division from 4 bars to 1/32, straight, triplet or dotted, and the window sits on the bar grid so a kick lands in the same place every pass. A vertical zoom of 1x to 8x for material that does not reach full scale. Full-scale samples are drawn in the over colour whatever the zoom is set to. |
+| **Oscilloscope** | The waveform itself, a lane per channel or both channels around one centre line. Free-running, with a time base from 5 ms to 5 seconds — triggered on a rising zero crossing below 200 ms so a periodic signal stands still, rolling above it — or locked to the DAW's tempo, where the width is a musical division from 4 bars to 1/32, straight, triplet or dotted, and the window sits on the bar grid so a kick lands in the same place every pass. `Trigger: Transient` replaces both with a sweep: the display waits for the signal to rise through a level you set, draws forward across the width once from that sample, and holds what it caught until the next crossing — which is how you look at the attack of one drum hit rather than at a picture that moves every pass. The threshold and the vertical zoom, 1x to 32x for material that does not reach full scale, are sliders along the bottom of the module; the threshold is drawn across the lane at the height it is set to. `AUTO` beside it hands the threshold to the audio: it follows the loudest transient of the last few seconds, six decibels under the peak so the sweep starts while the attack is still rising, and unchecking the box keeps the number it found. Full-scale samples are drawn in the over colour whatever the zoom is set to. |
 | **Phase Scope** | The goniometer, from the raw stereo sample stream. |
 | **Stereo Cloud** | Stereo position per frequency band. Needs two channels; on a mono source it says so. |
+
+Every loudness display marks the delivery target the same way: whatever stands
+above it is drawn in amber, cut at the target itself rather than coloured by a
+verdict on the whole bar. Being louder than the number you are aiming at is not
+a delivery failure, so it is not drawn in the colour of one — red stays for a
+ceiling that has actually been exceeded. What the amber tells you is *how much*
+of the reading is over, which is the same thing the Histogram and the Loudness
+Distribution show as an area.
 
 Modules are added, moved, resized, duplicated and deleted, with undo. A module
 that has nowhere to go does not move: placement is a predicate, not a

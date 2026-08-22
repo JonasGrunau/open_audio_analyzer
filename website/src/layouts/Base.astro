@@ -1,0 +1,315 @@
+---
+import '../styles/global.css';
+
+interface Props {
+  title: string;
+  description: string;
+  path?: string;
+}
+
+const { title, description, path = '/' } = Astro.props;
+const site = 'https://open-audio-analyzer.com';
+const canonical = site + (path === '/' ? '' : path);
+const REPO = 'https://github.com/JonasGrunau/open_audio_analyzer';
+const DOCS = 'https://jonasgrunau.github.io/open_audio_analyzer/index.html';
+const VERSION = '0.8.0';
+
+const nav = [
+  { href: '/#modules', label: 'Modules' },
+  { href: '/#measurement', label: 'Measurement' },
+  { href: '/#reach', label: 'Plugin & CLI' },
+  { href: '/#gaps', label: 'Known gaps' },
+  { href: '/download', label: 'Download' },
+];
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical} />
+
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/icon-180.png" />
+    <meta name="theme-color" content="#0b0c0e" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Open Audio Analyzer" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:image" content={`${site}/og.png`} />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..700&family=Google+Sans+Code:wght@400..600&family=Source+Serif+4:opsz,wght@8..60,400..600&display=swap"
+    />
+
+    <script
+      type="application/ld+json"
+      set:html={JSON.stringify({
+        '@context': 'https://schema.org',
+        '@type': 'SoftwareApplication',
+        name: 'Open Audio Analyzer',
+        applicationCategory: 'MultimediaApplication',
+        operatingSystem: 'macOS, Windows, Linux, iPadOS, Android',
+        softwareVersion: VERSION,
+        license: 'https://www.gnu.org/licenses/gpl-3.0.html',
+        url: site,
+        codeRepository: REPO,
+        offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+        description,
+      })}
+    />
+  </head>
+
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+
+    <header class="bar">
+      <div class="bar-in shell">
+        <a class="mark" href="/" aria-label="Open Audio Analyzer, home">
+          <svg viewBox="0 0 1024 1024" width="18" height="18" aria-hidden="true" focusable="false">
+            <g fill="#35e0c4">
+              <rect x="204.8" y="438.3" width="111.7" height="380.9" rx="22.3" />
+              <rect x="372.4" y="204.8" width="111.7" height="614.4" rx="22.3" />
+              <rect x="539.9" y="548.9" width="111.7" height="270.3" rx="22.3" />
+              <rect x="707.5" y="327.7" width="111.7" height="491.5" rx="22.3" />
+            </g>
+            <path
+              d="M372.4,227.1a22.3,22.3 0 0 1 22.3,-22.3h67a22.3,22.3 0 0 1 22.3,22.3v112.8h-111.7z"
+              fill="#ff4d4d"></path>
+          </svg>
+          <span class="wordmark">Open Audio Analyzer</span>
+        </a>
+
+        <nav aria-label="Sections">
+          {nav.map((n) => <a class="navlink" href={n.href}>{n.label}</a>)}
+        </nav>
+
+        <div class="bar-end">
+          <span class="num ver">{VERSION}</span>
+          <a class="navlink" href={REPO} rel="noopener">Source</a>
+          <a class="navlink" href={DOCS} rel="noopener">Docs</a>
+        </div>
+      </div>
+    </header>
+
+    <main id="main">
+      <slot />
+    </main>
+
+    <footer class="foot">
+      <div class="shell">
+        <div class="foot-grid">
+          <div class="stack-16">
+            <p class="label">Open Audio Analyzer</p>
+            <p class="foot-p">
+              A free and open-source loudness and spectrum analyzer for desktop and tablets.
+              Version {VERSION}.
+            </p>
+            <p class="foot-p">
+              A free reimplementation of the ideas in <a
+                class="link-quiet"
+                href="https://process.audio/products/decibel"
+                rel="noopener">Decibel</a
+              > by process.audio, whose modular canvas is the best interaction model anybody has found
+              for this problem. The measurement work, the architecture and the visual language are our
+              own — and where Open Audio Analyzer cannot honestly match it, it says so rather than
+              approximating.
+            </p>
+          </div>
+
+          <div class="stack-12">
+            <p class="label">Project</p>
+            <a class="foot-a" href={REPO} rel="noopener">Repository</a>
+            <a class="foot-a" href={DOCS} rel="noopener">Documentation</a>
+            <a class="foot-a" href={`${REPO}/releases`} rel="noopener">Releases</a>
+            <a class="foot-a" href={`${REPO}/blob/main/CHANGELOG.md`} rel="noopener">Changelog</a>
+            <a class="foot-a" href={`${REPO}/issues`} rel="noopener">Issues</a>
+          </div>
+
+          <div class="stack-12">
+            <p class="label">Reference</p>
+            <a class="foot-a" href="https://jonasgrunau.github.io/open_audio_analyzer/metrics.html" rel="noopener">Metrics</a>
+            <a class="foot-a" href="https://jonasgrunau.github.io/open_audio_analyzer/keyboard.html" rel="noopener">Keyboard</a>
+            <a class="foot-a" href="https://jonasgrunau.github.io/open_audio_analyzer/wire.html" rel="noopener">Wire protocol</a>
+            <a class="foot-a" href="https://jonasgrunau.github.io/open_audio_analyzer/building.html" rel="noopener">Building</a>
+          </div>
+
+          <div class="stack-12">
+            <p class="label">Licence</p>
+            <p class="foot-lic"><span class="num">MIT</span> — engine, domain model, wire protocol</p>
+            <p class="foot-lic"><span class="num">GPL-3.0</span> — application, UI toolkit, CLI</p>
+            <p class="foot-lic"><span class="num">AGPL-3.0</span> — the plugin, because it links JUCE</p>
+            <p class="foot-lic"><span class="num">SIL OFL</span> — Inter and Google Sans Code</p>
+          </div>
+        </div>
+
+        <div class="foot-rule">
+          <span class="num">© 2026 Jonas Grunau</span>
+          <span class="num">open-audio-analyzer.com</span>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>
+
+<style>
+  /* The application draws its own chrome and the status bar runs to the top
+     edge of the window. The site's header is the same object: one hairline,
+     no shadow, and it does not float above the page pretending to hover. */
+  .bar {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    background: var(--ink);
+    border-bottom: 1px solid var(--hair);
+  }
+
+  .bar-in {
+    height: var(--s48);
+    display: flex;
+    align-items: center;
+    gap: var(--s32);
+  }
+
+  .mark {
+    display: flex;
+    align-items: center;
+    gap: var(--s8);
+    flex: none;
+  }
+
+  .wordmark {
+    font-size: 0.75rem;
+    font-weight: 700;
+    font-variation-settings: 'wdth' 100;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+  }
+
+  nav {
+    display: flex;
+    gap: var(--s24);
+    margin-right: auto;
+  }
+
+  .navlink {
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--muted);
+    white-space: nowrap;
+    transition: color 140ms linear;
+  }
+
+  .navlink:hover {
+    color: var(--text);
+  }
+
+  .bar-end {
+    display: flex;
+    align-items: center;
+    gap: var(--s16);
+    flex: none;
+  }
+
+  .ver {
+    font-size: 0.6875rem;
+    color: var(--faint);
+    border: 1px solid var(--hair);
+    padding: 0 var(--s4);
+  }
+
+  /* --- footer --- */
+
+  .foot {
+    border-top: 1px solid var(--hair);
+    padding-block: var(--s64) var(--s32);
+    background: var(--ink);
+  }
+
+  .foot-grid {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr 1.2fr;
+    gap: var(--s48);
+  }
+
+  .foot-p {
+    font-family: var(--prose);
+    font-size: 0.9375rem;
+    line-height: 1.6;
+    color: var(--faint);
+    max-width: 46ch;
+  }
+
+  .foot-a {
+    display: block;
+    font-size: 0.875rem;
+    color: var(--muted);
+    transition: color 140ms linear;
+  }
+
+  .foot-a:hover {
+    color: var(--signal);
+  }
+
+  .foot-lic {
+    font-size: 0.8125rem;
+    color: var(--faint);
+  }
+
+  .foot-lic .num {
+    color: var(--muted);
+    font-size: 0.75rem;
+  }
+
+  .foot-rule {
+    margin-top: var(--s64);
+    padding-top: var(--s16);
+    border-top: 1px solid var(--hair);
+    display: flex;
+    justify-content: space-between;
+    gap: var(--s16);
+    font-size: 0.6875rem;
+    color: var(--faint);
+    letter-spacing: 0.04em;
+  }
+
+  @media (max-width: 1080px) {
+    nav {
+      display: none;
+    }
+    .foot-grid {
+      grid-template-columns: 1fr 1fr;
+    }
+  }
+
+  @media (max-width: 620px) {
+    .wordmark {
+      font-size: 0.6875rem;
+    }
+    .bar-in {
+      gap: var(--s16);
+    }
+    .bar-end {
+      margin-left: auto;
+      gap: var(--s12);
+    }
+    .ver {
+      display: none;
+    }
+    .foot-grid {
+      grid-template-columns: 1fr;
+      gap: var(--s32);
+    }
+  }
+</style>

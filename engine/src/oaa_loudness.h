@@ -4,13 +4,13 @@
  * SPDX-License-Identifier: MIT
  *
  * Everything is built from one primitive: the mean square of the K-weighted
- * signal over a 100 ms sub-block. Every published quantity is a window of those
+ * signal over a 10 ms sub-block. Every published quantity is a window of those
  * sub-blocks, which is what makes the momentary, short-term and integrated
  * readings provably consistent with each other — they are literally different
  * lengths of the same ring.
  *
- *   Momentary   last 4 sub-blocks   (400 ms)
- *   Short-term  last 30 sub-blocks  (3 s)
+ *   Momentary   last 40 sub-blocks   (400 ms)
+ *   Short-term  last 300 sub-blocks  (3 s)
  *   Integrated  gated mean of every 400 ms block, stepped 100 ms (75% overlap)
  *   LRA         10th to 95th percentile of the gated 3 s distribution
  *
@@ -45,12 +45,33 @@
 
 #include <stdint.h>
 
-/* 100 ms. The step of every gating window, and the resolution at which
- * momentary and short-term advance. */
-#define OAA_SUBBLOCK_DIVISOR 10
+/* 10 ms. The resolution at which momentary and short-term loudness advance.
+ *
+ * Not 100 ms, which is the gating step and which this was until the official
+ * EBU vectors were run against it. Tech 3341 tests 13 and 14 take a 400 ms tone
+ * — exactly one momentary window long — and slide it through twenty files in
+ * 20 ms steps, requiring Max M within ±0.1 LU every time. On a 100 ms grid a
+ * tone offset by anything other than a multiple of 100 ms never lies inside one
+ * window whole, so the highest momentary reading available is taken over part
+ * tone and part silence: sixteen of those twenty read low, by up to 0.45 LU,
+ * and test 14 by 0.70. At 10 ms the error is bounded by half a sub-block out of
+ * the window, 5/400 = 0.054 LU, for a transient landing anywhere at all —
+ * inside the tolerance by construction rather than by the offsets the EBU
+ * happened to pick. */
+#define OAA_SUBBLOCK_DIVISOR 100
 
-#define OAA_MOMENTARY_SUBBLOCKS 4  /* 400 ms */
-#define OAA_SHORTTERM_SUBBLOCKS 30 /* 3 s */
+#define OAA_MOMENTARY_SUBBLOCKS 40  /* 400 ms */
+#define OAA_SHORTTERM_SUBBLOCKS 300 /* 3 s */
+
+/* 100 ms, in sub-blocks. The step of both gating windows: the 75% overlap
+ * BS.1770 asks of the 400 ms blocks behind integrated loudness, and the rate at
+ * which the 3 s blocks behind LRA are filed.
+ *
+ * It is a separate constant from the sub-block above so that making the
+ * momentary reading ten times finer did not also make both distributions ten
+ * times denser — which would have moved every percentile in them, and so the
+ * LRA of every programme, for no reason anybody asked for. */
+#define OAA_GATING_STEP_SUBBLOCKS 10
 
 /* Histogram span, in LUFS. The low edge is the absolute gate: nothing quieter
  * is ever filed. The high edge is far above any real programme — a block that

@@ -64,11 +64,18 @@ class _AlertMeterModuleState extends State<AlertMeterModule> {
 
   void observe(ReadingState state, double value) {
     final elapsed = widget.engine.elapsedSeconds;
-    if (elapsed < _lastElapsed) {
-      worst = ReadingState.unavailable;
-      worstValue = double.nan;
+    // A link that has gone quiet reports NaN seconds, and a quiet link is not a
+    // reset — the latch stays. What matters is that the NaN is not *stored*:
+    // NaN compares false against everything, so a `_lastElapsed` holding one
+    // makes the test below false forever and the latch can never be cleared
+    // again, on this source or on any source selected after it.
+    if (!elapsed.isNaN) {
+      if (elapsed < _lastElapsed) {
+        worst = ReadingState.unavailable;
+        worstValue = double.nan;
+      }
+      _lastElapsed = elapsed;
     }
-    _lastElapsed = elapsed;
 
     if (state == ReadingState.unavailable) return;
 

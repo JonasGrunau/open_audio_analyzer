@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'transport.dart';
@@ -259,3 +260,27 @@ abstract interface class MeterSource {
   /// measured.
   Float32List get histogram;
 }
+
+/// The geometric centre frequency of spectrum band [band], in Hz.
+///
+/// Here rather than beside the engine's copy of these constants because the
+/// things that need it most cannot see `oaa_engine`: the fourteen modules draw
+/// a frequency axis and a tilt curve from it, and they are the same fourteen
+/// modules the remote display runs with no engine at all. Two modules that
+/// disagree by one band about where 1 kHz is are two modules whose graticules
+/// do not line up when they sit side by side.
+double bandCentreHz(int band) =>
+    MeterShape.spectrumHzLow *
+    math.pow(
+      MeterShape.spectrumHzHigh / MeterShape.spectrumHzLow,
+      (band + 0.5) / MeterShape.spectrumBands,
+    );
+
+/// The band a frequency falls in — the inverse of [bandCentreHz], for placing
+/// an axis label or a cursor. Not clamped: a caller asking about 30 kHz gets an
+/// index past the end, which is the honest answer.
+double bandOfHz(double hz) =>
+    MeterShape.spectrumBands *
+        math.log(hz / MeterShape.spectrumHzLow) /
+        math.log(MeterShape.spectrumHzHigh / MeterShape.spectrumHzLow) -
+    0.5;

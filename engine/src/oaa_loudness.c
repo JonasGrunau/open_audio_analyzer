@@ -141,7 +141,15 @@ static void close_subblock(oaa_loudness *l) {
   l->subblocks_done++;
 
   /* A 400 ms gating block every 100 ms is the 75% overlap the standard asks
-   * for; the same applies to the 3 s blocks LRA is built from. */
+   * for; the same applies to the 3 s blocks LRA is built from. Momentary and
+   * short-term move with every sub-block — that is the point of the sub-block
+   * being 10 ms — but the two histograms are filed at the coarser step, so both
+   * integrating measurements see exactly the blocks they saw when a sub-block
+   * was 100 ms long. */
+  if (l->subblocks_done % OAA_GATING_STEP_SUBBLOCKS != 0) {
+    return;
+  }
+
   const double gating_energy = window_energy(l, OAA_MOMENTARY_SUBBLOCKS);
   if (gating_energy >= 0.0) {
     file_block(l->gating, gating_energy);

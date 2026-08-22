@@ -120,6 +120,12 @@ class _LufsMeterPainter extends MeterPainter {
        // switching skins silently swapped which of these two bars looked like
        // the emphasised one. A meter fill is not a text colour.
        _short = (Paint()..color = colors.meterFill.withValues(alpha: 0.55)),
+       // The same pair again in the warning colour, for the part of a bar that
+       // stands above the target. The short-term bar keeps its 0.55 on both
+       // sides of the line: a warning that also promoted the quieter bar to
+       // full strength would say two things at once.
+       _momentaryOver = (Paint()..color = colors.warn),
+       _shortOver = (Paint()..color = colors.warn.withValues(alpha: 0.55)),
        _targetBand = (Paint()
          ..color = colors.textFaint.withValues(alpha: 0.18)),
        _targetLine = (Paint()
@@ -138,6 +144,8 @@ class _LufsMeterPainter extends MeterPainter {
   final Paint _track;
   final Paint _momentary;
   final Paint _short;
+  final Paint _momentaryOver;
+  final Paint _shortOver;
   final Paint _targetBand;
   final Paint _targetLine;
   final Paint _integratedLine;
@@ -271,7 +279,17 @@ class _LufsMeterPainter extends MeterPainter {
     );
 
     // --- Bars ---------------------------------------------------------------
-    _bar(canvas, track, track.left, barWidth, engine.lufsMomentary, _momentary);
+    final targetY = _y(track, calibration.lufsTarget);
+    _bar(
+      canvas,
+      track,
+      track.left,
+      barWidth,
+      engine.lufsMomentary,
+      _momentary,
+      _momentaryOver,
+      targetY,
+    );
     _bar(
       canvas,
       track,
@@ -279,10 +297,11 @@ class _LufsMeterPainter extends MeterPainter {
       barWidth,
       engine.lufsShort,
       _short,
+      _shortOver,
+      targetY,
     );
 
     // The target line, over the bars — see the note above the band.
-    final targetY = _y(track, calibration.lufsTarget);
     canvas.drawLine(
       Offset(track.left, targetY),
       Offset(track.right, targetY),
@@ -370,6 +389,16 @@ class _LufsMeterPainter extends MeterPainter {
   double _y(Rect track, double value) =>
       track.bottom - graticule.scale.fractionOf(value) * track.height;
 
+  /// One bar, in up to two segments: the part below the target and the part
+  /// above it.
+  ///
+  /// **Split at the line, not coloured by a verdict on the whole bar.** A
+  /// momentary reading standing over the target is not a delivery failure and
+  /// must not be painted as though something had classified it as one — what
+  /// carries the meaning is *how much* of the bar is above the line, which is
+  /// the same reading the Histogram and the Loudness Distribution offer as an
+  /// area. Cutting at the target puts the boundary in the only place it is
+  /// true, and it lands exactly on the target line drawn over it.
   void _bar(
     Canvas canvas,
     Rect track,
@@ -377,14 +406,25 @@ class _LufsMeterPainter extends MeterPainter {
     double width,
     double value,
     Paint paint,
+    Paint over,
+    double targetY,
   ) {
     if (value.isNaN) return;
     final top = _y(track, value);
     if (top >= track.bottom) return;
+
+    // A target off the end of the scale leaves the whole bar on one side of it.
+    final split = math.max(
+      top,
+      targetY.clamp(track.top, track.bottom).toDouble(),
+    );
     canvas.drawRect(
-      Rect.fromLTRB(left, top, left + width, track.bottom),
+      Rect.fromLTRB(left, split, left + width, track.bottom),
       paint,
     );
+    if (top < split) {
+      canvas.drawRect(Rect.fromLTRB(left, top, left + width, split), over);
+    }
   }
 
   void _centred(

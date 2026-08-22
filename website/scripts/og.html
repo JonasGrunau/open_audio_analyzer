@@ -1,0 +1,114 @@
+<!doctype html>
+<!--
+  The Open Graph card, rendered once and committed as public/og.png.
+
+  It is a page rather than a drawing so it uses the site's own tokens and type,
+  and so a change to either can be re-rendered rather than redrawn:
+
+      npm run og      (needs Chrome on the machine doing it)
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..700&family=Google+Sans+Code:wght@400..600&family=Source+Serif+4:opsz,wght@8..60,400..600&display=swap"
+    />
+    <style>
+      * { box-sizing: border-box; margin: 0; }
+      html, body { width: 1200px; height: 630px; }
+      body {
+        background: #0b0c0e;
+        color: #e6e8eb;
+        font-family: 'Archivo', sans-serif;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        padding: 64px;
+        overflow: hidden;
+      }
+      .top { display: flex; align-items: center; gap: 16px; }
+      .repo {
+        font-family: 'Google Sans Code', monospace;
+        font-size: 18px;
+        color: #565e67;
+        letter-spacing: -0.01em;
+      }
+      h1 {
+        font-size: 92px;
+        font-weight: 700;
+        font-variation-settings: 'wdth' 94;
+        letter-spacing: -0.038em;
+        line-height: 0.94;
+      }
+      p {
+        font-family: 'Source Serif 4', serif;
+        font-size: 27px;
+        line-height: 1.45;
+        color: #8a9199;
+        max-width: 30ch;
+        margin-top: 24px;
+      }
+      .mid { display: flex; align-items: flex-end; justify-content: space-between; gap: 48px; }
+      /* A meter, drawn from the same tokens — the card shows the thing itself
+         rather than a logo on a field. */
+      .bars { display: flex; align-items: flex-end; gap: 7px; height: 260px; flex: none; }
+      .bars i { width: 15px; background: #35e0c4; display: block; }
+      .bars i.over { background: linear-gradient(to bottom, #ff4d4d 22%, #35e0c4 22%); }
+      .foot {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        border-top: 1px solid #1f2328;
+        padding-top: 20px;
+        font-family: 'Google Sans Code', monospace;
+        font-size: 17px;
+        color: #565e67;
+        letter-spacing: 0.02em;
+      }
+      .foot b { color: #8a9199; font-weight: 400; }
+    </style>
+  </head>
+  <body>
+    <div class="top">
+      <svg viewBox="0 0 1024 1024" width="26" height="26">
+        <g fill="#35e0c4">
+          <rect x="204.8" y="438.3" width="111.7" height="380.9" rx="22.3" />
+          <rect x="372.4" y="204.8" width="111.7" height="614.4" rx="22.3" />
+          <rect x="539.9" y="548.9" width="111.7" height="270.3" rx="22.3" />
+          <rect x="707.5" y="327.7" width="111.7" height="491.5" rx="22.3" />
+        </g>
+        <path d="M372.4,227.1a22.3,22.3 0 0 1 22.3,-22.3h67a22.3,22.3 0 0 1 22.3,22.3v112.8h-111.7z" fill="#ff4d4d" />
+      </svg>
+      <span class="repo">github.com/JonasGrunau/open_audio_analyzer</span>
+    </div>
+
+    <div class="mid">
+      <div>
+        <h1>Open Audio<br />Analyzer</h1>
+        <p>A free and open-source loudness and spectrum analyzer for desktop and tablets.</p>
+      </div>
+      <div class="bars" id="bars"></div>
+    </div>
+
+    <div class="foot">
+      <span><b>ITU-R BS.1770-4</b> · EBU R128 · verified against EBU Tech 3341 / 3342 in CI</span>
+      <span>GPL-3.0 · MIT</span>
+    </div>
+
+    <script>
+      // A spectrum-ish silhouette, deterministic so the card is reproducible.
+      const heights = [
+        0.34, 0.52, 0.71, 0.88, 0.62, 0.79, 1.0, 0.74, 0.58, 0.66, 0.48, 0.55,
+        0.4, 0.46, 0.33, 0.37, 0.26, 0.3, 0.2, 0.16,
+      ];
+      const el = document.getElementById('bars');
+      heights.forEach((h, i) => {
+        const b = document.createElement('i');
+        b.style.height = Math.round(h * 260) + 'px';
+        if (h === 1.0) b.className = 'over';
+        el.appendChild(b);
+      });
+    </script>
+  </body>
+</html>

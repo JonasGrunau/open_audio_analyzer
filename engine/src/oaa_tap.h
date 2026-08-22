@@ -75,6 +75,34 @@
 #define OAA_TAP_SUPPORTED 0
 #endif
 
+/*
+ * The deployment floor, asserted rather than assumed.
+ *
+ * `CATapDescription` is an Objective-C *class*, and a class reference is not
+ * weak-imported the way the tapping functions are — `nm -m` shows
+ * `_AudioHardwareCreateProcessTap` as `weak external` and
+ * `_OBJC_CLASS_$_CATapDescription` as plain `external`. Below 14.2 that class
+ * does not exist, so dyld cannot resolve the symbol, and what fails is not the
+ * tap: it is the load of the whole engine library, which every meter in the
+ * application goes through. The application died at launch on any macOS older
+ * than the class it never intended to use, and the `@available` checks this
+ * file used to carry could not help — they gate the *call*, and the symbol is
+ * resolved before a line of it runs.
+ *
+ * So the floor is the fix, and this is here because a deployment target is set
+ * in two build descriptions that know nothing about each other
+ * (`plugin/CMakeLists.txt` and `macos/Runner.xcodeproj`) and lowering either
+ * would bring the crash back with nothing to catch it. A compile error is
+ * cheaper than a launch failure on somebody else's Mac.
+ */
+#if OAA_TAP_SUPPORTED
+#if defined(__MAC_OS_X_VERSION_MIN_REQUIRED) && \
+    __MAC_OS_X_VERSION_MIN_REQUIRED < 140200
+#error "oaa_tap needs a macOS deployment target of 14.2 or later: the strong \
+reference to CATapDescription makes the engine library unloadable below it."
+#endif
+#endif
+
 /* Declared on every platform, defined on one. A handle to an incomplete type
  * costs nothing, and it keeps `#if` out of the struct in oaa_device.c — which
  * carries the field unconditionally and leaves it NULL everywhere else. */

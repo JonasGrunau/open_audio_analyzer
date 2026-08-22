@@ -20,6 +20,7 @@
 /// is swappable per skin.
 library;
 
+export 'src/check.dart';
 export 'src/drag_devices.dart';
 export 'src/focusable.dart';
 export 'src/glyph.dart';
@@ -32,6 +33,7 @@ export 'src/qr.dart';
 export 'src/readout.dart';
 export 'src/scale.dart';
 export 'src/skin_palette.dart';
+export 'src/slider.dart';
 export 'src/text_cache.dart';
 export 'src/theme.dart';
 export 'src/tokens.dart';

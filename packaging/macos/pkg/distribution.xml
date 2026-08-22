@@ -15,17 +15,22 @@
   start_selected and start_enabled="false": ticked, and greyed out.
 
   ==========================================================================
-  Why the plugin rows are gated on 11.0 rather than simply offered
+  Why the plugin rows are no longer gated separately
 
-  plugin/CMakeLists.txt sets CMAKE_OSX_DEPLOYMENT_TARGET to 11.0; the
-  application's is 10.15. So there is a band of macOS versions that can run
-  the application and cannot load its plugins, and on Catalina a DAW given
-  this VST3 does not report an error — the plugin is silently absent from the
+  They used to be, and the gate was right at the time: the application built
+  at 10.15 and the plugins at 11.0, so there was a band of macOS versions that
+  could run one and not load the others — and on Catalina a DAW given that
+  VST3 reported no error at all, the plugin simply being absent from the
   browser, which is indistinguishable from having installed it in the wrong
-  folder. An installer that can know this and stays quiet is an installer that
-  manufactures that support question. `system.compareVersions` is the
-  supported way to ask; a string compare on ProductVersion gets '10.15' and
-  '9.0' the wrong way round.
+  folder.
+
+  Both are 14.2 now, because the engine holds a strong reference to
+  `CATapDescription` and a strong reference to a class that does not exist is a
+  library dyld cannot load at all — see `engine/src/oaa_tap.h`. The band is
+  therefore empty, `allowed-os-versions` below refuses the whole volume under
+  14.2, and a per-row `system.compareVersions` check could only ever agree with
+  it. If the two targets are ever allowed to diverge again, this is the gate to
+  bring back.
 
   ==========================================================================
   customize="always"
@@ -47,7 +52,7 @@
 
     <volume-check>
         <allowed-os-versions>
-            <os-version min="10.15"/>
+            <os-version min="14.2"/>
         </allowed-os-versions>
     </volume-check>
 
@@ -68,23 +73,17 @@
 
     <choice id="vst3"
             title="VST3 plug-in"
-            description="Installs into /Library/Audio/Plug-Ins/VST3, where every VST3 host looks. Needs macOS 11 or later."
-            start_selected="oaaPluginsRun()" start_enabled="oaaPluginsRun()" visible="true">
+            description="Installs into /Library/Audio/Plug-Ins/VST3, where every VST3 host looks."
+            start_selected="true" start_enabled="true" visible="true">
         <pkg-ref id="com.openaudioanalyzer.oaa.vst3"/>
     </choice>
 
     <choice id="au"
             title="Audio Unit"
-            description="Installs into /Library/Audio/Plug-Ins/Components, for Logic, GarageBand and other AU hosts. Needs macOS 11 or later."
-            start_selected="oaaPluginsRun()" start_enabled="oaaPluginsRun()" visible="true">
+            description="Installs into /Library/Audio/Plug-Ins/Components, for Logic, GarageBand and other AU hosts."
+            start_selected="true" start_enabled="true" visible="true">
         <pkg-ref id="com.openaudioanalyzer.oaa.au"/>
     </choice>
-
-    <script><![CDATA[
-function oaaPluginsRun() {
-    return system.compareVersions(system.version.ProductVersion, '11.0') >= 0;
-}
-    ]]></script>
 
     <pkg-ref id="com.openaudioanalyzer.oaa.app"  onConclusion="none">app.pkg</pkg-ref>
     <pkg-ref id="com.openaudioanalyzer.oaa.vst3" onConclusion="none">vst3.pkg</pkg-ref>

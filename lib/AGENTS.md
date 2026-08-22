@@ -44,6 +44,39 @@ The application. GPL-3.0-or-later.
   lands on the meter — and the canvas's drag and selection layers sit behind the
   module. The symptom is a meter that cannot be selected or dragged by its own
   face, with nothing reported anywhere.
+- **A module's settings are menu rows, unless the setting is a number.** The
+  canvas's menu is where a closed set of named choices belongs — a time base, a
+  stereo arrangement, a metric — and thirteen of the fourteen modules have
+  nothing else. The oscilloscope has two settings that are *values* over a wide
+  range, its height and its trigger threshold, and both are chosen by looking at
+  the picture while they move: a menu that closes over the waveform on every step
+  cannot be used for that. They are `OaaSlider`s in a strip along the bottom of
+  the module, written back through `ModuleHost.onOption`, and the threshold
+  carries an `OaaCheck` — `AUTO`, which hands the level to the audio and is the
+  one control in the strip that is not a value.
+  Four properties of that arrangement are not optional. The strip is **absent
+  where `onOption` is null**, which is the remote display — the same signal
+  `onMenu` already uses, and a control that cannot change anything is worse than
+  no control. It is **dropped when the plot cannot spare the room**, like the
+  graticule and the lane letters before it. And a drag **reports continuously
+  and commits once**: the undo history is a stack of whole workspaces and the
+  autosave and every attached display watch the same provider, so a write per
+  pointer event costs sixty history entries, sixty JSON encodings and sixty
+  layout frames for one gesture. **A level that follows the audio never writes
+  at all** — `AUTO` persists the checkbox and not the number, so the level it
+  found is state in the module and is committed to the layout once, on the click
+  that switches it off. The same arithmetic as a drag, with the publish rate in
+  place of the pointer.
+  A setting a mode makes inert is **greyed in the menu rather than dropped**:
+  `Trigger` under `Sync: Tempo` is the one, and a row that vanishes is a row
+  somebody hunts for while suspecting the wrong setting.
+  The two controls stand **side by side, one `Space.md` apart**, and each cell
+  in a control is cut to what *that* control needs rather than to the widest in
+  the strip. What makes two sliders agree is the track length, which is one
+  number handed to both; padding the shorter label and the shorter readout out
+  to the longer ones does not align anything, it just moves 85 px of nothing
+  into the gutter between the pair — which is where it was, and which read as
+  one control at each end of the module rather than as a strip of two.
 - **`metric_reader.dart` is the only place `oaa_core` meets `oaa_engine`.**
   There is now a second implementation of the same signature backed by the wire
   protocol — `WireSnapshot`, in `oaa_wire` — and every module works unchanged

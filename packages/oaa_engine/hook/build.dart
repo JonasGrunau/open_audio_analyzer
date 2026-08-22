@@ -170,9 +170,28 @@ List<String> _frameworks(OS targetOS) => switch (targetOS) {
 /// `oaa_tap_macos.m` does; there is no per-source flag to give it alone, and
 /// none is wanted — thirteen files compiled two different ways is a difference
 /// somebody would eventually have to debug.
+///
+/// **macOS carries its own `-mmacos-version-min`, and it is not redundant.**
+/// Flutter's native-assets pipeline pins the engine at
+/// `-mmacos-version-min=13` and does not read `MACOSX_DEPLOYMENT_TARGET` from
+/// `macos/Runner.xcodeproj` — so raising the application's floor moved the
+/// application and left the library it loads behind. That matters here more
+/// than it would anywhere else: `oaa_tap_macos.m` holds a *strong* reference to
+/// `CATapDescription`, so a library built below 14.2 is one dyld cannot resolve
+/// on any system, and it also compiled with a page of
+/// `-Wunguarded-availability-new` warnings that nobody was reading. `CBuilder`
+/// emits its own flag ahead of these, and clang takes the last one, so this
+/// wins. `oaa_tap.h` fails the build if it ever stops winning.
 List<String> _flags(OS targetOS) => switch (targetOS) {
   OS.windows => const <String>[],
-  OS.iOS || OS.macOS => const <String>['-Wall', '-Wextra', '-x', 'objective-c'],
+  OS.macOS => const <String>[
+    '-Wall',
+    '-Wextra',
+    '-x',
+    'objective-c',
+    '-mmacos-version-min=14.2',
+  ],
+  OS.iOS => const <String>['-Wall', '-Wextra', '-x', 'objective-c'],
   _ => const <String>['-Wall', '-Wextra'],
 };
 

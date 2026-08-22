@@ -113,13 +113,20 @@ plus a painter, reads the same `MeterSource`, and repaints from the same clock.
 | **VU Meter** | A needle, on the movement the engine models. |
 | **Alert Meter** | One measurement, watched, with the worst it has been latched. |
 | **Validator** | The delivery decision, as a table. |
-| **Histogram** | Loudness against time: how the programme moved, and when it was over target. |
-| **Loudness Distribution** | How much of the programme was spent at each loudness. |
-| **Spectrum Analyzer** | Level against frequency, log-spaced, with a peak hold. |
+| **Histogram** | Loudness against time: how the programme moved, and when it was over target. Both bands averaged over a window its menu names. |
+| **Loudness Distribution** | How much of the programme was spent at each loudness, bracketed between the two percentiles LRA is the distance between, with the reading on the bracket. |
+| **Spectrum Analyzer** | Level against frequency, log-spaced, tilted so a mix reads roughly flat, with a peak hold. |
 | **Spectrogram** | Frequency against time, with level as brightness. |
-| **Oscilloscope** | The waveform itself, one lane per channel or both overlaid: triggered at scope speeds, rolling from half a second up, locked to the DAW's bar grid when a plugin is attached, with a vertical zoom for quiet material. |
+| **Oscilloscope** | The waveform itself, one lane per channel or both overlaid: triggered at scope speeds, rolling from half a second up, locked to the DAW's bar grid when a plugin is attached, or swept from a transient at a level you set. Height and trigger threshold are sliders on the module, because both are chosen by watching the picture move; `AUTO` beside the threshold takes it from the loudest transient instead, six decibels under so the sweep starts inside the attack rather than on top of it. |
 | **Phase Scope** | A goniometer: left against right, rotated so mono stands upright. |
 | **Stereo Cloud** | Where each frequency sits in the stereo image, accumulated over time. |
+
+Every one of these that draws a bar, an arc or an area against the delivery
+target splits it at the target and draws the part above in `warn` — the LUFS
+Meter's two bars, the Super Meter's three arcs, the Histogram and the Loudness
+Distribution. The split is a clip at the target, not a verdict on the whole
+shape: what carries the meaning is how much of the reading is over. `over`
+stays what it has always been, a ceiling that has actually been exceeded.
 
 ---
 
@@ -180,12 +187,12 @@ Three consequences worth naming, because they are what usually goes wrong:
 | Number box, LUFS, Alert, Validator | Cached `ui.Paragraph`, rebuilt on string change only |
 | Digital meter | Batched `drawRect`, one reused `Paint` |
 | VU meter | Dial face pre-rendered once to a `ui.Image`; only the needle repaints |
-| Spectrum analyzer | `drawRawPoints` over the native `Float32List` — C writes screen-space x,y directly. The drawn level is a one-pole average of the published bands, at the time constant its `Response` menu names; the peak-hold line above it never is |
+| Spectrum analyzer | `drawRawPoints` over the native `Float32List` — C writes screen-space x,y directly. The drawn level is a one-pole average of the published bands, at the time constant its `Response` menu names, plus the fixed per-band offset its `Tilt` menu names; the line above it is the envelope of that curve and follows the same pole |
 | Phase scope | The last forty frames of samples in a ring, one `drawRawPoints` each at its age's brightness — the trail is the frames, not a faded picture |
 | Stereo cloud | A decayed accumulator per two-pixel cell, emitted as points sorted into brightness buckets |
 | Spectrogram | Run-length columns kept as data and redrawn every published frame, one `drawRawPoints` per palette step |
-| Histogram | Ten columns a second into a fixed ring of loudness values, redrawn whole every frame as three `drawRawPoints`. Kept as measurements, not pixels, so it survives a resize |
-| Loudness distribution | The engine's 120 published bins as one `drawRawPoints`, clipped twice so the bars either side of the target take different colours |
+| Histogram | Ten columns a second into a fixed ring of loudness values, redrawn whole every frame as three `drawRawPoints`. Kept as measurements, not pixels, so it survives a resize — and raw, with `Smoothing` applied by one running-sum pass on the way out, so the setting redraws the whole programme rather than taking effect from where it was chosen |
+| Loudness distribution | The engine's 120 published bins as one-pixel columns that tile exactly — one `drawRawPoints` for the fill and one for the silhouette's top edge, each clipped twice so either side of the target takes its own colour. One stroke per bin, half a pixel oversized against seams, composited every overlap twice and drew a fence |
 
 ---
 
@@ -263,13 +270,32 @@ written to a WAV, decoded and analysed again, produce identical numbers to the
 bit. That is the property offline analysis rests on, so it is asserted rather
 than assumed.
 
+**The official vectors are run too, and they are not a gate.** Neither the EBU
+nor the ITU licenses its test material for redistribution here, and fetching
+811 MB in CI would put a network dependency in front of the one suite that must
+never be flaky — so `packages/oaa_engine/test/vectors_test.dart` skips unless it
+is told where an unzipped copy is:
+
+```sh
+cd packages/oaa_engine
+OAA_VECTORS=~/ebu-loudness-test-set OAA_VECTORS_ITU=~/bs2217 \
+  dart test test/vectors_test.dart
+```
+
+**All 112 cases pass** — Table 1 of EBU Tech 3341 entire, Table 1 of Tech 3342,
+and the compliance material of Report ITU-R BS.2217, each against its own stated
+tolerance.
+
 > [!NOTE]
-> The official **BS.2217 WAV vectors are still not used**, and the obstacle is
-> no longer technical. The EBU and ITU test material is not licensed for
-> redistribution here, and fetching it in CI would put a network dependency in
-> front of the one suite that must never be flaky. Running them locally against
-> `oaa` is worthwhile and is a one-liner; they are not a gate. See
-> [docs/METRICS.md](docs/METRICS.md#conformance).
+> Running them found two real defects, which is the argument for material
+> somebody else made. Tech 3341's tests 13 and 14 slide a 400 ms tone — exactly
+> one momentary window — through twenty files in 20 ms steps, and momentary
+> loudness advanced only every 100 ms, so sixteen of the twenty read up to
+> 0.45 LU low. And the ITU's two 7.1 files read 0.35 LU high, because the
+> +1.5 dB surround weight was reaching the rear pair as well as the side pair.
+> Both are fixed; neither is expressible as a signal a generated suite would
+> think to write. See [CHANGELOG.md](CHANGELOG.md) for what moved and by how
+> much, and [docs/METRICS.md](docs/METRICS.md#conformance) for the whole run.
 
 ---
 
@@ -499,8 +525,8 @@ measurement gear is machined panels sitting flush, not floating cards.
 
 ```
 bg      #0B0C0E     accent  #35E0C4   in spec
-panel   #121417     warn    #F2B01E
-hairline#1F2328     over    #FF4D4D
+panel   #121417     warn    #F2B01E   over target
+hairline#1F2328     over    #FF4D4D   past a ceiling
 text    #E6E8EB / #8A9199 / #565E67
 ```
 
@@ -596,7 +622,7 @@ site](https://jonasgrunau.github.io/open_audio_analyzer/install.html).
 
 | | Platform | Artefact | Plugin | |
 |:-:|---|---|:-:|---|
-| 🍎 | macOS 11+ | `Open.Audio.Analyzer-<version>-macos.pkg` | VST3 + AU | Universal — Apple silicon and Intel. |
+| 🍎 | macOS 14.2+ | `Open.Audio.Analyzer-<version>-macos.pkg` | VST3 + AU | Universal — Apple silicon and Intel. |
 | 🪟 | Windows 10 1809+ | `Open.Audio.Analyzer-<version>-windows-x64.exe` | VST3 | Uninstaller in Installed apps. |
 | 🐧 | Linux | `Open.Audio.Analyzer-<version>-linux-<arch>.tar.gz` | VST3 | `./install.sh`, no root. |
 | 🐧 | Linux | `Open.Audio.Analyzer-<version>-<arch>.AppImage` | — | One file, no root, GTK from the host. |
@@ -729,6 +755,12 @@ display client reads it back the way a tablet does — so a DAW's meters are sho
 to reach a second screen, field by field, rather than each half being shown to
 work on its own. It skips without a built plugin too, and both want port 47822,
 so neither runs while Open Audio Analyzer is open.
+
+One suite is deliberately not on that list. `packages/oaa_engine/test/vectors_test.dart`
+runs the [official EBU and ITU vectors](#-the-correctness-gate) and skips unless
+`OAA_VECTORS` and `OAA_VECTORS_ITU` say where they are, because 811 MB of
+material nobody may redistribute cannot be a gate. Run it after touching
+anything in `engine/src/oaa_loudness.*`, `oaa_kweight.*` or `oaa_truepeak.*`.
 
 The engine tests are worth a look even if you never touch the C. A sine of
 amplitude *A* has a peak of *A* and an RMS of *A*/√2 — exactly 3.0103 dB lower.
@@ -863,10 +895,14 @@ and `packaging/macos/notarize.sh` is what then gets a download past Gatekeeper
 without the user doing anything — a signature on its own does not, which is the
 step people skip.
 
-The bundles are universal and load on **macOS 11 and later**. That is one
-version above the application's own floor of 10.15, which is why the pkg greys
-out its two plugin rows on Catalina rather than installing something that would
-never load. Releases up to 0.5.0 were neither: CMake defaults both the
+The bundles are universal and load on **macOS 14.2 and later**, which is the
+application's floor too — so the pkg no longer has a band of versions that can
+run one and not the other, and its plugin rows are gated on the same version the
+whole installer is. The floor is 14.2 because the engine holds a strong
+reference to `CATapDescription`, and a strong reference to a class that does not
+exist is a library dyld cannot load *at all* — see the assertion at the top of
+`engine/src/oaa_tap.h`. Releases up to 0.5.0 were neither universal nor
+portable: CMake defaults both the
 architecture and the deployment target to whatever machine did the build, so
 the runner shipped an arm64-only bundle that no Intel Mac and no older macOS
 could load — and a bundle whose slice does not match is, to a DAW, the same
@@ -1026,19 +1062,18 @@ so a release built from a fork is unsigned and every script says so. See
   the LAN and stays read-only until somebody designs authentication for it.
   Silently restarting an integration mid-programme is wrong in a way nothing on
   screen reveals, which is not a capability to put on an unauthenticated port.
-- 🔊 **Capturing your own system's output needs macOS below 14.2 to be
-  worked around.** Everywhere else it now takes no setup at all, and there is
-  no driver to install on any platform.
+- 🔊 **Capturing your own system's output takes all of it, and on macOS it
+  takes permission.** There is no driver to install on any platform and no
+  per-application selection on any of them.
   - **Windows** — nothing to do. WASAPI loopback captures whatever is playing.
-  - **macOS 14.2 and later** — nothing to do. **System Output** is the first
-    entry in the source menu, named after the output device it is metering. It
-    is a Core Audio process tap: it reads what is being sent to your speakers
-    without rerouting it, so you keep hearing your audio, and the first time you
-    choose it macOS may ask for permission to record system audio.
-  - **macOS below 14.2** — the entry is absent, because the API is not there.
-    Install [BlackHole](https://existential.audio/blackhole/) (free) or
-    Loopback, route your output through it, and it appears in the source menu
-    like any other input.
+  - **macOS** — nothing to do. **System Output** is the first entry in the
+    source menu, named after the output device it is metering. It is a Core
+    Audio process tap: it reads what is being sent to your speakers without
+    rerouting it, so you keep hearing your audio. The first time you choose it
+    macOS asks for permission to record system audio, and a refusal is silent by
+    Apple's design — the meters read digital black rather than saying no. 14.2
+    is where the tapping API arrived and it is also this application's minimum,
+    so there is no supported version where the entry is missing.
   - **Linux** — a PulseAudio or PipeWire monitor source already appears in the
     list.
 

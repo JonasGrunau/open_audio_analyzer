@@ -1,25 +1,31 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// The spectrum analyser's Response setting, held to what it promises.
+// The spectrum analyser's Response and Tilt settings, held to what they
+// promise.
 //
 // The engine publishes a transform every 1024 samples — about 47 a second — and
 // drawing each one untouched makes the curve flicker hard enough that the shape
 // of a balance is difficult to read. Response averages the *drawn* level over a
-// time constant instead of drawing fewer frames, and the three things worth
-// proving are the three that make that an honest trade:
+// time constant instead of drawing fewer frames, and Tilt rotates what is drawn
+// about 1 kHz so that a mix is roughly horizontal rather than a ramp. Five
+// things are worth proving:
 //
 //   - Fast is not an average at all. The curve is where the last published
 //     frame put it, which is what it was before the setting existed.
 //   - A slower setting arrives. A one-pole that lags and then never quite gets
 //     there is a meter that reads low on steady programme.
-//   - The peak-hold line moves with the curve and still arrives where the
-//     engine's hold went. It used to snap to a new peak while the curve eased
-//     towards it, which on Slow read as two plots in one box; folding it
-//     through the same pole fixes the motion without lowering the line.
-//   - `SpectrumHold.envelope` holds the curve instead, and says so by reading
-//     *lower* than the peaks on a transient a slow curve smoothed away. That is
-//     the whole cost of the setting, and it is the reason it is not the
-//     default.
+//   - The hold sits above the curve after a transient and then comes down to
+//     it. It is the envelope of the drawn curve, so it moves with it by
+//     construction — what has to be shown is that it holds at all, and that it
+//     lets itself down again afterwards.
+//   - The hold cannot exceed the curve, and says so by reading *lower* than
+//     the engine's own peak on a transient a slow response smoothed away. That
+//     is the whole cost of holding what the reader can see, and `Fast` is the
+//     setting that catches a click.
+//   - A tilt rotates the picture in the direction and by the amount the
+//     setting names, and takes the hold line with it. A tilt applied to the
+//     curve and not to the line above it would bury the line under the fill at
+//     the top of the range and nothing would look broken.
 //
 // These are pixel reads for the reason `histogram_test.dart` gives — a level
 // folded into the wrong buffer passes every widget assertion there is.
@@ -56,8 +62,13 @@ class _Fake implements MeterSource {
   int _generation = 0;
   double _elapsed = 0;
 
-  /// One published frame [seconds] later, with every band at [db] and the hold
-  /// at [peakDb].
+  /// One published frame [seconds] later, with every band at [db].
+  ///
+  /// [peakDb] fills the engine's own per-band hold, which the analyser no
+  /// longer draws — the line above the curve is the envelope of the curve. It
+  /// is still published, still on the wire and still what a report carries, so
+  /// a test that sets it and then finds nothing on screen holding it is part of
+  /// what is being proved.
   void publish(double seconds, {required double db, double peakDb = -96}) {
     _generation++;
     _elapsed += seconds;
@@ -150,13 +161,18 @@ class _Harness extends StatefulWidget {
     required this.source,
     required this.boundary,
     required this.response,
-    this.hold = SpectrumHold.peaks,
+    this.tilt = SpectrumTilt.db0,
   }) : super(key: UniqueKey());
 
   final MeterSource source;
   final GlobalKey boundary;
   final SpectrumResponse response;
-  final SpectrumHold hold;
+
+  /// **Flat unless a test is about the tilt**, where the module itself defaults
+  /// to 4.5 dB/oct. Every reading below is a pixel row at one x, and a tilt
+  /// offsets that row by however many octaves the x stands for — which would
+  /// leave each response assertion quietly measuring a level nobody chose.
+  final SpectrumTilt tilt;
 
   @override
   State<_Harness> createState() => _HarnessState();
@@ -188,7 +204,7 @@ class _HarnessState extends State<_Harness>
                 engine: widget.source,
                 clock: clock,
                 response: widget.response,
-                hold: widget.hold,
+                tilt: widget.tilt,
               ),
             ),
           ),
@@ -197,6 +213,15 @@ class _HarnessState extends State<_Harness>
     ),
   );
 }
+
+/// Two columns to read the tilt between, well inside the plot at either end.
+///
+/// The plot is the module's width less the gutter the dB labels reserve, so
+/// neither of these is a frequency the test can name — which is the point of
+/// asserting one tilt against another rather than against a number of
+/// decibels.
+const int _xLow = 100;
+const int _xHigh = 400;
 
 /// Where the curve sits with [db] published steadily at [response].
 Future<int> _settled(
@@ -299,7 +324,60 @@ void main() {
     );
   });
 
-  testWidgets('the hold travels with the curve and still gets there', (
+  testWidgets('the hold sits above the curve and then comes down to it', (
+    tester,
+  ) async {
+    final loud = await _settled(tester, SpectrumResponse.fast, -12);
+
+    final key = GlobalKey();
+    final source = _Fake();
+    await tester.pumpWidget(
+      _Harness(source: source, boundary: key, response: SpectrumResponse.fast),
+    );
+
+    for (var i = 0; i < 60; i++) {
+      source.publish(0.02, db: -60);
+      await _frame(tester);
+    }
+    final quiet = _topAt(await _shoot(tester, key));
+    expect(
+      quiet,
+      greaterThan(loud + 20),
+      reason: 'the two levels were not far enough apart to prove anything',
+    );
+
+    // The programme goes loud for one frame and then quiet again. On Fast the
+    // curve is back at the floor the very next frame; the line has to stay up
+    // there, which is the entire purpose of a hold.
+    source.publish(0.02, db: -12);
+    await _frame(tester);
+    for (var i = 0; i < 10; i++) {
+      source.publish(0.02, db: -60);
+      await _frame(tester);
+    }
+    final held = _topAt(await _shoot(tester, key), ink: 32);
+    expect(
+      (held - loud).abs(),
+      lessThanOrEqualTo(3),
+      reason: 'the hold did not stay at the level the curve reached',
+    );
+
+    // And then it lets itself down: a second and a half at the top, and 12 dB
+    // a second after that. Eight seconds is comfortably past the five and a
+    // half that 48 dB of fall takes. A hold that never falls is a high-water
+    // mark for the session, which is a different instrument.
+    for (var i = 0; i < 400; i++) {
+      source.publish(0.02, db: -60);
+      await _frame(tester);
+    }
+    expect(
+      (_topAt(await _shoot(tester, key), ink: 32) - quiet).abs(),
+      lessThanOrEqualTo(3),
+      reason: 'the hold never came back down to the curve',
+    );
+  });
+
+  testWidgets('the hold holds the curve, which is lower and says so', (
     tester,
   ) async {
     final loud = await _settled(tester, SpectrumResponse.fast, -12);
@@ -314,63 +392,11 @@ void main() {
       source.publish(0.02, db: -60, peakDb: -60);
       await _frame(tester);
     }
-    final quiet = _topAt(await _shoot(tester, key));
-    expect(
-      quiet,
-      greaterThan(loud + 20),
-      reason: 'the two levels were not far enough apart to prove anything',
-    );
 
-    // The programme goes loud, and the engine's hold latches immediately — it
-    // is a hold. One 20 ms frame into a 500 ms time constant, the *drawn* line
-    // must not already be at the top: that jump beside a curve that has barely
-    // moved is the thing this fold removes.
-    source.publish(0.02, db: -12, peakDb: -12);
-    await _frame(tester);
-    final stepped = _topAt(await _shoot(tester, key), ink: 32);
-    expect(
-      stepped,
-      greaterThan(loud + 10),
-      reason: 'the hold snapped past the curve instead of travelling with it',
-    );
-    expect(stepped, lessThan(quiet), reason: 'the hold did not move at all');
-
-    // And it arrives. A hold that eased towards a peak and stopped short would
-    // be a meter reading low on the one thing it is there to catch.
-    for (var i = 0; i < 150; i++) {
-      source.publish(0.02, db: -60, peakDb: -12);
-      await _frame(tester);
-    }
-    expect(
-      (_topAt(await _shoot(tester, key), ink: 32) - loud).abs(),
-      lessThanOrEqualTo(3),
-      reason: 'the hold never reached the peak the engine caught',
-    );
-  });
-
-  testWidgets('Envelope holds the curve, which is lower and says so', (
-    tester,
-  ) async {
-    final loud = await _settled(tester, SpectrumResponse.fast, -12);
-
-    final key = GlobalKey();
-    final source = _Fake();
-    await tester.pumpWidget(
-      _Harness(
-        source: source,
-        boundary: key,
-        response: SpectrumResponse.slow,
-        hold: SpectrumHold.envelope,
-      ),
-    );
-
-    for (var i = 0; i < 60; i++) {
-      source.publish(0.02, db: -60, peakDb: -60);
-      await _frame(tester);
-    }
-
-    // The same transient as above, and the same time to settle. Peaks reaches
-    // the top; this cannot, because the curve it is holding never went there.
+    // One frame of programme at −12 dB, which a 500 ms pole barely moves the
+    // curve for, and the engine's own hold latched to it. The line above the
+    // curve cannot reach that: it is holding the curve, and the curve never
+    // went there.
     source.publish(0.02, db: -12, peakDb: -12);
     await _frame(tester);
     for (var i = 0; i < 30; i++) {
@@ -382,8 +408,106 @@ void main() {
       _topAt(await _shoot(tester, key), ink: 32),
       greaterThan(loud + 10),
       reason:
-          'Envelope reached a level the drawn curve never did, so it is not '
+          'the line reached a level the drawn curve never did, so it is not '
           'holding the curve',
+    );
+  });
+
+  testWidgets('a tilt rotates the picture by what the setting says', (
+    tester,
+  ) async {
+    // A flat spectrum is the one input a tilt is legible against: whatever the
+    // curve does across the width is the tilt, and nothing else.
+    Future<(int, int)> ends(SpectrumTilt tilt) async {
+      final key = GlobalKey();
+      final source = _Fake();
+      await tester.pumpWidget(
+        _Harness(
+          source: source,
+          boundary: key,
+          response: SpectrumResponse.fast,
+          tilt: tilt,
+        ),
+      );
+      for (var i = 0; i < 10; i++) {
+        source.publish(0.02, db: -40);
+        await _frame(tester);
+      }
+      final pixels = await _shoot(tester, key);
+      return (_topAt(pixels, x: _xLow), _topAt(pixels, x: _xHigh));
+    }
+
+    final (flatLow, flatHigh) = await ends(SpectrumTilt.db0);
+    expect(
+      (flatLow - flatHigh).abs(),
+      lessThanOrEqualTo(1),
+      reason: '0 dB/oct drew a flat spectrum as something other than flat',
+    );
+
+    // Up to the right, because that is where the energy of a mix is missing.
+    // Smaller y is higher on the screen.
+    final (steepLow, steepHigh) = await ends(SpectrumTilt.db4p5);
+    expect(
+      steepHigh,
+      lessThan(steepLow - 40),
+      reason: '4.5 dB/oct did not lift the top of the range',
+    );
+    expect(
+      steepLow,
+      greaterThan(flatLow),
+      reason:
+          'the rotation lifted the bottom of the range as well as the '
+          'top, so it is an offset and not a tilt',
+    );
+
+    // Two settings, one ratio. Asserted against each other rather than in
+    // decibels, because the alternative is a test that has to know how wide
+    // the plot is and where the graticule's gutter starts — and would then
+    // pass or fail on the width of a tick label.
+    final (midLow, midHigh) = await ends(SpectrumTilt.db3);
+    final steep = steepLow - steepHigh;
+    final mid = midLow - midHigh;
+    expect(
+      steep / mid,
+      closeTo(1.5, 0.15),
+      reason: '4.5 dB/oct is not one and a half times 3 dB/oct',
+    );
+  });
+
+  testWidgets('the tilt takes the hold line with it', (tester) async {
+    // The steepest setting, and a reading at the top of the range where it
+    // lifts the curve by nearly twenty decibels. A hold left untilted would
+    // sit that far *below* the curve, under the fill, where the eye reads a
+    // module with no hold at all rather than a bug.
+    final key = GlobalKey();
+    final source = _Fake();
+    await tester.pumpWidget(
+      _Harness(
+        source: source,
+        boundary: key,
+        response: SpectrumResponse.fast,
+        tilt: SpectrumTilt.db6,
+      ),
+    );
+
+    for (var i = 0; i < 30; i++) {
+      source.publish(0.02, db: -60);
+      await _frame(tester);
+    }
+    source.publish(0.02, db: -24);
+    await _frame(tester);
+    for (var i = 0; i < 10; i++) {
+      source.publish(0.02, db: -60);
+      await _frame(tester);
+    }
+
+    final pixels = await _shoot(tester, key);
+    final curve = _topAt(pixels, x: _xHigh);
+    final hold = _topAt(pixels, x: _xHigh, ink: 32);
+    expect(
+      hold,
+      lessThan(curve - 20),
+      reason: 'the hold is not above the curve at the top of a tilted range',
     );
   });
 }

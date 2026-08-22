@@ -408,13 +408,20 @@ class _PhaseScopePainter extends MeterPainter {
       size.width,
       _correlationHeight,
     );
-    canvas.drawRect(track, _correlationTrack);
+    // Rounded at the two ends only: the bar is the one thing here that is not
+    // part of the graticule, so it reads as a control rather than a scale.
+    final rounded = RRect.fromRectAndRadius(track, OaaRadius.xs);
+    canvas.drawRRect(rounded, _correlationTrack);
 
     final correlation = engine.correlation;
     if (!correlation.isNaN) {
       final centreX = track.center.dx;
       final extent = correlation.clamp(-1.0, 1.0) * track.width / 2;
       _correlation.color = correlation < 0 ? colors.warn : colors.meterFill;
+      // At ±1 the fill reaches the end of the track, so it is clipped to the
+      // same corners rather than drawn square over them.
+      canvas.save();
+      canvas.clipRRect(rounded);
       canvas.drawRect(
         Rect.fromLTRB(
           extent < 0 ? centreX + extent : centreX,
@@ -424,6 +431,7 @@ class _PhaseScopePainter extends MeterPainter {
         ),
         _correlation,
       );
+      canvas.restore();
     }
     canvas.drawLine(
       Offset(track.center.dx, track.top),

@@ -268,23 +268,33 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
           _ModuleAction.response,
           'Response: ${module.spectrumResponse.label}',
         ),
-        // What the line above the curve holds. See `SpectrumHold` — the two
-        // are different pictures, not different amounts of smoothing.
+        // How far the drawn curve is rotated. See `SpectrumTilt` — it is a
+        // view of the same measurement, and the module says which one is on.
         oaaMenuItem(
           context,
-          _ModuleAction.hold,
-          'Peak hold: ${module.spectrumHold.label}',
+          _ModuleAction.tilt,
+          'Tilt: ${module.spectrumTilt.label}',
         ),
       ],
+      // Named "Smoothing" rather than a response or a time constant, because
+      // unlike the analyser's this is not a ballistic: it is a centred window
+      // over history that has already been measured, and it moves nothing in
+      // time. See `HistogramSmoothing`.
+      if (module.kind == ModuleKind.histogram)
+        oaaMenuItem(
+          context,
+          _ModuleAction.smoothing,
+          'Smoothing: ${module.histogramSmoothing.label}',
+        ),
       // The one control the oscilloscope has, and it is two settings in one:
       // it sets how much time the width holds *and*, by doing so, whether
       // the display is triggered or rolls. See `ScopeTimeBase`.
       if (module.kind == ModuleKind.oscilloscope) ...[
         // What the window is locked to, and then the width in whichever unit
-        // that answer makes meaningful. Both rows are never shown: a
+        // that answer makes meaningful. Both width rows are never shown: a
         // millisecond width means nothing to a bar-locked display and a note
-        // value means nothing without a tempo, and a menu that offers a
-        // setting which does nothing is a menu that has to be explained.
+        // value means nothing without a tempo, and the width is asked for
+        // either way — one setting, spelled in the unit that answers.
         oaaMenuItem(
           context,
           _ModuleAction.sync,
@@ -296,30 +306,45 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
             _ModuleAction.timeBase,
             'Time base: ${module.scopeTimeBase.label}',
           ),
-        if (module.scopeSync == ScopeSync.tempo) ...[
+        if (module.scopeSync == ScopeSync.tempo)
           oaaMenuItem(
             context,
             _ModuleAction.division,
             'Division: ${module.scopeDivision.label}',
           ),
+        // What starts the window, which only a free-running one has a choice
+        // about — a tempo-locked window is already placed by the bar line. So
+        // it is **disabled rather than dropped**, and in the same row of the
+        // menu either way: a row that vanishes is a row somebody hunts for, and
+        // the setting they would suspect is the trigger itself rather than the
+        // sync two rows above it. The *threshold* it fires at is not a row at
+        // all — it is a slider on the module, because it is chosen by watching
+        // the picture. See `ScopeTrigger`.
+        oaaMenuItem(
+          context,
+          _ModuleAction.trigger,
+          'Trigger: ${module.scopeTrigger.label}',
+          enabled: module.scopeSync == ScopeSync.free,
+        ),
+        if (module.scopeSync == ScopeSync.tempo)
           oaaMenuItem(
             context,
             _ModuleAction.grid,
             'Grid: ${module.scopeGrid.label}',
           ),
-        ],
-        // Two settings about the picture rather than about the window, so they
-        // sit under the one that decides what is in it. See `ScopeStereo` and
-        // `ScopeZoom`.
+        // How the picture is arranged rather than what is in it, so it sits
+        // under the settings that decide the window. See `ScopeStereo`.
+        //
+        // **`Height` used to be the row below this one and is now a slider on
+        // the module itself.** It is a number over thirty decibels of range,
+        // and a menu of four multipliers meant the setting that fitted the
+        // material was usually between two rows — and that every step of
+        // finding it closed a menu over the waveform it was being judged
+        // against. See `ScopeZoom`.
         oaaMenuItem(
           context,
           _ModuleAction.stereo,
           'Stereo: ${module.scopeStereo.label}',
-        ),
-        oaaMenuItem(
-          context,
-          _ModuleAction.zoom,
-          'Height: ${module.scopeZoom.label}',
         ),
       ],
     ];
@@ -351,8 +376,10 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
         await _showMetricMenu(globalPosition, module);
       case _ModuleAction.response:
         await _showResponseMenu(globalPosition, module);
-      case _ModuleAction.hold:
-        await _showHoldMenu(globalPosition, module);
+      case _ModuleAction.tilt:
+        await _showTiltMenu(globalPosition, module);
+      case _ModuleAction.smoothing:
+        await _showSmoothingMenu(globalPosition, module);
       case _ModuleAction.timeBase:
         await _showTimeBaseMenu(globalPosition, module);
       case _ModuleAction.sync:
@@ -363,8 +390,8 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
         await _showGridMenu(globalPosition, module);
       case _ModuleAction.stereo:
         await _showStereoMenu(globalPosition, module);
-      case _ModuleAction.zoom:
-        await _showZoomMenu(globalPosition, module);
+      case _ModuleAction.trigger:
+        await _showTriggerMenu(globalPosition, module);
       case _ModuleAction.duplicate:
         if (!_controller.duplicateModule(module.id)) {
           _report('No room on this tab for another ${module.kind.label}.');
@@ -422,26 +449,51 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
     _controller.setModuleOption(module.id, 'response', response.id);
   }
 
-  Future<void> _showHoldMenu(Offset globalPosition, ModuleSpec module) async {
+  Future<void> _showTiltMenu(Offset globalPosition, ModuleSpec module) async {
     final colors = OaaTheme.of(context);
-    final current = module.spectrumHold;
-    final hold = await showMenu<SpectrumHold>(
+    final current = module.spectrumTilt;
+    final tilt = await showMenu<SpectrumTilt>(
       context: context,
       color: colors.panelRaised,
       position: menuPositionAt(context, globalPosition),
       items: [
-        for (final hold in SpectrumHold.values)
+        for (final tilt in SpectrumTilt.values)
           oaaMenuItem(
             context,
-            hold,
-            hold.label,
-            color: hold == current ? colors.textPrimary : colors.textMuted,
+            tilt,
+            tilt.label,
+            color: tilt == current ? colors.textPrimary : colors.textMuted,
           ),
       ],
     );
 
-    if (hold == null || !mounted) return;
-    _controller.setModuleOption(module.id, 'hold', hold.id);
+    if (tilt == null || !mounted) return;
+    _controller.setModuleOption(module.id, 'tilt', tilt.id);
+  }
+
+  Future<void> _showSmoothingMenu(
+    Offset globalPosition,
+    ModuleSpec module,
+  ) async {
+    final colors = OaaTheme.of(context);
+    final current = module.histogramSmoothing;
+    final smoothing = await showMenu<HistogramSmoothing>(
+      context: context,
+      color: colors.panelRaised,
+      position: menuPositionAt(context, globalPosition),
+      items: [
+        for (final smoothing in HistogramSmoothing.values)
+          oaaMenuItem(
+            context,
+            smoothing,
+            smoothing.label,
+            color: smoothing == current ? colors.textPrimary : colors.textMuted,
+          ),
+      ],
+    );
+
+    if (smoothing == null || !mounted) return;
+    _controller.setModuleOption(module.id, 'smoothing', smoothing.id);
   }
 
   Future<void> _showTimeBaseMenu(
@@ -560,26 +612,29 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
     _controller.setModuleOption(module.id, 'stereo', mode.id);
   }
 
-  Future<void> _showZoomMenu(Offset globalPosition, ModuleSpec module) async {
+  Future<void> _showTriggerMenu(
+    Offset globalPosition,
+    ModuleSpec module,
+  ) async {
     final colors = OaaTheme.of(context);
-    final current = module.scopeZoom;
-    final zoom = await showMenu<ScopeZoom>(
+    final current = module.scopeTrigger;
+    final trigger = await showMenu<ScopeTrigger>(
       context: context,
       color: colors.panelRaised,
       position: menuPositionAt(context, globalPosition),
       items: [
-        for (final zoom in ScopeZoom.values)
+        for (final trigger in ScopeTrigger.values)
           oaaMenuItem(
             context,
-            zoom,
-            zoom.label,
-            color: zoom == current ? colors.textPrimary : colors.textMuted,
+            trigger,
+            trigger.label,
+            color: trigger == current ? colors.textPrimary : colors.textMuted,
           ),
       ],
     );
 
-    if (zoom == null || !mounted) return;
-    _controller.setModuleOption(module.id, 'zoom', zoom.id);
+    if (trigger == null || !mounted) return;
+    _controller.setModuleOption(module.id, 'trigger', trigger.id);
   }
 
   // --- Build --------------------------------------------------------------
@@ -735,6 +790,8 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
         handleTouchHeight: handleTouch,
         onSelect: () => _controller.select(module.id),
         onMenu: (position) => _showModuleMenu(position, module),
+        onOption: (key, value) =>
+            _controller.setModuleOption(module.id, key, value),
         onDragStart: (resize) => _beginDrag(module, resize: resize),
         onDragUpdate: (details) => _updateDrag(details, geometry),
         onDragEnd: _endDrag,
@@ -751,13 +808,15 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
 enum _ModuleAction {
   metric,
   response,
-  hold,
+  tilt,
+  smoothing,
   timeBase,
+  trigger,
   sync,
   division,
   grid,
   stereo,
-  zoom,
+
   duplicate,
   delete,
 }
@@ -775,6 +834,7 @@ class _ModuleSlot extends StatelessWidget {
     required this.handleTouchHeight,
     required this.onSelect,
     required this.onMenu,
+    required this.onOption,
     required this.onDragStart,
     required this.onDragUpdate,
     required this.onDragEnd,
@@ -796,6 +856,11 @@ class _ModuleSlot extends StatelessWidget {
   final double handleTouchHeight;
   final VoidCallback onSelect;
   final void Function(Offset globalPosition) onMenu;
+
+  /// A setting the module changes itself, from a control of its own. The
+  /// oscilloscope's height and trigger level are the only two — see
+  /// `ModuleHost.onOption`.
+  final void Function(String key, Object? value) onOption;
   final void Function(bool resize) onDragStart;
   final void Function(DragUpdateDetails details) onDragUpdate;
   final VoidCallback onDragEnd;
@@ -888,6 +953,7 @@ class _ModuleSlot extends StatelessWidget {
           calibration: calibration,
           selected: selected,
           onMenu: () => onMenu(_centreOf(context)),
+          onOption: onOption,
         ),
 
         // The corner grip's target for a finger, on the same principle as the

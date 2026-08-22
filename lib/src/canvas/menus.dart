@@ -21,19 +21,33 @@ RelativeRect menuPositionAt(BuildContext context, Offset globalPosition) {
   );
 }
 
+/// A row of one of those menus.
+///
+/// [enabled] is `false` for a setting that is *in* this menu but does nothing
+/// where the module currently stands — the oscilloscope's trigger under a
+/// tempo-locked window is the one. It greys and stops answering rather than
+/// being left out of the list: a row that disappears is a row the user goes
+/// looking for, and the setting above it — the one that turned this one off —
+/// is not what they suspect. The ink is [OaaColors.textFaint], which is the
+/// role's second job; the Material default would be a colour from outside the
+/// skin.
 PopupMenuItem<T> oaaMenuItem<T>(
   BuildContext context,
   T value,
   String label, {
   Color? color,
+  bool enabled = true,
 }) {
   final colors = OaaTheme.of(context);
   return PopupMenuItem<T>(
     value: value,
     height: Space.xl,
+    enabled: enabled,
     child: Text(
       label,
-      style: OaaType.body.copyWith(color: color ?? colors.textPrimary),
+      style: OaaType.body.copyWith(
+        color: enabled ? color ?? colors.textPrimary : colors.textFaint,
+      ),
     ),
   );
 }

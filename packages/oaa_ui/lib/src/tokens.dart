@@ -102,6 +102,16 @@ abstract final class OaaStroke {
 
   /// Emphasis on a target line or an active selection.
   static const double emphasis = 2;
+
+  /// A mark that has to be found *across* other ink, rather than read against
+  /// the background.
+  ///
+  /// The super meter's target tick is the case this exists for: it is radial,
+  /// so antialiasing spreads it across two pixel columns, and it crosses three
+  /// arcs whose fill is the brightest thing on the module. At [emphasis] it
+  /// read as an artefact of the arcs rather than as the one number the whole
+  /// gauge is aimed at. Nothing that sits on the background needs this.
+  static const double heavy = 3;
 }
 
 /// The colour palette.

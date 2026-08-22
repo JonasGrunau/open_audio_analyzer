@@ -251,6 +251,52 @@ void main() {
     expect(frame.selected, isTrue);
   });
 
+  testWidgets('a slider on a module moves the value and not the module', (
+    tester,
+  ) async {
+    // The oscilloscope is the one module with controls of its own, and they sit
+    // *inside* a stack whose other layers all drag the module. What is checked
+    // here is that the strip takes the gesture and nothing else does: an opaque
+    // detector over the selection catcher, clear of the corner grip, and a
+    // value written back to the layout once.
+    final container = await _pumpSparse(tester);
+    final controller = container.read(workspaceProvider.notifier);
+    controller.addModule(
+      ModuleKind.oscilloscope,
+      at: const GridRect(column: 0, row: 4, columns: 12, rows: 6),
+    );
+    final id = container.read(workspaceProvider).selectedModuleId!;
+    await tester.pump();
+
+    final before = container.read(workspaceProvider).tab.moduleById(id)!;
+    expect(before.scopeZoom, ScopeZoom.defaultScale);
+
+    final slider = find.descendant(
+      of: _moduleTitled('OSCILLOSCOPE'),
+      matching: find.byType(OaaSlider),
+    );
+    expect(slider, findsOneWidget, reason: 'the strip is not on the module');
+
+    await tester.drag(
+      slider,
+      const Offset(Space.xl, 0),
+      kind: PointerDeviceKind.mouse,
+    );
+    await tester.pump();
+
+    final after = container.read(workspaceProvider).tab.moduleById(id)!;
+    expect(
+      after.rect.column,
+      before.rect.column,
+      reason: 'dragging the slider carried the module with it',
+    );
+    expect(after.rect.row, before.rect.row);
+    // Pressed at the middle of the track and dragged a little to the right of
+    // it, so the height is above the default and short of the top.
+    expect(after.scopeZoom, greaterThan(ScopeZoom.defaultScale));
+    expect(after.scopeZoom, lessThan(ScopeZoom.max));
+  });
+
   testWidgets('dragging the title bar moves the module by whole cells', (
     tester,
   ) async {

@@ -1,0 +1,66 @@
+---
+import Base from '../layouts/Base.astro';
+
+const REPO = 'https://github.com/JonasGrunau/open_audio_analyzer';
+const DOCS = 'https://jonasgrunau.github.io/open_audio_analyzer';
+---
+
+<Base
+  title="No page at this address — Open Audio Analyzer"
+  description="There is no page at this address. The front page, the downloads and the documentation are all one link away."
+  path="/404"
+>
+  <section class="nf shell">
+    <div class="nf-mark" aria-hidden="true">—</div>
+    <p class="label nf-code">HTTP 404</p>
+    <h1>No page at this address</h1>
+    <p class="prose nf-p">The pages that do exist:</p>
+    <ul class="nf-list">
+      <li><a class="link" href="/">The front page, and the meter bridge</a></li>
+      <li><a class="link" href="/download">Downloads for all five platforms</a></li>
+      <li><a class="link" href={DOCS} rel="noopener">The documentation site</a></li>
+      <li><a class="link" href={REPO} rel="noopener">The repository</a></li>
+    </ul>
+  </section>
+</Base>
+
+<style>
+  .nf {
+    padding-block: var(--s128) var(--s128);
+    max-width: 720px;
+    margin-inline: auto;
+  }
+
+  .nf-mark {
+    font-family: var(--readout);
+    font-size: clamp(4rem, 14vw, 9rem);
+    line-height: 0.7;
+    color: var(--faint);
+    user-select: none;
+  }
+
+  .nf-code {
+    margin-top: var(--s32);
+    color: var(--over);
+  }
+
+  .nf h1 {
+    margin-top: var(--s16);
+  }
+
+  .nf-p {
+    margin-top: var(--s32);
+  }
+
+  .nf-list {
+    list-style: none;
+    margin: var(--s32) 0 0;
+    padding: 0;
+  }
+
+  .nf-list li {
+    padding: var(--s12) 0;
+    border-bottom: 1px solid var(--hair);
+    font-size: 0.9375rem;
+  }
+</style>

@@ -37,6 +37,7 @@ class ModuleHost extends StatelessWidget {
     required this.calibration,
     required this.selected,
     required this.onMenu,
+    this.onOption,
     super.key,
   });
 
@@ -51,6 +52,16 @@ class ModuleHost extends StatelessWidget {
   /// viewer cannot change anything about what is on that screen, and a control
   /// that is drawn and does nothing is worse than one that is not there.
   final VoidCallback? onMenu;
+
+  /// Writes one of the module's own settings back into the layout.
+  ///
+  /// Null on the same surface [onMenu] is null on, and for the same reason: a
+  /// remote display renders the layout it was sent and changes nothing about
+  /// it. Only the oscilloscope uses this today — it is the one module with a
+  /// setting that is a *number*, and a number is dragged rather than picked off
+  /// a menu. Everything else a module can be set to still goes through the
+  /// canvas's menu, which is where a closed set of named choices belongs.
+  final void Function(String key, Object? value)? onOption;
 
   @override
   Widget build(BuildContext context) {
@@ -137,6 +148,7 @@ class ModuleHost extends StatelessWidget {
         engine: engine,
         clock: clock,
         calibration: calibration,
+        smoothing: spec.histogramSmoothing,
       ),
       ModuleKind.loudnessDistribution => LoudnessDistributionModule(
         engine: engine,
@@ -147,7 +159,7 @@ class ModuleHost extends StatelessWidget {
         engine: engine,
         clock: clock,
         response: spec.spectrumResponse,
-        hold: spec.spectrumHold,
+        tilt: spec.spectrumTilt,
       ),
       ModuleKind.spectrogram => SpectrogramModule(engine: engine, clock: clock),
       ModuleKind.oscilloscope => OscilloscopeModule(
@@ -158,7 +170,11 @@ class ModuleHost extends StatelessWidget {
         division: spec.scopeDivision,
         grid: spec.scopeGrid,
         stereo: spec.scopeStereo,
+        trigger: spec.scopeTrigger,
+        threshold: spec.scopeThresholdDb,
+        autoThreshold: spec.scopeAutoThreshold,
         zoom: spec.scopeZoom,
+        onOption: onOption,
       ),
       ModuleKind.phaseScope => PhaseScopeModule(engine: engine, clock: clock),
       ModuleKind.stereoCloud => StereoCloudModule(engine: engine, clock: clock),

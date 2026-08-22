@@ -31,10 +31,17 @@ import '../clock/meter_clock.dart';
 ///
 /// Colour is the target and nothing else. Everything under the calibration's
 /// LUFS target is drawn in [OaaColors.accent], everything over it in
-/// [OaaColors.over], and the split is a clip rather than a per-column verdict —
+/// [OaaColors.warn], and the split is a clip rather than a per-column verdict —
 /// a short-term reading above target is not a delivery failure and must not be
 /// coloured as though somebody had classified it as one. It is the *area* over
 /// the line that carries the meaning, and the eye adds that up on its own.
+///
+/// **[OaaColors.warn] and not [OaaColors.over]**, which this drew in for two
+/// phases. `over` is the colour of a ceiling that has been exceeded — a clipped
+/// sample, a true peak past the limit — and spending it on "louder than the
+/// number you are aiming at" left the module contradicting the sentence above
+/// it. Every bar in the application now marks the same thing the same way: over
+/// the target is amber, and red is still a failure.
 ///
 /// ---------------------------------------------------------------------------
 /// Not to be confused with the Loudness Distribution
@@ -68,17 +75,42 @@ import '../clock/meter_clock.dart';
 /// for what that costs — the short version is 266 GB and a dead raster thread.
 /// The whole visible history is redrawn every frame out of buffers allocated on
 /// resize, which for a 1200-column display is three `drawRawPoints` calls.
+///
+/// ---------------------------------------------------------------------------
+/// Smoothing happens on the way out of the ring, never on the way in
+///
+/// The ring holds what was measured. [HistogramSmoothing] is applied when the
+/// columns are read, every frame, which is what makes the setting a *view*: it
+/// redraws the whole programme so far rather than taking effect from the moment
+/// it was chosen, and `Off` is the measured columns byte for byte. A smoother
+/// applied in [_LoudnessHistory.accumulate] would be cheaper and would leave a
+/// module whose history was drawn under two different settings at once.
+///
+/// **Both bands take the same window.** Smoothing the momentary and not the
+/// short-term — or the reverse — would make the *gap* between them a difference
+/// between two filters rather than a difference between two measurements, and
+/// the gap is the whole reading.
+///
+/// One consequence worth stating: the colour split is a clip at the target
+/// applied to the drawn geometry, so at any setting but `Off` the coloured area
+/// is the area of the *smoothed* curve over the target. The area is being read
+/// as a shape rather than counted in columns, which is what the split was for.
 class HistogramModule extends StatefulWidget {
   const HistogramModule({
     required this.engine,
     required this.clock,
     required this.calibration,
+    this.smoothing = HistogramSmoothing.normal,
     super.key,
   });
 
   final MeterSource engine;
   final MeterClock clock;
   final Calibration calibration;
+
+  /// How much the two bands are averaged over before they are drawn. See
+  /// [HistogramSmoothing].
+  final HistogramSmoothing smoothing;
 
   @override
   State<HistogramModule> createState() => _HistogramModuleState();
@@ -143,6 +175,12 @@ class _HistogramModuleState extends State<HistogramModule> {
   Float32List _momentaryBars = Float32List(0);
   Float32List _curve = Float32List(0);
   Float32List _dashes = Float32List(0);
+
+  /// The two bands as they are drawn — the ring's columns through the
+  /// smoothing window. One value per visible column, newest first, which is the
+  /// order [_LoudnessHistory] indexes in.
+  Float32List _shortShown = Float32List(0);
+  Float32List _momentaryShown = Float32List(0);
   int _builtColumns = -1;
 
   void _ensureColumns(int columns) {
@@ -152,6 +190,8 @@ class _HistogramModuleState extends State<HistogramModule> {
     _momentaryBars = Float32List(columns * 4);
     _curve = Float32List(columns * 2);
     _dashes = Float32List((columns / _dashPeriod).ceil() * 4);
+    _shortShown = Float32List(columns);
+    _momentaryShown = Float32List(columns);
   }
 
   // --- The four fills, and the gradient they share --------------------------
@@ -188,13 +228,13 @@ class _HistogramModuleState extends State<HistogramModule> {
       ]);
 
     _fillUnder = fill(colors.accent, 0.70, 0.16);
-    _fillOver = fill(colors.over, 0.70, 0.16);
+    _fillOver = fill(colors.warn, 0.70, 0.16);
     // The momentary band is the same two colours held well back. It is context
     // for the short-term line, not a second reading, and at equal weight the
     // eye reads the *top* of the band as the measurement — which is the fast
     // meter, the one a loudness display exists to look past.
     _bandUnder = fill(colors.accent, 0.26, 0.05);
-    _bandOver = fill(colors.over, 0.26, 0.05);
+    _bandOver = fill(colors.warn, 0.26, 0.05);
   }
 
   @override
@@ -244,6 +284,7 @@ class _HistogramModuleState extends State<HistogramModule> {
         colors: colors,
         graticule: _graticule!,
         history: _history,
+        smoothing: widget.smoothing,
         state: this,
         repaint: widget.clock,
       ),
@@ -324,8 +365,75 @@ class _LoudnessHistory {
   /// Age 0 is the newest column.
   int _slot(int age) => (_next - 1 - age + _capacity * 2) % _capacity;
 
-  double shortAt(int age) => _short[_slot(age)];
-  double momentaryAt(int age) => _momentary[_slot(age)];
+  /// The newest [count] short-term columns, each averaged over ±[radius].
+  void shortInto(Float32List out, int count, int radius) =>
+      _average(_short, out, count, radius);
+
+  /// The newest [count] momentary columns, each averaged over ±[radius].
+  void momentaryInto(Float32List out, int count, int radius) =>
+      _average(_momentary, out, count, radius);
+
+  /// Fills `out[0..count)` with a centred mean of [source] over ±[radius]
+  /// columns, in the same newest-first order [shortAt] reads in.
+  ///
+  /// Two pointers over one running sum, so the cost is the number of columns
+  /// drawn and not that times the window — a wide module at the broadest
+  /// setting would otherwise be thirty thousand adds a frame for a picture
+  /// nobody could tell from this one. Nothing is allocated: both buffers belong
+  /// to the state and are sized on resize.
+  ///
+  /// Three rules the arithmetic has to keep:
+  ///
+  ///   - **NaN is skipped, not averaged in.** A column with no momentary
+  ///     reading in it is a column the source did not measure momentary for,
+  ///     and it counts towards neither the sum nor the divisor. A window with
+  ///     nothing finite in it stays NaN, so a source that measures no momentary
+  ///     at all still draws no band rather than a band at zero.
+  ///   - **The window may reach past what is drawn**, as far as [filled]. The
+  ///     oldest visible column is averaged against history that has already
+  ///     scrolled off the left edge, so widening the module reveals more of the
+  ///     programme instead of changing the columns already on screen.
+  ///   - **A radius of zero copies.** `Off` has to be the measured columns
+  ///     exactly, not a one-tap filter that rounds like one.
+  void _average(Float32List source, Float32List out, int count, int radius) {
+    if (radius == 0) {
+      for (var age = 0; age < count; age++) {
+        out[age] = source[_slot(age)];
+      }
+      return;
+    }
+
+    var sum = 0.0;
+    var finite = 0;
+
+    // The window over ages [low, high], both inclusive and both monotonic in
+    // age, which is what lets one pass do it. `high` starts one short of the
+    // first window so that the loop's own advance fills it.
+    var low = 0;
+    var high = -1;
+
+    for (var age = 0; age < count; age++) {
+      final wanted = age + radius >= filled ? filled - 1 : age + radius;
+      while (high < wanted) {
+        high++;
+        final value = source[_slot(high)];
+        if (!value.isNaN) {
+          sum += value;
+          finite++;
+        }
+      }
+      final oldest = age - radius;
+      while (low < oldest) {
+        final value = source[_slot(low)];
+        if (!value.isNaN) {
+          sum -= value;
+          finite--;
+        }
+        low++;
+      }
+      out[age] = finite == 0 ? double.nan : sum / finite;
+    }
+  }
 }
 
 /// Dash geometry for the target line: six pixels on, five off.
@@ -339,6 +447,7 @@ class _HistogramPainter extends MeterPainter {
     required this.colors,
     required this.graticule,
     required this.history,
+    required this.smoothing,
     required this.state,
     required Listenable repaint,
   }) : _curve = (Paint()
@@ -369,6 +478,7 @@ class _HistogramPainter extends MeterPainter {
   final OaaColors colors;
   final ScaleGraticule graticule;
   final _LoudnessHistory history;
+  final HistogramSmoothing smoothing;
   final _HistogramModuleState state;
 
   final Paint _curve;
@@ -496,6 +606,17 @@ class _HistogramPainter extends MeterPainter {
   void _paintProgramme(Canvas canvas, Rect plot, int columns, double targetY) {
     final visible = math.min(history.filled, columns);
 
+    // The ring through the smoothing window, once for each band, before
+    // anything is positioned. Only the measured columns go through it: the
+    // resting floor to the left of the history is a convention rather than a
+    // measurement, and averaging against it would ramp the oldest columns of a
+    // loud programme down towards −48 as though the programme had faded in.
+    final radius = smoothing.radiusInColumns(_secondsPerColumn);
+    final shortShown = state._shortShown;
+    final momentaryShown = state._momentaryShown;
+    history.shortInto(shortShown, visible, radius);
+    history.momentaryInto(momentaryShown, visible, radius);
+
     final shortBars = state._shortBars;
     final momentaryBars = state._momentaryBars;
     final curve = state._curve;
@@ -527,10 +648,8 @@ class _HistogramPainter extends MeterPainter {
       // be handed over as it is; a `sublistView` would be an allocation per
       // frame.
       final measured = i < visible;
-      final shortY = measured ? _y(plot, history.shortAt(i)) : plot.bottom;
-      var momentaryY = measured
-          ? _y(plot, history.momentaryAt(i))
-          : plot.bottom;
+      final shortY = measured ? _y(plot, shortShown[i]) : plot.bottom;
+      var momentaryY = measured ? _y(plot, momentaryShown[i]) : plot.bottom;
       // Momentary quieter than short-term is an ordinary reading, not an error,
       // and it has no band — the area is only ever drawn upwards from the line.
       if (momentaryY > shortY) momentaryY = shortY;
@@ -622,6 +741,7 @@ class _HistogramPainter extends MeterPainter {
   bool shouldRepaint(_HistogramPainter oldDelegate) =>
       oldDelegate.colors != colors ||
       oldDelegate.calibration != calibration ||
+      oldDelegate.smoothing != smoothing ||
       !identical(oldDelegate.engine, engine) ||
       !identical(oldDelegate.graticule, graticule);
 }

@@ -180,11 +180,16 @@ class _SettingsPanelState extends ConsumerState<SettingsPanel> {
             ],
           ),
         ),
+        // **Was written before the tap existed and then contradicted it.** The
+        // note said "input devices only" and named BlackHole, sitting directly
+        // under a picker that had been offering System Output since 0.8.0 — so
+        // the one document a user reads at the moment of choosing told them the
+        // feature was not there. Say what each platform actually does.
         const PanelNote(
-          'Input devices only. To measure what this machine is playing, '
-          'select a loopback device — BlackHole on macOS, VB-Cable on '
-          'Windows, a PulseAudio monitor on Linux. Open Audio Analyzer ships no system-audio '
-          'driver of its own; the README says why.',
+          'System Output measures what this machine is playing, on macOS 14.2 '
+          'and later, with no driver — macOS asks permission the first time and '
+          'the meters read silence if it is declined. On Windows and Linux, '
+          'pick a loopback device: VB-Cable, or a PulseAudio monitor.',
         ),
       ],
     );

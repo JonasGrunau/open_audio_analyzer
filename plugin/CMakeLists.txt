@@ -68,11 +68,17 @@ cmake_minimum_required(VERSION 3.22)
 # was eventually seen; a DAW shows you nothing, because a bundle whose slice
 # does not match and a bundle that is not there are the same event to a host.
 #
-# 11.0 because that is what the app's dmg claims, and because it is the first
-# macOS with Apple silicon. `engine/src/oaa_tap_macos.m` already expects a
-# target far below the 14.2 its Core Audio process tap needs — its `@available`
-# guard and the weak linking that guard protects are written for exactly this,
-# and were doing nothing while the target was the runner's own OS.
+# **14.2, and it was 11.0 on a belief that turned out to be false.** That
+# comment said `oaa_tap_macos.m`'s `@available` guard and "the weak linking that
+# guard protects" made a lower target safe. There was no such weak linking. The
+# tapping *functions* were weak-imported; `CATapDescription` is an Objective-C
+# class, and `nm -m` showed `_OBJC_CLASS_$_CATapDescription` as a plain
+# `external` — a strong reference to a class that does not exist below 14.2. So
+# dyld could not load the engine library on any older system, and what failed
+# was not the tap but everything: the bundle, and the application that shares
+# the source. An `@available` check cannot help with that, because it gates the
+# call and the symbol is resolved before any of it runs. The build now says so
+# itself — `engine/src/oaa_tap.h` refuses to compile below 14.2.
 #
 # The cost is a compile of both architectures, roughly doubling a job that only
 # runs on a release. Pass `-DCMAKE_OSX_ARCHITECTURES=arm64` for a local build
@@ -91,7 +97,13 @@ if(NOT CMAKE_OSX_ARCHITECTURES)
     "macOS architectures for the plugin bundles. Ignored off Apple." FORCE)
 endif()
 if(NOT CMAKE_OSX_DEPLOYMENT_TARGET)
-  set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0" CACHE STRING
+  # 14.2 because that is the version `CATapDescription` arrived in, and the
+  # engine holds a *strong* reference to that class. Below it the class does not
+  # exist, dyld cannot resolve the symbol, and the failure is not a missing
+  # feature — the whole engine framework fails to load and the application dies
+  # at launch. See the floor assertion in `engine/src/oaa_tap.h`, which is what
+  # stops this constant drifting back down without anybody noticing.
+  set(CMAKE_OSX_DEPLOYMENT_TARGET "14.2" CACHE STRING
     "Oldest macOS the plugin bundles load on. Ignored off Apple." FORCE)
 endif()
 

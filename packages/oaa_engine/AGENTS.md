@@ -13,6 +13,22 @@ Dart bindings for the engine, plus the build hook that compiles it.
 
 ## Rules
 
+- **The suite here is two suites, and only one of them gates.**
+  `test/conformance_test.dart` generates its signals and runs everywhere;
+  `test/vectors_test.dart` reads the official EBU and ITU vector files and skips
+  unless `OAA_VECTORS` and `OAA_VECTORS_ITU` name unzipped copies — 811 MB that
+  may not be redistributed here. Run the second one after any change to the
+  engine's loudness, K-weighting or true-peak code:
+
+  ```sh
+  OAA_VECTORS=~/ebu-loudness-test-set OAA_VECTORS_ITU=~/bs2217 \
+    dart test test/vectors_test.dart
+  ```
+
+  It found two defects on its first run, so treat a green gated suite as
+  necessary rather than sufficient. Anything it catches that a generated signal
+  can also express belongs in `conformance_test.dart` too — nothing in CI can
+  see these files.
 - **This package is not publishable.** `hook/build.dart` reaches `../../engine`
   with relative paths that no published archive would contain. It is a
   workspace package; keep `publish_to: 'none'`.
@@ -49,6 +65,19 @@ Dart bindings for the engine, plus the build hook that compiles it.
   follows it and there is no per-source flag; the other twelve translation units
   are unaffected, since `-std=c11` still picks the C dialect, and vendored
   miniaudio contains no `__OBJC__` conditional at all.
+- **macOS carries `-mmacos-version-min=14.2` in `_flags`, and it is not
+  redundant.** Flutter's native-assets pipeline compiles this hook's sources
+  with `-mmacos-version-min=13` and never reads `MACOSX_DEPLOYMENT_TARGET` from
+  `macos/Runner.xcodeproj`, so raising the application's floor moves the
+  application and leaves the library it loads behind. That is not a portability
+  nicety here: `oaa_tap_macos.m` holds a *strong* reference to
+  `CATapDescription`, so a library built below 14.2 is one dyld cannot resolve,
+  and what fails is the load of the whole engine — the application dies at
+  launch rather than losing a feature. The old floor also compiled with five
+  `-Wunguarded-availability-new` diagnostics that nobody was reading.
+  `CBuilder` emits its own flag first and clang takes the last, so this one
+  wins; `engine/src/oaa_tap.h` fails the build if it ever stops winning.
+
 - **`frameworks:` only reaches the linker when `language:` is
   `Language.objectiveC`** — which is now both Apple platforms, so on both the
   list is load-bearing. It was not always: macOS used to build as C and the

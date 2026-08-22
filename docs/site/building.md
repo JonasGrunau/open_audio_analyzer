@@ -63,7 +63,21 @@ amplitude *A* has a peak of *A* and an RMS of *A*/√2 — exactly 3.0103 dB low
 That is arithmetic, not convention, so the built-in test tone doubles as a
 reference the meters can be held against on a headless runner with no sound
 hardware anywhere near it. The same job runs the **EBU Tech 3341 and 3342**
-conformance vectors, and a red conformance run is a red build.
+conformance cases, and a red conformance run is a red build.
+
+The official vector files are a separate, manual run — they may not be
+redistributed, so they are not a gate:
+
+```sh
+cd packages/oaa_engine
+OAA_VECTORS=~/ebu-loudness-test-set OAA_VECTORS_ITU=~/bs2217 \
+  dart test test/vectors_test.dart
+```
+
+The EBU set is at <https://tech.ebu.ch/publications/ebu_loudness_test_set> and
+the ITU's at <https://www.itu.int/oth/R1102000001/en>. Either group skips when
+its variable is unset. Run this after touching the engine's loudness,
+K-weighting or true-peak code.
 
 ## Running with a different configuration
 
@@ -109,7 +123,7 @@ timestamp, both of which notarisation requires and neither of which is a
 default. A bundle you built yourself carries no quarantine flag, so nothing has
 to be stripped from it.
 
-The bundles are built for **arm64 and x86_64, targeting macOS 11**. Both are
+The bundles are built for **arm64 and x86_64, targeting macOS 14.2**. Both are
 CMake variables whose defaults are the machine doing the build, which is how
 every release up to 0.5.0 shipped an arm64-only plugin that also refused to load
 on any macOS older than the runner's. Pass

@@ -9,6 +9,75 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### 📐 Measurement
+- **7.1 material reads 0.35 LU quieter, and correctly.** The +1.5 dB surround
+  weight was applied to every channel past the LFE, so a 7.1 stream had it on
+  the rear pair as well as the side pair. BS.1770 gives it to the surround pair
+  only — Report ITU-R BS.2217's channel table states 7.1 as
+  1.00 / 1.00 / 1.00 / N/A / 1.41 / 1.41 / **1.00 / 1.00** — and the ITU's own
+  two 7.1 compliance files read 0.35 LU high against a ±0.1 tolerance until this
+  was fixed; they now read −23.000 and −24.000 exactly. **Only 7.1 and wider is
+  affected**: mono, stereo, quad, 5.0 and 5.1 never reached the arm that was
+  wrong, and every reading from them is unchanged. Anything measured from a 7.1
+  master — its `LUFS-I`, `LUFS-M`, `LUFS-S`, `LRA` and the delivery verdict
+  drawn from them — was 0.35 LU too loud and is worth re-measuring.
+- **`Max M` and `Max S` are found on a 10 ms grid, where momentary and
+  short-term loudness previously advanced only every 100 ms.** The official EBU
+  test vectors caught this: Tech 3341 tests 13 and 14 slide a 400 ms tone —
+  exactly one momentary window long — through twenty files in 20 ms steps and
+  require `Max M` within ±0.1 LU of −23.0 every time. On a 100 ms grid a tone
+  offset by anything else never lies inside one window whole, so sixteen of the
+  twenty read low, by up to 0.45 LU, and test 14 by 0.70. Every `Max M` and
+  `Max S` therefore rises rather than falls: on the EBU's two authentic
+  programme segments `Max M` rises by 0.16 and 0.11 LU and `Max S` by 0.02 and
+  0.01, and a transient that fell between the old grid points can rise by up to
+  0.7 LU. **`LUFS-I`, `LRA` and its percentiles, `TP Max` and `Peak Max` are
+  unchanged** — identical to three decimals across all 70 files of the test set
+  — because both gating windows are still filed every 100 ms, which is the 75%
+  overlap BS.1770 asks for. Re-read a delivery decision that turned on `Max M`
+  or `Max S` against a ceiling; one that turned on the integrated numbers stands.
+- **The spectrum analyser draws its bands tilted, at 4.5 dB per octave by
+  default.** The curve is rotated about 1 kHz, so 20 Hz is drawn 25.4 dB lower
+  than it measures and 20 kHz 19.4 dB higher — 44.8 dB between the ends of the
+  range, where previously the drawn level was the measured level at every
+  frequency. It is a view: the offset is added per band at the moment of
+  drawing, and `Spectrum` and `Spectrum peak` are published and sent over the
+  wire exactly as the engine measured them, so nothing needs re-measuring. What
+  changes is that a level read off the analyser's own dB scale is only true at
+  1 kHz now, which is why the module prints the tilt it is drawing at and why
+  `Tilt: 0 dB/oct` — where the scale is true everywhere — prints nothing.
+- **The analyser's peak-hold line holds the drawn curve rather than the raw
+  bands.** It is the highest the curve has been, held for a second and a half
+  and then let down at 12 dB a second, which is the schedule the engine's own
+  per-band hold already followed. Two consequences: the line moves with the
+  curve instead of jumping to a peak the curve is still easing towards, and on
+  `Response: Slow` it reads *lower* than it used to — by as much as the pole
+  smoothed the transient away — because the curve it is holding never went
+  there. `Response: Fast` holds every published frame and is the setting to
+  find a click with. `Spectrum peak` itself is unchanged.
+- **The histogram draws both of its bands averaged over a second, where it
+  previously drew every 100 ms column exactly as measured.** `Smoothing` in its
+  menu chooses Off — the old picture, byte for byte — Light at 0.5 s, Normal at
+  1.0 s or Broad at 2.0 s, and **Normal is the default**. The window is centred
+  rather than trailing, so nothing moves along the time axis; what it costs is
+  height on a short event. A transient the momentary band reached for a single
+  column now reads lower by roughly the distance between that column and its
+  neighbours — a 6 LU spike over a steady body reads about 1 LU above it on
+  Normal — and the newest column at the right edge lags the live meters by up to
+  half the window, settling as it ages. Nothing measured changes: the ring holds
+  the columns as they arrived, the smoothing is applied on the way out every
+  frame, and reports, the wire protocol and every other loudness module are
+  untouched. Choose Off to find the loudest 100 ms in a programme.
+- **The loudness distribution's fill no longer double-draws itself.** Each of
+  the 120 published bins was stroked half a pixel wider than its own spacing to
+  keep butt caps from leaving seams, so every overlap was composited twice
+  through the translucent gradient — a brighter line at all 119 bin boundaries,
+  and on a default-sized module nearly a fifth of the fill drawn at double
+  alpha. The bins are unchanged and none of them moves; what changes is that the
+  drawn area is now a shape rather than a row of overlapping lines, and a column
+  covering more than one bin takes the loudest of them rather than blending
+  them, the way the engine already maps transform bins into spectrum bands.
+
 ### ✨ Added
 - **The oscilloscope locks to the DAW.** `Sync: Tempo` makes the width a
   musical division — 4 bars down to 1/32, straight, triplet or dotted — and
@@ -21,24 +90,97 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   A source with no playhead — a sound card, or a DAW that reports none — draws
   the free window and labels it as the free window, because a display that
   said `1 bar` over something else would be worse than one that is not synced.
-- The analyser's peak-hold line can hold the drawn curve instead of the raw
-  bands, from `Peak hold: Envelope` in its menu. It is then the envelope of the
-  line it sits over and as smooth as the curve is, which is the picture to pick
-  when the hold is being read as a shape. It reads *lower* than `Peaks` on a
-  transient that a slow response smoothed away, which is why `Peaks` — the
-  level the engine actually measured, caught between published frames — is
-  still the default.
+- **The spectrum analyser has a tilt**, `Tilt` in its menu: 0, 1.5, 3, 4.5 or
+  6 dB per octave, rotated about 1 kHz. Programme material falls with frequency
+  at something like 3 to 4.5 dB an octave, so an untilted analyser draws every
+  mix ever made as the same ramp — bottom octaves against the ceiling, top
+  octaves crushed into the floor — and spends most of its height on the one
+  part of the picture that carries no information. Tilted, a mix is roughly
+  horizontal and what is left is the deviation. The analyser prints the tilt it
+  is drawing at, because a dB scale quietly rotated across its width is worse
+  than no scale at all.
 - The oscilloscope draws a stereo signal either as two lanes or with both
   channels around one centre line, from `Stereo` in its menu. Overlaid, the
   two are told apart by weight rather than by colour, and the trace gets the
   whole height of the module — which is the arrangement that shows what the
   channels are doing *differently*.
-- The oscilloscope has a vertical zoom, `Height` in its menu, from 1x to 8x. A
-  reverb tail thirty decibels under full scale is a flat line at 1x. Nothing
-  measured changes: a sample is still marked as clipped only if it reached full
-  scale, and a trace that runs off its lane is a trace that is zoomed.
+- **The oscilloscope can be triggered by a transient.** `Trigger: Transient`
+  makes the display wait, armed, until the signal rises through a level you set,
+  draw forward across the whole width once from that sample, and hold what it
+  caught until the next crossing. It works at every time base — the roll above
+  200 ms is replaced by the sweep rather than left in place — so the attack of
+  one kick can be looked at instead of a picture that lands somewhere different
+  every pass. `Trigger: Auto`, which is the default and what the module did
+  before, is unchanged: a rising zero crossing below 200 ms, a rolling display
+  above it, and always something on screen. A threshold nothing reaches leaves
+  the last capture where it is, which is the mode working rather than failing.
+  `Trigger` stays in the module's menu under `Sync: Tempo`, greyed rather than
+  dropped: a bar-locked window is placed by the bar line and has no use for it,
+  and a row that vanishes is a row somebody hunts for.
+- **The oscilloscope's height and trigger threshold are sliders on the
+  module**, `HEIGHT` and `THRESHOLD` in a strip along the bottom of the plot,
+  and the threshold is drawn across the lane at the height it is set to. Both
+  are numbers over a wide range that are chosen by watching the waveform while
+  they move, and a menu that closes over the waveform on every step cannot be
+  used for that. The height goes from 1x to 32x, continuously rather than in
+  named steps — a reverb tail thirty decibels under full scale is a flat line at
+  1x, and the setting that fits the material is rarely a round multiple. The
+  strip is dropped on a module too short to spare the room, like the graticule
+  and the lane letters, and is not drawn on a remote display, which has no
+  layout to write to. Nothing measured changes: a sample is still marked as
+  clipped only if it reached full scale, and a trace that runs off its lane is a
+  trace that is zoomed.
+- **`AUTO` beside the threshold takes it from the loudest transient.** It
+  follows the largest positive excursion of the mid signal over the last two to
+  four seconds — the quantity the trigger itself compares against — and sets the
+  threshold six decibels under it, which is half the amplitude and so still
+  inside the attack: the sweep starts before the transient rather than on top of
+  it, which is what a threshold set exactly *at* the peak would do. The slider
+  shows where the level has got to and stops answering while the box is checked;
+  unchecking it keeps the number Auto found rather than snapping back to
+  whatever was dragged before. Silence moves nothing — a passage nobody played
+  is not a measurement, and a threshold dropped to the floor would arm the
+  trigger on the noise underneath it.
+- **The histogram has a `Smoothing` setting** — Off, Light, Normal or Broad. See
+  the Measurement note above for what each one does to the picture and why the
+  window is centred rather than trailing.
+- **The loudness distribution prints LRA.** The module drew the picture behind
+  the number for two phases without ever showing the number, so reading one off
+  it meant putting a Number Box beside it. It is now on the bracket across the
+  top, which is the distance the reading *is*.
 
 ### ⚡ Changed
+- **macOS 14.2 is now the stated requirement for the application, the VST3 and
+  the Audio Unit**, where the application claimed 10.15 and the plug-ins 11.0.
+  Nothing is lost that worked: neither could load below 14.2 at all — see the
+  Fixed entry. The installer refuses the volume under 14.2 rather than gating
+  its plug-in rows, because there is no longer a version that can run one
+  component and not another.
+- **Nothing crosses the loudness distribution's plot except the target.** The
+  10th and 95th percentiles were two full-height lines at the reading weight,
+  and on steady material they and the dashed target line piled up within a few
+  pixels of each other over the bars. The percentiles are now a bracket across
+  the top strip carrying the LRA reading, with short end marks at the top and at
+  the axis and the gated range shaded between them — so the distribution is the
+  only thing in the plot, and the target, which is the one line the user chose,
+  is the only line through it. The `10%` and `95%` labels are gone: the bracket's
+  ends are those percentiles and the number on it is the distance between them.
+- **The loudness distribution's annotations are painted over the bars rather
+  than under them.** The percentile marks and their labels were drawn before the
+  fill, so the translucent gradient was composited on top of the part of the
+  module meant to be read first.
+- **The settings panel says what the source list actually offers.** The note
+  under the device picker still read "input devices only" and told macOS users
+  to install BlackHole, sitting directly beneath a picker that has offered
+  **System Output** since 0.8.0 — so the one sentence read at the moment of
+  choosing said the feature was not there. It now names what each platform does,
+  and says that macOS asks permission and reads silence if it is declined.
+- **Upgrading from 0.5.0 or earlier is documented as revoking every macOS
+  permission, not just Local Network.** The bundle identifier moved in 0.6.0 and
+  macOS keys permissions to the identifier, so Microphone, Camera and System
+  Audio Recording were revoked as well. System Audio Recording is the one worth
+  checking first, because Apple's refusal of it is silent — see the install
+  page.
 - The page switcher on a remote display's link bar sits at the right-hand end
   of the bar, beside `Disconnect`, where it used to sit between the host's name
   and its playhead readout. It no longer moves when the host gains or loses a
@@ -57,8 +199,70 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   question instead of answering one. A display with nothing behind it, which is
   a tablet that opened straight into one, still lands on the picker, because
   there is nowhere else for it to go.
+- The phase scope's correlation bar and the super meter's three arcs have
+  rounded ends. On the bar the fill is clipped to the same corners, so ±1
+  fills the rounded tip rather than sitting square over it; on the arcs the
+  track carries the same cap as the fill, so neither end of the scale is
+  overrun, and the M, S and I names step a little further round the open end to
+  keep their clearance from ink the arcs did not have before.
+- **Everything drawn against the delivery target is amber above it.** The LUFS
+  meter's momentary and short-term bars and the super meter's three arcs are
+  now cut at the target and drawn in `warn` past it, where they were one colour
+  from the floor to the reading; the histogram and the loudness distribution
+  already split at the target and drew the far side in `over`, and that side is
+  now `warn` as well. One rule in four modules: over the target is amber, and
+  red still means a ceiling has actually been exceeded. The cut is a clip at
+  the target rather than a verdict on the whole shape, so what it shows is how
+  much of the reading is over — a momentary peak 3 LU above a −14 target is
+  three quarters grey with an amber cap, not an amber bar.
+- The super meter's target tick is drawn at 3 px rather than 2. It is radial,
+  so antialiasing spreads it over two pixel columns, and it now also crosses
+  the amber above the target — at the old weight it read as an edge between two
+  colours rather than as the mark the whole gauge is aimed at.
 
 ### 🐛 Fixed
+- **The macOS application and its plug-ins load again on every macOS they claim
+  to support, and the floor is now 14.2.** The engine holds a strong reference
+  to `CATapDescription` — the Core Audio class behind System Output — and a
+  strong reference to a class that does not exist is a library dyld cannot
+  resolve. Below macOS 14.2 the *entire* engine library therefore failed to
+  load, so the application died at launch and a DAW found the plug-in absent,
+  on every version between the old floor and 14.2. Nothing degraded to "no
+  system capture"; it was all or nothing. The application previously declared
+  10.15 and the plug-ins 11.0, both of which were promises the binaries could
+  not keep, and the library itself was being compiled at 13.0 by a build flag
+  that ignored either setting. All three are 14.2 now, `engine/src/oaa_tap.h`
+  fails the build if any of them is lowered again, and the five
+  unguarded-availability warnings the old floor produced are gone.
+- **The super meter's target ticks read as marks rather than as rendering
+  artefacts.** All three are drawn at the emphasis weight now. They are radial,
+  so unlike every other target mark in the application they cannot be drawn with
+  antialiasing off and land on whole pixels — at the mark weight the same 1.5 px
+  was spread across two pixel columns at about half the alpha each, which is a
+  deliberate annotation with half the contrast of the ones it was matched to.
+- **Backspace, Delete and the arrow keys work inside the tab rename field.**
+  Renaming a tab, the keys that edit text did nothing at all: Backspace and
+  Delete are bound to "delete the selected module" and the arrows to "move the
+  selected module", and the guard that was supposed to stand these aside while a
+  text field has focus was checked one layer too late. `CallbackShortcuts`
+  reports a key handled the moment its activator matches, whatever the callback
+  then decides, so the keystroke was consumed and never reached Flutter's own
+  text editing bindings. Typing was unaffected throughout, which is why this was
+  easy to miss and infuriating to hit: a name could be entered but not
+  corrected. The guarded chords are now absent from the map while a field has
+  focus rather than present and declining.
+- **An alert meter's latch can be cleared again after the source has gone
+  quiet.** The latch holds the worst reading since the last reset and is cleared
+  by the elapsed clock running backwards, which is what a reset looks like. A
+  link that goes quiet reports its elapsed time as "not a number", that value
+  was stored, and every later comparison against it was false — so the lamp
+  stayed lit for the rest of the session, across every source selected
+  afterwards. It now ignores a non-number rather than remembering one.
+- **A remote display no longer receives one frame of the previous source's
+  audio.** The waveform collected for the tablet was not dropped when the
+  desktop switched sources, so up to one publish interval of the old
+  programme was sent spliced onto the front of the new one's first frame — a
+  join the display had no way to know about.
 - **The oscilloscope's trace no longer comes apart at short time bases.** From
   about 20 ms to 100 ms across the width, one or two samples land in each
   column of the display, so each was drawn as a dot a pixel tall with nothing
@@ -69,13 +273,6 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   where the display is one point per sample, the trace is a single joined
   polyline instead of a segment per sample; independent segments were composited
   independently and the line read as chewed.
-- **The analyser's peak-hold line no longer snaps while the curve eases.** The
-  hold jumped to a new peak the instant one landed and the curve under it took
-  the response's time constant to follow, so on `Slow` the two moved as though
-  they belonged to different plots. The drawn hold now follows the same pole at
-  every setting. No peak is lost: the engine's hold still latches on every
-  1024-sample hop, and it stays latched for a second and a half — long enough
-  for the line to arrive at it.
 - **The Super Meter's arcs no longer step ten times a second.** Momentary,
   short-term and integrated loudness advance on the engine's 100 ms gating
   grid, and the meters repaint at about 47 Hz — so four frames in five drew the
@@ -162,6 +359,19 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   most broken.
 
 ### 🚧 Internal
+- `packages/oaa_engine/test/vectors_test.dart` runs the two official vector sets
+  through the decoder and the engine: the EBU Loudness Test Set — every case in
+  Table 1 of Tech 3341 and of Tech 3342 — and the compliance material of Report
+  ITU-R BS.2217. 112 cases, all passing, and each group skips unless
+  `OAA_VECTORS` or `OAA_VECTORS_ITU` names an unzipped copy. Not a gate, because
+  neither set may be redistributed here and fetching 811 MB would put the
+  network in front of the one suite that must never be flaky; the generated
+  cases in `conformance_test.dart` remain the gate, and now assert the 7.1
+  weights too, since no official file can be committed to hold them. Both
+  measurement entries above are what the first run found.
+- The six ITU files wider than 7.1 — 10, 12 and 24 channels — are asserted to be
+  refused rather than measured. The engine carries eight channels and has no
+  weights for those layouts, so a number would be worse than an error.
 - Decoding a snapshot was measured and cleared as a cause of a slow tablet:
   4 µs a frame against a 33,000 µs budget at the default link rate. It was
   briefly rewritten as nine block copies, eleven times faster and worth
@@ -187,6 +397,15 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   looking at the window rather than by anything in the suite. The material is
   now built through the real encoder and decoder — `tool/bench_material.dart` —
   so there is no second implementation of the protocol to drift.
+- `website/` holds `open-audio-analyzer.com`: a static Astro site, deployed by
+  hand to Cloudflare Workers, in this repository rather than beside it because
+  its content is derived from the code next to it. The numbers on its front page
+  are measured at build time by `website/scripts/measure.mjs` rather than typed,
+  and the fourteen thumbnails in its module catalogue are photographs of the real
+  widgets, taken from `package:oaa` by `website/tools/module-renderer` — an
+  approximation of a measurement display is the one picture this project should
+  not publish. No job in `ci.yml` builds it or deploys it, and nothing in a
+  release contains it.
 
 ## [0.8.0] — 2026-08-22
 

@@ -82,6 +82,7 @@ is still not built, and `docs/PLAN.md` for what was planned.
 | `tool/` | Repository scripts. Nothing here ships. | GPL-3.0-or-later |
 | `packaging/` | pkg, Windows installer, Linux tarball, AppImage, flatpak, and the app icon they all need. The first three carry the VST3 (and on macOS the AU) and so are built from the plugin job's artefacts, not from the app alone. | GPL-3.0-or-later |
 | `assets/` | The fonts the application bundles, and the logo the repository publishes. | GPL-3.0-or-later; fonts SIL OFL 1.1 |
+| `website/` | `open-audio-analyzer.com` — a static Astro site, and the Flutter target that photographs the modules for it. Deployed by hand; no job in `ci.yml` touches it. | GPL-3.0-or-later |
 
 **`plugin/` is the one AGPL directory**, because JUCE 7 and 8 are
 AGPLv3-or-commercial (only JUCE 6 offered GPLv3, which `docs/PLAN.md` still
@@ -354,7 +355,20 @@ is unaffected: it never links JUCE — it talks to the plugin over a socket.
   `com.openaudioanalyzer.oaa` revoked it on every Mac that upgraded and left the
   old grant in System Settings naming an application that no longer exists —
   treat an identifier as a permission grant, and moving one as a release note
-  telling users to re-allow every TCC permission the app holds. On **Android**,
+  telling users to re-allow every TCC permission the app holds. **"Every" was
+  read as "the one this paragraph is about", and it cost a second bug report:**
+  the same rename revoked `kTCCServiceAudioCapture`, which is what a Core Audio
+  process tap needs, and *that* refusal is silent by Apple's design — every call
+  returns `noErr`, the IOProc fires on schedule, and every buffer is zeros, so
+  System Output metered digital black with nothing logged anywhere. The grant on
+  the developer's own Mac was recorded against `dev.openaudioanalyzer.oaa` two
+  hours before the tap was committed, and was orphaned by the rename the next
+  morning — so the feature was verified working and then broken by a commit that
+  touched neither tap file. When an identifier moves, enumerate the TCC services
+  by name and check each one. **A tap also cannot be exercised by an ad-hoc
+  signed build**: TCC keys its record to a stable signing identity, and an
+  ad-hoc binary's cdhash changes on every rebuild, so a grant does not survive
+  the next `flutter run`. On **Android**,
   receiving needs a
   `WifiManager.MulticastLock` — a platform call, now `OaaMulticastLock.kt` — and
   the socket opens, joins and queries perfectly without one while every answer
@@ -473,6 +487,7 @@ claim something about it:
 | The iOS build, its signing, or the TestFlight upload | `packaging/AGENTS.md`, `docs/site/building.md`'s credential table, `.github/AGENTS.md`, and `docs/site/install.md`'s iPadOS section. The IPA is **not** a release asset — if you make it one, `README.md`'s note and the publish step's exclusion both become wrong |
 | A switch on the fake DAW | `plugin/host/AGENTS.md`, and `README.md` if it is one of the gestures a person cannot perform on cue. `--help` in `FakeDawOptions.h` is the exhaustive list and the only one that has to be; the other two name the interesting ones and are prose |
 | A page the documentation site publishes, or its filename | The page list in `tool/docs.dart`. It is written out rather than globbed, so a renamed document fails the docs job instead of silently vanishing from the site |
+| A version, a stated requirement, an artefact filename, or how a module looks | `website/src/pages/download.astro` and `website/src/pages/index.astro`, and `npm run modules -- --only <id>` for the photograph. The site's facts are *derived* from this repository and nothing regenerates them — the macOS floor moved to 14.2 in the same change that added `website/`, and the download page still said 11 Big Sur. See `website/AGENTS.md` |
 | A phase reaching done | `README.md` Roadmap, `CLAUDE.md`'s status line, `docs/PLAN.md` |
 | Anything a user sees or configures | `README.md`, and `CHANGELOG.md` under ✨ or ⚡ |
 
@@ -590,6 +605,16 @@ flutter test test/plugin_to_display_e2e_test.dart
                                       # app → display
 dart run tool/docs.dart               # the documentation site still builds
 ```
+
+**One suite is deliberately not a gate.**
+`packages/oaa_engine/test/vectors_test.dart` runs the official EBU and ITU
+vector files — 112 cases — and skips unless `OAA_VECTORS` and `OAA_VECTORS_ITU`
+name unzipped copies, because 811 MB that may not be redistributed here cannot
+be fetched by the suite that must never be flaky. **Run it by hand after
+touching `oaa_loudness.*`, `oaa_kweight.*` or `oaa_truepeak.*`**, and add
+whatever it catches to `conformance_test.dart` as well if a generated signal can
+express it — those two are the only reason CI would ever see the same defect
+again. See `docs/METRICS.md` § Conformance for where the material comes from.
 
 All twelve gates are jobs in `ci.yml`, which is the only workflow. The repeated
 `dart test packages/oaa_wire` is not a thirteenth: it is the same suite, run

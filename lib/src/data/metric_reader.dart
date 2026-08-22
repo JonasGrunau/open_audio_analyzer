@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import 'package:oaa_core/oaa_core.dart';
-import 'package:oaa_engine/oaa_engine.dart';
 import 'package:oaa_ui/oaa_ui.dart';
 
 /// Reads a [Metric] out of a [MeterSource].
@@ -40,7 +39,7 @@ double readMetric(MeterSource engine, Metric metric) => switch (metric) {
 /// checked against. Averaging channels would hide a single hot one, which is
 /// precisely the thing somebody looking at a peak reading wants to catch.
 double _loudestChannel(List<double> values, int channels) {
-  var loudest = kOaaDbFloor;
+  var loudest = MeterShape.dbFloor;
   final count = channels.clamp(1, values.length);
   for (var i = 0; i < count; i++) {
     if (values[i] > loudest) loudest = values[i];

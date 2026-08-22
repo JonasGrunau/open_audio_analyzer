@@ -4,7 +4,6 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:oaa_core/oaa_core.dart';
-import 'package:oaa_engine/oaa_engine.dart';
 import 'package:oaa_ui/oaa_ui.dart';
 import 'package:flutter/widgets.dart';
 
@@ -359,9 +358,9 @@ class _SpectrogramPainter extends MeterPainter {
   int _stepAt(int row) {
     final rows = state._rows;
     final band = (rows > 1)
-        ? ((rows - 1 - row) / (rows - 1) * (kOaaSpectrumBands - 1))
+        ? ((rows - 1 - row) / (rows - 1) * (MeterShape.spectrumBands - 1))
               .round()
-              .clamp(0, kOaaSpectrumBands - 1)
+              .clamp(0, MeterShape.spectrumBands - 1)
         : 0;
     final db = engine.spectrum[band];
     if (db <= _floorDb) return 0;

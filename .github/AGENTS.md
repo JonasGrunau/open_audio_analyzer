@@ -150,10 +150,14 @@ The jobs are split by what they need, and that split is deliberate:
   hidden it once.
 - **The conformance run is a gate, not a report.** The EBU Tech 3341/3342 cases
   run inside the `engine` job's Dart suite; a red conformance run blocks the
-  release, because these are the numbers users deliver against. The official
-  BS.2217 WAV vectors are deliberately *not* here — the material is not
-  licensed for redistribution and fetching it would put a network dependency in
-  front of the one suite that must never be flaky. See `docs/METRICS.md`.
+  release, because these are the numbers users deliver against. The official EBU
+  and ITU vector files are deliberately *not* here — 811 MB that may not be
+  redistributed, and fetching it would put a network dependency in front of the
+  one suite that must never be flaky. `packages/oaa_engine/test/vectors_test.dart`
+  runs them from a local copy and skips here, which is why **anything it catches
+  that a generated signal can also express is added to the gated suite in the
+  same change** — it caught two defects on its first run and CI could see
+  neither. See `docs/METRICS.md`.
 - **Never add `continue-on-error` to a test step.** A test that is allowed to
   fail is a test that has already been deleted, just more slowly.
 - **A gate named in a document and missing from `ci.yml` is worse than no

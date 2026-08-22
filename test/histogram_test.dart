@@ -75,10 +75,19 @@ class _Fake implements MeterSource {
 /// ticker created beside the tree outlives it and the binding then reports an
 /// animation still running after disposal.
 class _Harness extends StatefulWidget {
-  const _Harness({required this.source, required this.boundary});
+  const _Harness({
+    required this.source,
+    required this.boundary,
+    this.smoothing = HistogramSmoothing.normal,
+    super.key,
+  });
 
   final MeterSource source;
   final GlobalKey boundary;
+
+  /// Defaulted to what ships, so the resting-curve cases below exercise the
+  /// setting a module actually opens with.
+  final HistogramSmoothing smoothing;
 
   @override
   State<_Harness> createState() => _HarnessState();
@@ -110,6 +119,7 @@ class _HarnessState extends State<_Harness>
                 engine: widget.source,
                 clock: clock,
                 calibration: BuiltInCalibrations.streaming,
+                smoothing: widget.smoothing,
               ),
             ),
           ),
@@ -168,6 +178,50 @@ List<int> _curveColumns(Uint8List pixels, {int rows = 3}) {
   ];
 }
 
+/// The highest row any curve pixel reaches. Smaller is higher up the plot.
+int _curveTop(Uint8List pixels) {
+  final width = _size.width.toInt();
+  for (var y = 0; y < _size.height.toInt(); y++) {
+    for (var x = 0; x < width; x++) {
+      if (_isCurve(pixels, x, y)) return y;
+    }
+  }
+  return _size.height.toInt();
+}
+
+/// A hundred columns of quiet, one loud column, a hundred more of quiet.
+///
+/// Five publishes to a column at 50 ms apart, so the spike is one closed column
+/// and not a fraction of two — the property under test is what happens to a
+/// single column, and a spike smeared across a boundary by the harness would
+/// pass either way.
+Future<Uint8List> _spike(
+  WidgetTester tester,
+  HistogramSmoothing smoothing,
+) async {
+  final key = GlobalKey();
+  final source = _Fake();
+  await tester.pumpWidget(
+    _Harness(
+      key: ValueKey(smoothing),
+      source: source,
+      boundary: key,
+      smoothing: smoothing,
+    ),
+  );
+
+  for (var publish = 1; publish <= 1005; publish++) {
+    final loud = publish > 500 && publish <= 505;
+    source.publish(
+      publish * 0.02,
+      short: loud ? -6 : -24,
+      momentary: loud ? -6 : -24,
+    );
+    await _frame(tester);
+  }
+  return _shoot(tester, key);
+}
+
 void main() {
   testWidgets('the curve spans the plot before any audio arrives', (
     tester,
@@ -204,6 +258,69 @@ void main() {
 
     final columns = _curveColumns(await _shoot(tester, key));
     _expectSpansThePlot(columns, 'the history was cleared by a reset');
+  });
+
+  // --- Smoothing ------------------------------------------------------------
+  //
+  // The setting is a centred mean over columns of measured signal, applied when
+  // the ring is read rather than when it is written. Two properties are worth
+  // holding: it costs height on a short event, and it costs nothing at all on a
+  // steady one. Both are pixel reads because both are claims about the drawn
+  // curve, and a mean computed into the wrong half of a `Float32List` passes
+  // every widget assertion there is.
+
+  testWidgets('a one-column spike is drawn lower with smoothing on', (
+    tester,
+  ) async {
+    final off = _curveTop(await _spike(tester, HistogramSmoothing.off));
+    final broad = _curveTop(await _spike(tester, HistogramSmoothing.broad));
+
+    // −6 LUFS against a −24 body over a 21-column window averages to about
+    // −23.1, which is most of the plot's height further down. Asserted as a
+    // distance rather than against a row, because where the plot starts depends
+    // on the width of a laid-out label.
+    expect(
+      broad - off,
+      greaterThan(40),
+      reason: 'Broad drew the spike at nearly the height Off did',
+    );
+    expect(
+      off,
+      lessThan(broad),
+      reason: 'the smoothed curve reached higher than the measured one',
+    );
+  });
+
+  testWidgets('a steady programme is drawn at the same height at every '
+      'setting', (tester) async {
+    final tops = <HistogramSmoothing, int>{};
+    for (final smoothing in HistogramSmoothing.values) {
+      final key = GlobalKey();
+      final source = _Fake();
+      await tester.pumpWidget(
+        _Harness(
+          key: ValueKey(smoothing),
+          source: source,
+          boundary: key,
+          smoothing: smoothing,
+        ),
+      );
+      for (var publish = 1; publish <= 600; publish++) {
+        source.publish(publish * 0.02, short: -18, momentary: -18);
+        await _frame(tester);
+      }
+      tops[smoothing] = _curveTop(await _shoot(tester, key));
+    }
+
+    // A constant is its own mean, so a level that has not moved must be drawn
+    // where it was measured whatever the window is. This is the assertion that
+    // a smoother has not quietly become a gain.
+    expect(
+      tops.values.toSet(),
+      hasLength(1),
+      reason:
+          'the drawn level of a steady −18 LUFS depends on the window: $tops',
+    );
   });
 }
 

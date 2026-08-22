@@ -5,13 +5,12 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:oaa_core/oaa_core.dart';
-import 'package:oaa_engine/oaa_engine.dart';
 import 'package:oaa_ui/oaa_ui.dart';
 import 'package:flutter/widgets.dart';
 
 import '../clock/meter_clock.dart';
 
-/// Level against frequency, log-spaced, with a peak hold.
+/// Level against frequency, log-spaced, tilted, with a peak hold.
 ///
 /// The horizontal axis needs no mapping code at all, and that is by design: the
 /// engine's 512 bands are *already* log-spaced across 20 Hz to 20 kHz, so band
@@ -50,7 +49,7 @@ class SpectrumAnalyzerModule extends StatefulWidget {
     required this.engine,
     required this.clock,
     this.response = SpectrumResponse.normal,
-    this.hold = SpectrumHold.peaks,
+    this.tilt = SpectrumTilt.db4p5,
     super.key,
   });
 
@@ -61,8 +60,9 @@ class SpectrumAnalyzerModule extends StatefulWidget {
   /// [SpectrumResponse] for why this is a time constant and not a frame rate.
   final SpectrumResponse response;
 
-  /// What the line above the curve is a hold of. See [SpectrumHold].
-  final SpectrumHold hold;
+  /// How far the drawn curve is rotated, per octave about 1 kHz. See
+  /// [SpectrumTilt] — it moves the picture and nothing else.
+  final SpectrumTilt tilt;
 
   @override
   State<SpectrumAnalyzerModule> createState() => _SpectrumAnalyzerModuleState();
@@ -74,9 +74,10 @@ class SpectrumAnalyzerModule extends StatefulWidget {
 /// The same numbers as `OAA_SPECTRUM_HOLD_SECONDS` and
 /// `OAA_SPECTRUM_FALL_DB_PER_SECOND` in `engine/src/oaa_spectrum.h`, restated
 /// because that header is on the far side of an ABI this module never links —
-/// the tablet runs this file with no engine at all. They are only used by
-/// [SpectrumHold.envelope], and they are the engine's on purpose: the setting
-/// changes what is held, not how a hold behaves. Move one and move the other.
+/// the tablet runs this file with no engine at all. The engine holds the raw
+/// bands on the same schedule this file holds the drawn ones, so a hold reads
+/// the same whichever side of the wire is doing it. Move one and move the
+/// other.
 const double _holdSeconds = 1.5;
 const double _fallDbPerSecond = 12;
 
@@ -110,44 +111,49 @@ class _SpectrumAnalyzerModuleState extends State<SpectrumAnalyzerModule> {
   static const _scale = MeterScale(min: -96, max: 0, step: 12);
 
   /// x, yBottom, x, yTop per band.
-  final Float32List _bars = Float32List(kOaaSpectrumBands * 4);
+  final Float32List _bars = Float32List(MeterShape.spectrumBands * 4);
 
   /// x, y per band, for the peak-hold polyline.
-  final Float32List _hold = Float32List(kOaaSpectrumBands * 2);
+  final Float32List _hold = Float32List(MeterShape.spectrumBands * 2);
 
   /// x, y per band, for the curve stroked along the top of the fill.
-  final Float32List _curve = Float32List(kOaaSpectrumBands * 2);
+  final Float32List _curve = Float32List(MeterShape.spectrumBands * 2);
 
   /// The level actually drawn, per band, in dB.
   ///
   /// One pole per band, folded once per published frame — see [_advance]. On
   /// [SpectrumResponse.fast] it holds a copy of what the engine published and
   /// the arithmetic below collapses to an assignment.
-  final Float32List _shown = Float32List(kOaaSpectrumBands);
+  final Float32List _shown = Float32List(MeterShape.spectrumBands);
 
   /// The peak hold actually drawn, per band, in dB.
   ///
-  /// Folded through the same pole as [_shown] whatever [SpectrumHold] says, and
-  /// that is the half of the mismatch that was never a matter of taste. The
-  /// engine's hold jumps to a new peak the instant one lands; the curve under
-  /// it eases over the response's time constant — so on Slow the line above a
-  /// calm shape flicked about as if it belonged to a different plot. One pole
-  /// on both and they move together.
+  /// The envelope of [_shown]: the highest the *drawn* curve has been, held for
+  /// [_holdSeconds] and then let down at [_fallDbPerSecond], and folded through
+  /// the same pole as the curve so the two move together. The engine's own hold
+  /// over the raw bands — `spectrumPeak` — is a truer maximum, and it is the
+  /// wrong line to draw here: it jumps to a new peak the instant one lands
+  /// while the curve under it eases over the response's time constant, so on
+  /// Slow the line above a calm shape flicked about as if it belonged to a
+  /// different plot. A hold of the curve is a hold of what the reader can see.
   ///
-  /// What the pole is applied *to* is the setting. See [_holdSeconds] for the
-  /// second source, and [SpectrumHold] for what each costs.
-  final Float32List _shownHold = Float32List(kOaaSpectrumBands);
+  /// The cost is stated rather than hidden: on a slow response this sits below
+  /// a peak the programme really reached, because the curve it is holding never
+  /// went there. [SpectrumResponse.fast] is the setting that catches one.
+  final Float32List _shownHold = Float32List(MeterShape.spectrumBands);
 
-  /// Seconds left at the top, per band, for [SpectrumHold.envelope].
+  /// Seconds left at the top, per band, before the hold starts falling.
+  final Float32List _holdLeft = Float32List(MeterShape.spectrumBands);
+
+  /// The offset the tilt adds to each band's drawn level, in dB.
   ///
-  /// Only that mode keeps a hold of its own; the other reads one the engine
-  /// already keeps, on audio this side never sees.
-  final Float32List _holdLeft = Float32List(kOaaSpectrumBands);
-
-  /// The mode [_shownHold] currently holds, so a change of setting starts the
-  /// new one from the signal rather than easing across from the old one's
-  /// answer — which would be a line drifting between two definitions.
-  SpectrumHold? _heldMode;
+  /// Built once per change of setting rather than per frame: the offsets are
+  /// 512 logarithms, and the frame path does not take a logarithm per band for
+  /// something that only moves when somebody picks a menu item. Held here
+  /// rather than in the painter, which is rebuilt on every skin change and
+  /// every selection.
+  final Float32List _tiltDb = Float32List(MeterShape.spectrumBands);
+  SpectrumTilt? _tiltFor;
 
   /// The generation [_shown] and [_shownHold] were last folded for, and the
   /// engine time they were folded at.
@@ -171,58 +177,80 @@ class _SpectrumAnalyzerModuleState extends State<SpectrumAnalyzerModule> {
   /// 30 fps the clock reads fewer of the engine's ~47 published frames per
   /// second than at 120, and a fixed per-fold coefficient would make Normal
   /// slower on a laptop than on a workstation.
-  void _advance(MeterSource engine, double tau, SpectrumHold mode) {
+  void _advance(MeterSource engine, double tau) {
     final elapsed = engine.elapsedSeconds;
     final dt = elapsed - _seenElapsed;
     _seenElapsed = elapsed;
 
     // A reset takes the clock back to zero, and a first frame has nothing to
-    // average against. Snap rather than fade in from whatever was on screen —
+    // average against. Reseat rather than fade in from whatever was on screen —
     // a curve rising slowly out of the floor after a reset is a picture of a
-    // programme that did not happen.
-    final snap = tau <= 0 || dt <= 0 || _seenGeneration < 0;
-    final alpha = snap ? 1.0 : 1 - math.exp(-dt / tau);
-    final reseat = snap || _heldMode != mode;
-    _heldMode = mode;
+    // programme that did not happen — and reseat the *hold* with it, because a
+    // hold carried across a discontinuity is a maximum of two different
+    // programmes.
+    //
+    // `!(dt > 0)` rather than `dt <= 0`, so that a NaN takes this branch too. A
+    // source whose link has gone quiet reports NaN seconds, and NaN compares
+    // false against everything: the fade branch would compute an alpha of NaN,
+    // write it into every band of [_shown], and leave the curve undrawn for the
+    // rest of the session — including after a new source started publishing.
+    // Reseating instead shows the stale frame's unavailable spectrum, and the
+    // first real frame after it snaps back to something measured.
+    //
+    // **[SpectrumResponse.fast] is not a discontinuity**, and conflating the
+    // two cost the hold entirely: an unaveraged curve is `alpha == 1`, which
+    // draws the published frame exactly, but a *reseat* at `alpha == 1` also
+    // starts the hold again from that frame — so on Fast, the one setting a
+    // click is looked for at, the line above the curve was the curve.
+    final reseat = !(dt > 0) || _seenGeneration < 0;
+    final alpha = reseat || tau <= 0 ? 1.0 : 1 - math.exp(-dt / tau);
+    final instant = alpha >= 1;
 
     final spectrum = engine.spectrum;
-    final peaks = engine.spectrumPeak;
     final step = dt > 0 ? dt : 0.0;
 
-    for (var band = 0; band < kOaaSpectrumBands; band++) {
-      final level = snap
+    for (var band = 0; band < MeterShape.spectrumBands; band++) {
+      final level = instant
           ? spectrum[band]
           : _shown[band] + (spectrum[band] - _shown[band]) * alpha;
       _shown[band] = level;
 
-      // The band the hold is taken over. `peaks` is the engine's, measured on
-      // every hop; `envelope` is the highest the curve above has been, held and
-      // then let down at the same rate the engine's is so the two modes are the
-      // same picture of different data.
-      final double source;
-      if (mode == SpectrumHold.peaks) {
-        source = peaks[band];
+      // The highest the curve above has been, held and then let down at the
+      // rate the engine lets its own hold down, so a hold reads the same
+      // whichever side of the wire computed it.
+      var held = reseat ? level : _shownHold[band];
+      if (level >= held) {
+        held = level;
+        _holdLeft[band] = _holdSeconds;
+      } else if (_holdLeft[band] > 0) {
+        _holdLeft[band] -= step;
       } else {
-        var held = reseat ? level : _shownHold[band];
-        if (level >= held) {
-          held = level;
-          _holdLeft[band] = _holdSeconds;
-        } else if (_holdLeft[band] > 0) {
-          _holdLeft[band] -= step;
-        } else {
-          held -= _fallDbPerSecond * step;
-          if (held < level) held = level;
-        }
-        source = held;
+        held -= _fallDbPerSecond * step;
+        if (held < level) held = level;
       }
 
-      _shownHold[band] = reseat
-          ? source
-          : _shownHold[band] + (source - _shownHold[band]) * alpha;
+      _shownHold[band] = instant
+          ? held
+          : _shownHold[band] + (held - _shownHold[band]) * alpha;
     }
   }
 
   ScaleGraticule? _graticule;
+
+  /// The tilt, printed in the plot's top-left corner.
+  ///
+  /// Only when there is one. At [SpectrumTilt.db0] the dB scale on the right is
+  /// true everywhere and there is nothing to disclose; at any other setting it
+  /// is true at 1 kHz and rotated away from it, and a reader who has not been
+  /// told that is reading the wrong numbers off a correct-looking axis.
+  ///
+  /// Top left because that is the corner a tilt *clears*: the same rotation
+  /// that makes the label necessary takes the bottom octaves — which are the
+  /// loudest part of every mix and were drawn against the ceiling — down the
+  /// plot by twenty-odd decibels.
+  ui.Paragraph? _tiltLabel;
+  SpectrumTilt? _labelledTilt;
+  Color? _labelColor;
 
   /// A paragraph per gridline, laid out at both label densities. Both sets are
   /// built here rather than at paint time because laying out a paragraph on the
@@ -259,6 +287,24 @@ class _SpectrumAnalyzerModuleState extends State<SpectrumAnalyzerModule> {
   Widget build(BuildContext context) {
     final colors = OaaTheme.of(context);
 
+    if (_tiltFor != widget.tilt) {
+      for (var band = 0; band < MeterShape.spectrumBands; band++) {
+        _tiltDb[band] = widget.tilt.dbAt(bandCentreHz(band));
+      }
+      _tiltFor = widget.tilt;
+    }
+
+    if (_labelledTilt != widget.tilt || _labelColor != colors.textFaint) {
+      _tiltLabel = widget.tilt.dbPerOctave == 0
+          ? null
+          : layoutParagraph(
+              widget.tilt.label,
+              OaaType.tick.copyWith(color: colors.textFaint),
+            );
+      _labelledTilt = widget.tilt;
+      _labelColor = colors.textFaint;
+    }
+
     if (_graticule == null ||
         !_graticule!.matches(_scale, ScaleSide.right, colors.textFaint)) {
       _graticule?.dispose();
@@ -289,7 +335,7 @@ class _SpectrumAnalyzerModuleState extends State<SpectrumAnalyzerModule> {
         colors: colors,
         graticule: _graticule!,
         response: widget.response,
-        hold: widget.hold,
+        tilt: widget.tilt,
         state: this,
         repaint: widget.clock,
       ),
@@ -303,7 +349,7 @@ class _SpectrumPainter extends MeterPainter {
     required this.colors,
     required this.graticule,
     required this.response,
-    required this.hold,
+    required this.tilt,
     required this.state,
     required Listenable repaint,
   }) : _fill = (Paint()..strokeCap = StrokeCap.butt),
@@ -328,7 +374,7 @@ class _SpectrumPainter extends MeterPainter {
   final OaaColors colors;
   final ScaleGraticule graticule;
   final SpectrumResponse response;
-  final SpectrumHold hold;
+  final SpectrumTilt tilt;
   final _SpectrumAnalyzerModuleState state;
 
   final Paint _fill;
@@ -346,7 +392,8 @@ class _SpectrumPainter extends MeterPainter {
     for (final label in wide) {
       if (label.longestLine > widest) widest = label.longestLine;
     }
-    final gap = (bandOfHz(50) - bandOfHz(20)) / kOaaSpectrumBands * plot.width;
+    final gap =
+        (bandOfHz(50) - bandOfHz(20)) / MeterShape.spectrumBands * plot.width;
     return gap > widest + Space.sm ? wide : state._gridLabelsNarrow;
   }
 
@@ -367,7 +414,8 @@ class _SpectrumPainter extends MeterPainter {
     final labels = _labelsFor(plot);
     for (var i = 0; i < _gridHz.length; i++) {
       final x =
-          plot.left + bandOfHz(_gridHz[i]) / kOaaSpectrumBands * plot.width;
+          plot.left +
+          bandOfHz(_gridHz[i]) / MeterShape.spectrumBands * plot.width;
       if (x < plot.left || x > plot.right) continue;
       canvas.drawLine(Offset(x, plot.top), Offset(x, plot.bottom), _grid);
 
@@ -386,8 +434,8 @@ class _SpectrumPainter extends MeterPainter {
 
     if (!engine.hasSpectrum) return;
 
-    if (engine.generation != state._seenGeneration || state._heldMode != hold) {
-      state._advance(engine, response.timeConstant, hold);
+    if (engine.generation != state._seenGeneration) {
+      state._advance(engine, response.timeConstant);
       state._seenGeneration = engine.generation;
     }
 
@@ -396,13 +444,21 @@ class _SpectrumPainter extends MeterPainter {
     // a stroke exactly one band wide leave a seam of background between
     // neighbours wherever the band centre lands mid-pixel, and five hundred
     // hairline seams read as vertical banding across the whole fill.
-    final bandWidth = plot.width / kOaaSpectrumBands;
+    final bandWidth = plot.width / MeterShape.spectrumBands;
     _fill.strokeWidth = bandWidth + 0.5;
     _fill.shader = state.fillShader(plot, colors.accent);
 
-    for (var band = 0; band < kOaaSpectrumBands; band++) {
+    // The tilt is added here rather than folded into [_advance], and that is
+    // not an arrangement of convenience: a fixed per-band offset commutes with
+    // a maximum, a hold and a one-pole alike, so the tilted picture is exactly
+    // the untilted one rotated — and changing the setting rotates what is on
+    // screen instead of reseating five hundred averages and drawing a curve
+    // that climbs out of the floor for half a second.
+    final tiltDb = state._tiltDb;
+
+    for (var band = 0; band < MeterShape.spectrumBands; band++) {
       final x = plot.left + (band + 0.5) * bandWidth;
-      final y = _y(plot, state._shown[band]);
+      final y = _y(plot, state._shown[band] + tiltDb[band]);
 
       state._bars[band * 4] = x;
       state._bars[band * 4 + 1] = plot.bottom;
@@ -413,7 +469,10 @@ class _SpectrumPainter extends MeterPainter {
       state._curve[band * 2 + 1] = y;
 
       state._hold[band * 2] = x;
-      state._hold[band * 2 + 1] = _y(plot, state._shownHold[band]);
+      state._hold[band * 2 + 1] = _y(
+        plot,
+        state._shownHold[band] + tiltDb[band],
+      );
     }
 
     canvas.save();
@@ -422,6 +481,14 @@ class _SpectrumPainter extends MeterPainter {
     canvas.drawRawPoints(ui.PointMode.polygon, state._curve, _curve);
     canvas.drawRawPoints(ui.PointMode.polygon, state._hold, _hold);
     canvas.restore();
+
+    final label = state._tiltLabel;
+    if (label != null && label.longestLine + Space.sm < plot.width) {
+      canvas.drawParagraph(
+        label,
+        Offset(plot.left + Space.xs, plot.top + Space.xxs),
+      );
+    }
   }
 
   double _y(Rect plot, double db) =>
@@ -431,7 +498,7 @@ class _SpectrumPainter extends MeterPainter {
   bool shouldRepaint(_SpectrumPainter oldDelegate) =>
       oldDelegate.colors != colors ||
       oldDelegate.response != response ||
-      oldDelegate.hold != hold ||
+      oldDelegate.tilt != tilt ||
       !identical(oldDelegate.engine, engine) ||
       !identical(oldDelegate.graticule, graticule);
 }

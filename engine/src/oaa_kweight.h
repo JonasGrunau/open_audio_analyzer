@@ -55,10 +55,11 @@ static inline double oaa_biquad_process(const oaa_biquad *c,
 /*
  * The BS.1770-4 weight for a channel, by its index in the stream.
  *
- * The standard weights surround channels 1.41 (+1.5 dB) and excludes LFE
- * entirely. Applying that needs to know which channel is which, and an
- * interleaved buffer does not say — so this assumes the conventional order for
- * each channel count:
+ * The standard weights the two surround channels 1.41 (+1.5 dB), excludes LFE
+ * entirely, and leaves everything else at 1.0 — including the rear surrounds of
+ * a 7.1 layout, which are not the surround pair and are not weighted. Applying
+ * that needs to know which channel is which, and an interleaved buffer does not
+ * say — so this assumes the conventional order for each channel count:
  *
  *   1   M
  *   2   L R

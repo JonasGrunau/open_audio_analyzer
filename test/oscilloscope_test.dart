@@ -55,10 +55,26 @@ class _Tone implements MeterSource {
   int _frames = 0;
   final Float32List _scope = Float32List(_block * 2);
 
-  void publish() {
+  void publish({double gain = 1}) {
     _generation++;
     for (var i = 0; i < _block; i++) {
-      final value = _sample(_frames + i);
+      final value = _sample(_frames + i) * gain;
+      _scope[i * 2] = value;
+      _scope[i * 2 + 1] = channels >= 2 ? -value : value;
+    }
+    _frames += _block;
+  }
+
+  /// A block that is digital black until [after] and the tone from there on.
+  ///
+  /// What a transient looks like to a trigger, and the reason the sweep exists:
+  /// the audio before it is not a smaller version of the audio after it, it is
+  /// nothing at all. The tone starts at phase zero so it *rises* through the
+  /// threshold rather than appearing above it.
+  void publishHit({required int after}) {
+    _generation++;
+    for (var i = 0; i < _block; i++) {
+      final value = i < after ? 0.0 : _sample(i - after);
       _scope[i * 2] = value;
       _scope[i * 2 + 1] = channels >= 2 ? -value : value;
     }
@@ -108,6 +124,10 @@ class _Harness extends StatefulWidget {
     this.fps = 60,
     this.sync = ScopeSync.free,
     this.division = ScopeDivision.bar1,
+    this.trigger = ScopeTrigger.auto,
+    this.threshold = ScopeThreshold.defaultDb,
+    this.autoThreshold = false,
+    this.onOption,
   });
 
   final MeterSource source;
@@ -115,6 +135,15 @@ class _Harness extends StatefulWidget {
   final ScopeTimeBase timeBase;
   final ScopeSync sync;
   final ScopeDivision division;
+  final ScopeTrigger trigger;
+  final double threshold;
+  final bool autoThreshold;
+
+  /// Given only where a case is about the module's own controls. Everything
+  /// else leaves it null, which is what keeps the boundary the plot: the strip
+  /// is only built where there is a layout to write to, so a pixel coordinate
+  /// below is a coordinate in the painter.
+  final void Function(String key, Object? value)? onOption;
 
   /// What the user set the meters to redraw at. The engine publishes at about
   /// 47 Hz regardless, so 30 is the setting where the two disagree.
@@ -155,6 +184,10 @@ class _HarnessState extends State<_Harness>
                 timeBase: widget.timeBase,
                 sync: widget.sync,
                 division: widget.division,
+                trigger: widget.trigger,
+                threshold: widget.threshold,
+                autoThreshold: widget.autoThreshold,
+                onOption: widget.onOption,
               ),
             ),
           ),
@@ -209,6 +242,17 @@ List<int> _inked(Uint8List pixels) => [
 /// The topmost row of signal ink in column [x], or null.
 int? _top(Uint8List pixels, int x) {
   for (var y = 0; y < _height; y++) {
+    if (_isSignal(pixels, x, y)) return y;
+  }
+  return null;
+}
+
+/// The lowest row of signal ink in column [x], or null.
+///
+/// The one the sweep is read from: a column drawn forward from a trigger runs
+/// from the sample that fired it upwards, so its *bottom* is the level.
+int? _bottom(Uint8List pixels, int x) {
+  for (var y = _height - 1; y >= 0; y--) {
     if (_isSignal(pixels, x, y)) return y;
   }
   return null;
@@ -544,6 +588,375 @@ void main() {
         );
       }
     }
+  });
+
+  group('transient trigger', () {
+    // The sweep's whole promise is that the picture starts where the *signal*
+    // did. Everything below is a pixel read for the same reason the trigger
+    // cases above are: a sweep that started a block boundary late draws the
+    // same waveform, at the same amplitude, two hundred columns along, and
+    // nothing throws.
+
+    const level = -6.0;
+
+    testWidgets('nothing is drawn until the signal crosses the level', (
+      tester,
+    ) async {
+      final key = GlobalKey();
+      final source = _Tone(hz: 1000, amplitude: 0.9);
+      await tester.pumpWidget(
+        _Harness(
+          source: source,
+          boundary: key,
+          timeBase: ScopeTimeBase.ms20,
+          trigger: ScopeTrigger.transient,
+          threshold: level,
+        ),
+      );
+
+      // Audio, and plenty of it, all of it under the threshold. A rolling
+      // display would have filled the width by now and an auto-triggered one
+      // would be locked to it; a sweep has been handed nothing to start on.
+      for (var i = 0; i < 40; i++) {
+        source.publish(gain: 0.1);
+        await _frame(tester);
+      }
+
+      expect(
+        _inked(await _shoot(tester, key)),
+        isEmpty,
+        reason:
+            'the sweep drew a picture of audio that never reached the level '
+            'it was told to wait for',
+      );
+    });
+
+    testWidgets('the sweep starts at the sample that crossed the level', (
+      tester,
+    ) async {
+      final key = GlobalKey();
+      final source = _Tone(hz: 1000, amplitude: 0.9);
+      await tester.pumpWidget(
+        _Harness(
+          source: source,
+          boundary: key,
+          timeBase: ScopeTimeBase.ms20,
+          trigger: ScopeTrigger.transient,
+          threshold: level,
+        ),
+      );
+
+      for (var i = 0; i < 4; i++) {
+        source.publish(gain: 0);
+        await _frame(tester);
+      }
+      // Half a block in, so a display that started where the *block* did would
+      // be five hundred samples early — and would draw the silence before the
+      // transient as the first half of its width.
+      source.publishHit(after: _block ~/ 2);
+      await _frame(tester);
+      // The rest of the span, so the sweep completes rather than being read
+      // half drawn.
+      for (var i = 0; i < 2; i++) {
+        source.publish();
+        await _frame(tester);
+      }
+
+      final pixels = await _shoot(tester, key);
+      expect(
+        _inked(pixels),
+        hasLength(greaterThan(_width ~/ 2)),
+        reason: 'the sweep drew nothing, so the row below proves nothing',
+      );
+
+      // The first column is drawn from the sample that fired the trigger
+      // upwards, so its lowest ink is the level itself. Two samples of a 1 kHz
+      // sine land in a column at this span, which is what the tolerance is
+      // for; a sweep that began at the block boundary would put this on the
+      // centre line, where the silence was.
+      final centre = _height / 2;
+      final half = centre - OaaStroke.hairline;
+      final at = centre - math.pow(10, level / 20) * half;
+      expect(
+        _bottom(pixels, 0)?.toDouble(),
+        closeTo(at, 6),
+        reason: 'the window does not start at the level it was set to',
+      );
+    });
+
+    testWidgets('a level nothing reaches leaves the last capture on screen', (
+      tester,
+    ) async {
+      final key = GlobalKey();
+      final source = _Tone(hz: 1000, amplitude: 0.9);
+      await tester.pumpWidget(
+        _Harness(
+          source: source,
+          boundary: key,
+          timeBase: ScopeTimeBase.ms20,
+          trigger: ScopeTrigger.transient,
+          threshold: level,
+        ),
+      );
+
+      source.publish(gain: 0);
+      await _frame(tester);
+      source.publishHit(after: _block ~/ 2);
+      await _frame(tester);
+      // Enough audio under the level to finish the sweep this hit started.
+      // **A sweep in progress draws whatever happens next, including the drop
+      // back to quiet** — that is what a sweep is, and it is only once the
+      // capture is complete that there is something for the module to hold.
+      for (var i = 0; i < 3; i++) {
+        source.publish(gain: 0.1);
+        await _frame(tester);
+      }
+
+      final captured = await _shoot(tester, key);
+      expect(_inked(captured), isNotEmpty, reason: 'nothing was captured');
+
+      // Programme material that carries on below the level. The display holds
+      // what it caught: blanking it would flash on every quiet passage, and
+      // drawing the quiet audio instead would be an untriggered display in a
+      // triggered mode.
+      for (var i = 0; i < 30; i++) {
+        source.publish(gain: 0.1);
+        await _frame(tester);
+        expect(
+          await _shoot(tester, key),
+          captured,
+          reason: 'the capture was overwritten by audio that never triggered',
+        );
+      }
+    });
+  });
+
+  group('the module\'s own controls', () {
+    // The two settings that are sliders rather than menu rows. What is checked
+    // here is the contract the canvas depends on and the pointer cannot show:
+    // that a drag writes to the layout **once**, at the end. The undo history
+    // is a stack of whole workspaces and the autosave and every remote display
+    // watch the same provider, so a slider that committed per pointer event
+    // would spend sixty history entries and sixty layout frames on one
+    // gesture.
+
+    testWidgets('a drag commits once, at the end', (tester) async {
+      final key = GlobalKey();
+      final source = _Tone(hz: 1000);
+      final writes = <(String, Object?)>[];
+      await tester.pumpWidget(
+        _Harness(
+          source: source,
+          boundary: key,
+          timeBase: ScopeTimeBase.ms20,
+          onOption: (key, value) => writes.add((key, value)),
+        ),
+      );
+
+      final slider = find.byType(OaaSlider);
+      expect(
+        slider,
+        findsOneWidget,
+        reason: 'the height slider is not on the module',
+      );
+
+      await tester.drag(slider, const Offset(_width * 1.0, 0));
+      await _frame(tester);
+
+      expect(writes, hasLength(1));
+      expect(writes.single.$1, 'zoom');
+      // Dragged past the right-hand end, so the value is the top of the range
+      // whatever the module's width turned out to be.
+      expect(writes.single.$2, ScopeZoom.max);
+    });
+
+    testWidgets('the level slider is drawn only where the level is used', (
+      tester,
+    ) async {
+      final key = GlobalKey();
+      final source = _Tone(hz: 1000);
+
+      await tester.pumpWidget(
+        _Harness(
+          source: source,
+          boundary: key,
+          timeBase: ScopeTimeBase.ms20,
+          onOption: (_, _) {},
+        ),
+      );
+      expect(
+        find.byType(OaaSlider),
+        findsOneWidget,
+        reason:
+            'an auto-triggered window places itself, so a level control there '
+            'is a slider that moves a number nothing reads',
+      );
+
+      await tester.pumpWidget(
+        _Harness(
+          source: source,
+          boundary: key,
+          timeBase: ScopeTimeBase.ms20,
+          trigger: ScopeTrigger.transient,
+          onOption: (_, _) {},
+        ),
+      );
+      expect(find.byType(OaaSlider), findsNWidgets(2));
+    });
+
+    group('AUTO', () {
+      // The checkbox beside the threshold, which hands the level to the audio.
+      // Three things about it cannot be seen in a picture: what level it picks,
+      // that the slider stops answering while it holds it, and that switching
+      // it off keeps the number it found rather than the one that was dragged
+      // before it was switched on.
+
+      testWidgets('the level is set from the loudest transient', (
+        tester,
+      ) async {
+        final key = GlobalKey();
+        // Peaks at 0.8, which is −1.9 dBFS, so the level lands six decibels
+        // under it. Mono, so the mid the trigger compares against is the
+        // sample itself — see `_AutoLevel`.
+        final source = _Tone(hz: 1000, amplitude: 0.8);
+
+        await tester.pumpWidget(
+          _Harness(
+            source: source,
+            boundary: key,
+            timeBase: ScopeTimeBase.ms20,
+            trigger: ScopeTrigger.transient,
+            autoThreshold: true,
+            onOption: (_, _) {},
+          ),
+        );
+        source.publish();
+        await _frame(tester);
+
+        expect(
+          find.text('-8.0 dB'),
+          findsOneWidget,
+          reason:
+              'the level should be ScopeThreshold.autoMarginDb under the peak '
+              'of the mid signal, rounded to the step the slider moves in',
+        );
+      });
+
+      testWidgets('silence leaves the level where it was', (tester) async {
+        final key = GlobalKey();
+        final source = _Tone(hz: 1000, amplitude: 0);
+
+        await tester.pumpWidget(
+          _Harness(
+            source: source,
+            boundary: key,
+            timeBase: ScopeTimeBase.ms20,
+            trigger: ScopeTrigger.transient,
+            autoThreshold: true,
+            onOption: (_, _) {},
+          ),
+        );
+        source.publish();
+        await _frame(tester);
+
+        expect(
+          find.text('-12.0 dB'),
+          findsOneWidget,
+          reason:
+              'a passage nobody played is not a measurement, and a level '
+              'dropped to the floor arms the trigger on the noise under it',
+        );
+      });
+
+      testWidgets('the slider does not answer while AUTO holds it', (
+        tester,
+      ) async {
+        final key = GlobalKey();
+        final source = _Tone(hz: 1000, amplitude: 0.8);
+        final writes = <(String, Object?)>[];
+
+        await tester.pumpWidget(
+          _Harness(
+            source: source,
+            boundary: key,
+            timeBase: ScopeTimeBase.ms20,
+            trigger: ScopeTrigger.transient,
+            autoThreshold: true,
+            onOption: (key, value) => writes.add((key, value)),
+          ),
+        );
+        source.publish();
+        await _frame(tester);
+
+        // The second of the two, which is the threshold's — the strip is built
+        // height first.
+        await tester.drag(find.byType(OaaSlider).at(1), const Offset(-200, 0));
+        await _frame(tester);
+
+        expect(
+          writes,
+          isEmpty,
+          reason:
+              'a drag on a control something else is setting wrote to the '
+              'layout, so the next published block fought it',
+        );
+      });
+
+      testWidgets('switching AUTO off keeps the level it found', (
+        tester,
+      ) async {
+        final key = GlobalKey();
+        final source = _Tone(hz: 1000, amplitude: 0.8);
+        final writes = <(String, Object?)>[];
+
+        await tester.pumpWidget(
+          _Harness(
+            source: source,
+            boundary: key,
+            timeBase: ScopeTimeBase.ms20,
+            trigger: ScopeTrigger.transient,
+            autoThreshold: true,
+            onOption: (key, value) => writes.add((key, value)),
+          ),
+        );
+        source.publish();
+        await _frame(tester);
+
+        await tester.tap(find.byType(OaaCheck));
+        await _frame(tester);
+
+        expect(
+          writes,
+          [('threshold', -8.0), ('autoThreshold', false)],
+          reason:
+              'the level has to be written before the mode, or the layout '
+              'still holds whatever was dragged before AUTO was checked and '
+              'the line jumps off the transient it was sitting on',
+        );
+      });
+    });
+
+    testWidgets('a display with no layout to write to draws no controls', (
+      tester,
+    ) async {
+      final key = GlobalKey();
+      final source = _Tone(hz: 1000);
+      await tester.pumpWidget(
+        _Harness(
+          source: source,
+          boundary: key,
+          timeBase: ScopeTimeBase.ms20,
+          trigger: ScopeTrigger.transient,
+        ),
+      );
+
+      expect(
+        find.byType(OaaSlider),
+        findsNothing,
+        reason:
+            'a remote display drew a control for a setting it cannot change',
+      );
+    });
   });
 
   group('tempo sync', () {

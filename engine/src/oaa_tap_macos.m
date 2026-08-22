@@ -409,14 +409,12 @@ static int32_t build_chain(oaa_tap *self, AudioObjectID device,
 
 int32_t oaa_tap_probe(uint32_t *sample_rate, uint32_t *channels, char *name,
                       size_t name_capacity) {
-  if (@available(macOS 14.2, *)) {
-    /* Fall through. Everything below this line is weak-linked: the deployment
-     * target is far lower than 14.2, so on an older system the symbols are
-     * null and this branch is the only thing keeping us out of them. */
-  } else {
-    return OAA_ERR_UNSUPPORTED;
-  }
-
+  /* No `@available` check, and its absence is the point. The engine's
+   * deployment target is 14.2 — asserted in oaa_tap.h, which says why — so
+   * there is no older system to keep out of these symbols. The check that used
+   * to be here claimed to be guarding weak-linked ones and was guarding a
+   * strong class reference that had already decided whether the library could
+   * load at all. */
   const AudioObjectID device = default_output_device();
   if (device == kAudioObjectUnknown) {
     return OAA_ERR_UNSUPPORTED;
@@ -460,11 +458,6 @@ int32_t oaa_tap_open(oaa_tap **out, uint32_t *sample_rate, uint32_t *channels) {
     return OAA_ERR_INVALID_ARGUMENT;
   }
   *out = NULL;
-
-  if (@available(macOS 14.2, *)) {
-  } else {
-    return OAA_ERR_UNSUPPORTED;
-  }
 
   oaa_tap *self = (oaa_tap *)calloc(1, sizeof(oaa_tap));
   if (self == NULL) {

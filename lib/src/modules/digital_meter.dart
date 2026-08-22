@@ -3,7 +3,6 @@
 import 'dart:ui' as ui;
 
 import 'package:oaa_core/oaa_core.dart';
-import 'package:oaa_engine/oaa_engine.dart';
 import 'package:oaa_ui/oaa_ui.dart';
 import 'package:flutter/widgets.dart';
 
@@ -53,7 +52,7 @@ class _DigitalMeterModuleState extends State<DigitalMeterModule> {
   @override
   Widget build(BuildContext context) {
     final colors = OaaTheme.of(context);
-    final channels = widget.engine.channels.clamp(1, kOaaMaxChannels);
+    final channels = widget.engine.channels.clamp(1, MeterShape.maxChannels);
 
     if (_graticule == null ||
         !_graticule!.matches(_scale, ScaleSide.left, colors.textFaint) ||

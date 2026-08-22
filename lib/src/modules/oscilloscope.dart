@@ -103,6 +103,52 @@ import '../clock/meter_clock.dart';
 /// so a clipped passage is visible as a red band rather than as a flat top
 /// somebody has to notice — and a trace running off the lane is a trace that is
 /// zoomed, which is a different thing and looks like one.
+///
+/// ---------------------------------------------------------------------------
+/// The sweep, which is the third way this module finds a window
+///
+/// [ScopeTrigger.transient] replaces both of the displays above with one that
+/// waits: armed, drawing nothing new, until the signal rises through
+/// [ScopeThreshold]; from that sample forward across the whole width once; then
+/// holding what it drew until the next crossing. It is what a bench scope's
+/// Normal mode is for and what the other two cannot do — a rolling display puts
+/// a drum hit somewhere different every pass and a zero-crossing trigger locks
+/// to the *pitch* of whatever is loudest, neither of which lets you look at the
+/// attack.
+///
+/// Three properties of it are decisions rather than consequences.
+///
+///   - **The trigger is found in the audio as it arrives, not searched for
+///     backwards.** [ScopeTrigger.auto] can search, because at 200 ms its whole
+///     window plus somewhere to look sits in a third of a second of kept
+///     samples; a five-second window does not, and never will. So the sweep is
+///     written forward from the sample that fired it, into the same columns the
+///     rolling display uses, and needs no raw ring at all.
+///   - **Nothing is blanked between triggers.** The last capture is the
+///     picture, and a display that cleared itself while waiting would flash
+///     rather than hold. A sweep overwrites its predecessor in place, which is
+///     the same call [ScopeSync.tempo] makes and for the same reason.
+///   - **A threshold nothing reaches leaves the screen alone.** That is the
+///     mode working, not failing: the number is printed beside the slider and
+///     the level is drawn across the lane, so where the trigger sits relative
+///     to the signal is on screen rather than inferred.
+///
+/// ---------------------------------------------------------------------------
+/// Two of the settings are controls on the module, and only here
+///
+/// The height and the trigger level are dragged, in a strip along the bottom of
+/// the plot, because both are chosen by looking: you move them until the
+/// picture is right, and a menu that closes over the picture on every step
+/// cannot be used for that. They are the only module settings in the
+/// application that are not menu rows, and they are the only two whose value is
+/// a number rather than one of a handful of named things.
+///
+/// The strip is chrome and behaves like the rest of the module's chrome: it is
+/// dropped when there is no room for it, on the same principle that drops the
+/// graticule and the lane letters, because what a small module keeps is the
+/// signal. It is also absent wherever there is nothing to write a setting *to*
+/// — a remote display draws this module from the same painters and changes
+/// nothing about the layout it was sent.
 class OscilloscopeModule extends StatefulWidget {
   const OscilloscopeModule({
     required this.engine,
@@ -112,7 +158,11 @@ class OscilloscopeModule extends StatefulWidget {
     this.division = ScopeDivision.bar1,
     this.grid = ScopeGrid.straight,
     this.stereo = ScopeStereo.lanes,
-    this.zoom = ScopeZoom.x1,
+    this.trigger = ScopeTrigger.auto,
+    this.threshold = ScopeThreshold.defaultDb,
+    this.autoThreshold = false,
+    this.zoom = ScopeZoom.defaultScale,
+    this.onOption,
     super.key,
   });
 
@@ -135,8 +185,29 @@ class OscilloscopeModule extends StatefulWidget {
   /// Two lanes or one. See [ScopeStereo].
   final ScopeStereo stereo;
 
-  /// How tall full scale is drawn. See [ScopeZoom].
-  final ScopeZoom zoom;
+  /// What starts the window when [sync] is [ScopeSync.free]. See
+  /// [ScopeTrigger].
+  final ScopeTrigger trigger;
+
+  /// The level [ScopeTrigger.transient] fires at, in dBFS. See
+  /// [ScopeThreshold].
+  final double threshold;
+
+  /// Whether that level follows the loudest transient instead of being
+  /// dragged. See [_AutoLevel] and [ScopeThreshold.autoAt].
+  final bool autoThreshold;
+
+  /// How tall full scale is drawn, as a multiplier. See [ScopeZoom].
+  final double zoom;
+
+  /// Writes one of this module's own settings back to the layout.
+  ///
+  /// **Null is what a surface with no editable layout looks like**, and it is
+  /// the same signal `ModuleFrame.onMenu` uses: no callback, no control drawn.
+  /// A remote display is that surface — it renders the layout it was sent and
+  /// has nothing to change it with — so the strip is not built there rather
+  /// than built and ignored.
+  final void Function(String key, Object? value)? onOption;
 
   @override
   State<OscilloscopeModule> createState() => _OscilloscopeModuleState();
@@ -166,6 +237,78 @@ const double _laneLabelAbove = Space.lg;
 /// channel reads as a shadow of the left.
 const double _dim = 0.55;
 
+/// What the plot keeps for itself before the strip may have its sixteen pixels.
+///
+/// Deliberately above `ModuleKind.oscilloscope.minBodyHeight`, which is where a
+/// waveform stops being one: a strip that took the plot down *to* its floor
+/// would spend the picture on a control whose whole job is to improve the
+/// picture. At this height two lanes are still 30 px each. Chrome goes first
+/// when there is not enough — the same order the graticule, the half-scale
+/// lines and the lane letters already go in.
+const double _plotAbove = Space.xxl + Space.md;
+
+/// Room for `THRESHOLD`, which is 68 px of the label face, measured.
+///
+/// What the threshold control's *box* is sized against rather than a cell the
+/// word sits in — the words are drawn tight and flush left. See
+/// [_ScopeControl] for where the difference between two labels ends up.
+const double _longestLabel = Space.xxxl + Space.sm;
+
+/// Room for `HEIGHT`, which is 43 px of the same face.
+///
+/// Sized against its own word rather than the longest one, because these two
+/// controls stand side by side: a height control in a box cut for `THRESHOLD`
+/// ends 29 px past its own last glyph, and that slack lands in the gutter
+/// between the pair. One px over the measurement rather than one under — the
+/// label clips rather than wrapping, so a fallback face costs a glyph.
+const double _heightLabel = Space.xl + Space.smd;
+
+/// The threshold's reading: eight glyphs of the tick face, which is `-60.0 dB`.
+///
+/// Measured rather than derived — the first guess was this face's nominal
+/// advance times eight, and it printed `-12.0 dE`.
+const double _readingColumn = Space.xxl + Space.sm;
+
+/// The height's reading: five glyphs, which is `32.0x`.
+///
+/// Its own column for the same reason it has its own label column — the
+/// difference between the widest reading a control can print and the widest
+/// one in the strip is slack, and side by side the slack is the gutter. A
+/// glyph of room over the five, because [_readingColumn] is a measurement and
+/// five-eighths of it is not.
+const double _zoomReading = Space.xl + Space.xs;
+
+/// The `AUTO` box and its word, which only the threshold control has.
+///
+/// Taken on that control alone. It was once reserved blank on the height
+/// control too, to keep the two tracks the same length — but the length is the
+/// caller's `track`, which is one number handed to both, so the cell never did
+/// that job. What it did was park 48 px of nothing at the height control's
+/// right-hand end, which is the gutter between the two.
+const double _autoColumn = Space.xxl;
+
+/// Everything in a control that is not the track.
+double _controlChrome({
+  required double label,
+  required double reading,
+  required bool auto,
+}) => label + reading + Space.sm * 2 + (auto ? _autoColumn + Space.sm : 0);
+
+/// The least track worth drawing. Below it a control is a readout with a
+/// hairline beside it.
+const double _trackMin = Space.xl;
+
+/// The most track that is drawn, however wide the module is. See the strip.
+const double _trackMax = Space.xxxl * 2 + Space.sm;
+
+/// Room left at the right-hand end of the strip for the canvas's resize grip.
+///
+/// The grip is drawn over the module's bottom-right corner and its *touch*
+/// target is twice the size of the ink; both are above this module in the
+/// canvas's stack, so a slider that ran to the right-hand edge would end
+/// underneath them. See `_ModuleSlot` in `lib/src/canvas/grid_canvas.dart`.
+const double _gripClearance = Space.lg;
+
 /// Where a segment the painter is not using is parked.
 ///
 /// The buffers handed to `drawRawPoints` are always passed whole, because
@@ -177,6 +320,20 @@ const double _parked = -1;
 
 class _OscilloscopeModuleState extends State<OscilloscopeModule> {
   final _ScopeHistory _history = _ScopeHistory();
+
+  /// The height and the level as they are *being* dragged.
+  ///
+  /// The slider reports continuously and commits once, and this is the half in
+  /// between: what the painter is handed while the pointer is down. Writing
+  /// each pointer event to the layout instead would spend an undo entry, a JSON
+  /// encoding and a wire frame per pixel of travel — see `OaaSlider`. Seeded
+  /// from the widget and re-seeded whenever it changes, so a preset load, an
+  /// undo or the commit at the end of the drag all arrive the same way.
+  late double _zoom = widget.zoom;
+  late double _threshold = widget.threshold;
+
+  /// The loudest the trigger's own quantity has been, for `AUTO`.
+  final _AutoLevel _auto = _AutoLevel();
 
   ui.Paragraph? _leftLabel;
   ui.Paragraph? _rightLabel;
@@ -224,7 +381,15 @@ class _OscilloscopeModuleState extends State<OscilloscopeModule> {
     // no relationship to the one on screen — the desktop swaps its engine for
     // a plugin's decoded frames the moment a DAW connects. Keeping the old
     // waveform would draw one session's audio onto the end of another's.
-    if (!identical(old.engine, widget.engine)) _history.reset();
+    if (!identical(old.engine, widget.engine)) {
+      _history.reset();
+      // The same reason: the peak this was holding belongs to a programme that
+      // is no longer playing, and a level taken from it would arm the trigger
+      // somewhere the new signal never goes.
+      _auto.reset();
+    }
+    if (old.zoom != widget.zoom) _zoom = widget.zoom;
+    if (old.threshold != widget.threshold) _threshold = widget.threshold;
   }
 
   @override
@@ -245,7 +410,20 @@ class _OscilloscopeModuleState extends State<OscilloscopeModule> {
   ///
   /// Nothing here marks the tree dirty. Pixels still arrive on the clock's
   /// throttled notification, at the rate the user asked for.
-  void _measured() => _history.ingest(widget.engine);
+  void _measured() {
+    _history.ingest(widget.engine);
+    _auto.ingest(widget.engine);
+    // Only while the box is checked, and only when the decibel it prints
+    // actually moved. On steady material the peak holds and this does nothing
+    // at all; through a fade it fires a handful of times a second, which is
+    // what rounding the level to `ScopeThreshold.stepDb` buys — the tenth of a
+    // decibel a drag stores would rebuild the strip on every publish.
+    if (!widget.autoThreshold) return;
+    final level = _auto.level;
+    if (level != null && level != _threshold) {
+      setState(() => _threshold = level);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -278,7 +456,7 @@ class _OscilloscopeModuleState extends State<OscilloscopeModule> {
       _divisionLabel = layoutParagraph(division, style);
     }
 
-    return MeterBody(
+    final plot = MeterBody(
       painter: _OscilloscopePainter(
         engine: widget.engine,
         colors: colors,
@@ -288,10 +466,428 @@ class _OscilloscopeModuleState extends State<OscilloscopeModule> {
         division: widget.division,
         grid: widget.grid,
         stereo: widget.stereo,
-        zoom: widget.zoom,
+        trigger: widget.trigger,
+        threshold: _threshold,
+        zoom: _zoom,
         repaint: widget.clock,
       ),
     );
+
+    if (widget.onOption == null) return plot;
+
+    // The level is only a control where it is the thing deciding what is on
+    // screen: a tempo-locked window is placed by the bar line and a
+    // free-running one by [ScopeTrigger.auto], and a slider that moves a number
+    // nothing reads is a slider that has to be explained. Same rule as the
+    // menu, which offers the time base and the trigger to a free window and the
+    // division and the grid to a locked one, and never both.
+    final levelled = widget.sync == ScopeSync.free && widget.trigger.sweeps;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth - _gripClearance;
+        // Each control is cut to its own word and its own cells: the `AUTO`
+        // box belongs to the threshold, so the room for it is only taken where
+        // there is a threshold to set, and the height control's box ends where
+        // `HEIGHT` does rather than where `THRESHOLD` would have.
+        final heightChrome = _controlChrome(
+          label: _heightLabel,
+          reading: _zoomReading,
+          auto: false,
+        );
+        final levelChrome = _controlChrome(
+          label: _longestLabel,
+          reading: _readingColumn,
+          auto: levelled,
+        );
+        final minimum = (levelled ? levelChrome : heightChrome) + _trackMin;
+        // Two controls fit side by side on almost every module and on none of
+        // the narrow ones, so the fallback is a second row rather than a
+        // dropped control: a setting that disappears when a module is resized
+        // is worse than a plot that is sixteen pixels shorter.
+        // Measured against the *wider* control twice, not against the pair's
+        // real widths: cutting the height control to its own word freed 100 px,
+        // and spending that on fitting two 32 px tracks where two 136 px ones
+        // used to stack would be a worse strip on every narrow module. The
+        // freed room goes into the tracks that are already side by side.
+        final rows = levelled && width < minimum * 2 + Space.md ? 2 : 1;
+        final side = (width - heightChrome - levelChrome - Space.md) / 2;
+        final strip = rows * OaaSlider.height + (rows - 1) * Space.xs;
+
+        if (width < minimum ||
+            constraints.maxHeight < _plotAbove + strip + Space.xs) {
+          return plot;
+        }
+
+        // **Not the whole width, on a wide module.** A track drawn across a
+        // twelve-column module under a waveform is a scrub bar to anybody who
+        // has used a DAW, and this one plays nothing and locates nothing.
+        // [_trackMax] already puts half a decibel of level and a thirtieth of
+        // an octave of height in a pixel, so the rest of the row is better
+        // spent being empty and letting the strip read as a pair of controls.
+        // One length, handed to both controls. Two sliders side by side whose
+        // travel differs are two sliders that look mis-set rather than
+        // differently scaled — the chrome around them may differ, the track
+        // may not.
+        final track = math.min(
+          _trackMax,
+          rows == 1 && levelled
+              ? side
+              : width - (levelled ? levelChrome : heightChrome),
+        );
+
+        // The height is dragged in *octaves* and printed in multipliers. A
+        // slider linear in the multiplier spends half its travel between 16x
+        // and 32x, where the picture barely changes, and the first four
+        // multipliers — which is where the material usually is — in an eighth
+        // of it.
+        final height = _ScopeControl(
+          label: 'HEIGHT',
+          semanticLabel: 'Waveform height',
+          format: (position) => ScopeZoom.label(ScopeZoom.scaleAt(position)),
+          value: ScopeZoom.positionOf(_zoom),
+          min: 0,
+          max: ScopeZoom.octaves,
+          step: ScopeZoom.stepOctaves,
+          onChanged: (position) => _setZoom(position, commit: false),
+          onChangeEnd: (position) => _setZoom(position, commit: true),
+          track: track,
+          readingColumn: _zoomReading,
+        );
+        final level = _ScopeControl(
+          label: 'THRESHOLD',
+          semanticLabel: 'Trigger threshold',
+          format: ScopeThreshold.label,
+          value: _threshold,
+          min: ScopeThreshold.minDb,
+          max: ScopeThreshold.maxDb,
+          step: ScopeThreshold.stepDb,
+          // Dragging is what `AUTO` takes over. The track still shows where the
+          // level has got to, because that is the whole of what it is for.
+          enabled: !widget.autoThreshold,
+          onChanged: (db) => _setThreshold(db, commit: false),
+          onChangeEnd: (db) => _setThreshold(db, commit: true),
+          track: track,
+          readingColumn: _readingColumn,
+          trailing: OaaCheck(
+            label: 'AUTO',
+            value: widget.autoThreshold,
+            semanticLabel: 'Set the trigger threshold automatically',
+            onChanged: _setAuto,
+          ),
+        );
+
+        return Column(
+          children: [
+            Expanded(child: plot),
+            const SizedBox(height: Space.xs),
+            SizedBox(
+              height: strip,
+              child: Padding(
+                padding: const EdgeInsets.only(right: _gripClearance),
+                child: rows == 1
+                    ? Row(
+                        // Adjacent, one gutter apart, the first flush with the
+                        // plot's left edge — which is where the module's own
+                        // chrome already starts, at the lane letters. Pushed to
+                        // the two ends instead, as they were, a wide module put
+                        // half a module between them and the pair stopped
+                        // reading as one strip of controls. [side] already has
+                        // the gutter taken out of it, so the two fit whatever
+                        // the module's width.
+                        children: [
+                          SizedBox(width: heightChrome + track, child: height),
+                          if (levelled) ...[
+                            const SizedBox(width: Space.md),
+                            SizedBox(width: levelChrome + track, child: level),
+                          ],
+                        ],
+                      )
+                    : Column(
+                        children: [
+                          Row(
+                            children: [
+                              SizedBox(
+                                width: heightChrome + track,
+                                child: height,
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: Space.xs),
+                          Row(
+                            children: [
+                              SizedBox(
+                                width: levelChrome + track,
+                                child: level,
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  /// Both halves of a slider's contract, quantised once.
+  ///
+  /// The live value, the printed reading, the line drawn across the lane and
+  /// the number written to the layout are all this one — a control that commits
+  /// a value it never displayed is a control whose readout is a rounding of
+  /// something else.
+  void _setZoom(double position, {required bool commit}) {
+    final scale = ScopeZoom.scaleAt(position);
+    if (commit) widget.onOption!('zoom', scale);
+    if (scale != _zoom) setState(() => _zoom = scale);
+  }
+
+  void _setThreshold(double db, {required bool commit}) {
+    final level = ScopeThreshold.quantise(db);
+    if (commit) widget.onOption!('threshold', level);
+    if (level != _threshold) setState(() => _threshold = level);
+  }
+
+  /// Hands the level to the audio, or takes it back.
+  ///
+  /// **Switching `AUTO` off writes the level it had found, first.** The layout
+  /// still holds whatever was dragged before the box was checked — the audio
+  /// never wrote to it, deliberately, because a level that followed the
+  /// material into the preset would spend an undo entry and a wire frame per
+  /// published block — so without this, unchecking the box would jump the
+  /// trigger back to a number nobody has looked at in minutes and move the line
+  /// out from under the transient it was sitting on. Two writes and so two
+  /// entries in the history, which is what happened: the level is this one now,
+  /// and it is manual now.
+  void _setAuto(bool on) {
+    if (!on) {
+      widget.onOption!('threshold', ScopeThreshold.quantise(_threshold));
+    }
+    widget.onOption!('autoThreshold', on);
+  }
+}
+
+/// One row of the strip: what it sets, the track, and what it is set to.
+///
+/// Every control in the strip is this one widget, and every one of them has the
+/// same geometry: the word, a seam, [track], a seam, the reading, and the
+/// trailing cell where the strip has one. **Both seams are [Space.sm] and
+/// nothing else is ever between a thing and the track it belongs to.**
+///
+/// Which is the whole design here, because the two labels are not the same
+/// length — `HEIGHT` is 43 px of the label face and `THRESHOLD` is 68 — and
+/// something has to absorb the difference. Three places to put it and only one
+/// is any good:
+///
+///   - *Between the word and the track*, by giving every label a column as wide
+///     as the longest one. Then `HEIGHT` floats 37 px off its own slider, which
+///     is the defect this strip already had once at the other end: `1.0x`
+///     right-aligned in a column sized for `-60.0 dB` sat forty pixels past the
+///     track and read as a caption belonging to nothing.
+///   - *In front of the word*, by right-aligning it in that column. Then the
+///     rows no longer start where the plot above them does, and the first one
+///     looks indented for no reason a reader can see.
+///   - *Nowhere*, which is what this does. The word is tight and flush left,
+///     the caller cuts each control's box to that control's own word, and
+///     [track] — one number, handed to both — is what makes them agree. The
+///     difference between the two labels is then simply not in the layout.
+///
+/// What that costs is that the controls start their tracks at different x.
+/// They are the same *length*, which is what a slider's travel is read from and
+/// the thing two controls side by side must agree about. Absorbing it as
+/// trailing margin instead was the previous answer here, and it is the one that
+/// put 85 px of nothing between the height control and the threshold beside it:
+/// 29 px of unused label column and a blank [_autoColumn] behind it.
+class _ScopeControl extends StatelessWidget {
+  const _ScopeControl({
+    required this.label,
+    required this.semanticLabel,
+    required this.format,
+    required this.value,
+    required this.min,
+    required this.max,
+    required this.step,
+    required this.onChanged,
+    required this.onChangeEnd,
+    required this.track,
+    required this.readingColumn,
+    this.enabled = true,
+    this.trailing,
+  });
+
+  final String label;
+  final String semanticLabel;
+
+  /// The value in words. Drawn *and* announced from this one function, so the
+  /// number a screen reader reads and the number on screen cannot drift.
+  final String Function(double value) format;
+  final double value;
+  final double min;
+  final double max;
+  final double step;
+  final ValueChanged<double> onChanged;
+  final ValueChanged<double> onChangeEnd;
+
+  /// How long the track is drawn. The same for every control in the strip —
+  /// see the class comment for why the caller works it out rather than the
+  /// row taking what is left over.
+  final double track;
+
+  /// How wide the readout is drawn — the widest string [format] can return,
+  /// and not a pixel more. Tabular, so it never changes; sized per control,
+  /// because the difference between `32.0x` and `-60.0 dB` is 20 px of gutter.
+  final double readingColumn;
+
+  /// Whether the track can be dragged. See [OaaSlider.enabled].
+  final bool enabled;
+
+  /// What sits past the reading, on the one control that has anything.
+  ///
+  /// Its cell is [_autoColumn] wide and exists only where it is filled — a
+  /// control that reserved it blank would end 56 px past its own last glyph.
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = OaaTheme.of(context);
+    final reading = format(value);
+
+    return SizedBox(
+      height: OaaSlider.height,
+      child: Row(
+        children: [
+          // Tight, and flexible only so that a fallback label face wider than
+          // the one this was measured against clips a word rather than
+          // overflowing the row. Chrome, in the ink the rest of the module's
+          // chrome uses: a control on the measurement surface that took
+          // `textPrimary` would be brighter than every reading around it.
+          Flexible(
+            child: Text(
+              label,
+              style: OaaType.label.copyWith(color: colors.textMuted),
+              maxLines: 1,
+              softWrap: false,
+              overflow: TextOverflow.clip,
+            ),
+          ),
+          const SizedBox(width: Space.sm),
+          SizedBox(
+            width: track,
+            child: OaaSlider(
+              value: value,
+              min: min,
+              max: max,
+              step: step,
+              onChanged: onChanged,
+              onChangeEnd: onChangeEnd,
+              format: format,
+              semanticLabel: semanticLabel,
+              enabled: enabled,
+            ),
+          ),
+          const SizedBox(width: Space.sm),
+          SizedBox(
+            width: readingColumn,
+            child: Text(
+              reading,
+              textAlign: TextAlign.left,
+              // Tabular, like every other number in the application: a readout
+              // that changes width as it is dragged drags the control with it.
+              style: OaaType.tick.copyWith(color: colors.textMuted),
+              maxLines: 1,
+              softWrap: false,
+              overflow: TextOverflow.clip,
+            ),
+          ),
+          if (trailing != null) ...[
+            const SizedBox(width: Space.sm),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 1),
+              child: SizedBox(width: _autoColumn, child: trailing),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// The loudest the trigger's own quantity has been lately, and the level that
+/// follows it.
+///
+/// **It measures the mid of the two channels, not either channel and not an
+/// absolute value.** `_ScopeHistory._sweepAudio` compares `(l + r) / 2` against
+/// the level and fires on a *rising* crossing, so the only peak that says
+/// anything about whether a level can ever fire is the largest positive
+/// excursion of that same signal. Take the absolute value instead and a
+/// waveform whose negative half is the bigger one — which is most kick drums —
+/// gets a level nothing on the positive side ever reaches: the box says it
+/// found something and the display never sweeps again.
+///
+/// **Two buckets rather than a release curve.** The window is the current two
+/// seconds of audio and the one before it, so a transient holds the level for
+/// between two and four seconds and is then let go. A decay would be an
+/// invented ballistic — there is no standard for this and nothing to hold one
+/// against — and a single bucket would drop the level to whatever the last two
+/// seconds happened to contain at the instant the bucket turned over.
+///
+/// Time comes from the source's elapsed clock and not the wall, so a file
+/// pushed through faster than real time gets the same window in audio seconds
+/// that a device gets in real ones.
+class _AutoLevel {
+  static const double _bucketSeconds = 2;
+
+  double _current = 0;
+  double _previous = 0;
+  int _bucket = 0;
+  bool _seeded = false;
+
+  /// The level to fire at, in dBFS, or null while nothing loud enough has been
+  /// published. See [ScopeThreshold.autoAt].
+  double? get level =>
+      ScopeThreshold.autoAt(_current > _previous ? _current : _previous);
+
+  void reset() {
+    _current = 0;
+    _previous = 0;
+    _seeded = false;
+  }
+
+  void ingest(MeterSource engine) {
+    final published = engine.scopeFrames;
+    if (published <= 0) return;
+    final elapsed = engine.elapsedSeconds;
+    if (elapsed.isNaN) return;
+
+    final bucket = (elapsed / _bucketSeconds).floor();
+    if (!_seeded || bucket < _bucket) {
+      // The first measurement, or the engine was reset under us. A peak from
+      // before a reset belongs to audio that is no longer playing.
+      _previous = 0;
+      _current = 0;
+      _bucket = bucket;
+      _seeded = true;
+    } else if (bucket != _bucket) {
+      // One bucket on carries the last one. Further than that is a silence
+      // longer than the window, and there is nothing in it to carry.
+      _previous = bucket == _bucket + 1 ? _current : 0;
+      _current = 0;
+      _bucket = bucket;
+    }
+
+    // The whole published block, not just the frames that are new since the
+    // last one: a maximum cannot double-count, and the few milliseconds of
+    // overlap cost nothing. Every module reads this buffer as interleaved
+    // pairs, a mono source included — see `MeterSource.scope`.
+    final scope = engine.scope;
+    var peak = _current;
+    for (var i = 0; i < published; i++) {
+      final mid = (scope[i * 2] + scope[i * 2 + 1]) * 0.5;
+      if (mid > peak) peak = mid;
+    }
+    _current = peak;
   }
 }
 
@@ -390,6 +986,28 @@ class _ScopeHistory {
   /// The column the phase-locked display is currently filling, or -1.
   int _syncedColumn = -1;
 
+  /// Whether the display is swept from a trigger rather than rolled or
+  /// searched. Part of the shape: switching it clears what is on screen,
+  /// because a rolling picture and a swept one put different audio in the same
+  /// column.
+  bool _sweep = false;
+
+  /// The amplitude the sweep fires at. **Not** part of the shape — it is
+  /// dragged, and re-cutting the display on every pointer event would mean
+  /// nothing was ever on screen to aim at.
+  double _level = 1;
+
+  /// How much of the sweep has been written, or -1 when it is waiting for a
+  /// trigger. Columns when the display is columns, samples when it is a trace.
+  int _swept = -1;
+
+  /// Whether the signal has been below [_level] since the last trigger.
+  ///
+  /// What makes the trigger a *rising* crossing rather than a level test. A
+  /// sustain sitting above the threshold retriggers on every sample without
+  /// it, which draws the same fifth of a window over and over.
+  bool _armed = false;
+
   /// Next column to write, which in a full ring is also the oldest.
   int _cursor = 0;
 
@@ -426,6 +1044,16 @@ class _ScopeHistory {
       ? 0
       : _base!.seconds * _sampleRate / _columns;
 
+  /// Frames of audio the whole width holds.
+  int get _spanFrames =>
+      _base == null ? 0 : (_base!.seconds * _sampleRate).round();
+
+  /// Whether a column holds fewer than one sample, so the display is a trace.
+  ///
+  /// The same test [resolve] applies to the triggered display, and it is
+  /// arithmetic rather than a mode — see the module header.
+  bool get _traceWide => _spanFrames < _columns;
+
   /// Sizes the buffers, and clears them when the shape of the display changed.
   ///
   /// A different width or a different span is a different set of columns and
@@ -438,13 +1066,18 @@ class _ScopeHistory {
     required ScopeTimeBase base,
     required int sampleRate,
     required double? quarters,
+    required bool sweep,
+    required double level,
   }) {
+    _level = level;
     if (columns == _columns &&
         base == _base &&
         sampleRate == _sampleRate &&
-        quarters == _quarters) {
+        quarters == _quarters &&
+        sweep == _sweep) {
       return;
     }
+    _sweep = sweep;
 
     final kept = sampleRate <= 0 ? 0 : (sampleRate * _keptSeconds).ceil();
     if (kept != _rawFrames) {
@@ -531,7 +1164,16 @@ class _ScopeHistory {
       // rolling display gets that many columns of nothing.
       _rawWrite = 0;
       _rawFilled = 0;
-      _rollGap(missed);
+      if (_sweep) {
+        // A sweep is one continuous stretch of audio drawn once across the
+        // width, and this is a hole in the middle of it. There is no such thing
+        // as a sweep with a gap, so it is abandoned: what is on screen stays,
+        // and the next trigger starts a capture that is whole.
+        _swept = -1;
+        _armed = false;
+      } else {
+        _rollGap(missed);
+      }
     }
 
     // A phase-locked display searches for nothing and scrolls nowhere, so it
@@ -543,9 +1185,104 @@ class _ScopeHistory {
       return;
     }
 
+    // A swept display needs no raw ring either: its trigger is the audio
+    // arriving rather than something to look back through, so every sample goes
+    // to the column the sweep is on.
+    if (_sweep) {
+      _sweepAudio(scope, first, taken);
+      _dirty = true;
+      return;
+    }
+
     _appendRaw(scope, first, taken);
     if (!_base!.isTriggered) _rollAudio(scope, first, taken);
     _dirty = true;
+  }
+
+  /// Waits for a rising crossing of [_level], then draws forward from it.
+  ///
+  /// The whole of [ScopeTrigger.transient]. Two things are worth saying about
+  /// the shape of it:
+  ///
+  /// **The sample that fires the trigger is the first sample drawn**, which is
+  /// what puts the transient itself at the left edge rather than a column of
+  /// whatever preceded it.
+  ///
+  /// **The column display appears as it is written and the trace display only
+  /// when it is finished.** Not an inconsistency: a column has NaN for "no
+  /// audio here" and a half-drawn sweep at five seconds across the width is
+  /// worth watching arrive, while a trace has no such value — a partly filled
+  /// buffer would be drawn as a line through zero — and at the spans where a
+  /// trace is the picture the whole sweep lands inside one published block
+  /// anyway.
+  void _sweepAudio(Float32List scope, int first, int count) {
+    final span = _spanFrames;
+    if (span < 2 || _columns == 0) return;
+    final trace = _traceWide;
+    final perColumn = trace ? 1.0 : _framesPerColumn;
+    final limit = trace ? span : _columns;
+    if (perColumn <= 0) return;
+
+    for (var i = 0; i < count; i++) {
+      final l = scope[(first + i) * 2];
+      final r = scope[(first + i) * 2 + 1];
+
+      if (_swept < 0) {
+        // Waiting, and drawing nothing: the last capture is the picture until
+        // there is a new one. Mid rather than either channel, so the level
+        // means the same thing here as the zero crossing does in [_findTrigger]
+        // and a trigger is not taken from a channel that is not on screen.
+        final mid = (l + r) * 0.5;
+        if (!_armed) {
+          if (mid < _level) _armed = true;
+          continue;
+        }
+        if (mid < _level) continue;
+        _swept = 0;
+        _armed = false;
+        _fill = 0;
+        _pEmpty = true;
+      }
+
+      if (trace) {
+        _traceL[_swept] = l;
+        _traceR[_swept] = r;
+        _swept++;
+      } else {
+        if (_pEmpty) {
+          _pMinL = _pMaxL = l;
+          _pMinR = _pMaxR = r;
+          _pEmpty = false;
+        } else {
+          if (l < _pMinL) {
+            _pMinL = l;
+          } else if (l > _pMaxL) {
+            _pMaxL = l;
+          }
+          if (r < _pMinR) {
+            _pMinR = r;
+          } else if (r > _pMaxR) {
+            _pMaxR = r;
+          }
+        }
+
+        _fill += 1;
+        if (_fill >= perColumn) {
+          _fill -= perColumn;
+          _minL[_swept] = _pMinL;
+          _maxL[_swept] = _pMaxL;
+          _minR[_swept] = _pMinR;
+          _maxR[_swept] = _pMaxR;
+          _pEmpty = true;
+          _swept++;
+        }
+      }
+
+      if (_swept >= limit) {
+        _swept = -1;
+        if (trace) traceCount = span;
+      }
+    }
   }
 
   /// Folds new audio into the columns its *musical* position falls in.
@@ -635,16 +1372,31 @@ class _ScopeHistory {
   void resolve() {
     if (!_dirty) return;
     _dirty = false;
-    traceCount = 0;
 
-    if (_base == null || _columns == 0) return;
+    if (_base == null || _columns == 0) {
+      traceCount = 0;
+      return;
+    }
 
     // Phase-locked: column zero is the start of the window, always. Nothing to
     // search for and nothing to scroll.
     if (_quarters != null) {
+      traceCount = 0;
       origin = 0;
       return;
     }
+
+    // Swept: the trigger was found in the audio as it arrived and the columns
+    // were written forward from it, so there is nothing here to resolve but
+    // where the left edge is — and nothing that may be cleared, because
+    // between triggers what is on screen *is* the picture. [traceCount] is the
+    // sweep's own and is not reset here.
+    if (_sweep) {
+      origin = 0;
+      return;
+    }
+
+    traceCount = 0;
 
     if (!_base!.isTriggered) {
       // The rolling display is already in the columns; the oldest is the one
@@ -769,6 +1521,8 @@ class _ScopeHistory {
     _blankColumns();
     _cursor = 0;
     _syncedColumn = -1;
+    _swept = -1;
+    _armed = false;
     _fill = 0;
     _pEmpty = true;
     origin = 0;
@@ -884,6 +1638,8 @@ class _OscilloscopePainter extends MeterPainter {
     required this.division,
     required this.grid,
     required this.stereo,
+    required this.trigger,
+    required this.threshold,
     required this.zoom,
     required Listenable repaint,
   }) : _grid = (Paint()
@@ -904,6 +1660,14 @@ class _OscilloscopePainter extends MeterPainter {
          ..color = colors.accent.withValues(alpha: _dim)
          ..strokeWidth = OaaStroke.hairline
          ..strokeCap = StrokeCap.butt),
+       // The trigger level, which is chrome and brighter than the graticule
+       // because it is a line somebody has put there. Never `accent`, `warn` or
+       // `over`: those three are verdicts on the signal everywhere else on this
+       // canvas, and a level is a setting.
+       _level = (Paint()
+         ..color = colors.hairlineStrong
+         ..strokeWidth = OaaStroke.hairline
+         ..isAntiAlias = false),
        _over = (Paint()
          ..color = colors.over
          ..strokeWidth = OaaStroke.hairline
@@ -922,12 +1686,15 @@ class _OscilloscopePainter extends MeterPainter {
   final ScopeDivision division;
   final ScopeGrid grid;
   final ScopeStereo stereo;
-  final ScopeZoom zoom;
+  final ScopeTrigger trigger;
+  final double threshold;
+  final double zoom;
 
   final Paint _grid;
   final Paint _centre;
   final Paint _signal;
   final Paint _second;
+  final Paint _level;
   final Paint _over;
   final Paint _overMark;
 
@@ -952,12 +1719,23 @@ class _OscilloscopePainter extends MeterPainter {
         ? division.quartersIn(transport) * grid.factor
         : null;
 
+    // **A trigger and a bar line cannot both decide where the window starts.**
+    // The locked window is placed by the host and the swept one by the signal,
+    // so the sweep is offered where the time base is — to a free-running
+    // display — and a module set to both draws the locked window. The menu
+    // offers them the same way round, and the level's own control is drawn only
+    // where it is doing something. See [ScopeTrigger].
+    final sweeping = sync == ScopeSync.free && trigger.sweeps;
+    final level = ScopeThreshold.amplitude(threshold);
+
     final history = state._history;
     history.configure(
       columns: columns,
       base: timeBase,
       sampleRate: engine.sampleRate,
       quarters: quarters,
+      sweep: sweeping,
+      level: level,
     );
 
     // Note what is *not* here: the audio was folded in by
@@ -977,15 +1755,29 @@ class _OscilloscopePainter extends MeterPainter {
     final gap = rows > 1 ? Space.xs : 0.0;
     final laneHeight = (size.height - gap * (rows - 1)) / rows;
     if (laneHeight < OaaStroke.mark * 2) return;
+    // Inset by the stroke so a full-scale sample is drawn inside the lane
+    // rather than half outside it, where the clip takes it.
+    final half = laneHeight / 2 - OaaStroke.hairline;
 
-    _paintGrid(canvas, size, rows, laneHeight, gap, quarters);
+    // Where the trigger sits, drawn only while it is inside the lane: a level
+    // the zoom has pushed off the top is drawn nowhere rather than pinned to
+    // the edge, where it would read as a border. The slider beside it prints
+    // the number either way.
+    final zoomed = level * zoom;
+    _paintGrid(
+      canvas,
+      size,
+      rows,
+      laneHeight,
+      gap,
+      half,
+      quarters,
+      sweeping && zoomed <= 1 ? zoomed : null,
+    );
 
     for (var channel = 0; channel < channels; channel++) {
       final row = rows == 1 ? 0 : channel;
       final centre = row * (laneHeight + gap) + laneHeight / 2;
-      // Inset by the stroke so a full-scale sample is drawn inside the lane
-      // rather than half outside it, where the clip takes it.
-      final half = laneHeight / 2 - OaaStroke.hairline;
       final low = channel == 0 ? history.minL : history.minR;
       final high = channel == 0 ? history.maxL : history.maxR;
       // Only the second of two channels sharing a row is dimmed. In lanes it
@@ -1018,7 +1810,9 @@ class _OscilloscopePainter extends MeterPainter {
     int lanes,
     double laneHeight,
     double gap,
+    double half,
     double? quarters,
+    double? level,
   ) {
     // **A tempo-locked window is divided into beats, not into tenths.** The
     // graticule is what says where in the bar something happened, and ten
@@ -1039,6 +1833,10 @@ class _OscilloscopePainter extends MeterPainter {
     for (var lane = 0; lane < lanes; lane++) {
       final centre = lane * (laneHeight + gap) + laneHeight / 2;
       canvas.drawLine(Offset(0, centre), Offset(size.width, centre), _centre);
+      if (level != null) {
+        final y = (centre - level * half).roundToDouble();
+        canvas.drawLine(Offset(0, y), Offset(size.width, y), _level);
+      }
       if (laneHeight >= _halfScaleAbove) {
         final quarter = laneHeight / 4;
         canvas.drawLine(
@@ -1154,9 +1952,8 @@ class _OscilloscopePainter extends MeterPainter {
       // flickers sample by sample. Whole rows at full coverage are the same
       // measurement drawn so that a person can see it, and they are what a
       // waveform display has always been.
-      var top = (centre - (hi * zoom.scale).clamp(-1.0, 1.0) * half)
-          .roundToDouble();
-      var bottom = (centre - (lo * zoom.scale).clamp(-1.0, 1.0) * half)
+      var top = (centre - (hi * zoom).clamp(-1.0, 1.0) * half).roundToDouble();
+      var bottom = (centre - (lo * zoom).clamp(-1.0, 1.0) * half)
           .roundToDouble();
       // A column whose extremes are equal — silence, or a held DC level — is a
       // zero-length segment, which draws nothing at all. A flat line is the
@@ -1254,7 +2051,7 @@ class _OscilloscopePainter extends MeterPainter {
     for (var i = 0; i < count; i++) {
       final sample = samples[i];
       final x = i * step;
-      final y = centre - (sample * zoom.scale).clamp(-1.0, 1.0) * half;
+      final y = centre - (sample * zoom).clamp(-1.0, 1.0) * half;
 
       line[i * 2] = x;
       line[i * 2 + 1] = y;
@@ -1295,6 +2092,8 @@ class _OscilloscopePainter extends MeterPainter {
       oldDelegate.division != division ||
       oldDelegate.grid != grid ||
       oldDelegate.stereo != stereo ||
+      oldDelegate.trigger != trigger ||
+      oldDelegate.threshold != threshold ||
       oldDelegate.zoom != zoom ||
       !identical(oldDelegate.engine, engine);
 }

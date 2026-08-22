@@ -4,7 +4,6 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:oaa_core/oaa_core.dart';
-import 'package:oaa_engine/oaa_engine.dart';
 import 'package:oaa_ui/oaa_ui.dart';
 import 'package:flutter/widgets.dart';
 
@@ -331,7 +330,7 @@ class _StereoCloudPainter extends MeterPainter {
 
   /// Splats this frame's bands into the grid.
   void _accumulate(Size plot) {
-    for (var band = 0; band < kOaaSpectrumBands; band++) {
+    for (var band = 0; band < MeterShape.spectrumBands; band++) {
       final db = engine.spectrum[band];
       if (db <= _floorDb) continue;
 
@@ -352,7 +351,7 @@ class _StereoCloudPainter extends MeterPainter {
 
   /// Low frequencies at the bottom, as on the analyser.
   double _y(Size plot, double band) =>
-      plot.height * (1 - band / kOaaSpectrumBands);
+      plot.height * (1 - band / MeterShape.spectrumBands);
 
   @override
   bool shouldRepaint(_StereoCloudPainter oldDelegate) =>

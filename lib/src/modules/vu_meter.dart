@@ -4,7 +4,6 @@ import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:oaa_core/oaa_core.dart';
-import 'package:oaa_engine/oaa_engine.dart';
 import 'package:oaa_ui/oaa_ui.dart';
 import 'package:flutter/widgets.dart';
 
@@ -284,8 +283,8 @@ class _VuPainter extends MeterPainter {
     // --- The needle ---------------------------------------------------------
     // The loudest channel. A stereo pair on one movement is what a mono VU
     // does, and showing the quieter of the two would understate the programme.
-    var loudest = kOaaDbFloor;
-    final channels = engine.channels.clamp(1, kOaaMaxChannels);
+    var loudest = MeterShape.dbFloor;
+    final channels = engine.channels.clamp(1, MeterShape.maxChannels);
     for (var c = 0; c < channels; c++) {
       if (engine.vu[c] > loudest) loudest = engine.vu[c];
     }

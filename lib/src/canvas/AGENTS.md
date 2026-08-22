@@ -44,6 +44,20 @@ that decides *what a pointer means* belongs here.
   you add chrome, check it is inert: `DecoratedBox` and `Text` both absorb by
   default, and the failure is silent.
 
+  **A control inside a module works with that rather than against it**, and the
+  oscilloscope's slider strip is the first one. An opaque detector in the module
+  takes the hit before the selection catcher underneath ever sees it, so nothing
+  has to be arbitrated and no layer has to move — which is what `_ModuleSlot`'s
+  note about a body that wants scrubbing anticipated. Two things it does have to
+  do: keep clear of the **corner grip**, whose ink is 16 px and whose touch
+  target is twice that, both drawn *above* `ModuleHost` at the bottom-right
+  corner (`_gripClearance` in `oscilloscope.dart` is that reservation); and give
+  every drag detector `kDragDevices`, like every other one here. A right click
+  over such a control opens no menu, because an opaque detector with no
+  secondary handler absorbs that too — acceptable for a sixteen-pixel strip on a
+  module whose whole face still opens it, and worth knowing before somebody adds
+  a taller one.
+
 - **An illegal drop is not a drop.** Nothing snaps to a nearby free space and
   nothing pushes a neighbour aside. Validity is shown live while the pointer is
   down and an invalid release leaves the layout untouched.

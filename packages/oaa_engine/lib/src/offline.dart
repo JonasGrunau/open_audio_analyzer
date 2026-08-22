@@ -32,6 +32,7 @@ library;
 
 import 'dart:ffi';
 import 'dart:math' as math;
+import 'dart:typed_data';
 
 import 'package:ffi/ffi.dart';
 
@@ -310,16 +311,41 @@ OfflineResult _run(
     return math.min(current, value);
   }
 
-  for (var block = file.readBlock(); block != null; block = file.readBlock()) {
-    engine.push(block);
+  // The engine advances momentary and short-term loudness every 10 ms. The
+  // maxima below are whatever this loop looked at, so pushing a whole decoded
+  // block and reading once would step over readings — and Max M would depend on
+  // the size of the buffer the decoder happened to hand back, which is not a
+  // property of the audio. EBU Tech 3341 test 13 measures exactly that: a
+  // 400 ms tone offset by 20 ms, whose only correct momentary reading exists
+  // for one sub-block. So the loop pushes a sub-block at a time and looks in
+  // between. The views cost nothing; `push` copies into a buffer it already owns.
+  final subBlockFrames = math.max(1, sampleRate ~/ 100);
 
-    framesDone += block.length ~/ channels;
+  for (var block = file.readBlock(); block != null; block = file.readBlock()) {
+    final framesInBlock = block.length ~/ channels;
+
+    for (var pushed = 0; pushed < framesInBlock; pushed += subBlockFrames) {
+      final frames = math.min(subBlockFrames, framesInBlock - pushed);
+      engine.push(
+        Float32List.sublistView(
+          block,
+          pushed * channels,
+          (pushed + frames) * channels,
+        ),
+      );
+
+      momentaryMax = runningMax(momentaryMax, engine.lufsMomentary);
+      shortTermMax = runningMax(shortTermMax, engine.lufsShort);
+      shortTermMin = runningMin(shortTermMin, engine.lufsShort);
+    }
+
+    framesDone += framesInBlock;
     final seconds = framesDone / sampleRate;
 
-    momentaryMax = runningMax(momentaryMax, engine.lufsMomentary);
-    shortTermMax = runningMax(shortTermMax, engine.lufsShort);
-    shortTermMin = runningMin(shortTermMin, engine.lufsShort);
-
+    // Correlation and the per-channel peaks stay on the decoded block, which is
+    // what they have always been sampled at. The peaks are maxima and cannot
+    // move; the correlation mean is weighted per sample taken, and re-weighting
+    // it ten times finer would change a published number to no end.
     final correlation = engine.correlation;
     if (!correlation.isNaN) {
       correlationMin = runningMin(correlationMin, correlation);

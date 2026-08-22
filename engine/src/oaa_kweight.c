@@ -85,7 +85,20 @@ double oaa_channel_weight(uint32_t index, uint32_t count) {
     case 3:
       /* LFE is excluded from loudness by the standard, not attenuated. */
       return 0.0;
-    default:
+    case 4:
+    case 5:
+      /* The surround pair, and only that pair. */
       return 1.41;
+    default:
+      /* Everything past 5.1 is unweighted. The +1.5 dB belongs to the two
+       * surround channels of the 5.1 layout, not to "any channel behind you":
+       * Report ITU-R BS.2217's channel table gives 7.1 as
+       * 1.00 / 1.00 / 1.00 / N/A / 1.41 / 1.41 / 1.00 / 1.00, so the rear pair
+       * Lrs and Rrs weigh the same as the front. Weighting them 1.41 read its
+       * two 7.1 compliance files 0.35 LU high, which is 3.5 times the tolerance
+       * and the only case in either official set that was wrong by more than
+       * 0.03. Nothing narrower than 7.1 is affected — a 5.1 file never reaches
+       * this arm. */
+      return 1.0;
   }
 }

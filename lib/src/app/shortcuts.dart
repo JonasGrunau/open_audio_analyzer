@@ -507,21 +507,32 @@ class OaaShortcuts extends ConsumerWidget {
   final Widget child;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) => CallbackShortcuts(
-    bindings: oaaShortcutBindings(
-      ShortcutScope(context: context, ref: ref, onReset: onReset),
+  Widget build(BuildContext context, WidgetRef ref) => ListenableBuilder(
+    // **Rebuilt when focus moves, because the map has to differ.** A guard
+    // inside the callback cannot stand aside — see [oaaShortcutBindings] — so
+    // which chords are bound is decided here, and that decision changes the
+    // moment a text field takes or loses focus. `FocusManager` notifies on
+    // exactly that. It costs one rebuild of this widget per focus change and
+    // none of the subtree: `child` is the same instance every time, which
+    // `Element.updateChild` short-circuits.
+    listenable: FocusManager.instance,
+    builder: (context, _) => CallbackShortcuts(
+      bindings: oaaShortcutBindings(
+        ShortcutScope(context: context, ref: ref, onReset: onReset),
+        editingText: isEditingText(),
+      ),
+      // **The `FocusScope` is not decoration and removing it kills every
+      // shortcut, silently.** A key event travels *up* from whatever holds
+      // focus, so a binding is only reachable from below it. When a text field
+      // goes away — finishing a tab rename, closing a panel — Flutter does not
+      // pick a new node; it drops focus to the nearest enclosing scope, and
+      // without one of our own that is the `Navigator`'s modal scope, which
+      // sits *above* this widget. From there nothing reaches these bindings and
+      // the whole keyboard stops working until the user clicks something. The
+      // symptom is indistinguishable from the shortcuts never having been
+      // installed, which is what makes it expensive to find.
+      child: FocusScope(child: child),
     ),
-    // **The `FocusScope` is not decoration and removing it kills every
-    // shortcut, silently.** A key event travels *up* from whatever holds focus,
-    // so a binding is only reachable from below it. When a text field goes away
-    // — finishing a tab rename, closing a panel — Flutter does not pick a new
-    // node; it drops focus to the nearest enclosing scope, and without one of
-    // our own that is the `Navigator`'s modal scope, which sits *above* this
-    // widget. From there nothing reaches these bindings and the whole keyboard
-    // stops working until the user clicks something. The symptom is
-    // indistinguishable from the shortcuts never having been installed, which
-    // is what makes it expensive to find.
-    child: FocusScope(child: child),
   );
 }
 
@@ -530,7 +541,25 @@ class OaaShortcuts extends ConsumerWidget {
 /// Every chord of every shortcut becomes one or two activators — see
 /// [Chord.activators] — and each maps to a closure that remembers which chord
 /// it was.
-Map<ShortcutActivator, VoidCallback> oaaShortcutBindings(ShortcutScope scope) {
+///
+/// **A guarded chord is left out of the map rather than bound to a callback
+/// that declines**, and the difference is the whole of a defect that made
+/// Backspace dead inside a tab rename. `CallbackShortcuts` reports a key
+/// handled the instant an activator matches, whatever the callback then
+/// decides, so a guard inside the closure consumed the keystroke and stopped it
+/// travelling on to `DefaultTextEditingShortcuts` — which is *above* us,
+/// because key events climb from the focused node and Flutter's own text
+/// editing bindings live up at `WidgetsApp`. An absent activator matches
+/// nothing, the `Focus` returns `ignored`, and the field gets its key.
+///
+/// Only the keys a field handles *as key events* were affected, which is why
+/// this hid: characters and digits arrive through the platform's text input
+/// connection and never touch this map, so typing looked perfectly normal while
+/// Backspace, Delete and the arrows did nothing.
+Map<ShortcutActivator, VoidCallback> oaaShortcutBindings(
+  ShortcutScope scope, {
+  bool editingText = false,
+}) {
   final bindings = <ShortcutActivator, VoidCallback>{};
 
   for (final shortcut in oaaShortcuts) {
@@ -538,7 +567,11 @@ Map<ShortcutActivator, VoidCallback> oaaShortcutBindings(ShortcutScope scope) {
       final chord = shortcut.chords[index];
       final position = index;
 
+      if (editingText && chord.guarded) continue;
+
       void invoke() {
+        // Belt and braces. The map above is the mechanism; this catches a
+        // keystroke that arrives on a map built before the focus moved.
         if (chord.guarded && isEditingText()) return;
         shortcut.action(scope, position);
       }

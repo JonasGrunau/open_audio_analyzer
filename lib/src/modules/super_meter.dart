@@ -120,6 +120,48 @@ class _SuperMeterModuleState extends State<SuperMeterModule> {
         : shown + (value - shown) * alpha;
   }
 
+  /// The sector of the dial that lies beyond the target, and the geometry it
+  /// was built for.
+  ///
+  /// Held across frames because **nothing on the frame path may allocate**, and
+  /// a `Path` is the one thing an angular clip needs. It moves only when the
+  /// module is resized or the delivery target changes, so it is rebuilt from
+  /// those rather than per frame — the same bargain the graticules and the
+  /// shaded fills in the other modules make.
+  Path? _beyond;
+  Offset _beyondCentre = Offset.zero;
+  double _beyondRadius = 0;
+  double _beyondFrom = double.nan;
+  double _beyondTo = double.nan;
+
+  /// A wedge from [from] round to [to], apex at the centre.
+  ///
+  /// Deep enough to reach the outermost ring, which makes it the clip for all
+  /// three: every ring is inside the same radius, and the only boundary that
+  /// matters is the radial one at the target.
+  Path _sectorBeyond(Offset centre, double radius, double from, double to) {
+    if (_beyond != null &&
+        _beyondCentre == centre &&
+        _beyondRadius == radius &&
+        _beyondFrom == from &&
+        _beyondTo == to) {
+      return _beyond!;
+    }
+    _beyondCentre = centre;
+    _beyondRadius = radius;
+    _beyondFrom = from;
+    _beyondTo = to;
+    return _beyond = Path()
+      ..moveTo(centre.dx, centre.dy)
+      ..arcTo(
+        Rect.fromCircle(center: centre, radius: radius),
+        from,
+        to - from,
+        false,
+      )
+      ..close();
+  }
+
   final _integrated = ValueParagraph();
   final _range = ValueParagraph();
   ui.Paragraph? _unit;
@@ -173,23 +215,46 @@ class _SuperMeterPainter extends MeterPainter {
     required this.scale,
     required this.state,
     required Listenable repaint,
-  }) : _track = (Paint()
+  }) : // Round, and the track and the fill have to agree: a round cap puts
+       // half a ring of ink *beyond* each end of the sweep, so a butt track
+       // under a round fill would be overrun at both ends of the scale. Given
+       // the same cap, the fill's ends land exactly on the track's — and the
+       // half ring the pair gained at the open end is what [_labelGap] carries.
+       _track = (Paint()
          ..color = colors.meterTrack
          ..style = PaintingStyle.stroke
-         ..strokeCap = StrokeCap.butt),
+         ..strokeCap = StrokeCap.round),
        _arc = (Paint()
          ..style = PaintingStyle.stroke
-         ..strokeCap = StrokeCap.butt),
+         ..strokeCap = StrokeCap.round),
        // Derived from `meterFill`, never from a text colour: `textMuted` sits
        // lighter than `meterFill` under the dark palette and darker under a
        // light one, so the momentary and short-term arcs would swap which
        // looked emphasised when the skin changed. Built here rather than in
        // `paint`, which is on the frame path and allocates nothing.
        _shortFill = colors.meterFill.withValues(alpha: 0.55),
+       // Where an arc runs past the target. The short-term ring keeps its 0.55
+       // so the three rings hold the same weights on both sides of the line —
+       // a warning that also promoted the middle ring would say two things at
+       // once.
+       _over = (Paint()
+         ..style = PaintingStyle.stroke
+         ..strokeCap = StrokeCap.round),
+       _overShort = colors.warn.withValues(alpha: 0.55),
+       // [OaaStroke.heavy] where every other target mark in the application
+       // takes [OaaStroke.mark], because this one is *radial* and the others
+       // are axis-aligned. A horizontal target line at 1.5 px is drawn with
+       // antialiasing off and lands on whole pixels at full strength; an angled
+       // stroke cannot be, and antialiasing spreads the same 1.5 px across two
+       // pixel columns at about half the alpha each. The nominal weight matched
+       // and the contrast did not, which is why three deliberate ticks read as
+       // three rendering artefacts. Two steps rather than one, because this
+       // mark is also crossed by the arcs themselves: it has to be found over
+       // the brightest ink on the module, not against the background.
        _target = (Paint()
          ..color = colors.textMuted
          ..style = PaintingStyle.stroke
-         ..strokeWidth = OaaStroke.mark),
+         ..strokeWidth = OaaStroke.heavy),
        super(repaint: repaint);
 
   final MeterSource engine;
@@ -200,8 +265,10 @@ class _SuperMeterPainter extends MeterPainter {
 
   final Paint _track;
   final Paint _arc;
+  final Paint _over;
   final Paint _target;
   final Color _shortFill;
+  final Color _overShort;
 
   /// The gauge opens at the bottom: 150° round to 30°, clockwise. A full ring
   /// would have no beginning and no end, and a scale needs both.
@@ -221,7 +288,13 @@ class _SuperMeterPainter extends MeterPainter {
   /// each mark one ring then read as a diagonal drifting off the bottom of the
   /// gauge rather than as three labels. The same number of pixels for all
   /// three puts each name beside the arc it names.
-  static const double _labelGap = 0.7;
+  ///
+  /// Half a ring of it is the round cap, which is ink the arc did not have when
+  /// this was 0.7: the gap is measured from the *end of the sweep*, and the cap
+  /// is a semicircle drawn past it. Clearance from what is actually on screen
+  /// is what the eye reads, so the cap is paid for here rather than allowed to
+  /// close on the names.
+  static const double _labelGap = 1.2;
 
   /// The angular lead of the *outermost* name.
   ///
@@ -273,6 +346,20 @@ class _SuperMeterPainter extends MeterPainter {
 
     _track.strokeWidth = ring;
     _arc.strokeWidth = ring;
+    _over.strokeWidth = ring;
+
+    // The target, as an angle, and the sector of the dial past it. Both are
+    // wanted by all three rings — the tick is drawn on each of them and the
+    // sector clips each arc's warning colour — so neither is recomputed inside
+    // the loop.
+    final targetSweep = scale.fractionOf(calibration.lufsTarget) * _sweepAngle;
+    final targetAngle = _startAngle + targetSweep;
+    final beyond = state._sectorBeyond(
+      centre,
+      outer,
+      targetAngle,
+      _startAngle + _sweepAngle,
+    );
 
     // The integrated reading, and the colour it is in. Both are wanted twice —
     // by the innermost arc and by the centre readout — and taken **raw**, from
@@ -307,17 +394,35 @@ class _SuperMeterPainter extends MeterPainter {
         final sweep = scale.fractionOf(value) * _sweepAngle;
         if (sweep > 0) {
           canvas.drawArc(bounds, _startAngle, sweep, false, _arc);
+
+          // Whatever ran past the target, again, in the warning colour and
+          // clipped to the sector beyond the tick.
+          //
+          // **The same arc redrawn under a clip, not a second arc starting at
+          // the target.** Two arcs meeting at the tick would meet round cap to
+          // round cap, and each cap is a semicircle half a ring long drawn
+          // *past* its own end — so the seam would be a lump straddling the
+          // target with the warning nosing half a ring into the good side of
+          // it. Clipping puts the colour boundary exactly where the target is,
+          // which is the only place it is true, and leaves the arc's own cap at
+          // the reading intact.
+          if (sweep > targetSweep) {
+            _over.color = i == 1 ? _overShort : colors.warn;
+            canvas.save();
+            canvas.clipPath(beyond);
+            canvas.drawArc(bounds, _startAngle, sweep, false, _over);
+            canvas.restore();
+          }
         }
       }
 
       // Target tick, on every ring, so the three can be compared against it
-      // without the eye travelling to a legend.
-      final angle =
-          _startAngle + scale.fractionOf(calibration.lufsTarget) * _sweepAngle;
+      // without the eye travelling to a legend. Over the arcs, because the
+      // reading it judges is drawn up to it and often past it.
       final inner = radius - ring;
       canvas.drawLine(
-        centre + Offset(math.cos(angle), math.sin(angle)) * inner,
-        centre + Offset(math.cos(angle), math.sin(angle)) * radius,
+        centre + Offset(math.cos(targetAngle), math.sin(targetAngle)) * inner,
+        centre + Offset(math.cos(targetAngle), math.sin(targetAngle)) * radius,
         _target,
       );
 

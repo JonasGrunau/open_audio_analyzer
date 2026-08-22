@@ -118,7 +118,7 @@
           dev.openaudioanalyzer.oaa if you do not want both. Downloaded macOS
           builds no longer need a quarantine flag stripped by hand, because the
           plugin bundles and the disk image are notarised. The VST3 and Audio
-          Unit are universal and load on macOS 11 and later, where every
+          Unit are universal and load on macOS 14.2 and later, where every
           previous release shipped a bundle built only for the machine that
           built it.
         </p>

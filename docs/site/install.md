@@ -10,7 +10,7 @@ ticked. If you use a DAW, those are the ones to take.
 
 | Platform | Download | Plugin | Notes |
 | --- | --- | --- | --- |
-| macOS 11+ | `Open.Audio.Analyzer-<version>-macos.pkg` | ✅ VST3 + AU | Universal — Apple silicon and Intel. |
+| macOS 14.2+ | `Open.Audio.Analyzer-<version>-macos.pkg` | ✅ VST3 + AU | Universal — Apple silicon and Intel. |
 | Windows 10 1809+ | `Open.Audio.Analyzer-<version>-windows-x64.exe` | ✅ VST3 | |
 | Linux | `Open.Audio.Analyzer-<version>-linux-<arch>.tar.gz` | ✅ VST3 | Unpack and run `./install.sh`. No root needed. |
 | Linux | `Open.Audio.Analyzer-<version>-<arch>.AppImage` | — | One file, no root. Application only. |
@@ -47,8 +47,9 @@ Untick either plug-in row if you do not want it. The application row is fixed
 because the plug-ins have nothing to talk to without it — they stream what they
 measure to the app over loopback, on the same machine.
 
-On macOS 10.15 the two plug-in rows are greyed out: the plug-ins need macOS 11.
-The application runs on 10.15 either way.
+The application and both plug-ins need **macOS 14.2 or later**, so there is no
+longer a version that can run one and not the others. Below it the installer
+declines rather than placing files that could not load.
 
 The installer needs an administrator password, because `/Library/Audio/Plug-Ins`
 is shared by every user and every DAW on the machine.
@@ -84,13 +85,18 @@ The image is examined for a code and is never recorded, stored or sent
 anywhere. Declining leaves the other two ways of finding a host untouched, and
 the panel names the setting to change rather than showing a black rectangle.
 
-**Upgrading from 0.5.0 or earlier revokes that permission,** because 0.6.0
-changed the application's bundle identifier from `dev.openaudioanalyzer.oaa` to
-`com.openaudioanalyzer.oaa`, and macOS keys the permission to the identifier.
-The old entry under **System Settings → Privacy & Security → Local Network**
-belongs to an application that no longer exists; allow the new one. Nothing else
-about the upgrade needs anything — presets, skins and paired hosts are keyed by
-name rather than by identifier and are all still there.
+**Upgrading from 0.5.0 or earlier revokes every permission the application
+holds,** because 0.6.0 changed the bundle identifier from
+`dev.openaudioanalyzer.oaa` to `com.openaudioanalyzer.oaa`, and macOS keys a
+permission to the identifier rather than to the application. That is **Local
+Network**, **Microphone**, **Camera** and — the one that fails without saying so
+— **System Audio Recording**. Each old entry under **System Settings → Privacy &
+Security** belongs to an application that no longer exists; allow the new one in
+each. Nothing else about the upgrade needs anything: presets, skins and paired
+hosts are keyed by name rather than by identifier and are all still there.
+
+System audio is the one to check first, because it is the only one of the four
+whose refusal is silent — see below.
 
 **There is no Mac App Store build and there will not be one.** The store
 requires the app sandbox, and a sandboxed application has its home directory
@@ -101,7 +107,7 @@ notarised.
 
 ### System audio
 
-**On macOS 14.2 and later there is nothing to install.** Pick **System Output**
+**There is nothing to install.** Pick **System Output**
 from the source menu in the status bar — it is the first entry, and it is named
 after the output device it is metering, so you can see what you are listening
 to. Open Audio Analyzer measures what is being sent to that device without
@@ -117,8 +123,19 @@ Three things worth knowing:
 - **macOS may ask for permission to record system audio** the first time you
   choose it. If you decline, the tap delivers silence rather than an error, so
   the meters sit at the floor — which looks exactly like genuinely quiet audio.
-  If that happens with something obviously playing, look under **System Settings
-  → Privacy & Security**.
+  Apple does this deliberately: every Core Audio call still returns success and
+  the callbacks still arrive on schedule, carrying nothing but zeros, so that
+  software cannot tell that it has been refused. There is no error for Open
+  Audio Analyzer to show you.
+
+  If the meters sit at the floor with something obviously playing, look under
+  **System Settings → Privacy & Security → System Audio Recording**. Two things
+  put an application there that cannot use it: **declining once** (the prompt
+  does not come back on its own), and **upgrading from 0.5.0 or earlier**, which
+  changed the bundle identifier and left the old grant naming an application
+  that no longer exists — so the list can show an "Open Audio Analyzer" that is
+  switched on while the one you are running has never been asked about. Remove
+  the stale entry, then choose **System Output** again to raise a fresh prompt.
 - **It follows your output device** when you change it, as long as the new one
   has the same sample rate and channel count. Swapping between two stereo
   devices at 48 kHz — speakers and headphones, say — just works. A device with a
@@ -128,14 +145,12 @@ Three things worth knowing:
 - **It captures every application at once,** mixed as your output device
   receives it. There is no per-application selection.
 
-**Below macOS 14.2** the entry is absent, because the API is not there. Use a
-loopback device instead:
-
-- [BlackHole](https://existential.audio/blackhole/) — free, and the usual
-  answer. Create a Multi-Output Device in Audio MIDI Setup containing both your
-  real output and BlackHole, then select BlackHole as Open Audio Analyzer's
-  source.
-- Loopback, SoundSource, or any interface with a loopback channel.
+macOS 14.2 is where the tapping API arrived, and it is also Open Audio
+Analyzer's minimum, so there is no supported version where the entry is missing.
+The loopback route older versions needed — a Multi-Output Device in Audio MIDI
+Setup pairing your real output with [BlackHole](https://existential.audio/blackhole/),
+or an interface with a loopback channel — still works and is still a perfectly
+good way to meter one specific path, but nothing requires it any more.
 
 If you are metering a DAW, the [plugin](#in-a-daw) is better than any of these:
 it takes the buffer directly and brings the transport with it.

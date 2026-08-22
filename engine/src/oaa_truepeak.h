@@ -27,8 +27,14 @@
 #define OAA_TRUEPEAK_PHASES 4
 
 /* Per-100 ms maxima retained, so a 3 s sliding maximum can be taken without
- * storing samples. Matches the loudness sub-block cadence deliberately: the
- * two measurements are shown side by side and must describe the same window. */
+ * storing samples. Three seconds deliberately: this is shown beside short-term
+ * loudness and the two have to describe the same window.
+ *
+ * The step stays 100 ms where loudness moved to 10 ms, because a maximum does
+ * not care where the window boundaries fall — the largest sample in the last
+ * 3 s is in the history whichever bucket it landed in, whereas a *mean* over a
+ * window that is one bucket short of the signal reads low. That asymmetry is
+ * the whole reason the loudness grid had to get finer and this one did not. */
 #define OAA_TRUEPEAK_HISTORY 30
 
 typedef struct {

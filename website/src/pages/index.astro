@@ -1,0 +1,1432 @@
+---
+import Base from '../layouts/Base.astro';
+import bridge from '../data/bridge.json';
+
+const REPO = 'https://github.com/JonasGrunau/open_audio_analyzer';
+const DOCS = 'https://jonasgrunau.github.io/open_audio_analyzer';
+
+/* The catalogue. Every one of these is one ModuleFrame plus a painter in the
+   application, reading the same MeterSource and repainting from the same
+   clock — which is why the thumbnails below can be the same painters. */
+// The fourteen modules, each with the photograph of it taken from the running
+// application by `npm run modules`, and what the photograph shows. The images
+// carry the app's own frame and title bar, because they *are* the app's frame
+// and title bar — see scripts/render-modules.mjs.
+const MODULES = [
+  ['number-box', 'Number Box', 'Any single measurement, as a number.',
+    'A Number Box reading −14.1 LUFS in green, on target.'],
+  ['lufs-meter', 'LUFS Meter', 'Momentary and short-term loudness as bars, integrated loudness as a line.',
+    'A LUFS Meter: momentary and short-term bars against a scale, reading −14.1 LUFS integrated over a 7.1 LU range.'],
+  ['super-meter', 'Super Meter', 'Momentary, short-term and integrated loudness as three concentric arcs.',
+    'A Super Meter: three concentric arcs around a −14.1 LUFS readout.'],
+  ['digital-meter', 'Digital Meter', 'Sample peak and RMS, per channel, up to 7.1.',
+    'A Digital Meter: left and right bars with peak-hold lines held near the top of the scale.'],
+  ['vu-meter', 'VU Meter', 'A needle, on the movement the engine models.',
+    'A VU Meter with the needle resting just below zero.'],
+  ['alert-meter', 'Alert Meter', 'One measurement, watched, with the worst it has been latched.',
+    'An Alert Meter in red, showing true peak at −0.2 dBTP with −0.2 latched as the worst so far.'],
+  ['validator', 'Validator', 'The delivery decision, as a table.',
+    'A Validator reading NOT READY: loudness and range pass, true peak fails at −0.2 against a −1.0 ceiling.'],
+  ['histogram', 'Histogram', 'Loudness against time: how the programme moved, and when it was over target.',
+    'A Histogram: thirty seconds of short-term loudness against a dashed target line, with a dip where the programme breaks.'],
+  ['loudness-distribution', 'Loudness Distribution', 'How much of the programme was spent at each loudness.',
+    'A Loudness Distribution: a peak near −14 LUFS with the 7.9 LU range bracketed across it.'],
+  ['spectrum-analyzer', 'Spectrum Analyzer', 'Level against frequency, log-spaced, with a peak hold.',
+    'A Spectrum Analyzer: a bass-heavy curve falling away above 10 kHz, with a peak-hold line over it.'],
+  ['spectrogram', 'Spectrogram', 'Frequency against time, with level as brightness.',
+    'A Spectrogram: frequency against time, with sustained tones as horizontal bands and transients as vertical ones.'],
+  ['oscilloscope', 'Oscilloscope', 'The waveform itself, one lane per channel or both overlaid.',
+    'An Oscilloscope showing 20 milliseconds of waveform in two lanes, left above right.'],
+  ['phase-scope', 'Phase Scope', 'A goniometer: left against right, rotated so mono stands upright.',
+    'A Phase Scope: an upright figure leaning slightly, drawn from left against right.'],
+  ['stereo-cloud', 'Stereo Cloud', 'Where each frequency sits in the stereo image, accumulated over time.',
+    'A Stereo Cloud: frequency up the side, stereo position across, bass gathered at the centre and the top spread wide.'],
+];
+
+const METRICS = [
+  [
+    'K-weighting',
+    'ITU-R BS.1770-4 stage-1 shelf plus stage-2 RLB, with the coefficients computed from the analog prototype <strong>at the actual sample rate</strong> — not from a hardcoded 48 kHz table.',
+  ],
+  ['Gating', 'EBU R128: 400 ms blocks at 75% overlap, absolute gate −70 LUFS, relative gate −10 LU.'],
+  ['Momentary / Short-term', '400 ms and 3 s windows.'],
+  [
+    'LRA',
+    'Gated at −20 LU relative, 10th to 95th percentile, through a 0.01 LU-bin histogram that stores exact energy sums — O(1) per update, constant memory.',
+  ],
+  [
+    'True peak',
+    'BS.1770-4 Annex 2: 4× oversampling through the specified 48-tap polyphase FIR, at every sample rate.',
+  ],
+  [
+    'Spectrum',
+    'A 4096-point Hann window at a 1024-sample hop, zero-padded to a 16384-point transform and mapped onto 512 log-spaced bands with <strong>peak-per-bin</strong>, so narrow peaks survive. A full-scale sine reads 0.0 dBFS on a bin centre and within 0.3 dB off it.',
+  ],
+  ['Correlation', 'Running Pearson over a sliding window.'],
+  [
+    'Crest',
+    'Sample peak minus RMS over the same block — the block’s own values, not the held peak and the smoothed RMS the meters draw, whose difference drifts on its own. Exactly 3.0103 dB for a sine, 0 for DC.',
+  ],
+  [
+    'Clip',
+    'Longest run of consecutive samples at or above 0.999 since the reset, per channel. Latched, so a clip that lasted three samples is still visible when you look back.',
+  ],
+];
+
+const TIERS = [
+  ['Capture', 'audio callback, realtime-safe', 'Copy input into a lock-free ring. No malloc, no locks, no syscalls.'],
+  ['Analysis', 'dedicated thread, high priority', 'Run the DSP graph. Publish results into a seqlock-protected snapshot.'],
+  ['Display', 'the UI thread', 'One FFI call per frame, then paint. The widget tree is never involved.'],
+];
+
+const GAPS = [
+  [
+    'No module offers the Elapsed or Timecode LUFS modes yet.',
+    'The protocol frame and the engine’s half are both built; what is left is the part you would see — a mode menu and a region editor. <strong>Continuous is what every module measures today</strong>, and it is the mode a producer with no playhead can honour anyway.',
+  ],
+  [
+    'Offline analysis does not read Ogg Vorbis, Opus, AAC or ALAC.',
+    'WAV, AIFF, RF64, Wave64, FLAC and MP3 cover what a master is delivered <em>as</em>, which is what a delivery check is for. No measurement is silently wrong in the meantime: an unsupported file is refused rather than half-read.',
+  ],
+  [
+    'A file is measured whole, from the start.',
+    'There is no region selection and no seeking during analysis, because an integrated loudness taken over a file that was seeked through is a measurement of a programme nobody played.',
+  ],
+  [
+    'The remote display has no authentication and no encryption.',
+    'Anyone who can reach the port can read the measurements and the layout — not the audio, which never goes on the wire. That is why publishing is off until you switch it on, and why the link is one-directional. Do not switch it on at a venue whose Wi-Fi you do not control.',
+  ],
+  [
+    'Neither tablet’s discovery can be proved by a test.',
+    'An Android emulator sits behind NAT that does not carry the LAN’s multicast, an iOS simulator is exempt from the restriction the device enforces, and a test host is refused the local network for reasons that have nothing to do with the code. Both paths are checked by hand on hardware, and typing an address is supported everywhere and always will be.',
+  ],
+  [
+    'None of the five installers is signed in this repository.',
+    'Signing needs certificates that are not ours to commit, so a release built from a fork is unsigned and every packaging script says which of its three states it was in — because “signed” and “a user can double-click it” are not the same thing.',
+  ],
+];
+
+const PLATFORMS = [
+  ['macOS 14.2+', 'Universal — Apple silicon and Intel', '.pkg', 'VST3 + AU'],
+  ['Windows 10 1809+', 'Uninstaller in Installed apps', '.exe', 'VST3'],
+  ['Linux', 'install.sh, no root', '.tar.gz', 'VST3'],
+  ['Linux', 'One file, no root, GTK from the host', '.AppImage', '—'],
+  ['Linux', 'Sandboxed, carries its own runtime', '.flatpak', '—'],
+  ['Any', 'The analyser. No Flutter runtime.', 'oaa CLI', '—'],
+];
+---
+
+<Base
+  title="Open Audio Analyzer — free and open-source loudness and spectrum analyzer"
+  description="A free and open-source loudness and spectrum analyzer for macOS, Windows, Linux, iPadOS and Android. Fourteen meter modules on an arrangeable canvas, ITU-R BS.1770-4 and EBU R128 measurement verified against the EBU Tech 3341 and 3342 reference cases in CI, offline file analysis, a VST3/AU plugin and a command-line analyser."
+  path="/"
+>
+  <!-- ===================== hero ===================== -->
+  <section class="hero shell">
+    <p class="eyebrow num">
+      <a class="link-quiet" href={REPO} rel="noopener">github.com/JonasGrunau/open_audio_analyzer</a>
+    </p>
+
+    <h1>Open Audio Analyzer</h1>
+
+    <div class="hero-say">
+      <div class="stack-24">
+        <p class="prose">
+          A free and open-source loudness and spectrum analyzer for desktop and tablets. It is a
+          modular metering suite: a canvas of resizable meter modules — loudness, true peak, VU,
+          spectrum, spectrogram, phase scope, histogram — organised into tabs, driven by presets,
+          delivery targets and skins, with offline file analysis and a companion display that
+          mirrors a tab to a tablet over Wi-Fi.
+        </p>
+        <p class="prose">
+          Every quantity is defined against a published spec — ITU-R BS.1770-4 and EBU R128 — and
+          the EBU Tech 3341 and 3342 reference cases run on Linux, macOS and Windows on every push,
+          failing the build if a reading falls outside the standard’s stated tolerance.
+        </p>
+        <p class="prose">
+          It is a reimplementation of the ideas in <a class="link" href="https://process.audio/products/decibel" rel="noopener">Decibel</a>
+          by process.audio, whose modular canvas is the best interaction model anybody has found for
+          this problem. The measurement work, the architecture and the visual language are our own,
+          and where Open Audio Analyzer cannot honestly match Decibel it says so rather than
+          approximating.
+        </p>
+        <div class="cta">
+          <a class="btn btn-primary" href="/download">Download 0.8.0</a>
+          <a class="btn" href={REPO} rel="noopener">Source</a>
+          <a class="btn" href={`${DOCS}/index.html`} rel="noopener">Documentation</a>
+        </div>
+      </div>
+
+      <div class="aside">
+        <dl class="plate">
+          <div>
+            <dt class="label">Desktop</dt>
+            <dd class="num">macOS · Windows · Linux</dd>
+          </div>
+          <div>
+            <dt class="label">Tablet</dt>
+            <dd class="num">iPadOS · Android</dd>
+          </div>
+          <div>
+            <dt class="label">Plugin</dt>
+            <dd class="num">VST3 · Audio Unit</dd>
+          </div>
+          <div>
+            <dt class="label">Command line</dt>
+            <dd class="num">oaa</dd>
+          </div>
+          <div>
+            <dt class="label">Licence</dt>
+            <dd class="num">GPL-3.0 · MIT · AGPL-3.0</dd>
+          </div>
+        </dl>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== the live bridge ===================== -->
+  <section class="bridge-wrap shell" data-bridge aria-labelledby="bridge-h">
+    <div class="bridge-head">
+      <h2 id="bridge-h" class="label">Meter bridge</h2>
+      <p class="bridge-note">
+        A twenty-second stereo programme, synthesised and measured at build time by
+        <a class="link-quiet" href={`${REPO}/blob/main/README.md#-measurement`} rel="noopener">the
+        definitions below</a>, played back here through the same painters. The measuring script is
+        in this site's repository.
+      </p>
+    </div>
+
+    <div class="grid24 bridge-a">
+      <div class="module b-lufs">
+        <div class="module-bar">
+          <span class="name">LUFS</span>
+          <span class="val"><span class="num" data-readout="m">—</span> / <span class="num" data-readout="s">—</span></span>
+        </div>
+        <div class="module-body"><canvas data-meter="lufs" aria-hidden="true"></canvas></div>
+      </div>
+
+      <div class="module b-super">
+        <div class="module-bar">
+          <span class="name">Super</span>
+          <span class="val num" data-readout="i">—</span>
+        </div>
+        <div class="module-body"><canvas data-meter="super" aria-hidden="true"></canvas></div>
+      </div>
+
+      <div class="module b-spec">
+        <div class="module-bar">
+          <span class="name">Spectrum analyzer</span>
+          <span class="val">4096 pt · 512 bands · peak/bin</span>
+        </div>
+        <div class="module-body"><canvas data-meter="spectrum" aria-hidden="true"></canvas></div>
+      </div>
+
+      <div class="module b-valid">
+        <div class="module-bar">
+          <span class="name">Validator</span>
+          <span class="val">Streaming −14 LUFS</span>
+        </div>
+        <div class="module-body validator-body">
+          <table class="vtable">
+            <tbody>
+              <tr>
+                <th scope="row">Integrated</th>
+                <td class="num" data-readout="i" data-judge="true">—</td>
+                <td class="unit">LUFS</td>
+              </tr>
+              <tr>
+                <th scope="row">True peak</th>
+                <td class="num" data-readout="tpmax" data-judge="true">—</td>
+                <td class="unit">dBTP</td>
+              </tr>
+              <tr>
+                <th scope="row">Range</th>
+                <td class="num" data-readout="lra" data-judge="true">—</td>
+                <td class="unit">LU</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid24 bridge-b">
+      <div class="module b-hist">
+        <div class="module-bar">
+          <span class="name">Histogram</span>
+          <span class="val">Short-term against time</span>
+        </div>
+        <div class="module-body"><canvas data-meter="histogram" aria-hidden="true"></canvas></div>
+      </div>
+
+      <div class="module b-sgram">
+        <div class="module-bar">
+          <span class="name">Spectrogram</span>
+          <span class="val">20 Hz – 20 kHz</span>
+        </div>
+        <div class="module-body"><canvas data-meter="spectrogram" aria-hidden="true"></canvas></div>
+      </div>
+
+      <div class="module b-dig">
+        <div class="module-bar"><span class="name">Digital</span></div>
+        <div class="module-body"><canvas data-meter="digital" aria-hidden="true"></canvas></div>
+      </div>
+
+      <div class="module b-num">
+        <div class="module-bar"><span class="name">Number box</span></div>
+        <div class="module-body"><canvas data-meter="numberbox" aria-hidden="true"></canvas></div>
+      </div>
+    </div>
+
+    <!-- The application's own status bar: what is being measured, and how far in. -->
+    <div class="statusbar" data-status data-state="held">
+      <span class="st-live"><span class="dot" aria-hidden="true"></span><span class="st-word"></span></span>
+      <span class="num st-i st-fmt">48 000 Hz · 2 ch · 24 bit</span>
+      <span class="num st-i"><span data-readout="time">00:00</span> / 00:20</span>
+      <span class="num st-i st-hide">Corr <span data-readout="corr">—</span></span>
+      <span class="num st-i st-hide">Crest <span data-readout="crest">—</span> dB</span>
+      <span class="num st-i st-target">Target · Streaming (−14 LUFS)</span>
+    </div>
+
+    <p class="bridge-foot prose">
+      Momentary reads a dash until 400 ms of signal exists, short-term until three seconds, and
+      integrated until one gating block clears the absolute gate. A quantity that is not measured
+      is <code>NaN</code> and never zero — zero is a legitimate reading for correlation, balance and
+      several dB quantities, so it cannot double as “no data” — and the UI renders it as an em dash.
+      A remote display that has lost its host shows dashes too: a frozen meter is indistinguishable
+      from a quiet passage.
+    </p>
+  </section>
+
+  <!-- ===================== modules ===================== -->
+  <section class="section shell" id="modules">
+    <div class="section-head">
+      <div>
+        <p class="label">Modules</p>
+        <h2 class="section-title">Fourteen meter modules</h2>
+      </div>
+      <p class="readout">ModuleFrame + painter</p>
+    </div>
+
+    <p class="prose mod-intro">
+      Every module is one <code>ModuleFrame</code> plus a painter, reads the same
+      <code>MeterSource</code>, and repaints from the same clock. That is the whole reuse strategy: a
+      module that also owned its border and title treatment is a module that would drift from the
+      other thirteen. Independent tickers drift too — and two meters showing the same quantity that
+      disagree inside one frame is a correctness bug, not a cosmetic one.
+    </p>
+
+    <ul class="cat">
+      {
+        MODULES.map(([shot, name, desc, alt]) => (
+          <li class="cat-item">
+            <div class="cat-shot">
+              <img
+                src={`/modules/${shot}.webp`}
+                alt={alt}
+                width="340"
+                height="230"
+                loading="lazy"
+                decoding="async"
+              />
+            </div>
+            <h3 class="cat-name">{name}</h3>
+            <p class="cat-desc">{desc}</p>
+          </li>
+        ))
+      }
+    </ul>
+  </section>
+
+  <!-- ===================== measurement ===================== -->
+  <section class="section shell" id="measurement">
+    <div class="section-head">
+      <div>
+        <p class="label">Measurement</p>
+        <h2 class="section-title">Every quantity, and how<br />it is defined</h2>
+      </div>
+      <p class="readout">ITU-R BS.1770-4 · EBU R128 · EBU Tech 3342</p>
+    </div>
+
+    <div class="split">
+      <div class="table-scroll" tabindex="0" role="region" aria-label="Measurement definitions">
+      <table class="spec">
+        <thead>
+          <tr>
+            <th scope="col">Quantity</th>
+            <th scope="col">Definition</th>
+          </tr>
+        </thead>
+        <tbody>
+          {
+            METRICS.map(([q, d]) => (
+              <tr>
+                <td class="q">{q}</td>
+                <td set:html={d} />
+              </tr>
+            ))
+          }
+        </tbody>
+      </table>
+      </div>
+
+      <aside class="gate module">
+        <div class="module-bar">
+          <span class="name">Correctness gate</span>
+          <span class="val">every push</span>
+        </div>
+        <div class="gate-body">
+          <ul class="gate-list">
+            <li>
+              <span class="gate-k">EBU Tech 3341</span>
+              <span class="gate-v sig">PASS</span>
+            </li>
+            <li>
+              <span class="gate-k">EBU Tech 3342</span>
+              <span class="gate-v sig">PASS</span>
+            </li>
+            <li>
+              <span class="gate-k">Sine at 0 dBFS, bin centre</span>
+              <span class="gate-v sig">0.0 dBFS</span>
+            </li>
+            <li>
+              <span class="gate-k">44.1 / 48 / 88.2 / 96 / 192 kHz</span>
+              <span class="gate-v sig">AGREE</span>
+            </li>
+            <li>
+              <span class="gate-k">1 call / 512 / 377-frame blocks</span>
+              <span class="gate-v sig">± 0.001 LU</span>
+            </li>
+            <li>
+              <span class="gate-k">Decoded vs. direct</span>
+              <span class="gate-v sig">BIT-EQUAL</span>
+            </li>
+          </ul>
+          <p class="gate-os">
+            <span class="num">linux</span> · <span class="num">macos</span> ·
+            <span class="num">windows</span>
+          </p>
+          <p class="gate-note">
+            The signals are <strong>generated, not downloaded</strong> — every case is a sine at a
+            stated level, so the suite needs no fixtures, no network and no decoder, and each
+            expected value is derived from the standard in a comment rather than copied from
+            somebody’s output.
+          </p>
+        </div>
+      </aside>
+    </div>
+  </section>
+
+  <!-- ===================== honesty ===================== -->
+  <section class="section shell honesty">
+    <div class="section-head">
+      <div>
+        <p class="label">Dynamics</p>
+        <h2 class="section-title">What it reports<br />instead of TrueDyn</h2>
+      </div>
+      <p class="readout">DR-S · DR-I · PSR · PLR</p>
+    </div>
+
+    <div class="hon-grid">
+      <div class="stack-24">
+        <p class="prose">
+          Decibel reports a dynamics figure called <em>TrueDyn</em>. It is proprietary and
+          undocumented, so any claim to match it would be a guess presented as a measurement.
+          <strong>Open Audio Analyzer does not implement it.</strong>
+        </p>
+        <p class="prose">
+          Instead it reports <code>DR-S</code> and <code>DR-I</code>, defined as
+          <code>TruePeak − LUFS-S</code> and <code>TruePeakMax − LUFS-I</code>, published in the
+          metrics document and reproducible from the definition by anybody who wants to check.
+          <code>PSR</code> and <code>PLR</code> are the same two quantities under the names in wider
+          use, and are offered as well — four names for two numbers, each computed once so the pair
+          cannot drift, and printed once in a report rather than twice under different headings.
+        </p>
+        <p>
+          <a class="link" href={`${DOCS}/metrics.html`} rel="noopener">Read the metrics document</a>
+        </p>
+      </div>
+
+      <figure class="dash module">
+        <div class="module-bar">
+          <span class="name">A quantity nobody measured</span>
+        </div>
+        <div class="dash-body">
+          <div class="dash-row"><span class="dash-fmt">report</span><span class="num dash-val">—</span></div>
+          <div class="dash-row"><span class="dash-fmt">json</span><span class="num dash-val">null</span></div>
+          <div class="dash-row"><span class="dash-fmt">csv</span><span class="num dash-val dash-empty">(empty)</span></div>
+          <div class="dash-row dash-never">
+            <span class="dash-fmt">never</span><span class="num dash-val over-c">0</span>
+          </div>
+        </div>
+        <figcaption class="dash-cap">
+          Zero is a legitimate reading for correlation, balance and several dB quantities. It cannot
+          double as “no data”.
+        </figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <!-- ===================== architecture ===================== -->
+  <section class="section shell">
+    <div class="section-head">
+      <div>
+        <p class="label">Architecture</p>
+        <h2 class="section-title">Three tiers, and the<br />boundary between each</h2>
+      </div>
+      <p class="readout">C11 engine · seqlock snapshot · one clock</p>
+    </div>
+
+    <blockquote class="rule">
+      Measurements never cross an isolate boundary, never allocate per frame, and never rebuild a
+      widget.
+    </blockquote>
+
+    <div class="tiers">
+      {
+        TIERS.map(([name, thread, job]) => (
+          <div class="tier">
+            <p class="label tier-name">{name}</p>
+            <p class="num tier-thread">{thread}</p>
+            <p class="tier-job">{job}</p>
+          </div>
+        ))
+      }
+    </div>
+
+    <div class="arch-notes">
+      <p class="prose">
+        Once per frame the clock makes a single leaf FFI call — an atomic load, a memcpy, and a
+        second atomic load, with no VM state transition. Then every painter reads views that were
+        <strong>built once at startup</strong> over native memory that never moves. A frame costs one
+        FFI call plus N paint calls, and allocates nothing.
+      </p>
+      <p class="prose">
+        The snapshot is a seqlock precisely because it is wait-free for the analysis thread:
+        <strong>the reader retries, never the writer.</strong> A mutex would let a descheduled UI
+        thread stall the thread that must never stall — and when that thread falls behind, the ring
+        overruns and signal is lost for good.
+      </p>
+    </div>
+  </section>
+
+  <!-- ===================== reach ===================== -->
+  <section class="section shell" id="reach">
+    <div class="section-head">
+      <div>
+        <p class="label">Plugin, tablet and CLI</p>
+        <h2 class="section-title">The same engine,<br />in three more places</h2>
+      </div>
+      <p class="readout">VST3 · Audio Unit · Wi-Fi · stdout</p>
+    </div>
+
+    <div class="reach">
+      <article class="stack-16">
+        <h3>In a DAW</h3>
+        <p class="prose reach-p">
+          A <strong>VST3</strong> and an <strong>Audio Unit</strong> that draw nothing. Insert one on
+          a track, a bus or the master, and the desktop app meters what your DAW is playing —
+          through the same engine, on the same canvas, with the same painters as a live input. The
+          plugin measures and streams; the app displays. That split is not a compromise around a UI
+          toolkit, it is what stops there being two implementations of every meter drifting apart.
+        </p>
+      </article>
+
+      <article class="stack-16">
+        <h3>On a tablet</h3>
+        <p class="prose reach-p">
+          Flip <strong>PUBLISH</strong> in the desktop’s status bar and a tablet mirrors the canvas
+          over Wi-Fi. It finds the host by itself, or reads a pairing code off the desktop’s screen
+          with its camera, or takes an address typed by hand — <strong>three routes, because the
+          first one is what a venue’s Wi-Fi blocks.</strong> A preset stores grid cells rather than
+          fractions of a window, so the same layout opens on a 32-inch monitor and an 11-inch
+          tablet with nobody writing responsive code.
+        </p>
+      </article>
+
+      <article class="stack-16">
+        <h3>On the command line</h3>
+        <p class="prose reach-p">
+          <code>oaa</code> decodes a file and pushes the blocks through the <em>same</em> analysis a
+          capture device drives — there is no second DSP path, and a test asserts that an offline
+          reading and a live reading of the same audio are identical rather than merely close.
+          Nothing resamples or remixes: a converter in front of a measurement changes the
+          measurement.
+        </p>
+      </article>
+    </div>
+
+    <div class="term module">
+      <div class="module-bar">
+        <span class="name">oaa — the command-line analyser</span>
+        <span class="val">0 pass · 2 missed target · 1 unreadable</span>
+      </div>
+      <pre class="term-body"><code><span class="c">$</span> oaa master.wav                              <span class="cm"># human-readable report</span>
+<span class="c">$</span> oaa --target streaming-14 master.wav        <span class="cm"># …and a delivery verdict</span>
+<span class="c">$</span> oaa --format json --timeline master.wav     <span class="cm"># every measurement, for scripts</span>
+<span class="c">$</span> oaa --format csv -o loudness.csv master.wav  <span class="cm"># the loudness timeline</span>
+<span class="c">$</span> oaa --list-targets                          <span class="cm"># what you can measure against</span>
+
+<span class="cm"># fail a release build on a master that is 2 LU too loud,</span>
+<span class="cm"># instead of shipping it</span>
+<span class="c">$</span> oaa --target streaming-14 master.wav || exit 1</code></pre>
+    </div>
+  </section>
+
+  <!-- ===================== configuration ===================== -->
+  <section class="section shell">
+    <div class="section-head">
+      <div>
+        <p class="label">Configuration</p>
+        <h2 class="section-title">Settings, presets, targets<br />and skins</h2>
+      </div>
+      <p class="readout">plain JSON · 13 colour roles · 6 built-in targets</p>
+    </div>
+
+    <div class="cfg">
+      <div class="stack-24">
+        <p class="prose">
+          Settings, presets, delivery targets and skins are plain JSON in a documented directory —
+          open them, edit them, copy them between machines, keep them in version control. A skin
+          names as many of thirteen semantic colour <em>roles</em> as it likes and inherits the rest,
+          so changing one colour is a three-line file. The roles are semantic rather than literal —
+          <code>over</code> is “the colour that means over a limit”, used for nothing else — which is
+          what lets a skin apply to a module written after it.
+        </p>
+        <p class="prose">
+          A delivery target whose <code>id</code> matches one that ships <strong>replaces it
+          everywhere</strong>, including in presets that already name it. So if you disagree with our
+          reading of a published spec, your number wins, and it reaches the CLI’s exit code and not
+          only the window. Delete the file and the original comes back.
+        </p>
+      </div>
+
+      <div class="json module">
+        <div class="module-bar">
+          <span class="name">calibrations/house-standard.json</span>
+        </div>
+        <pre class="json-body"><code>&lbrace;
+  <span class="k">"id"</span>: <span class="s">"house-standard"</span>,
+  <span class="k">"name"</span>: <span class="s">"House standard"</span>,
+  <span class="k">"lufs_target"</span>: <span class="n">-12.0</span>,
+  <span class="k">"lufs_tolerance"</span>: <span class="n">0.5</span>,
+  <span class="k">"true_peak_max"</span>: <span class="n">-1.0</span>,
+  <span class="k">"lra_max"</span>: <span class="n">14.0</span>,
+  <span class="k">"vu_reference"</span>: <span class="n">-18.0</span>
+&rbrace;</code></pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== known gaps ===================== -->
+  <section class="section shell" id="gaps">
+    <div class="section-head">
+      <div>
+        <p class="label">Known gaps</p>
+        <h2 class="section-title">What is not built</h2>
+      </div>
+      <p class="readout">six of the twelve in the README</p>
+    </div>
+
+    <p class="prose gaps-intro">
+      The list in the README is honest rather than short, and it is kept there rather than here so
+      it stays next to the code. Six of the twelve are below.
+    </p>
+
+    <ul class="gaps">
+      {
+        GAPS.map(([head, body]) => (
+          <li class="gap">
+            <h3 class="gap-h">{head}</h3>
+            <p class="prose gap-b" set:html={body} />
+          </li>
+        ))
+      }
+    </ul>
+
+    <p class="gaps-more">
+      <a class="link" href={`${REPO}#-known-gaps-stated-plainly`} rel="noopener">
+        All twelve, in the README
+      </a>
+    </p>
+  </section>
+
+  <!-- ===================== download ===================== -->
+  <section class="section shell" id="get">
+    <div class="section-head">
+      <div>
+        <p class="label">Installing</p>
+        <h2 class="section-title">Artefacts per platform</h2>
+      </div>
+      <p class="readout">0.8.0 · GPL-3.0-or-later</p>
+    </div>
+
+    <div class="dl">
+      <div class="table-scroll" tabindex="0" role="region" aria-label="Download artefacts">
+      <table class="spec">
+        <thead>
+          <tr>
+            <th scope="col">Platform</th>
+            <th scope="col">Artefact</th>
+            <th scope="col">Plugin</th>
+            <th scope="col">Note</th>
+          </tr>
+        </thead>
+        <tbody>
+          {
+            PLATFORMS.map(([plat, note, art, plug]) => (
+              <tr>
+                <td class="q">{plat}</td>
+                <td><code>{art}</code></td>
+                <td class="num dl-plug">{plug}</td>
+                <td>{note}</td>
+              </tr>
+            ))
+          }
+        </tbody>
+      </table>
+      </div>
+
+      <p class="prose dl-note">
+        <strong>The first three install the plugin as well, and the checkbox starts ticked.</strong>
+        Metering your own system’s output needs nothing installed on Windows, on macOS 14.2 and
+        later, or on Linux — no driver on any platform, and on macOS the audio still reaches your
+        speakers while it is measured.
+      </p>
+
+      <div class="cta">
+        <a class="btn btn-primary" href="/download">Downloads and setup</a>
+        <a class="btn" href={`${REPO}/releases`} rel="noopener">Release notes</a>
+      </div>
+    </div>
+  </section>
+
+  <script id="bridge-data" type="application/json" is:inline set:html={JSON.stringify(bridge)} />
+  <script>
+    import '../scripts/bridge.js';
+  </script>
+</Base>
+
+<style>
+  /* ---------- hero ---------- */
+
+  .hero {
+    padding-block: var(--s64) var(--s48);
+  }
+
+  .eyebrow {
+    font-size: 0.8125rem;
+    color: var(--faint);
+  }
+
+  h1 {
+    margin-top: var(--s24);
+  }
+
+  .hero-say {
+    margin-top: var(--s48);
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: var(--s48);
+    align-items: start;
+  }
+
+  .aside {
+    border-left: 1px solid var(--hair-strong);
+    padding-left: var(--s24);
+  }
+
+  .plate {
+    margin: 0;
+    display: grid;
+    gap: var(--s12);
+  }
+
+  .plate div {
+    display: grid;
+    grid-template-columns: 8.5rem minmax(0, 1fr);
+    gap: var(--s12);
+    align-items: baseline;
+    padding-top: var(--s12);
+    border-top: 1px solid var(--hair);
+  }
+
+  .plate dt {
+    color: var(--faint);
+  }
+
+  .plate dd {
+    margin: 0;
+    font-size: 0.8125rem;
+    color: var(--muted);
+  }
+
+  .cta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s12);
+    grid-column: 1 / -1;
+  }
+
+  /* ---------- the bridge ---------- */
+
+  .bridge-wrap {
+    padding-bottom: var(--s96);
+  }
+
+  .bridge-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--s24);
+    padding-bottom: var(--s12);
+    flex-wrap: wrap;
+  }
+
+  .bridge-note {
+    font-size: 0.8125rem;
+    color: var(--faint);
+    max-width: 62ch;
+  }
+
+  .bridge-a,
+  .bridge-b {
+    gap: var(--s8);
+  }
+
+  .bridge-b {
+    margin-top: var(--s8);
+  }
+
+  .bridge-a .module {
+    height: 208px;
+  }
+
+  .bridge-b .module {
+    height: 132px;
+  }
+
+  .module-body canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+
+  .b-lufs {
+    grid-column: span 4;
+  }
+  .b-super {
+    grid-column: span 4;
+  }
+  .b-spec {
+    grid-column: span 10;
+  }
+  .b-valid {
+    grid-column: span 6;
+  }
+  .b-hist {
+    grid-column: span 9;
+  }
+  .b-sgram {
+    grid-column: span 9;
+  }
+  .b-dig {
+    grid-column: span 3;
+  }
+  .b-num {
+    grid-column: span 3;
+  }
+
+  /* validator, as DOM rather than as pixels — a delivery verdict is the one
+     thing on this page a screen reader must be able to read. */
+  .validator-body {
+    display: flex;
+    align-items: center;
+    padding: var(--s8) var(--s12);
+  }
+
+  .vtable {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .vtable th {
+    text-align: left;
+    font-size: 0.6875rem;
+    font-weight: 500;
+    color: var(--muted);
+    padding: var(--s4) 0;
+    letter-spacing: 0.03em;
+  }
+
+  .vtable td {
+    text-align: right;
+    font-size: clamp(1rem, 1.5vw, 1.375rem);
+    color: var(--faint);
+    padding: var(--s4) 0;
+    line-height: 1.15;
+  }
+
+  .vtable td.unit {
+    width: 3.5em;
+    font-size: 0.625rem;
+    color: var(--faint);
+    font-family: var(--readout);
+    padding-left: var(--s8);
+    text-align: right;
+  }
+
+  /* ---------- status bar ---------- */
+
+  .statusbar {
+    margin-top: var(--s8);
+    border: 1px solid var(--hair);
+    background: var(--raised);
+    height: var(--s32);
+    display: flex;
+    align-items: center;
+    gap: var(--s16);
+    padding-inline: var(--s12);
+    font-size: 0.6875rem;
+    color: var(--faint);
+    overflow: hidden;
+  }
+
+  .st-live {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--s8);
+    font-family: var(--readout);
+    letter-spacing: 0.08em;
+    flex: none;
+  }
+
+  .dot {
+    width: 6px;
+    height: 6px;
+    background: var(--faint);
+    flex: none;
+  }
+
+  .st-word::after {
+    content: 'HELD';
+  }
+  [data-state='measuring'] .dot {
+    background: var(--signal);
+  }
+  [data-state='measuring'] .st-word {
+    color: var(--signal);
+  }
+  [data-state='measuring'] .st-word::after {
+    content: 'MEASURING';
+  }
+  [data-state='paused'] .st-word::after {
+    content: 'PAUSED · REDUCED MOTION';
+  }
+
+  .st-i {
+    white-space: nowrap;
+  }
+
+  .st-target {
+    margin-left: auto;
+    color: var(--muted);
+  }
+
+  .bridge-foot {
+    margin-top: var(--s32);
+    max-width: 78ch;
+    font-size: 1rem;
+  }
+
+  /* ---------- catalogue ---------- */
+
+  .mod-intro {
+    margin-bottom: var(--s48);
+  }
+
+  .cat {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--s16);
+  }
+
+  /* No panel of its own, and no title bar. Each photograph already carries the
+     application's frame and its own title, so wrapping it in the website's
+     version of both drew two borders around one module. */
+  .cat-item {
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Fixed height, and the shot centred inside it. The modules are photographed
+     at the shape each is drawn for — a LUFS meter is a pair of vertical bars, a
+     spectrogram is a strip of time — so the images differ in aspect and this is
+     what keeps the fourteen captions on one line. The letterboxing is invisible:
+     the box and the module share a background. */
+  .cat-shot {
+    flex: none;
+    height: 230px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .cat-shot img {
+    max-width: 100%;
+    max-height: 100%;
+    width: auto;
+    height: auto;
+  }
+
+  .cat-name {
+    font-size: 0.8125rem;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text);
+    margin: var(--s12) 0 0;
+  }
+
+  .cat-desc {
+    font-family: var(--prose);
+    font-size: 0.8125rem;
+    line-height: 1.5;
+    color: var(--faint);
+    margin: var(--s4) 0 0;
+  }
+
+  /* ---------- measurement ---------- */
+
+  .split {
+    display: grid;
+    grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
+    gap: var(--s48);
+    align-items: start;
+  }
+
+  .gate {
+    position: sticky;
+    top: calc(var(--s48) + var(--s16));
+  }
+
+  .gate-body {
+    padding: var(--s16);
+  }
+
+  .gate-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .gate-list li {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--s12);
+    padding: var(--s8) 0;
+    border-bottom: 1px solid var(--hair);
+  }
+
+  .gate-k {
+    font-size: 0.8125rem;
+    color: var(--muted);
+  }
+
+  .gate-v {
+    font-family: var(--readout);
+    font-size: 0.6875rem;
+    letter-spacing: 0.06em;
+    white-space: nowrap;
+  }
+
+  .gate-os {
+    padding-top: var(--s16);
+    font-size: 0.6875rem;
+    color: var(--faint);
+    letter-spacing: 0.08em;
+  }
+
+  .gate-note {
+    margin-top: var(--s16);
+    padding-top: var(--s16);
+    border-top: 1px solid var(--hair);
+    font-family: var(--prose);
+    font-size: 0.875rem;
+    line-height: 1.55;
+    color: var(--faint);
+  }
+
+  .gate-note strong {
+    color: var(--muted);
+  }
+
+  /* ---------- honesty ---------- */
+
+  .hon-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+    gap: var(--s48);
+    align-items: start;
+  }
+
+  .dash {
+    margin: 0;
+  }
+
+  .dash-body {
+    padding: var(--s8) var(--s16);
+  }
+
+  .dash-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--s24);
+    padding: var(--s12) 0;
+    border-bottom: 1px solid var(--hair);
+  }
+
+  .dash-fmt {
+    font-family: var(--readout);
+    font-size: 0.6875rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--faint);
+  }
+
+  .dash-val {
+    font-size: 1.5rem;
+    color: var(--text);
+  }
+
+  .dash-empty {
+    font-size: 0.8125rem;
+    color: var(--faint);
+  }
+
+  .dash-never {
+    border-bottom: 0;
+  }
+
+  .dash-never .dash-fmt {
+    color: var(--over);
+  }
+
+  .dash-never .dash-val {
+    text-decoration: line-through;
+    text-decoration-thickness: 1px;
+  }
+
+  .dash-cap {
+    padding: var(--s16);
+    border-top: 1px solid var(--hair);
+    font-family: var(--prose);
+    font-size: 0.875rem;
+    line-height: 1.55;
+    color: var(--faint);
+  }
+
+  /* ---------- architecture ---------- */
+
+  .rule {
+    margin: 0 0 var(--s48);
+    padding-left: var(--s24);
+    border-left: 2px solid var(--signal);
+    font-family: var(--display);
+    font-size: clamp(1.125rem, 1.9vw, 1.5rem);
+    font-weight: 500;
+    font-variation-settings: 'wdth' 98;
+    letter-spacing: -0.015em;
+    line-height: 1.35;
+    color: var(--text);
+    max-width: 48ch;
+  }
+
+  .tiers {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--s16);
+    padding-bottom: var(--s48);
+  }
+
+  .tier {
+    border-top: 1px solid var(--hair-strong);
+    padding-top: var(--s16);
+  }
+
+  .tier-name {
+    color: var(--text);
+  }
+
+  .tier-thread {
+    font-size: 0.6875rem;
+    color: var(--signal);
+    margin-top: var(--s8);
+    letter-spacing: 0.02em;
+  }
+
+  .tier-job {
+    margin-top: var(--s12);
+    font-family: var(--prose);
+    font-size: 0.9375rem;
+    line-height: 1.55;
+    color: var(--muted);
+  }
+
+  .arch-notes {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--s48);
+  }
+
+  /* ---------- reach ---------- */
+
+  .reach {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--s48);
+    padding-bottom: var(--s48);
+  }
+
+  .reach-p {
+    font-size: 0.9375rem;
+    max-width: none;
+  }
+
+  .term-body,
+  .json-body {
+    margin: 0;
+    padding: var(--s16);
+    overflow-x: auto;
+    font-family: var(--readout);
+    font-size: 0.8125rem;
+    line-height: 1.75;
+    color: var(--text);
+    tab-size: 2;
+  }
+
+  .term-body .c {
+    color: var(--signal);
+    user-select: none;
+  }
+
+  .term-body .cm,
+  .json-body .cm {
+    color: var(--faint);
+  }
+
+  .json-body .k {
+    color: var(--muted);
+  }
+  .json-body .s {
+    color: var(--text);
+  }
+  .json-body .n {
+    color: var(--signal);
+  }
+
+  /* ---------- configuration ---------- */
+
+  .cfg {
+    display: grid;
+    grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+    gap: var(--s48);
+    align-items: start;
+  }
+
+  /* ---------- gaps ---------- */
+
+  .gaps-intro {
+    margin-bottom: var(--s48);
+    color: var(--text);
+  }
+
+  .gaps {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--s48) var(--s48);
+  }
+
+  .gap {
+    border-top: 1px solid var(--hair-strong);
+    padding-top: var(--s16);
+  }
+
+  .gap-h {
+    font-family: var(--display);
+    font-size: 1rem;
+    font-weight: 650;
+    font-variation-settings: 'wdth' 98;
+    line-height: 1.3;
+    color: var(--text);
+    max-width: 40ch;
+  }
+
+  .gap-b {
+    margin-top: var(--s12);
+    font-size: 0.9375rem;
+    max-width: none;
+  }
+
+  .gaps-more {
+    margin-top: var(--s48);
+    font-size: 0.875rem;
+  }
+
+  /* ---------- download ---------- */
+
+  .dl-plug {
+    font-size: 0.75rem;
+    color: var(--signal);
+    white-space: nowrap;
+  }
+
+  .dl-note {
+    margin-top: var(--s32);
+    max-width: 72ch;
+  }
+
+  .dl .cta {
+    margin-top: var(--s32);
+  }
+
+  /* ---------- responsive ---------- */
+
+  @media (max-width: 1240px) {
+    .cat {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+  }
+
+  @media (max-width: 1080px) {
+    .hero {
+      padding-block: var(--s64) var(--s32);
+    }
+    .hero-say {
+      grid-template-columns: minmax(0, 1fr);
+      gap: var(--s24);
+    }
+    .aside {
+      border-left: 0;
+      border-top: 1px solid var(--hair-strong);
+      padding-left: 0;
+      padding-top: var(--s24);
+    }
+
+    .split,
+    .hon-grid,
+    .cfg,
+    .arch-notes {
+      grid-template-columns: minmax(0, 1fr);
+      gap: var(--s32);
+    }
+    .gate {
+      position: static;
+    }
+    .reach {
+      grid-template-columns: minmax(0, 1fr);
+      gap: var(--s32);
+    }
+    .tiers {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .gaps {
+      grid-template-columns: minmax(0, 1fr);
+      gap: var(--s32);
+    }
+
+    /* Twelve columns: thirds and quarters both still exact. */
+    .bridge-a,
+    .bridge-b {
+      grid-template-columns: repeat(12, minmax(0, 1fr));
+    }
+    .b-lufs,
+    .b-super {
+      grid-column: span 3;
+    }
+    .b-spec {
+      grid-column: span 6;
+    }
+    .b-valid {
+      grid-column: span 4;
+    }
+    .b-hist {
+      grid-column: span 8;
+    }
+    .b-sgram {
+      grid-column: span 6;
+    }
+    .b-dig,
+    .b-num {
+      grid-column: span 3;
+    }
+  }
+
+  @media (max-width: 720px) {
+    .cat {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .bridge-a,
+    .bridge-b {
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+    }
+    .b-lufs,
+    .b-super {
+      grid-column: span 3;
+    }
+    .b-spec,
+    .b-valid {
+      grid-column: span 6;
+    }
+    /* The two heaviest painters come off the phone: a scrolled bitmap and a
+       whole-timeline redraw are not what a hero needs to cost on a battery. */
+    .b-hist,
+    .b-sgram {
+      display: none;
+    }
+    .b-dig {
+      grid-column: span 2;
+    }
+    .b-num {
+      grid-column: span 4;
+    }
+    .bridge-a .module {
+      height: 168px;
+    }
+    .st-hide {
+      display: none;
+    }
+    .st-target {
+      display: none;
+    }
+  }
+
+  @media (max-width: 460px) {
+    .cat {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    /* LUFS and Super stay paired even here. A bar meter and a set of arcs are
+       both legible at half a phone's width, and stacking them would put eight
+       hundred pixels of bridge between the headline and the first sentence
+       about it. */
+    .bridge-a .module {
+      height: 150px;
+    }
+    .bridge-b .module {
+      height: 116px;
+    }
+    /* The status bar drops items rather than truncating one. A readout cut off
+       mid-string is worse than a readout that is not there. */
+    .st-fmt {
+      display: none;
+    }
+  }
+</style>

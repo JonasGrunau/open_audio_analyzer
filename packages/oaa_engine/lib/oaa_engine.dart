@@ -19,7 +19,6 @@ library;
 
 import 'dart:convert';
 import 'dart:ffi';
-import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:oaa_core/oaa_core.dart';
@@ -36,6 +35,14 @@ export 'src/oaa_file.dart';
 /// Driving a whole file through the engine. Lives here rather than in the app
 /// or the CLI because both need it and neither can import the other.
 export 'src/offline.dart';
+
+/// The band-to-frequency mapping, which now lives in `oaa_core` beside
+/// `MeterShape` — the fourteen modules draw a frequency axis from it and must
+/// not import this library to do so, because the remote display runs the same
+/// modules with no engine at all. Re-exported rather than moved silently so
+/// that the CLI, the plugin and this package's own tests keep reading it where
+/// they always have, and so there is still exactly one definition.
+export 'package:oaa_core/oaa_core.dart' show bandCentreHz, bandOfHz;
 
 /// Widest channel layout the engine carries (7.1).
 const int kOaaMaxChannels = 8;
@@ -63,28 +70,6 @@ const double kOaaHistogramMaxLufs = 0.0;
 
 /// The floor every dB reading clamps to. Mirrors `OAA_DB_FLOOR` in `oaa.h`.
 const double kOaaDbFloor = -144.0;
-
-/// The geometric centre frequency of spectrum band [band], in Hz.
-///
-/// Declared here beside the constants it is derived from rather than
-/// rediscovered by each painter that draws a frequency axis. Two modules that
-/// disagree by one band about where 1 kHz is are two modules whose graticules
-/// do not line up when they sit side by side.
-double bandCentreHz(int band) =>
-    kOaaSpectrumHzLow *
-    math.pow(
-      kOaaSpectrumHzHigh / kOaaSpectrumHzLow,
-      (band + 0.5) / kOaaSpectrumBands,
-    );
-
-/// The band a frequency falls in — the inverse of [bandCentreHz], for placing
-/// an axis label or a cursor. Not clamped: a caller asking about 30 kHz gets an
-/// index past the end, which is the honest answer.
-double bandOfHz(double hz) =>
-    kOaaSpectrumBands *
-        math.log(hz / kOaaSpectrumHzLow) /
-        math.log(kOaaSpectrumHzHigh / kOaaSpectrumHzLow) -
-    0.5;
 
 /// Where the engine takes its signal from.
 enum OaaSource {
