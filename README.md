@@ -639,6 +639,8 @@ in both.**
 
 ```sh
 flutter analyze                       # lints, whole workspace
+dart format --output=none --set-exit-if-changed .
+                                      # formatting; nothing else objects to it
 flutter test                          # widget and golden tests
 dart test packages/oaa_core           # domain layer, no toolchain needed
 dart test packages/oaa_wire           # the wire protocol, incl. the C++ golden

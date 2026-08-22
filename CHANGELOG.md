@@ -53,6 +53,14 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   appears with the playhead and does not move again while the link lasts, so a
   reading that goes stale does not shift the tabs out from under your finger.
 
+### 🚧 Internal
+- `tool/bench_spectrogram.dart` is formatted the way the test job's
+  `dart format --set-exit-if-changed` step demands. It was not, so that job
+  failed on every push after the benchmark landed while the analyzer, the
+  suites and the benchmark itself all stayed green. That step is now listed
+  with the other gates in `README.md` and `CLAUDE.md`, which is why it was
+  never run by hand.
+
 ## [0.4.1] — 2026-08-22
 
 ### 🐛 Fixed

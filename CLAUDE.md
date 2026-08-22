@@ -494,6 +494,10 @@ heading twice, never anywhere else in the file.
 
 ```sh
 flutter analyze                       # whole workspace, must be clean
+dart format --output=none --set-exit-if-changed .
+                                      # the test job's other reading of the same
+                                      # code; nothing else objects to a file
+                                      # the formatter would rewrite
 flutter test                          # widget and golden tests
 dart test packages/oaa_core           # domain, no toolchain needed
 dart test packages/oaa_wire           # the wire protocol, including the C++ golden
@@ -518,15 +522,15 @@ flutter test test/plugin_to_display_e2e_test.dart
 dart run tool/docs.dart               # the documentation site still builds
 ```
 
-All eleven gates are jobs in `ci.yml`, which is the only workflow. The repeated
-`dart test packages/oaa_wire` is not a twelfth: it is the same suite, run again
-where a built plugin turns its end-to-end cases from skipped into real.
+All twelve gates are jobs in `ci.yml`, which is the only workflow. The repeated
+`dart test packages/oaa_wire` is not a thirteenth: it is the same suite, run
+again where a built plugin turns its end-to-end cases from skipped into real.
 The line after it is one file of the `flutter test` suite for the same reason —
 `test/plugin_to_display_e2e_test.dart` skips without a built plugin, and it is
 the only thing anywhere that runs a DAW's audio through the plugin, the app and
 out to a display.
 
-Two of the eleven do not run on a push. `dart build cli` does, and is there
+Two of the twelve do not run on a push. `dart build cli` does, and is there
 because nothing else builds the CLI the way a release does: `cli/test` runs it with
 `dart run`, so `dart compile exe` was broken for an unknown length of time and
 was found by tagging a release. **The full plugin build runs only on a release or a manual
