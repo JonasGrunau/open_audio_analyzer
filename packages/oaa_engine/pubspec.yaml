@@ -2,7 +2,7 @@ name: oaa_engine
 description: >-
   Dart bindings for the Open Audio Analyzer measurement engine. Compiles the C in engine/ via a
   build hook and exposes its snapshot as zero-copy typed views.
-version: 0.4.1
+version: 0.5.0
 publish_to: 'none' # Depends on ../../engine, which no published archive contains.
 
 environment:

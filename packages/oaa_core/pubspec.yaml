@@ -2,7 +2,7 @@ name: oaa_core
 description: >-
   The Open Audio Analyzer domain model: what a metric is, what a delivery target is, and how a
   meter layout is described. Pure Dart — no Flutter, no dart:ffi, no I/O.
-version: 0.4.1
+version: 0.5.0
 publish_to: 'none'
 
 environment:

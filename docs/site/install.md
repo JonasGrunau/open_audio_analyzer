@@ -98,8 +98,8 @@ as [VB-Audio Cable](https://vb-audio.com/Cable/).
 ### AppImage
 
 ```sh
-chmod +x Open.Audio.Analyzer-0.4.1-x86_64.AppImage
-./Open.Audio.Analyzer-0.4.1-x86_64.AppImage
+chmod +x Open.Audio.Analyzer-0.5.0-x86_64.AppImage
+./Open.Audio.Analyzer-0.5.0-x86_64.AppImage
 ```
 
 GTK 3 is expected from the host — every desktop Linux that can run a Flutter
@@ -111,7 +111,7 @@ distribution simply refuses to start on an older one.
 ### Flatpak
 
 ```sh
-flatpak install --user Open.Audio.Analyzer-0.4.1-x86_64.flatpak
+flatpak install --user Open.Audio.Analyzer-0.5.0-x86_64.flatpak
 flatpak run dev.openaudioanalyzer.oaa
 ```
 

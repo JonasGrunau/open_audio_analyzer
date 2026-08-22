@@ -75,6 +75,19 @@
   <content_rating type="oars-1.1"/>
 
   <releases>
+    <release version="0.5.0" date="2026-08-22">
+      <description>
+        <p>
+          The canvas no longer slows down the longer a spectrogram is on screen:
+          its history is now kept as pixels and drawn as one image, at a fixed
+          cost whatever the signal does. On a remote display the tab control sits
+          beside the name of the machine being watched instead of stranded in the
+          middle of the link bar. On macOS, double-clicking the status bar zooms
+          the window again, obeying the system's title bar setting. The iOS and
+          Android home screen label is now OAA, which a tablet has room to draw.
+        </p>
+      </description>
+    </release>
     <release version="0.4.1" date="2026-08-22">
       <description>
         <p>

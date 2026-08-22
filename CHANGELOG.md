@@ -9,6 +9,8 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-08-22
+
 ### ✨ Added
 - Double-clicking the status bar on macOS zooms the window again, as
   double-clicking a title bar does everywhere else on the Mac — the status bar
@@ -1646,7 +1648,8 @@ meters do not exist yet. See the [roadmap](README.md#roadmap).
 - Licensing is split: MIT for `engine/`, `oaa_engine` and `oaa_core`;
   GPL-3.0-or-later for the application, UI, CLI and plugin.
 
-[unreleased]: https://github.com/JonasGrunau/open_audio_analyzer/compare/v0.4.1...HEAD
+[unreleased]: https://github.com/JonasGrunau/open_audio_analyzer/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/JonasGrunau/open_audio_analyzer/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/JonasGrunau/open_audio_analyzer/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/JonasGrunau/open_audio_analyzer/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/JonasGrunau/open_audio_analyzer/compare/v0.2.0...v0.3.0
