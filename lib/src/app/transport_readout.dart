@@ -23,17 +23,26 @@
 // host that never mentioned a tempo is exactly the invented measurement this
 // project forbids, and 4/4 is the most plausible-looking of all of them.
 //
-// **The box is a reservation and the ink is packed against one edge of it.**
-// The width is fixed so that the row does not move when the position does: a
-// host that starts rolling goes from `--:--:--` to a timecode, and a readout
-// that resized on that would shove every control beside it sideways the moment
-// somebody pressed play. But what the box reserves is room for a *timecode*,
-// and a host that counts bars instead fills 36 px of it — so the fields are
-// drawn against the edge the readout's row packs against, [TransportAlign], and
-// the unspent reserve joins the row's own slack instead of sitting between two
-// items as a hole. Left-aligned in the desktop's bar, `1|1.0` had 56 px of
-// nothing to its right and whatever the window was not using to its left, and
-// read as a number floating in the middle of the title bar.
+// **The box is the ink, and [width] is only the ceiling.** It used to reserve
+// room for the widest thing it could ever print — a drop-frame timecode, eleven
+// glyphs — and a host that counts bars fills five of them. The other 56 px were
+// a hole, and there is nowhere good to put a hole that size: against the
+// elapsed clock it read as a seam four times the width of every other one in
+// the bar, and against the group before it as a number floating in the middle
+// of the title bar. Fitting the box removes it instead of moving it.
+//
+// **A box that fits is a box that resizes, and here that costs nothing.** The
+// desktop's readout is the first item of a group packed against the right edge,
+// and the tablet's is the last item before the row's slack — so a width change
+// moves this readout's own left edge and not one thing beside it. That is the
+// property to check before reusing this widget anywhere else; a readout with
+// items either side of it would shuffle them every time a bar counter gained a
+// digit.
+//
+// Everything drawn here is monospaced with tabular figures, so a width is a
+// glyph count and not a measurement.
+
+import 'dart:math' as math;
 
 import 'package:flutter/widgets.dart';
 import 'package:oaa_core/oaa_core.dart';
@@ -41,22 +50,35 @@ import 'package:oaa_ui/oaa_ui.dart';
 
 /// Which edge of the box the fields are drawn against.
 ///
-/// A readout belongs to the group it is packed with, and the reserve it is not
-/// using belongs on the far side of it — which is a different edge on the two
-/// screens. In the desktop's status bar the readout is the first item of the
-/// right-hand group, so it is [trailing] and its ink sits one gap from the
-/// elapsed clock, exactly as `ElapsedReadout` right-aligns inside its own 72 px
-/// box for the same reason. In the tablet's link bar it is the last item before
-/// the row's slack, so it is [leading] and its ink sits one gap from the tab
-/// control.
-///
-/// **Which edge is right follows from where the slack is, so a readout that
-/// moves in its row is a readout whose alignment has to be looked at again.**
-/// The tablet's sat between the host name and the tabs at first, and [leading]
-/// there put the unspent reserve between the ink and a control — the same hole
-/// this enum exists to prevent, in the one place neither value could have
-/// removed it.
+/// Both screens pack [leading] now, because the box is the width of the format
+/// and there is normally nothing left over to place. It still decides where the
+/// one remaining reserve goes: a caller whose [TransportReadout.width] cannot
+/// hold the tempo gets the position alone in a box that was sized for both, and
+/// the reserve belongs on the far side of the ink from the group it is packed
+/// with.
 enum TransportAlign { leading, trailing }
+
+/// Advance of one glyph of [OaaType.readingSmall], in ems.
+///
+/// Every glyph this file prints is a digit, a separator or a letter of `BPM`,
+/// and the face is monospaced — so a width is arithmetic and not a trial
+/// layout. Google Sans Code advances 0.6 and the slack is what keeps this an
+/// upper bound. The meters size their readings the same way.
+const double _advance = 0.62;
+
+/// The room [transport]'s counters need, at most [most].
+double _reserveFor(Transport transport, double most) {
+  final glyph = OaaType.readingSmall.fontSize! * _advance;
+  final position = transportPosition(transport).length * glyph;
+  final tempo = transportTempo(transport);
+  if (tempo == null) return math.min(position, most);
+
+  // The tempo comes with the position or not at all — the painter makes the
+  // same call against the box this returns, so the two cannot disagree about
+  // whether there was room.
+  final full = position + Space.md + tempo.length * glyph;
+  return math.min(full <= most ? full : position, most);
+}
 
 /// A readout of a DAW's transport, repainting on a clock.
 class TransportReadout extends StatefulWidget {
@@ -78,6 +100,8 @@ class TransportReadout extends StatefulWidget {
   /// about when "now" is would be worse than one that is absent.
   final Listenable repaint;
 
+  /// The **most** room the caller has for this readout. See the note at the
+  /// top of the file: the box takes what the host's format needs, up to this.
   final double width;
 
   /// The edge the fields are packed against inside [width]. See
@@ -103,17 +127,48 @@ class _TransportReadoutState extends State<TransportReadout> {
   final ValueParagraph _position = ValueParagraph();
   final ValueParagraph _tempo = ValueParagraph();
 
+  /// The room this host's format needs, at most [TransportReadout.width].
+  late double _reserve = _reserveFor(widget.transportOf(), widget.width);
+
+  @override
+  void initState() {
+    super.initState();
+    widget.repaint.addListener(_tick);
+  }
+
+  @override
+  void didUpdateWidget(TransportReadout old) {
+    super.didUpdateWidget(old);
+    if (!identical(old.repaint, widget.repaint)) {
+      old.repaint.removeListener(_tick);
+      widget.repaint.addListener(_tick);
+    }
+    if (old.width != widget.width) _tick();
+  }
+
   @override
   void dispose() {
+    widget.repaint.removeListener(_tick);
     _position.dispose();
     _tempo.dispose();
     super.dispose();
   }
 
+  /// Resizes the box when the *format* changes, and at no other time.
+  ///
+  /// A comparison of two doubles per frame, and a `setState` when a host starts
+  /// reporting a timecode where it was reporting bars. Everything else about
+  /// this readout reaches the screen through the painter without the tree being
+  /// touched — see the note at the top of the file about why.
+  void _tick() {
+    final reserve = _reserveFor(widget.transportOf(), widget.width);
+    if (reserve != _reserve) setState(() => _reserve = reserve);
+  }
+
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      width: widget.width,
+      width: _reserve,
       height: 16,
       child: CustomPaint(
         painter: _TransportPainter(

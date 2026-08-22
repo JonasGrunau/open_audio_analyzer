@@ -12,9 +12,14 @@
 //     frame put it, which is what it was before the setting existed.
 //   - A slower setting arrives. A one-pole that lags and then never quite gets
 //     there is a meter that reads low on steady programme.
-//   - The peak-hold line is never averaged, at any setting. It is what keeps a
-//     slow curve honest: the curve says where the programme mostly sits, the
-//     line above it says how far it actually went.
+//   - The peak-hold line moves with the curve and still arrives where the
+//     engine's hold went. It used to snap to a new peak while the curve eased
+//     towards it, which on Slow read as two plots in one box; folding it
+//     through the same pole fixes the motion without lowering the line.
+//   - `SpectrumHold.envelope` holds the curve instead, and says so by reading
+//     *lower* than the peaks on a transient a slow curve smoothed away. That is
+//     the whole cost of the setting, and it is the reason it is not the
+//     default.
 //
 // These are pixel reads for the reason `histogram_test.dart` gives — a level
 // folded into the wrong buffer passes every widget assertion there is.
@@ -32,6 +37,19 @@ import 'package:flutter_test/flutter_test.dart';
 
 /// A spectrum source the test drives by hand.
 class _Fake implements MeterSource {
+  /// **The floor, not zero.** A `Float32List` starts full of 0.0, and 0.0 dB is
+  /// full scale — so a source that had published nothing yet described a
+  /// moment of digital silence as the loudest one there is, and the first paint
+  /// snapped the curve to the top of the plot. Harmless for the curve, which
+  /// eases away from it within a frame or two, and not at all harmless for a
+  /// *hold*, which is entitled to sit at the top for a second and a half and
+  /// then let itself down at 12 dB a second. The real engine says
+  /// `hasSpectrum: false` until it has one and this module draws nothing.
+  _Fake() {
+    _spectrum.fillRange(0, _spectrum.length, -96);
+    _spectrumPeak.fillRange(0, _spectrumPeak.length, -96);
+  }
+
   final Float32List _spectrum = Float32List(MeterShape.spectrumBands);
   final Float32List _spectrumPeak = Float32List(MeterShape.spectrumBands);
 
@@ -132,11 +150,13 @@ class _Harness extends StatefulWidget {
     required this.source,
     required this.boundary,
     required this.response,
+    this.hold = SpectrumHold.peaks,
   }) : super(key: UniqueKey());
 
   final MeterSource source;
   final GlobalKey boundary;
   final SpectrumResponse response;
+  final SpectrumHold hold;
 
   @override
   State<_Harness> createState() => _HarnessState();
@@ -168,6 +188,7 @@ class _HarnessState extends State<_Harness>
                 engine: widget.source,
                 clock: clock,
                 response: widget.response,
+                hold: widget.hold,
               ),
             ),
           ),
@@ -278,7 +299,11 @@ void main() {
     );
   });
 
-  testWidgets('the peak hold is not averaged at any response', (tester) async {
+  testWidgets('the hold travels with the curve and still gets there', (
+    tester,
+  ) async {
+    final loud = await _settled(tester, SpectrumResponse.fast, -12);
+
     final key = GlobalKey();
     final source = _Fake();
     await tester.pumpWidget(
@@ -290,24 +315,75 @@ void main() {
       await _frame(tester);
     }
     final quiet = _topAt(await _shoot(tester, key));
-
-    // The programme goes loud for one frame. On Slow the curve has barely
-    // moved — and the hold has to be at the top of the move regardless, which
-    // is the whole reason a slow curve is allowed to exist.
-    source.publish(0.02, db: -12, peakDb: -12);
-    await _frame(tester);
-    final top = _topAt(await _shoot(tester, key), ink: 32);
-
-    final loud = await _settled(tester, SpectrumResponse.fast, -12);
-    expect(
-      (top - loud).abs(),
-      lessThanOrEqualTo(2),
-      reason: 'the hold line lagged the transient it exists to catch',
-    );
     expect(
       quiet,
       greaterThan(loud + 20),
       reason: 'the two levels were not far enough apart to prove anything',
+    );
+
+    // The programme goes loud, and the engine's hold latches immediately — it
+    // is a hold. One 20 ms frame into a 500 ms time constant, the *drawn* line
+    // must not already be at the top: that jump beside a curve that has barely
+    // moved is the thing this fold removes.
+    source.publish(0.02, db: -12, peakDb: -12);
+    await _frame(tester);
+    final stepped = _topAt(await _shoot(tester, key), ink: 32);
+    expect(
+      stepped,
+      greaterThan(loud + 10),
+      reason: 'the hold snapped past the curve instead of travelling with it',
+    );
+    expect(stepped, lessThan(quiet), reason: 'the hold did not move at all');
+
+    // And it arrives. A hold that eased towards a peak and stopped short would
+    // be a meter reading low on the one thing it is there to catch.
+    for (var i = 0; i < 150; i++) {
+      source.publish(0.02, db: -60, peakDb: -12);
+      await _frame(tester);
+    }
+    expect(
+      (_topAt(await _shoot(tester, key), ink: 32) - loud).abs(),
+      lessThanOrEqualTo(3),
+      reason: 'the hold never reached the peak the engine caught',
+    );
+  });
+
+  testWidgets('Envelope holds the curve, which is lower and says so', (
+    tester,
+  ) async {
+    final loud = await _settled(tester, SpectrumResponse.fast, -12);
+
+    final key = GlobalKey();
+    final source = _Fake();
+    await tester.pumpWidget(
+      _Harness(
+        source: source,
+        boundary: key,
+        response: SpectrumResponse.slow,
+        hold: SpectrumHold.envelope,
+      ),
+    );
+
+    for (var i = 0; i < 60; i++) {
+      source.publish(0.02, db: -60, peakDb: -60);
+      await _frame(tester);
+    }
+
+    // The same transient as above, and the same time to settle. Peaks reaches
+    // the top; this cannot, because the curve it is holding never went there.
+    source.publish(0.02, db: -12, peakDb: -12);
+    await _frame(tester);
+    for (var i = 0; i < 30; i++) {
+      source.publish(0.02, db: -60, peakDb: -12);
+      await _frame(tester);
+    }
+
+    expect(
+      _topAt(await _shoot(tester, key), ink: 32),
+      greaterThan(loud + 10),
+      reason:
+          'Envelope reached a level the drawn curve never did, so it is not '
+          'holding the curve',
     );
   });
 }

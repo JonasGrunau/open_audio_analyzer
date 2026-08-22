@@ -139,15 +139,18 @@ void main() {
     );
     expect(find.text('DISCONNECT'), findsOneWidget);
 
-    // **And the readout is behind the tabs, not in front of them.** The tab
-    // control is the one thing on this bar somebody touches, so its distance
-    // from the name it belongs to is fixed by the name and by nothing else: a
-    // host that gains or loses a DAW, or reports two counters where another
-    // reports three, must not move it. In front of the tabs it did both — the
-    // readout is a 232 px reservation and this host's counters come to 182 of
-    // them, so the control stood 66 px clear of the ink with nothing between the
-    // two. A host counting bars leaves 88 px, and one reporting a clock and no
-    // tempo 190.
+    // **The pages are at the trailing end of the bar, one gap in front of the
+    // way out, and the readout leads them rather than following them.** The
+    // page control is the one thing on this bar somebody touches repeatedly, so
+    // what fixes its position is the edge it is packed against and nothing
+    // else: a host that gains or loses a DAW, or reports two counters where
+    // another reports three, must not move it. In front of the pages the
+    // readout did exactly that — it is a 232 px reservation and this host's
+    // counters come to 182 of them, so the control stood 66 px clear of the ink
+    // with nothing between the two. A host counting bars leaves 88 px, and one
+    // reporting a clock and no tempo 190. Every unspent pixel of it now falls
+    // into the row's slack, which sits between the readout and the pages and is
+    // the one place in the bar where a gap means nothing.
     //
     // Measured rather than read off the tree, because a finder cannot see this:
     // every widget in that bar was present and correct throughout, and the hole
@@ -157,15 +160,17 @@ void main() {
     final name = tester.getRect(find.text('Studio Desktop'));
     final tabs = tester.getRect(find.byType(SegmentedControl<int>));
     final readout = tester.getRect(find.byType(TransportReadout));
+    final out = tester.getRect(find.byType(OaaButton));
 
-    expect(tabs.left - name.right, closeTo(Space.md, 0.5));
-    expect(readout.left - tabs.right, closeTo(Space.md, 0.5));
+    expect(readout.left - name.right, closeTo(Space.md, 0.5));
+    expect(out.left - tabs.right, closeTo(Space.md, 0.5));
+    expect(tabs.left, greaterThan(readout.right));
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.runAsync(host.stop);
   });
 
-  testWidgets('a host with no playhead puts the tabs beside its name', (
+  testWidgets('a host with no playhead leaves the pages where they are', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(1600, 1000);
@@ -184,8 +189,8 @@ void main() {
     await tester.runAsync(() => host.start(port: 0));
     final port = host.port!;
 
-    // Two tabs, because one draws no tab control — and the control is the thing
-    // that was left stranded in the middle of the bar.
+    // Two tabs, because one draws no page control at all — and the control is
+    // the thing that was left stranded in the middle of the bar.
     host.publishLayout(
       const PresetSpec(
         name: 'Two',
@@ -217,13 +222,90 @@ void main() {
     // present and blank, which is the whole of the fix.
     expect(find.byType(TransportReadout), findsNothing);
 
-    // And the consequence, measured: the tab control starts one gap after the
-    // name ends. Asserted in pixels because it is a pixel problem — every
-    // widget involved was present and correct while 248 px of nothing sat
-    // between them, so nothing about it is visible in a finder.
-    final name = tester.getRect(find.text('Studio Desktop'));
+    // And the consequence, measured: the page control ends one gap in front of
+    // the way out, exactly where it ends on the host that does have a playhead.
+    // That is the whole point of putting it here — the presence of a DAW at the
+    // other end cannot move it, because everything that comes and goes with one
+    // is upstream of the row's slack. Asserted in pixels because it is a pixel
+    // problem: every widget involved was present and correct while 248 px of
+    // nothing sat in the bar, so nothing about it is visible in a finder.
     final tabs = tester.getRect(find.byType(SegmentedControl<int>));
-    expect(tabs.left - name.right, closeTo(Space.md, 0.5));
+    final out = tester.getRect(find.byType(OaaButton));
+    expect(out.left - tabs.right, closeTo(Space.md, 0.5));
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.runAsync(host.stop);
+  });
+
+  testWidgets('disconnecting lands back on the view that opened the display', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1600, 1000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    final host = DisplayHost(
+      source: null,
+      hostName: 'Studio Desktop',
+      abiVersion: 0,
+    );
+    addTearDown(host.dispose);
+
+    await tester.runAsync(() => host.start(port: 0));
+    final port = host.port!;
+
+    host.publishLayout(
+      const PresetSpec(
+        name: 'One',
+        tabs: [TabSpec(name: 'Master', modules: [])],
+      ),
+    );
+
+    // Pushed, which is the only shape the application ever has: both ways into
+    // a display put it on the stack over the screen the person was looking at.
+    await tester.pumpWidget(
+      OaaTheme(
+        colors: OaaColors.precisionInstrument,
+        child: MaterialApp(
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: Center(
+                child: TextButton(
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) =>
+                          RemoteDisplayScreen(host: '127.0.0.1', port: port),
+                    ),
+                  ),
+                  child: const Text('THE VIEW BEHIND'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('THE VIEW BEHIND'));
+    await _pumpUntil(
+      tester,
+      () => find.text('Studio Desktop').evaluate().isNotEmpty,
+    );
+
+    // The route is still sliding in when the first frame lands, and a control
+    // half off the right edge cannot be tapped.
+    await tester.pump(const Duration(milliseconds: 400));
+
+    await tester.tap(find.text('DISCONNECT'));
+    await tester.pumpAndSettle();
+
+    // The way out goes back, and it does not hand over a question on the way.
+    // Disconnect used to drop the screen to `idle`, whose build is the host
+    // picker — so leaving a display put a panel asking which machine to attach
+    // to next on top of the meters, with the display still behind it.
+    expect(find.text('THE VIEW BEHIND'), findsOneWidget);
+    expect(find.text('SHOW ANOTHER MACHINE'), findsNothing);
+    expect(find.text('DISCONNECT'), findsNothing);
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.runAsync(host.stop);

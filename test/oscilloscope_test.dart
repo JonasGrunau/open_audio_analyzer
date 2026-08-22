@@ -40,6 +40,11 @@ const _size = Size(400, 120);
 class _Tone implements MeterSource {
   _Tone({required this.hz, this.amplitude = 0.8, this.channels = 1});
 
+  /// No DAW. Every case below the tempo-sync group is about audio arriving
+  /// without a playhead behind it, which is what a sound card is.
+  @override
+  Transport transport = Transport.none;
+
   final double hz;
   final double amplitude;
 
@@ -101,11 +106,15 @@ class _Harness extends StatefulWidget {
     required this.boundary,
     required this.timeBase,
     this.fps = 60,
+    this.sync = ScopeSync.free,
+    this.division = ScopeDivision.bar1,
   });
 
   final MeterSource source;
   final GlobalKey boundary;
   final ScopeTimeBase timeBase;
+  final ScopeSync sync;
+  final ScopeDivision division;
 
   /// What the user set the meters to redraw at. The engine publishes at about
   /// 47 Hz regardless, so 30 is the setting where the two disagree.
@@ -144,6 +153,8 @@ class _HarnessState extends State<_Harness>
                 engine: widget.source,
                 clock: clock,
                 timeBase: widget.timeBase,
+                sync: widget.sync,
+                division: widget.division,
               ),
             ),
           ),
@@ -534,4 +545,251 @@ void main() {
       }
     }
   });
+
+  group('tempo sync', () {
+    // A bar-locked display is the one picture in this module that cannot be
+    // checked by looking at one frame: what it promises is that the *same*
+    // audio lands in the *same* column pass after pass. So the impulse below
+    // is placed at a fixed point in the bar and the column it draws in is
+    // compared across two bars, which is the assertion a scrolling display
+    // fails and a phase-locked one passes.
+
+    testWidgets('the bar lands in the same column every pass', (tester) async {
+      final key = GlobalKey();
+      final source = _Bar();
+      await tester.pumpWidget(
+        _Harness(
+          source: source,
+          boundary: key,
+          timeBase: ScopeTimeBase.s1,
+          sync: ScopeSync.tempo,
+        ),
+      );
+
+      // Two bars to fill the window, then a reading at the end of each of the
+      // next two.
+      await _playBars(tester, source, 2);
+      await _playBars(tester, source, 1);
+      final first = _tallestColumn(await _shoot(tester, key));
+      await _playBars(tester, source, 1);
+      final second = _tallestColumn(await _shoot(tester, key));
+
+      expect(
+        first,
+        isNotNull,
+        reason: 'nothing was drawn, so there is no column to compare',
+      );
+      expect(
+        (second! - first!).abs(),
+        lessThanOrEqualTo(2),
+        reason:
+            'the impulse moved between bars — the window is not locked to the '
+            'playhead',
+      );
+
+      // And it is where the impulse is: a quarter of the way into the bar.
+      expect((first - _width ~/ 4).abs(), lessThanOrEqualTo(6));
+    });
+
+    testWidgets('the division is the width of the window', (tester) async {
+      // An impulse halfway through every beat. A one-beat window puts it in
+      // the middle; a one-bar window would put it an eighth of the way in.
+      // Same audio, same playhead, different grid — which is the only thing
+      // the setting does.
+      final key = GlobalKey();
+      final source = _Bar(perBeat: true);
+      await tester.pumpWidget(
+        _Harness(
+          source: source,
+          boundary: key,
+          timeBase: ScopeTimeBase.s1,
+          sync: ScopeSync.tempo,
+          division: ScopeDivision.quarter,
+        ),
+      );
+      await _playBars(tester, source, 3);
+
+      // Halfway into every beat, so halfway across a one-beat window — and an
+      // eighth of the way across a one-bar one, which is where it would be if
+      // the division were ignored.
+      final at = _tallestColumn(await _shoot(tester, key));
+      expect(at, isNotNull);
+      expect(
+        (at! - _width ~/ 2).abs(),
+        lessThanOrEqualTo(6),
+        reason: 'the window is not one beat wide',
+      );
+    });
+
+    testWidgets('a parked playhead freezes rather than piling up', (
+      tester,
+    ) async {
+      final key = GlobalKey();
+      final source = _Bar();
+      await tester.pumpWidget(
+        _Harness(
+          source: source,
+          boundary: key,
+          timeBase: ScopeTimeBase.s1,
+          sync: ScopeSync.tempo,
+        ),
+      );
+      await _playBars(tester, source, 3);
+      final rolling = _tallestColumn(await _shoot(tester, key));
+
+      // Stop. The plugin keeps publishing — a DAW calls `processBlock` with a
+      // parked transport — and every block reports the same position, so every
+      // sample would land in one column and bury the picture under a stripe of
+      // room tone.
+      source.playing = false;
+      for (var i = 0; i < 60; i++) {
+        source.publish();
+        await _frame(tester);
+      }
+
+      expect(
+        _tallestColumn(await _shoot(tester, key)),
+        rolling,
+        reason: 'a stopped transport redrew the display',
+      );
+    });
+
+    testWidgets('a source with no playhead draws the free window', (
+      tester,
+    ) async {
+      // Tempo sync on a sound card. There is nothing to lock to, and a blank
+      // module would be a worse answer than the display that does work.
+      final key = GlobalKey();
+      final source = _Tone(hz: 1000);
+      await tester.pumpWidget(
+        _Harness(
+          source: source,
+          boundary: key,
+          timeBase: ScopeTimeBase.ms20,
+          sync: ScopeSync.tempo,
+        ),
+      );
+      for (var i = 0; i < 20; i++) {
+        source.publish();
+        await _frame(tester);
+      }
+
+      expect(
+        _inked(await _shoot(tester, key)).length,
+        greaterThan(_width ~/ 2),
+        reason: 'the display went blank instead of falling back',
+      );
+    });
+  });
+}
+
+/// Plays [bars] bars of a source that carries a playhead.
+Future<void> _playBars(WidgetTester tester, _Bar source, int bars) async {
+  final blocks = (source.framesPerBar * bars / _block).ceil();
+  for (var i = 0; i < blocks; i++) {
+    source.publish();
+    await _frame(tester);
+  }
+}
+
+/// The column whose signal ink is tallest, or null if nothing is drawn.
+///
+/// A written column always has ink — a silent one is drawn as a single pixel
+/// so that a flat signal is a flat line rather than nothing — so "which column
+/// has ink" cannot find a transient. Its *height* can.
+int? _tallestColumn(Uint8List pixels) {
+  var best = -1;
+  var bestHeight = 1;
+  for (var x = 0; x < _width; x++) {
+    var height = 0;
+    for (var y = 0; y < _height; y++) {
+      if (_isSignal(pixels, x, y)) height++;
+    }
+    if (height > bestHeight) {
+      bestHeight = height;
+      best = x;
+    }
+  }
+  return best < 0 ? null : best;
+}
+
+/// A source with a DAW behind it: 120 bpm, 4/4, one impulse a quarter of the
+/// way into every bar.
+///
+/// The playhead advances with the audio, the way a host's does — which is the
+/// property tempo sync is built on and the one a fake that advanced it on a
+/// wall clock would quietly break.
+class _Bar implements MeterSource {
+  _Bar({this.perBeat = false});
+
+  /// Whether the impulse repeats every beat rather than every bar.
+  ///
+  /// A window narrower than the pattern in it is overwritten by the passes
+  /// that carry nothing, which is correct and makes a bar-long pattern useless
+  /// for testing a beat-long window.
+  final bool perBeat;
+
+  static const double bpm = 120;
+  static const double quartersPerBar = 4;
+
+  int _generation = 0;
+  int _frames = 0;
+  bool playing = true;
+  final Float32List _scope = Float32List(_block * 2);
+
+  Transport _transport = Transport.none;
+
+  int get framesPerBar => (quartersPerBar * 60 / bpm * _rate).round();
+
+  void publish() {
+    _generation++;
+    // The playhead this block starts at, before the audio in it is measured.
+    _transport = Transport(
+      flags:
+          (playing ? Transport.flagPlaying : 0) |
+          Transport.flagHasPpq |
+          Transport.flagHasBarStart |
+          Transport.flagHasBpm |
+          Transport.flagHasTimeSig,
+      ppqPosition: _frames / _rate * bpm / 60,
+      bpm: bpm,
+      timeSigNumerator: 4,
+      timeSigDenominator: 4,
+    );
+
+    final period = perBeat ? framesPerBar ~/ 4 : framesPerBar;
+    final impulseAt = perBeat ? period ~/ 2 : period ~/ 4;
+    for (var i = 0; i < _block; i++) {
+      final into = (_frames + i) % period;
+      final hit = into >= impulseAt && into < impulseAt + 64;
+      final value = hit ? 0.9 : 0.0;
+      _scope[i * 2] = value;
+      _scope[i * 2 + 1] = value;
+    }
+    if (playing) _frames += _block;
+  }
+
+  @override
+  Transport get transport => _transport;
+  @override
+  int get generation => _generation;
+  @override
+  bool refresh() => true;
+  @override
+  bool get hasOverrun => false;
+  @override
+  bool get isRunning => true;
+  @override
+  int get sampleRate => _rate;
+  @override
+  int get channels => 1;
+  @override
+  double get elapsedSeconds => _frames / _rate;
+  @override
+  Float32List get scope => _scope;
+
+  @override
+  int get scopeFrames => _scope.length ~/ 2;
+  @override
+  dynamic noSuchMethod(Invocation invocation) => throw UnimplementedError();
 }

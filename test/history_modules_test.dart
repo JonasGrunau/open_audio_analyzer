@@ -45,6 +45,11 @@ import 'package:flutter_test/flutter_test.dart';
 /// [MeterSource] — and it is the only way to run the history long enough to
 /// matter inside a widget test.
 class _Fake implements MeterSource {
+  /// No DAW behind this audio, which is what a sound card is and what these
+  /// cases are about.
+  @override
+  Transport transport = Transport.none;
+
   int _generation = 0;
 
   /// One analysis block per publish, which is what the engine does — and what

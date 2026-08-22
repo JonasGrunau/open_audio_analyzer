@@ -187,11 +187,21 @@ class _ElapsedReadoutState extends State<ElapsedReadout> {
   ui.Paragraph? _paragraph;
   String? _text;
 
+  /// Room for `00:00:00` and nothing spare.
+  ///
+  /// The string is eight glyphs whatever the clock says — `--:--:--` is the
+  /// same eight — so a box wider than the ink is a hole that never closes, and
+  /// it sat between this clock and the playhead beside it reading as a seam
+  /// twice the width of every other one in the bar. Arithmetic rather than a
+  /// measurement: the face is monospaced and 0.62 em is an upper bound on its
+  /// advance.
+  static double get width => OaaType.readingSmall.fontSize! * 0.62 * 8;
+
   @override
   Widget build(BuildContext context) {
     final colors = OaaTheme.of(context);
     return SizedBox(
-      width: 72,
+      width: width,
       height: 16,
       child: CustomPaint(
         painter: _ElapsedPainter(
@@ -210,7 +220,7 @@ class _ElapsedReadoutState extends State<ElapsedReadout> {
       final builder =
           ui.ParagraphBuilder(
               OaaType.readingSmall.getParagraphStyle(
-                textAlign: TextAlign.right,
+                textAlign: TextAlign.left,
                 maxLines: 1,
               ),
             )
@@ -219,7 +229,7 @@ class _ElapsedReadoutState extends State<ElapsedReadout> {
             )
             ..addText(text);
       _paragraph = builder.build()
-        ..layout(const ui.ParagraphConstraints(width: 72));
+        ..layout(ui.ParagraphConstraints(width: _ElapsedReadoutState.width));
     }
     return _paragraph!;
   }

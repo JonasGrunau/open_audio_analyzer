@@ -60,7 +60,7 @@ tabs as you like.
 | **Loudness Distribution** | How often the programme sat at each loudness, with the two percentiles LRA is the distance between. |
 | **Spectrum Analyzer** | 512 log-spaced bands from a 4096-point Hann window, zero-padded to a 16384-point transform. |
 | **Spectrogram** | The same transform over time. |
-| **Oscilloscope** | The waveform itself, a lane per channel. A time base from 5 ms to 5 seconds: triggered on a rising zero crossing below 200 ms so a periodic signal stands still, rolling above it. Full-scale samples are drawn in the over colour. |
+| **Oscilloscope** | The waveform itself, a lane per channel or both channels around one centre line. Free-running, with a time base from 5 ms to 5 seconds — triggered on a rising zero crossing below 200 ms so a periodic signal stands still, rolling above it — or locked to the DAW's tempo, where the width is a musical division from 4 bars to 1/32, straight, triplet or dotted, and the window sits on the bar grid so a kick lands in the same place every pass. A vertical zoom of 1x to 8x for material that does not reach full scale. Full-scale samples are drawn in the over colour whatever the zoom is set to. |
 | **Phase Scope** | The goniometer, from the raw stereo sample stream. |
 | **Stereo Cloud** | Stereo position per frequency band. Needs two channels; on a mono source it says so. |
 

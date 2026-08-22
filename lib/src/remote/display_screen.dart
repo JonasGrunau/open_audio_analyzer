@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import 'dart:async' show unawaited;
+
 import 'package:oaa_core/oaa_core.dart';
 import 'package:oaa_ui/oaa_ui.dart';
 import 'package:flutter/material.dart';
@@ -76,6 +78,36 @@ class _RemoteDisplayScreenState extends State<RemoteDisplayScreen>
     setState(() => _tab = 0);
   }
 
+  /// The way out of a display is the way back into the application.
+  ///
+  /// Disconnect used to call [DisplayClient.disconnect] and nothing else, which
+  /// left the screen mounted in `idle` — and `idle` builds the host picker. So
+  /// the one control on the bar labelled as the way out put a panel on top of
+  /// the meters asking which machine to attach to next, over a display screen
+  /// that was still there behind it. Nobody pressing Disconnect is answering
+  /// that question; they are leaving, and what they expect to be looking at is
+  /// the view they came from.
+  ///
+  /// Popping is also the whole of the disconnection: the route coming off the
+  /// stack disposes this state, and [dispose] disposes the client, which clears
+  /// its want-connection flag and tears the socket down. Awaiting
+  /// [DisplayClient.disconnect] first would do two unwanted things — show one
+  /// frame of the picker while the teardown completed, and then write `state`
+  /// on notifiers the pop had already disposed.
+  ///
+  /// The picker stays the build for `idle`, because that is still the state a
+  /// display *arrives* in when nothing upstream named a host. A screen with no
+  /// route beneath it has nowhere to land, so there it disconnects in place and
+  /// the picker is what it falls back to.
+  void _leave() {
+    final navigator = Navigator.of(context);
+    if (navigator.canPop()) {
+      navigator.pop();
+      return;
+    }
+    unawaited(_client.disconnect());
+  }
+
   @override
   Widget build(BuildContext context) {
     // The clock's ceiling, which nothing else on this screen would ever set.
@@ -114,9 +146,9 @@ class _RemoteDisplayScreenState extends State<RemoteDisplayScreen>
                       // screen with nothing behind it. `PanelScaffold` is a
                       // centred, bordered surface rather than a route, so it
                       // sits here unchanged and the two ways into a display
-                      // cannot drift apart. Detaching from a host lands back
-                      // here, which is what makes the link bar's Disconnect a
-                      // way to move to another machine rather than a dead end.
+                      // cannot drift apart. This is where a display with no
+                      // host waits — on arrival, and after a detach on a screen
+                      // with no route under it to go back to; see [_leave].
                       ? HostPickerPanel(
                           onConnect: _connect,
                           onClose: Navigator.of(context).canPop()
@@ -129,7 +161,7 @@ class _RemoteDisplayScreenState extends State<RemoteDisplayScreen>
                           state: state,
                           tab: _tab,
                           onTab: (index) => setState(() => _tab = index),
-                          onDisconnect: () => _client.disconnect(),
+                          onDisconnect: _leave,
                         ),
                 ),
               ),
@@ -248,32 +280,36 @@ class _LinkBar extends StatelessWidget {
           horizontal: Space.md,
           vertical: Space.sm,
         ),
-        // **Reading order, left to right: who, what, and the way out.** The tabs
-        // belong beside the name they belong to — a tablet is held, and its far
-        // corner is the most awkward place on the screen to put the control the
-        // viewer touches most. What stays on the right is the one control nobody
-        // wants to hit by accident.
+        // **Reading order, left to right: who this is, what its playhead is
+        // doing, what is wrong, and then the two controls.** The pages sit at
+        // the trailing end of the row, in front of the way out. The name is a
+        // label and reads first; the pages are a control and are reached for,
+        // and a control belongs at the edge of the bar rather than in the
+        // middle of the reading.
         //
-        // **Beside means beside, so nothing that can appear, vanish, or reserve
-        // room it is not using goes in front of the tabs.** They are the only
-        // control on this bar anybody reaches for, and a control placed
-        // downstream of an item like that moves under the finger already on its
-        // way to it. The transport readout is exactly such an item — it arrives
-        // with a DAW, leaves with one, and is a 232 px reservation whichever of
-        // the three counters the host at the other end happens to keep — so it
-        // follows the tabs rather than leading them.
+        // **What fixes a control's position is the edge it is packed against,
+        // and for the pages that edge is the right one.** The state message's
+        // `Expanded` takes every spare pixel in the row, so nothing upstream of
+        // it can move them: not a long host name, not a readout that appears
+        // with a DAW and leaves with one. Behind them is only the way out,
+        // which is a fixed width and always there. This matters more here than
+        // it looks — the pages are the one control on a display anybody touches
+        // repeatedly, and a control that shifts is a control the finger already
+        // on its way to it misses.
         //
-        // It led them for a phase, and both halves of that went wrong in the
-        // same way. On a host with no DAW the slot was 232 px of nothing, which
-        // is the collapse the note below describes; with a DAW it was worse,
-        // because the collapse cannot fire and the hole is *inside* the
-        // reservation. A host counting bars draws `1|1.0 120.0 BPM · 4/4` in
-        // 160 px of it and leaves the other 72 unspent, so the tabs stood 88 px
-        // clear of the ink with nothing whatsoever between the two and read as a
-        // control floating in the middle of the bar; on a host reporting only a
-        // clock the gap was 190 px. Behind the tabs the same reserve lands
-        // against the row's slack, where every readout in this application puts
-        // it — see [TransportAlign].
+        // The transport readout is exactly such a mover: 232 px reserved
+        // whichever of the three counters the host at the other end happens to
+        // keep. It led the pages for a phase and displaced them twice over. On
+        // a host with no DAW the slot was 232 px of nothing — the collapse the
+        // note below describes — and with a DAW it was worse, because the
+        // collapse cannot fire and the hole is *inside* the reservation: a host
+        // counting bars draws `1|1.0 120.0 BPM · 4/4` in 160 px of it and
+        // leaves the other 72 unspent, so the pages stood 88 px clear of the
+        // ink with nothing whatsoever between the two, and 190 px clear on a
+        // host reporting only a clock. In front of the `Expanded`, which is
+        // where it is now, every pixel it does not spend lands against the
+        // row's slack, where every readout in this application puts it — see
+        // [TransportAlign].
         child: Row(
           children: [
             _StateDot(state: state),
@@ -285,18 +321,6 @@ class _LinkBar extends StatelessWidget {
                 style: OaaType.body.copyWith(color: colors.textPrimary),
               ),
             ),
-
-            if (tabs.length > 1) ...[
-              const SizedBox(width: Space.md),
-              SegmentedControl<int>(
-                value: tab.clamp(0, tabs.length - 1),
-                segments: [
-                  for (final (index, spec) in tabs.indexed)
-                    (value: index, label: spec.name),
-                ],
-                onChanged: onTab,
-              ),
-            ],
 
             // **The playhead of the DAW at the other end, and the full width of
             // it.** The desktop's bar can afford a timecode and nothing else;
@@ -319,8 +343,9 @@ class _LinkBar extends StatelessWidget {
             // metering a sound card, which is most of them — that put 248 px of
             // nothing into the bar, reading as a control that had failed to lay
             // out rather than as an empty readout. Nothing behind it moves when
-            // it goes now, which is the point of it being here rather than in
-            // front of the tabs, and the emptiness is still not worth reserving.
+            // it goes now — the row's slack is what closes up — but an empty
+            // reservation is still not worth the space it would take from the
+            // message beside it.
             ValueListenableBuilder<bool>(
               valueListenable: client.hasTransport,
               builder: (context, hasTransport, _) => !hasTransport
@@ -351,7 +376,28 @@ class _LinkBar extends StatelessWidget {
             Expanded(
               child: _StateMessage(client: client, state: state),
             ),
-            const SizedBox(width: Space.sm),
+
+            // The pages of the host's layout, packed against the trailing edge
+            // with the way out. One page draws no control at all: a segmented
+            // control with a single segment is a label that can be pressed.
+            if (tabs.length > 1) ...[
+              const SizedBox(width: Space.md),
+              SegmentedControl<int>(
+                value: tab.clamp(0, tabs.length - 1),
+                segments: [
+                  for (final (index, spec) in tabs.indexed)
+                    (value: index, label: spec.name),
+                ],
+                onChanged: onTab,
+              ),
+            ],
+
+            // **A full gap in front of the way out, not the half one this was.**
+            // It used to separate a message from a button, where 8 px is
+            // plenty; it now separates two controls, and the second one leaves
+            // the host. Neighbours on a touch screen are mis-tapped, and this
+            // is the one control on the bar nobody wants to hit by accident.
+            const SizedBox(width: Space.md),
 
             OaaButton(label: 'Disconnect', onPressed: onDisconnect),
           ],

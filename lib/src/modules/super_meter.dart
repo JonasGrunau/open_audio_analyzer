@@ -41,6 +41,85 @@ class SuperMeterModule extends StatefulWidget {
 class _SuperMeterModuleState extends State<SuperMeterModule> {
   static const _scale = MeterScale(min: -48, max: 0, step: 6);
 
+  /// Seconds for an arc to cover 63% of the distance to a new reading.
+  ///
+  /// The three quantities behind the arcs advance on the engine's gating grid
+  /// and nowhere else: a momentary reading is a 400 ms window that slides in
+  /// 100 ms steps, so it changes exactly ten times a second however often it
+  /// is read. The clock repaints at the engine's publish rate, about 47 Hz, so
+  /// four frames in five drew the arc exactly where the frame before had left
+  /// it and the fifth jumped. A bar a few pixels tall gets away with that; a
+  /// 240 degree arc across the whole module does not, and it reads as an
+  /// instrument stuttering rather than as a signal moving.
+  ///
+  /// Half the interval between readings, so each step is 87% travelled before
+  /// the next one arrives, and an eighth of the momentary window, so the ease
+  /// is much shorter than the shortest thing the measurement itself can
+  /// resolve. It fills the gap between readings; it cannot smooth away
+  /// anything a reading could have shown.
+  ///
+  /// **Arcs only.** Every number this module prints, and every colour it
+  /// decides from one, is the measurement — drawn the frame it arrives. What
+  /// is eased is where a shape is drawn to, which is what the analyser's
+  /// response setting already does to its curve.
+  static const double _tau = 0.05;
+
+  /// The level each arc is drawn at, in LUFS: momentary, short-term,
+  /// integrated. NaN until that reading has a value, which is not a level of
+  /// zero and is drawn as no arc at all.
+  final List<double> _shown = List<double>.filled(3, double.nan);
+
+  /// The published measurement [_shown] was last folded for, and the engine
+  /// time it was folded at.
+  ///
+  /// **Zero is a real generation to have never seen**, so this starts at -1: a
+  /// source that published exactly once and then stopped must still get that
+  /// one measurement folded in.
+  int _seenGeneration = -1;
+  double _seenElapsed = 0;
+
+  /// Folds one published measurement into [_shown].
+  ///
+  /// **Called on a change of generation, never on a paint.** Paint also runs
+  /// on a resize, a skin change and a selection, and an ease that advanced on
+  /// those would travel while no audio did — the same defect as a spectrogram
+  /// that scrolls when the window is dragged, and just as convincing.
+  ///
+  /// The coefficient is derived from *engine* time rather than counted in
+  /// frames, so the arcs move at the same speed whether the meters are
+  /// refreshing at 30, 60 or 120.
+  void _advance(MeterSource engine) {
+    final elapsed = engine.elapsedSeconds;
+    final dt = elapsed - _seenElapsed;
+    _seenElapsed = elapsed;
+
+    // A reset takes the clock back to zero, and a first measurement has
+    // nothing to travel from. Snap rather than sweep up out of the floor,
+    // which would be a picture of a programme that did not happen.
+    // `!(dt > 0)` rather than `dt <= 0`, so that a NaN takes this branch too:
+    // a source whose link has gone quiet reports NaN seconds, and NaN compares
+    // false against everything — an alpha computed from one is NaN, and a
+    // single NaN folded into an arc's position stays there for the rest of the
+    // session.
+    final alpha = !(dt > 0) || _seenGeneration < 0
+        ? 1.0
+        : 1 - math.exp(-dt / _tau);
+
+    _fold(0, engine.lufsMomentary, alpha);
+    _fold(1, engine.lufsShort, alpha);
+    _fold(2, engine.lufsIntegrated, alpha);
+  }
+
+  /// One arc. A reading that is not yet defined leaves the arc undrawn rather
+  /// than easing towards a number nobody measured, and the first reading after
+  /// one snaps for the same reason.
+  void _fold(int i, double value, double alpha) {
+    final shown = _shown[i];
+    _shown[i] = value.isNaN || shown.isNaN
+        ? value
+        : shown + (value - shown) * alpha;
+  }
+
   final _integrated = ValueParagraph();
   final _range = ValueParagraph();
   ui.Paragraph? _unit;
@@ -101,6 +180,12 @@ class _SuperMeterPainter extends MeterPainter {
        _arc = (Paint()
          ..style = PaintingStyle.stroke
          ..strokeCap = StrokeCap.butt),
+       // Derived from `meterFill`, never from a text colour: `textMuted` sits
+       // lighter than `meterFill` under the dark palette and darker under a
+       // light one, so the momentary and short-term arcs would swap which
+       // looked emphasised when the skin changed. Built here rather than in
+       // `paint`, which is on the frame path and allocates nothing.
+       _shortFill = colors.meterFill.withValues(alpha: 0.55),
        _target = (Paint()
          ..color = colors.textMuted
          ..style = PaintingStyle.stroke
@@ -116,6 +201,7 @@ class _SuperMeterPainter extends MeterPainter {
   final Paint _track;
   final Paint _arc;
   final Paint _target;
+  final Color _shortFill;
 
   /// The gauge opens at the bottom: 150° round to 30°, clockwise. A full ring
   /// would have no beginning and no end, and a scale needs both.
@@ -148,6 +234,11 @@ class _SuperMeterPainter extends MeterPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    if (engine.generation != state._seenGeneration) {
+      state._advance(engine);
+      state._seenGeneration = engine.generation;
+    }
+
     // **The gauge is not a circle and must not be centred as one.** It opens
     // 120° at the bottom, so its ink reaches only `sin` of the way below the
     // centre that it does above it — and centring the notional circle instead
@@ -183,21 +274,16 @@ class _SuperMeterPainter extends MeterPainter {
     _track.strokeWidth = ring;
     _arc.strokeWidth = ring;
 
-    final readings = [
-      engine.lufsMomentary,
-      engine.lufsShort,
-      engine.lufsIntegrated,
-    ];
-    // Both derived from `meterFill`, never from a text colour: `textMuted` sits
-    // lighter than `meterFill` under the dark palette and darker under a light
-    // one, so the momentary and short-term arcs would swap which looked
-    // emphasised when the skin changed. The third entry is unused — the
-    // integrated arc takes its colour from the target check below.
-    final fills = [
-      colors.meterFill,
-      colors.meterFill.withValues(alpha: 0.55),
-      colors.accent,
-    ];
+    // The integrated reading, and the colour it is in. Both are wanted twice —
+    // by the innermost arc and by the centre readout — and taken **raw**, from
+    // the measurement rather than from the eased arc position: a pass or fail
+    // is a fact about a number somebody delivered, and easing decides where a
+    // shape is drawn, never what it says.
+    final integrated = engine.lufsIntegrated;
+    final integratedColor = colorForState(
+      classify(Metric.lufsIntegrated, integrated, calibration),
+      colors,
+    );
 
     for (var i = 0; i < 3; i++) {
       final radius = outer - i * (ring + gap);
@@ -206,18 +292,18 @@ class _SuperMeterPainter extends MeterPainter {
 
       canvas.drawArc(bounds, _startAngle, _sweepAngle, false, _track);
 
-      final value = readings[i];
+      // Where the arc is drawn to, which lags the reading by [_tau] and
+      // nothing else — see the note on it. NaN here is a reading that does not
+      // exist yet, and the arc is simply absent.
+      final value = state._shown[i];
       if (!value.isNaN) {
         // The integrated arc is the only one with a pass/fail meaning, so it is
         // the only one that takes the signal colour. Colouring all three would
         // make the accent decorative, and an accent that is decoration cannot
         // also be a warning.
         _arc.color = i == 2
-            ? colorForState(
-                classify(Metric.lufsIntegrated, value, calibration),
-                colors,
-              )
-            : fills[i];
+            ? integratedColor
+            : (i == 0 ? colors.meterFill : _shortFill);
         final sweep = scale.fractionOf(value) * _sweepAngle;
         if (sweep > 0) {
           canvas.drawArc(bounds, _startAngle, sweep, false, _arc);
@@ -249,12 +335,6 @@ class _SuperMeterPainter extends MeterPainter {
     }
 
     // --- The centre ---------------------------------------------------------
-    final integrated = engine.lufsIntegrated;
-    final integratedColor = colorForState(
-      classify(Metric.lufsIntegrated, integrated, calibration),
-      colors,
-    );
-
     // Sized off the gauge rather than off the module's short side: the
     // readout lives inside the rings, so it has to scale with them.
     // The ceiling is high enough that the gauge is what limits the number, not

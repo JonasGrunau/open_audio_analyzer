@@ -56,6 +56,20 @@ ThemeData oaaThemeData(OaaColors colors) {
   // background, because Material uses it for things no Open Audio Analyzer
   // colour covers — menu scrims, overlay tints, the text-selection handle. A
   // light skin under a dark scheme gets all three wrong at once.
+  //
+  // **`outlineVariant` has to be named even though `outline` is right beside
+  // it.** A `ColorScheme` role left unset is not a muted default — it is
+  // `outlineVariant => _outlineVariant ?? onBackground`, and the two baseline
+  // factories default `onBackground` to `Colors.white` and `Colors.black`. So
+  // the rule under "Silence" in the signal-source menu was drawn at
+  // `0xFFFFFFFF` across a `0xFF171A1E` menu: pure white, brighter than
+  // `textPrimary`, the loudest thing anywhere in a graphite interface, and the
+  // one value in the whole theme that came from no palette at all. It is
+  // `hairline` now — the same rule `ModuleFrame` draws under a title bar and
+  // the tab strip draws between its actions, at a step of eight counts.
+  //
+  // State every role this application leans on. The fallback for a boundary
+  // colour is a foreground colour, and a foreground colour is never subtle.
   final scheme = colors.isLight
       ? ColorScheme.light(
           surface: colors.panel,
@@ -67,6 +81,7 @@ ThemeData oaaThemeData(OaaColors colors) {
           error: colors.over,
           onError: colors.panel,
           outline: colors.hairline,
+          outlineVariant: colors.hairline,
         )
       : ColorScheme.dark(
           surface: colors.panel,
@@ -78,6 +93,7 @@ ThemeData oaaThemeData(OaaColors colors) {
           error: colors.over,
           onError: colors.background,
           outline: colors.hairline,
+          outlineVariant: colors.hairline,
         );
 
   return ThemeData(
@@ -85,7 +101,28 @@ ThemeData oaaThemeData(OaaColors colors) {
     colorScheme: scheme,
     scaffoldBackgroundColor: colors.background,
     canvasColor: colors.panel,
+
+    // `dividerColor` is the Material 2 reading of this and no longer the one
+    // that decides anything: under Material 3 a `Divider` takes
+    // `DividerTheme`, and falls through to `colorScheme.outlineVariant` where
+    // there is none. Set here as well because the scheme's own
+    // `outlineVariant` also answers for outlined fields and chips, and a rule
+    // between two menu items wants the hairline the rest of the application
+    // draws every division with — the one in `ModuleFrame` under a title bar,
+    // the one in the tab strip.
     dividerColor: colors.hairline,
+    // [OaaStroke.mark] rather than a hairline, and this is the one rule in the
+    // application that wants the heavier weight. A menu is drawn on
+    // `panelRaised`, one background step above the panel a `ModuleFrame`'s rule
+    // divides — so the same `hairline` colour has eight counts of contrast to
+    // work with there instead of thirteen, and at a single pixel it fades to
+    // the point where the menu reads as one unbroken list. Half a pixel more
+    // gives it back without reaching for a brighter colour.
+    dividerTheme: DividerThemeData(
+      color: colors.hairline,
+      thickness: OaaStroke.mark,
+      space: Space.sm,
+    ),
     splashFactory: NoSplash.splashFactory,
     highlightColor: Colors.transparent,
 

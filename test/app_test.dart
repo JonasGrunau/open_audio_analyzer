@@ -3,6 +3,7 @@
 import 'dart:io';
 
 import 'package:oaa/src/app/window_chrome.dart';
+import 'package:oaa_core/oaa_core.dart';
 import 'package:oaa_ui/oaa_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -235,6 +236,41 @@ void main() {
       expect(used.length, ReadingState.values.length);
       expect(colorForState(ReadingState.over, colors), colors.over);
     });
+  });
+
+  group('Material theme', () {
+    // Every skin, because the failure below is per-brightness: the unset role
+    // resolved to white under the dark factory and to black under the light
+    // one, so a test on one palette passes while the other skin is wrong.
+    for (final skin in BuiltInSkins.all) {
+      test('${skin.name} draws a divider in its own hairline', () {
+        final colors = oaaColorsFromSkin(skin);
+        final theme = oaaThemeData(colors);
+
+        // The rule between two menu items, resolved the way a Material 3
+        // `Divider` resolves it: `DividerTheme` first, then the scheme.
+        expect(theme.dividerTheme.color, colors.hairline);
+        expect(theme.colorScheme.outlineVariant, colors.hairline);
+        // Heavier than a border on purpose — a hairline has eight counts of
+        // contrast against `panelRaised` and reads as nothing there.
+        expect(theme.dividerTheme.thickness, OaaStroke.mark);
+
+        // The assertion that would have caught it. `outlineVariant` unset
+        // falls back to `onBackground`, which the baseline factories default
+        // to pure white and pure black — so the divider in the signal-source
+        // menu was `0xFFFFFFFF` on a `0xFF171A1E` menu, brighter than any
+        // colour the palette names. A boundary colour that equals a text
+        // colour is a boundary colour nobody chose.
+        for (final role in [
+          theme.colorScheme.outlineVariant,
+          theme.colorScheme.outline,
+        ]) {
+          expect(role, isNot(colors.textPrimary));
+          expect(role, isNot(const Color(0xFFFFFFFF)));
+          expect(role, isNot(const Color(0xFF000000)));
+        }
+      });
+    }
   });
 
   group('ReadoutPainter', () {

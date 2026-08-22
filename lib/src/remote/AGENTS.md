@@ -72,10 +72,22 @@ halves live here.
   "an unauthenticated port is open" is still a fact you glance at.
 
 - **There is one implementation of "choose a host".** `HostPickerPanel` is what
-  the desktop pushes and what the display screen shows whenever it has no host,
-  including after a Disconnect. Two of them would be two ideas about what to do
-  when discovery is blocked, and that answer — always offer a typed address —
-  is the whole reason the feature works in the rooms it was built for.
+  the desktop pushes and what the display screen shows whenever it has no host.
+  Two of them would be two ideas about what to do when discovery is blocked, and
+  that answer — always offer a typed address — is the whole reason the feature
+  works in the rooms it was built for.
+
+  **A display's Disconnect pops the route; it does not fall back into the
+  picker.** Both ways into a display push it onto the stack over the screen
+  somebody was looking at, so the way out is the way back. It used to call
+  `DisplayClient.disconnect` and stop there, which left the screen mounted in
+  `idle` — the state whose build is the panel above — so pressing the control
+  marked as the exit put a question on top of the meters with the display still
+  behind it, and nobody pressing it is answering that question. The picker is
+  still what `idle` builds, because it is the state a display *arrives* in when
+  nothing named a host; a screen with no route beneath it disconnects in place
+  and lands there, having nowhere to pop to. See `_leave` in
+  `display_screen.dart`.
 
   It offers three ways in, in the order they cost the person holding the
   tablet: a host discovery found, a code the camera reads, and an address typed
@@ -194,6 +206,14 @@ halves live here.
     goes out. A display may count relocations, so a dropped one is a relocation
     that never happened as far as every screen in the building is concerned.
 
+  **It is also copied onto the snapshot the modules read.** A module is handed a
+  `MeterSource` and nothing else — that is the rule that lets a tablet run the
+  desktop's fourteen painters — so the oscilloscope's tempo sync, which needs
+  the bar line, has no other way to reach a playhead. `DisplayClient` writes
+  each decoded frame to `snapshot.transport` as well as to its notifier; the two
+  are the same value read by two kinds of consumer, a painter that repaints on
+  the clock and a widget that must not.
+
   It is cleared when the link goes quiet, with the measurements and for the same
   reason: a parked transport legitimately sends nothing for minutes, so a held
   position and a dead link are indistinguishable. `TransportReadout` is what
@@ -212,20 +232,30 @@ halves live here.
   parked transport on a flaky access point would otherwise reflow the bar every
   time the link went quiet.
 
-  **The tab control comes before the readout in that row, and nothing that can
-  appear, vanish or reserve room it is not using may be put in front of it.** It
-  is the only control on a display anybody touches, so what fixes its distance
-  from the host name is the name and nothing else. The readout is all three of
-  those things at once: 232 px is room for a timecode, a tempo and a meter, and
-  a host keeping fewer counters than that spends less of it — 182 px for a clock
-  and a tempo, 160 for bars and beats, 58 for a clock alone. In front of the
-  tabs, the remainder became a hole between the ink and the control, 66 px wide
-  in the first case and 190 in the last, and the tabs read as floating in the
-  middle of the bar. Behind them the same remainder lands against the row's
+  **The page control sits at the trailing end of that row, one gap in front of
+  the way out, and nothing that can appear, vanish or reserve room it is not
+  using may be put between the two.** It is the only control on a display
+  anybody touches repeatedly, so what fixes its position is the edge it is
+  packed against: the state message's `Expanded` swallows every spare pixel in
+  the bar, so nothing upstream of it — a long host name, a readout that comes
+  and goes with a DAW — can move the pages by so much as a pixel. Behind them
+  there is only `Disconnect`, which is a fixed width and always present.
+
+  It read left to right as name, pages, readout for a phase, and the readout
+  moved them: 232 px is room for a timecode, a tempo and a meter, and a host
+  keeping fewer counters than that spends less of it — 182 px for a clock and a
+  tempo, 160 for bars and beats, 58 for a clock alone. In front of the pages,
+  the remainder was a hole between the ink and the control, 66 px wide in the
+  first case and 190 in the last, and the pages read as floating in the middle
+  of the bar. Behind the `Expanded` the same remainder lands against the row's
   slack, which is where every readout in this application puts it — see
   `TransportAlign` in `lib/src/app/transport_readout.dart`. `hasTransport`
   collapsing the slot is still right, and it is now the smaller half of the
   problem rather than the whole of it.
+
+  **The gap in front of `Disconnect` is `Space.md`, not `Space.sm`.** It used to
+  separate a message from a button; it now separates two controls, and the
+  second one leaves the host. On a touch screen neighbours are mis-tapped.
 
 - **The host refreshes the source itself and the clock compares generations.**
   A `Ticker` stops when the window is occluded, which is exactly when the tablet

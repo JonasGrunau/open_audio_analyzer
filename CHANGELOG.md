@@ -9,7 +9,40 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### ✨ Added
+- **The oscilloscope locks to the DAW.** `Sync: Tempo` makes the width a
+  musical division — 4 bars down to 1/32, straight, triplet or dotted — and
+  puts every sample in the column its position in the bar falls in, so each
+  pass overwrites the last in place and a kick is drawn in the same spot every
+  bar. The graticule divides into beats rather than tenths while it is locked,
+  and the corner says which division is on screen. It uses the host's own
+  playhead, tempo and time signature, which the plugin already forwards: MIDI
+  clock carries neither a bar position nor the accuracy, and is not involved.
+  A source with no playhead — a sound card, or a DAW that reports none — draws
+  the free window and labels it as the free window, because a display that
+  said `1 bar` over something else would be worse than one that is not synced.
+- The analyser's peak-hold line can hold the drawn curve instead of the raw
+  bands, from `Peak hold: Envelope` in its menu. It is then the envelope of the
+  line it sits over and as smooth as the curve is, which is the picture to pick
+  when the hold is being read as a shape. It reads *lower* than `Peaks` on a
+  transient that a slow response smoothed away, which is why `Peaks` — the
+  level the engine actually measured, caught between published frames — is
+  still the default.
+- The oscilloscope draws a stereo signal either as two lanes or with both
+  channels around one centre line, from `Stereo` in its menu. Overlaid, the
+  two are told apart by weight rather than by colour, and the trace gets the
+  whole height of the module — which is the arrangement that shows what the
+  channels are doing *differently*.
+- The oscilloscope has a vertical zoom, `Height` in its menu, from 1x to 8x. A
+  reverb tail thirty decibels under full scale is a flat line at 1x. Nothing
+  measured changes: a sample is still marked as clipped only if it reached full
+  scale, and a trace that runs off its lane is a trace that is zoomed.
+
 ### ⚡ Changed
+- The page switcher on a remote display's link bar sits at the right-hand end
+  of the bar, beside `Disconnect`, where it used to sit between the host's name
+  and its playhead readout. It no longer moves when the host gains or loses a
+  DAW, or reports a tempo where another reports only a clock.
 - The iPad display needs iPadOS 15 or later, where it previously needed 13.
   Apple stops accepting uploads built against anything below 15 in Spring 2027
   and warns on every one until then, so the floor moves now rather than in the
@@ -17,8 +50,68 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   by this.** iPadOS 13, 14 and 15 support exactly the same devices — every model
   back to the iPad Air 2 and the mini 4 — so what this excludes is an iPad that
   has not been updated, not an iPad that cannot be.
+- Disconnecting a remote display lands back on the view it was opened from,
+  rather than leaving the host picker on the screen. Leaving a display used to
+  put it in its no-host state, and that state *is* the panel that asks which
+  machine to attach to — so the one control marked as the way out asked a
+  question instead of answering one. A display with nothing behind it, which is
+  a tablet that opened straight into one, still lands on the picker, because
+  there is nowhere else for it to go.
 
 ### 🐛 Fixed
+- **The oscilloscope's trace no longer comes apart at short time bases.** From
+  about 20 ms to 100 ms across the width, one or two samples land in each
+  column of the display, so each was drawn as a dot a pixel tall with nothing
+  joining it to its neighbours — a waveform that arrived on screen as a dashed
+  line. Columns now reach to the one before them, which draws the connecting
+  line a per-sample trace would have drawn anyway, and the picture is snapped to
+  whole pixels so its density no longer flickers sample by sample. Below 10 ms,
+  where the display is one point per sample, the trace is a single joined
+  polyline instead of a segment per sample; independent segments were composited
+  independently and the line read as chewed.
+- **The analyser's peak-hold line no longer snaps while the curve eases.** The
+  hold jumped to a new peak the instant one landed and the curve under it took
+  the response's time constant to follow, so on `Slow` the two moved as though
+  they belonged to different plots. The drawn hold now follows the same pole at
+  every setting. No peak is lost: the engine's hold still latches on every
+  1024-sample hop, and it stays latched for a second and a half — long enough
+  for the line to arrive at it.
+- **The Super Meter's arcs no longer step ten times a second.** Momentary,
+  short-term and integrated loudness advance on the engine's 100 ms gating
+  grid, and the meters repaint at about 47 Hz — so four frames in five drew the
+  arcs exactly where the frame before had left them and the fifth jumped, which
+  on a gauge that size reads as an instrument stuttering. The arcs now travel
+  between readings over 50 ms, which is half the gap between them and an eighth
+  of the shortest window any of the three measures. **No reading changes**: every
+  number the module prints, and the pass or fail colour it takes, is the
+  measurement drawn the frame it arrives.
+- The playhead and the elapsed clock in the status bar are packed left, like
+  the pair on a remote display's link bar, and the gap between them is the
+  same seam as every other one in the row. Both used to sit in boxes reserved
+  for the widest thing they could ever print — a drop-frame timecode, eleven
+  glyphs — so a host counting bars left 56 px of nothing beside its own counter,
+  and the elapsed clock another 14. The boxes are the width of what is in them
+  now.
+- **The rule between items in a menu is no longer drawn in pure white.**
+  Material's `outlineVariant` — the colour a Material 3 divider actually reads
+  — was never named in the theme, and a `ColorScheme` role left unset falls
+  back to a *foreground* colour: `#FFFFFF` under a dark skin and `#000000`
+  under a light one. So the rules in the signal-source menu were brighter than
+  any colour a skin defines and brighter than the text beside them. They are
+  the hairline every other division in the application uses, at the graticule
+  weight rather than the border weight so they still read against the raised
+  surface a menu is drawn on.
+- A module's settings no longer look like entries that cannot be chosen. The
+  `Metric`, `Response` and `Time base` rows in a module's menu were drawn in
+  muted text to mark them as settings rather than actions, directly above a
+  `Duplicate` at full brightness — which is what a disabled item looks like
+  everywhere else in the interface, including in the menu one row up. They are
+  the same colour as every other row now, and a rule separates them from
+  `Duplicate` and `Delete` instead.
+- A module setting reads `Time base: 50 ms` where it read `Time base — 50 ms`.
+  An em dash between a setting and its value is the punctuation this interface
+  uses for a value that was never measured, and a menu row is the one place
+  that reading is available.
 - **The oscilloscope on a remote display draws a continuous waveform.** It
   could not before, at either of the two slower link rates, and the reason was
   structural rather than a slip: a snapshot carried one analysis block — 1,024

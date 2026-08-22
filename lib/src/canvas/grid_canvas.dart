@@ -240,39 +240,100 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
     final colors = OaaTheme.of(context);
     _controller.select(module.id);
 
+    // What this module *has*, above what can be done to any module. A module is
+    // exactly one kind, so this holds at most one row today — it is a list
+    // because the group is what the rule below divides, and a second setting on
+    // some future module has to land inside it rather than beside it.
+    //
+    // **Drawn in `textPrimary`, like every other row.** These were `textMuted`
+    // to mark them as a different sort of thing, and muted text in a menu does
+    // not read as "a setting" — it reads as an entry that cannot be chosen,
+    // sitting directly above a `Duplicate` at full brightness. The grouping is
+    // a rule now, which says the same thing without making a live control look
+    // dead.
+    final settings = <PopupMenuEntry<_ModuleAction>>[
+      if (module.kind == ModuleKind.numberBox)
+        oaaMenuItem(
+          context,
+          _ModuleAction.metric,
+          'Metric: ${module.metric.label}',
+        ),
+      // Named "Response" rather than a refresh rate, because that is what it
+      // is: the analyser draws every frame the engine publishes at every
+      // setting, and what changes is how long the drawn level takes to follow
+      // one. See `SpectrumResponse`.
+      if (module.kind == ModuleKind.spectrumAnalyzer) ...[
+        oaaMenuItem(
+          context,
+          _ModuleAction.response,
+          'Response: ${module.spectrumResponse.label}',
+        ),
+        // What the line above the curve holds. See `SpectrumHold` — the two
+        // are different pictures, not different amounts of smoothing.
+        oaaMenuItem(
+          context,
+          _ModuleAction.hold,
+          'Peak hold: ${module.spectrumHold.label}',
+        ),
+      ],
+      // The one control the oscilloscope has, and it is two settings in one:
+      // it sets how much time the width holds *and*, by doing so, whether
+      // the display is triggered or rolls. See `ScopeTimeBase`.
+      if (module.kind == ModuleKind.oscilloscope) ...[
+        // What the window is locked to, and then the width in whichever unit
+        // that answer makes meaningful. Both rows are never shown: a
+        // millisecond width means nothing to a bar-locked display and a note
+        // value means nothing without a tempo, and a menu that offers a
+        // setting which does nothing is a menu that has to be explained.
+        oaaMenuItem(
+          context,
+          _ModuleAction.sync,
+          'Sync: ${module.scopeSync.label}',
+        ),
+        if (module.scopeSync == ScopeSync.free)
+          oaaMenuItem(
+            context,
+            _ModuleAction.timeBase,
+            'Time base: ${module.scopeTimeBase.label}',
+          ),
+        if (module.scopeSync == ScopeSync.tempo) ...[
+          oaaMenuItem(
+            context,
+            _ModuleAction.division,
+            'Division: ${module.scopeDivision.label}',
+          ),
+          oaaMenuItem(
+            context,
+            _ModuleAction.grid,
+            'Grid: ${module.scopeGrid.label}',
+          ),
+        ],
+        // Two settings about the picture rather than about the window, so they
+        // sit under the one that decides what is in it. See `ScopeStereo` and
+        // `ScopeZoom`.
+        oaaMenuItem(
+          context,
+          _ModuleAction.stereo,
+          'Stereo: ${module.scopeStereo.label}',
+        ),
+        oaaMenuItem(
+          context,
+          _ModuleAction.zoom,
+          'Height: ${module.scopeZoom.label}',
+        ),
+      ],
+    ];
+
     final action = await showMenu<_ModuleAction>(
       context: context,
       color: colors.panelRaised,
       position: menuPositionAt(context, globalPosition),
       items: [
-        if (module.kind == ModuleKind.numberBox)
-          oaaMenuItem(
-            context,
-            _ModuleAction.metric,
-            'Metric — ${module.metric.label}',
-            color: colors.textMuted,
-          ),
-        // Named "Response" rather than a refresh rate, because that is what it
-        // is: the analyser draws every frame the engine publishes at every
-        // setting, and what changes is how long the drawn level takes to follow
-        // one. See `SpectrumResponse`.
-        if (module.kind == ModuleKind.spectrumAnalyzer)
-          oaaMenuItem(
-            context,
-            _ModuleAction.response,
-            'Response — ${module.spectrumResponse.label}',
-            color: colors.textMuted,
-          ),
-        // The one control the oscilloscope has, and it is two settings in one:
-        // it sets how much time the width holds *and*, by doing so, whether
-        // the display is triggered or rolls. See `ScopeTimeBase`.
-        if (module.kind == ModuleKind.oscilloscope)
-          oaaMenuItem(
-            context,
-            _ModuleAction.timeBase,
-            'Time base — ${module.scopeTimeBase.label}',
-            color: colors.textMuted,
-          ),
+        ...settings,
+        // Only where there is something above it to divide. Eleven of the
+        // fourteen kinds have no setting, and a menu that opens with a rule
+        // across its top edge looks like one whose first item failed to build.
+        if (settings.isNotEmpty) const PopupMenuDivider(),
         oaaMenuItem(context, _ModuleAction.duplicate, 'Duplicate'),
         oaaMenuItem(
           context,
@@ -290,8 +351,20 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
         await _showMetricMenu(globalPosition, module);
       case _ModuleAction.response:
         await _showResponseMenu(globalPosition, module);
+      case _ModuleAction.hold:
+        await _showHoldMenu(globalPosition, module);
       case _ModuleAction.timeBase:
         await _showTimeBaseMenu(globalPosition, module);
+      case _ModuleAction.sync:
+        await _showSyncMenu(globalPosition, module);
+      case _ModuleAction.division:
+        await _showDivisionMenu(globalPosition, module);
+      case _ModuleAction.grid:
+        await _showGridMenu(globalPosition, module);
+      case _ModuleAction.stereo:
+        await _showStereoMenu(globalPosition, module);
+      case _ModuleAction.zoom:
+        await _showZoomMenu(globalPosition, module);
       case _ModuleAction.duplicate:
         if (!_controller.duplicateModule(module.id)) {
           _report('No room on this tab for another ${module.kind.label}.');
@@ -349,6 +422,28 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
     _controller.setModuleOption(module.id, 'response', response.id);
   }
 
+  Future<void> _showHoldMenu(Offset globalPosition, ModuleSpec module) async {
+    final colors = OaaTheme.of(context);
+    final current = module.spectrumHold;
+    final hold = await showMenu<SpectrumHold>(
+      context: context,
+      color: colors.panelRaised,
+      position: menuPositionAt(context, globalPosition),
+      items: [
+        for (final hold in SpectrumHold.values)
+          oaaMenuItem(
+            context,
+            hold,
+            hold.label,
+            color: hold == current ? colors.textPrimary : colors.textMuted,
+          ),
+      ],
+    );
+
+    if (hold == null || !mounted) return;
+    _controller.setModuleOption(module.id, 'hold', hold.id);
+  }
+
   Future<void> _showTimeBaseMenu(
     Offset globalPosition,
     ModuleSpec module,
@@ -372,6 +467,119 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
 
     if (base == null || !mounted) return;
     _controller.setModuleOption(module.id, 'timeBase', base.id);
+  }
+
+  Future<void> _showSyncMenu(Offset globalPosition, ModuleSpec module) async {
+    final colors = OaaTheme.of(context);
+    final current = module.scopeSync;
+    final sync = await showMenu<ScopeSync>(
+      context: context,
+      color: colors.panelRaised,
+      position: menuPositionAt(context, globalPosition),
+      items: [
+        for (final sync in ScopeSync.values)
+          oaaMenuItem(
+            context,
+            sync,
+            sync.label,
+            color: sync == current ? colors.textPrimary : colors.textMuted,
+          ),
+      ],
+    );
+
+    if (sync == null || !mounted) return;
+    _controller.setModuleOption(module.id, 'sync', sync.id);
+  }
+
+  Future<void> _showDivisionMenu(
+    Offset globalPosition,
+    ModuleSpec module,
+  ) async {
+    final colors = OaaTheme.of(context);
+    final current = module.scopeDivision;
+    final division = await showMenu<ScopeDivision>(
+      context: context,
+      color: colors.panelRaised,
+      position: menuPositionAt(context, globalPosition),
+      items: [
+        for (final division in ScopeDivision.values)
+          oaaMenuItem(
+            context,
+            division,
+            division.label,
+            color: division == current ? colors.textPrimary : colors.textMuted,
+          ),
+      ],
+    );
+
+    if (division == null || !mounted) return;
+    _controller.setModuleOption(module.id, 'division', division.id);
+  }
+
+  Future<void> _showGridMenu(Offset globalPosition, ModuleSpec module) async {
+    final colors = OaaTheme.of(context);
+    final current = module.scopeGrid;
+    final grid = await showMenu<ScopeGrid>(
+      context: context,
+      color: colors.panelRaised,
+      position: menuPositionAt(context, globalPosition),
+      items: [
+        for (final grid in ScopeGrid.values)
+          oaaMenuItem(
+            context,
+            grid,
+            grid.label,
+            color: grid == current ? colors.textPrimary : colors.textMuted,
+          ),
+      ],
+    );
+
+    if (grid == null || !mounted) return;
+    _controller.setModuleOption(module.id, 'grid', grid.id);
+  }
+
+  Future<void> _showStereoMenu(Offset globalPosition, ModuleSpec module) async {
+    final colors = OaaTheme.of(context);
+    final current = module.scopeStereo;
+    final mode = await showMenu<ScopeStereo>(
+      context: context,
+      color: colors.panelRaised,
+      position: menuPositionAt(context, globalPosition),
+      items: [
+        for (final mode in ScopeStereo.values)
+          oaaMenuItem(
+            context,
+            mode,
+            mode.label,
+            color: mode == current ? colors.textPrimary : colors.textMuted,
+          ),
+      ],
+    );
+
+    if (mode == null || !mounted) return;
+    _controller.setModuleOption(module.id, 'stereo', mode.id);
+  }
+
+  Future<void> _showZoomMenu(Offset globalPosition, ModuleSpec module) async {
+    final colors = OaaTheme.of(context);
+    final current = module.scopeZoom;
+    final zoom = await showMenu<ScopeZoom>(
+      context: context,
+      color: colors.panelRaised,
+      position: menuPositionAt(context, globalPosition),
+      items: [
+        for (final zoom in ScopeZoom.values)
+          oaaMenuItem(
+            context,
+            zoom,
+            zoom.label,
+            color: zoom == current ? colors.textPrimary : colors.textMuted,
+          ),
+      ],
+    );
+
+    if (zoom == null || !mounted) return;
+    _controller.setModuleOption(module.id, 'zoom', zoom.id);
   }
 
   // --- Build --------------------------------------------------------------
@@ -540,7 +748,19 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
   }
 }
 
-enum _ModuleAction { metric, response, timeBase, duplicate, delete }
+enum _ModuleAction {
+  metric,
+  response,
+  hold,
+  timeBase,
+  sync,
+  division,
+  grid,
+  stereo,
+  zoom,
+  duplicate,
+  delete,
+}
 
 /// One module and the five transparent layers that make it manipulable.
 class _ModuleSlot extends StatelessWidget {

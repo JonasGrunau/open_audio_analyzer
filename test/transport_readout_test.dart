@@ -196,7 +196,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  group('the ink is packed against one edge of the box', () {
+  group('the box is the width of the ink', () {
     // The real fonts, because "how much of the box is unspent" is a question
     // about Google Sans Code and not about the test binding's placeholder,
     // whose square em box is wide enough to fill the reserve on its own and
@@ -217,6 +217,14 @@ void main() {
       await loader.load();
     });
 
+    // Under one glyph of slack, which is what the fit promises and not zero.
+    // The box is sized by arithmetic rather than by laying the line out — 0.62
+    // em per glyph, an upper bound on Google Sans Code's 0.6 advance — so a
+    // long line reserves a fraction of a glyph more than it draws. Measuring
+    // instead would mean a text layout during layout, every frame, for a hole
+    // nobody can see.
+    const glyphs = 1;
+
     // A host that counts bars and reports a tempo, parked at the top of the
     // session: `1|1.0`, and a tempo too wide for the desktop's box to hold. The
     // shortest position this readout can print, and the case that showed the
@@ -232,28 +240,34 @@ void main() {
       bpm: 120,
     );
 
-    testWidgets('trailing, in the desktop bar', (tester) async {
+    // The desktop bar, whose ceiling holds a timecode and not this host's
+    // counters plus its tempo. What it takes is the counter alone, and the
+    // 56 px it used to reserve for a timecode is not a hole in the row any
+    // more — it is not reserved at all.
+    testWidgets('a bars counter takes a bars counter of room', (tester) async {
       final ink = await _inkBounds(
         tester,
         transport: barBeat,
         width: TransportReadout.defaultWidth,
-        align: TransportAlign.trailing,
+        align: TransportAlign.leading,
       );
 
-      // Flush against the trailing edge, so the reserve it did not spend lands
-      // on the far side and joins the row's own slack. Anything else puts a
-      // gap between the playhead and the elapsed clock it is read beside.
-      expect(TransportReadout.defaultWidth - ink.right, lessThan(2));
       expect(
-        ink.left,
-        greaterThan(2),
+        ink.width,
+        lessThan(TransportReadout.defaultWidth - 20),
         reason:
-            'The position filled the whole box, so this proves nothing about '
-            'which edge it was drawn against.',
+            'the box is still reserving room for a format it is not '
+            'printing, which is the hole this fit exists to remove',
       );
+      expect(ink.left, lessThan(2));
+      expect(ink.width - ink.right, lessThan(glyphs * 8.0));
     });
 
-    testWidgets('leading, in the tablet link bar', (tester) async {
+    // The tablet's link bar, which can hold the tempo as well — so the box
+    // grows to hold both and still spends everything it took.
+    testWidgets('a box that can hold the tempo fills with both', (
+      tester,
+    ) async {
       final ink = await _inkBounds(
         tester,
         transport: barBeat,
@@ -261,10 +275,14 @@ void main() {
         align: TransportAlign.leading,
       );
 
-      // The other way on the tablet, where the readout follows the host name
-      // rather than leading a group packed right.
+      expect(
+        ink.width,
+        greaterThan(TransportReadout.defaultWidth),
+        reason: 'the tempo was dropped in a box with room for it',
+      );
+      expect(ink.width, lessThan(TransportReadout.fullWidth));
       expect(ink.left, lessThan(2));
-      expect(TransportReadout.fullWidth - ink.right, greaterThan(2));
+      expect(ink.width - ink.right, lessThan(glyphs * 8.0));
     });
   });
 }
@@ -275,7 +293,7 @@ void main() {
 /// other way to ask where a `CustomPainter` put something, and a screenshot of
 /// the running application needs a screen-recording permission an agent does
 /// not have. See `CLAUDE.md`.
-Future<({double left, double right})> _inkBounds(
+Future<({double left, double right, double width})> _inkBounds(
   WidgetTester tester, {
   required Transport transport,
   required double width,
@@ -341,5 +359,5 @@ Future<({double left, double right})> _inkBounds(
     isTrue,
     reason: 'Nothing was drawn, so there is no placement to check.',
   );
-  return (left: left, right: right);
+  return (left: left, right: right, width: image.width.toDouble());
 }

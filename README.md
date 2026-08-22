@@ -117,7 +117,7 @@ plus a painter, reads the same `MeterSource`, and repaints from the same clock.
 | **Loudness Distribution** | How much of the programme was spent at each loudness. |
 | **Spectrum Analyzer** | Level against frequency, log-spaced, with a peak hold. |
 | **Spectrogram** | Frequency against time, with level as brightness. |
-| **Oscilloscope** | The waveform itself, one lane per channel: triggered at scope speeds, rolling from half a second up. |
+| **Oscilloscope** | The waveform itself, one lane per channel or both overlaid: triggered at scope speeds, rolling from half a second up, locked to the DAW's bar grid when a plugin is attached, with a vertical zoom for quiet material. |
 | **Phase Scope** | A goniometer: left against right, rotated so mono stands upright. |
 | **Stereo Cloud** | Where each frequency sits in the stereo image, accumulated over time. |
 

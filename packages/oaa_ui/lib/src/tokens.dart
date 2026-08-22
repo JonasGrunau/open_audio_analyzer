@@ -95,7 +95,9 @@ abstract final class OaaRadius {
 abstract final class OaaStroke {
   static const double hairline = 1;
 
-  /// Meter scales, needles, graticule marks.
+  /// Meter scales, needles, graticule marks, and the rule between menu items —
+  /// which is drawn on `panelRaised`, where a hairline has less of a step to
+  /// stand on than it does anywhere else. See `oaaThemeData`.
   static const double mark = 1.5;
 
   /// Emphasis on a target line or an active selection.

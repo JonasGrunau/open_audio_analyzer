@@ -431,6 +431,250 @@ enum ScopeTimeBase {
   }
 }
 
+/// What the analyser's peak-hold line is a hold *of*.
+///
+/// The curve is averaged over [SpectrumResponse.timeConstant] and the hold is
+/// not, and the two used to disagree about more than one thing. Both are fixed
+/// here, but only one of them can be:
+///
+///   - **Motion.** The hold snapped to a new peak while the curve eased towards
+///     it, so on Slow the two moved as if they belonged to different plots.
+///     The drawn hold now follows the same pole at every setting, whichever of
+///     these is chosen. That is not a mode; it is the fix.
+///   - **Shape.** A maximum of a noisy band is spiky where an average of it is
+///     smooth, so the line above a Slow curve is a comb even once it moves in
+///     step. Removing *that* means holding the curve instead of the band, and
+///     it costs something real — which is why it is a choice and not the
+///     default.
+///
+/// [peaks] is what the engine measured: a hold over the raw band levels, taken
+/// on every 1024-sample hop, so it catches transients between two published
+/// frames that the display never saw. [envelope] is the highest the *drawn*
+/// curve has been, which is smooth wherever the curve is and is the line to
+/// pick when the hold is being read as a shape — and which, on a slow response,
+/// sits below a peak the programme really reached, because the curve it is
+/// holding never went there.
+enum SpectrumHold {
+  peaks('peaks', 'Peaks'),
+  envelope('envelope', 'Envelope');
+
+  const SpectrumHold(this.id, this.label);
+
+  /// Stable identifier for presets and the wire protocol.
+  final String id;
+
+  /// What the module's menu says.
+  final String label;
+
+  static SpectrumHold? fromId(String id) {
+    for (final hold in SpectrumHold.values) {
+      if (hold.id == id) return hold;
+    }
+    return null;
+  }
+}
+
+/// What decides where the oscilloscope's window starts and how wide it is.
+///
+/// [free] is the display this module was born with: a width in milliseconds
+/// from [ScopeTimeBase], found by a trigger at scope speeds and rolled above
+/// them. It needs nothing but audio, which is why it is the default and the
+/// only thing a sound card can offer.
+///
+/// [tempo] makes the width a musical division of the host's tempo and locks the
+/// window to the bar line, so a kick lands in the same column every bar and the
+/// picture stands still against the beat rather than against a zero crossing.
+/// It is drawn by *phase* rather than by scrolling: every sample is placed at
+/// the column its musical position falls in, so each pass overwrites the last
+/// in place.
+///
+/// **It is the host's playhead that does this, not a MIDI clock.** The plugin
+/// receives `ppqPosition`, the start of the current bar, the tempo and the time
+/// signature from the DAW itself and forwards all four — see `docs/WIRE.md`.
+/// MIDI clock is 24 pulses a quarter with no bar position in it and jitter from
+/// the message queue; everything it could tell us we already have exactly.
+///
+/// A source with no tempo cannot be locked to one. When the host offers none —
+/// a sound card, or a DAW that does not report a playhead — the module draws
+/// the [free] window and its label says the free time base, so what is written
+/// under the trace is always what is above it.
+enum ScopeSync {
+  free('free', 'Free'),
+  tempo('tempo', 'Tempo');
+
+  const ScopeSync(this.id, this.label);
+
+  /// Stable identifier for presets and the wire protocol.
+  final String id;
+
+  /// What the module's menu says.
+  final String label;
+
+  static ScopeSync? fromId(String id) {
+    for (final sync in ScopeSync.values) {
+      if (sync.id == id) return sync;
+    }
+    return null;
+  }
+}
+
+/// The musical width of a tempo-synced oscilloscope window.
+///
+/// Two families, because a bar is not a note value: a note is a fixed number of
+/// quarters and a bar is however many the time signature says. Both are here so
+/// that "1 bar" means one bar in 7/8 as well as in 4/4 — a scope that showed
+/// four quarters and called it a bar would be wrong in every session that is
+/// not in common time, and wrong in a way that looks like a drifting trace.
+enum ScopeDivision {
+  bars4('4bar', '4 bars', bars: 4),
+  bars2('2bar', '2 bars', bars: 2),
+  bar1('1bar', '1 bar', bars: 1),
+  half('1_2', '1/2', quarters: 2),
+  quarter('1_4', '1/4', quarters: 1),
+  eighth('1_8', '1/8', quarters: 0.5),
+  sixteenth('1_16', '1/16', quarters: 0.25),
+  thirtySecond('1_32', '1/32', quarters: 0.125);
+
+  const ScopeDivision(this.id, this.label, {this.bars = 0, this.quarters = 0});
+
+  /// Stable identifier for presets and the wire protocol.
+  final String id;
+
+  /// What the module's menu says.
+  final String label;
+
+  /// Bars, for the bar-counted widths. Zero for the note values.
+  final double bars;
+
+  /// Quarter notes, for the note values. Zero for the bar-counted widths.
+  final double quarters;
+
+  /// This width in quarter notes under [transport]'s time signature.
+  ///
+  /// A bar is `4 * numerator / denominator` quarters — four in 4/4, three in
+  /// 3/4, three and a half in 7/8. A host that has not said what it is in gets
+  /// common time, which is stated here rather than assumed silently: it is the
+  /// one place in this module where a missing field is filled in, and it is
+  /// filled in with a *grid* rather than with a measurement.
+  double quartersIn(Transport transport) {
+    if (bars == 0) return quarters;
+    final numerator = transport.hasTimeSignature
+        ? transport.timeSigNumerator
+        : 4;
+    final denominator = transport.hasTimeSignature
+        ? transport.timeSigDenominator
+        : 4;
+    if (numerator <= 0 || denominator <= 0) return bars * 4;
+    return bars * 4 * numerator / denominator;
+  }
+
+  static ScopeDivision? fromId(String id) {
+    for (final division in ScopeDivision.values) {
+      if (division.id == id) return division;
+    }
+    return null;
+  }
+}
+
+/// Straight, triplet or dotted, applied to a [ScopeDivision].
+///
+/// The modifier every tempo-synced control in a DAW has, and it means the same
+/// thing here: a triplet is two thirds of the width and a dotted note is half
+/// again. It applies to the bar widths too, which is unusual and harmless —
+/// two thirds of a bar is a legitimate thing to want to look at, and refusing
+/// it would be a special case to explain.
+enum ScopeGrid {
+  straight('straight', 'Straight', 1),
+  triplet('triplet', 'Triplet', 2 / 3),
+  dotted('dotted', 'Dotted', 1.5);
+
+  const ScopeGrid(this.id, this.label, this.factor);
+
+  /// Stable identifier for presets and the wire protocol.
+  final String id;
+
+  /// What the module's menu says.
+  final String label;
+
+  /// What the division's width is multiplied by.
+  final double factor;
+
+  static ScopeGrid? fromId(String id) {
+    for (final grid in ScopeGrid.values) {
+      if (grid.id == id) return grid;
+    }
+    return null;
+  }
+}
+
+/// How the oscilloscope arranges a stereo signal.
+///
+/// Two pictures of the same audio, and neither is right at both ends of the
+/// module's range. [lanes] is the one to open on and the one to read a stereo
+/// image from: two traces around two centre lines cannot be confused for one
+/// another, and a channel that is doing something the other is not shows up as
+/// a difference in shape rather than as a thickening. [overlay] puts both
+/// around one centre line, which buys the trace twice the height and makes the
+/// *difference* between the channels the thing you see — a widened low end, a
+/// side-chained pad, a channel that is a few samples late.
+///
+/// The overlaid channels are told apart by weight and never by hue. This
+/// application's skins move the hues, and a picture that depends on one is a
+/// picture that stops working in a skin somebody chose.
+enum ScopeStereo {
+  lanes('lanes', 'Lanes'),
+  overlay('overlay', 'Overlay');
+
+  const ScopeStereo(this.id, this.label);
+
+  /// Stable identifier for presets and the wire protocol. Never change one of
+  /// these; add a new arrangement instead.
+  final String id;
+
+  /// What the module's menu says.
+  final String label;
+
+  static ScopeStereo? fromId(String id) {
+    for (final mode in ScopeStereo.values) {
+      if (mode.id == id) return mode;
+    }
+    return null;
+  }
+}
+
+/// How tall the oscilloscope draws full scale.
+///
+/// A vertical zoom, not a gain: nothing about the measurement changes and the
+/// clip marks still mark samples that reached full scale, whatever this is set
+/// to. It exists because a mastered track and a solo'd reverb tail are thirty
+/// decibels apart, and a waveform drawn to the same full scale for both leaves
+/// the second one a line. What runs past the lane is clipped by the lane, which
+/// is what a zoom means — the picture says so by being cut off at the edge.
+enum ScopeZoom {
+  x1('1', '1x', 1),
+  x2('2', '2x', 2),
+  x4('4', '4x', 4),
+  x8('8', '8x', 8);
+
+  const ScopeZoom(this.id, this.label, this.scale);
+
+  /// Stable identifier for presets and the wire protocol.
+  final String id;
+
+  /// What the module's menu says.
+  final String label;
+
+  /// What a sample is multiplied by before it is drawn.
+  final double scale;
+
+  static ScopeZoom? fromId(String id) {
+    for (final zoom in ScopeZoom.values) {
+      if (zoom.id == id) return zoom;
+    }
+    return null;
+  }
+}
+
 /// One module on a tab.
 ///
 /// [options] is an untyped map on purpose. Every module has its own settings —
@@ -470,6 +714,15 @@ class ModuleSpec {
       SpectrumResponse.fromId(options['response'] as String? ?? '') ??
       SpectrumResponse.normal;
 
+  /// What the analyser's peak-hold line holds. See [SpectrumHold].
+  ///
+  /// Defaults to [SpectrumHold.peaks], because that is the measurement: a hold
+  /// that can only be as high as the drawn curve went is a hold that reads low
+  /// on exactly the material a hold exists for.
+  SpectrumHold get spectrumHold =>
+      SpectrumHold.fromId(options['hold'] as String? ?? '') ??
+      SpectrumHold.peaks;
+
   /// How much time the oscilloscope shows at once.
   ///
   /// Defaults to a second, which is the setting the module was asked for: long
@@ -481,6 +734,40 @@ class ModuleSpec {
   ScopeTimeBase get scopeTimeBase =>
       ScopeTimeBase.fromId(options['timeBase'] as String? ?? '') ??
       ScopeTimeBase.s1;
+
+  /// What the oscilloscope's window is locked to. See [ScopeSync].
+  ///
+  /// Defaults to [ScopeSync.free], which is the only thing that works without a
+  /// DAW on the other end of a socket.
+  ScopeSync get scopeSync =>
+      ScopeSync.fromId(options['sync'] as String? ?? '') ?? ScopeSync.free;
+
+  /// The musical width of a tempo-synced window. See [ScopeDivision].
+  ScopeDivision get scopeDivision =>
+      ScopeDivision.fromId(options['division'] as String? ?? '') ??
+      ScopeDivision.bar1;
+
+  /// Straight, triplet or dotted, applied to [scopeDivision]. See [ScopeGrid].
+  ScopeGrid get scopeGrid =>
+      ScopeGrid.fromId(options['grid'] as String? ?? '') ?? ScopeGrid.straight;
+
+  /// How the oscilloscope arranges a stereo signal. See [ScopeStereo].
+  ///
+  /// Defaults to [ScopeStereo.lanes], which is what the module did before the
+  /// setting existed and is the arrangement a stranger can read: two traces
+  /// around one centre line are two traces only once somebody has been told
+  /// so.
+  ScopeStereo get scopeStereo =>
+      ScopeStereo.fromId(options['stereo'] as String? ?? '') ??
+      ScopeStereo.lanes;
+
+  /// How tall the oscilloscope draws full scale. See [ScopeZoom].
+  ///
+  /// Defaults to [ScopeZoom.x1], where the lane is full scale and nothing can
+  /// run past it — the only setting at which the *height* of the trace is a
+  /// reading rather than a view.
+  ScopeZoom get scopeZoom =>
+      ScopeZoom.fromId(options['zoom'] as String? ?? '') ?? ScopeZoom.x1;
 
   /// What a LUFS module's integration counts from.
   ///

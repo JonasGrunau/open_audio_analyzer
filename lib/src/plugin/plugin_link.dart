@@ -292,6 +292,10 @@ class PluginLink extends ChangeNotifier {
           case WireFrameType.dawTransport:
             final transport = DawTransportCodec.decode(reader.payload);
             session.transport = transport;
+            // And on the snapshot the modules read, because the oscilloscope's
+            // tempo sync is a display that needs the playhead and a module is
+            // handed nothing but a `MeterSource`.
+            session.snapshot.transport = transport;
             onTransport?.call(session, transport);
 
           case WireFrameType.snapshot:

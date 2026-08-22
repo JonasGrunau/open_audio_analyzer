@@ -50,6 +50,7 @@ class SpectrumAnalyzerModule extends StatefulWidget {
     required this.engine,
     required this.clock,
     this.response = SpectrumResponse.normal,
+    this.hold = SpectrumHold.peaks,
     super.key,
   });
 
@@ -60,9 +61,24 @@ class SpectrumAnalyzerModule extends StatefulWidget {
   /// [SpectrumResponse] for why this is a time constant and not a frame rate.
   final SpectrumResponse response;
 
+  /// What the line above the curve is a hold of. See [SpectrumHold].
+  final SpectrumHold hold;
+
   @override
   State<SpectrumAnalyzerModule> createState() => _SpectrumAnalyzerModuleState();
 }
+
+/// How long a band sits at its maximum before the drawn hold lets it down, and
+/// how fast it falls after.
+///
+/// The same numbers as `OAA_SPECTRUM_HOLD_SECONDS` and
+/// `OAA_SPECTRUM_FALL_DB_PER_SECOND` in `engine/src/oaa_spectrum.h`, restated
+/// because that header is on the far side of an ABI this module never links —
+/// the tablet runs this file with no engine at all. They are only used by
+/// [SpectrumHold.envelope], and they are the engine's on purpose: the setting
+/// changes what is held, not how a hold behaves. Move one and move the other.
+const double _holdSeconds = 1.5;
+const double _fallDbPerSecond = 12;
 
 /// The decade lines a frequency axis is read against.
 const _gridHz = <double>[
@@ -109,8 +125,32 @@ class _SpectrumAnalyzerModuleState extends State<SpectrumAnalyzerModule> {
   /// the arithmetic below collapses to an assignment.
   final Float32List _shown = Float32List(kOaaSpectrumBands);
 
-  /// The generation [_shown] was last folded for, and the engine time it was
-  /// folded at.
+  /// The peak hold actually drawn, per band, in dB.
+  ///
+  /// Folded through the same pole as [_shown] whatever [SpectrumHold] says, and
+  /// that is the half of the mismatch that was never a matter of taste. The
+  /// engine's hold jumps to a new peak the instant one lands; the curve under
+  /// it eases over the response's time constant — so on Slow the line above a
+  /// calm shape flicked about as if it belonged to a different plot. One pole
+  /// on both and they move together.
+  ///
+  /// What the pole is applied *to* is the setting. See [_holdSeconds] for the
+  /// second source, and [SpectrumHold] for what each costs.
+  final Float32List _shownHold = Float32List(kOaaSpectrumBands);
+
+  /// Seconds left at the top, per band, for [SpectrumHold.envelope].
+  ///
+  /// Only that mode keeps a hold of its own; the other reads one the engine
+  /// already keeps, on audio this side never sees.
+  final Float32List _holdLeft = Float32List(kOaaSpectrumBands);
+
+  /// The mode [_shownHold] currently holds, so a change of setting starts the
+  /// new one from the signal rather than easing across from the old one's
+  /// answer — which would be a line drifting between two definitions.
+  SpectrumHold? _heldMode;
+
+  /// The generation [_shown] and [_shownHold] were last folded for, and the
+  /// engine time they were folded at.
   ///
   /// **Zero is a real generation to have never seen**, so this starts at −1: an
   /// engine that has published exactly once and then stopped — a file being
@@ -131,7 +171,7 @@ class _SpectrumAnalyzerModuleState extends State<SpectrumAnalyzerModule> {
   /// 30 fps the clock reads fewer of the engine's ~47 published frames per
   /// second than at 120, and a fixed per-fold coefficient would make Normal
   /// slower on a laptop than on a workstation.
-  void _advance(MeterSource engine, double tau) {
+  void _advance(MeterSource engine, double tau, SpectrumHold mode) {
     final elapsed = engine.elapsedSeconds;
     final dt = elapsed - _seenElapsed;
     _seenElapsed = elapsed;
@@ -142,12 +182,43 @@ class _SpectrumAnalyzerModuleState extends State<SpectrumAnalyzerModule> {
     // programme that did not happen.
     final snap = tau <= 0 || dt <= 0 || _seenGeneration < 0;
     final alpha = snap ? 1.0 : 1 - math.exp(-dt / tau);
+    final reseat = snap || _heldMode != mode;
+    _heldMode = mode;
 
     final spectrum = engine.spectrum;
+    final peaks = engine.spectrumPeak;
+    final step = dt > 0 ? dt : 0.0;
+
     for (var band = 0; band < kOaaSpectrumBands; band++) {
-      _shown[band] = snap
+      final level = snap
           ? spectrum[band]
           : _shown[band] + (spectrum[band] - _shown[band]) * alpha;
+      _shown[band] = level;
+
+      // The band the hold is taken over. `peaks` is the engine's, measured on
+      // every hop; `envelope` is the highest the curve above has been, held and
+      // then let down at the same rate the engine's is so the two modes are the
+      // same picture of different data.
+      final double source;
+      if (mode == SpectrumHold.peaks) {
+        source = peaks[band];
+      } else {
+        var held = reseat ? level : _shownHold[band];
+        if (level >= held) {
+          held = level;
+          _holdLeft[band] = _holdSeconds;
+        } else if (_holdLeft[band] > 0) {
+          _holdLeft[band] -= step;
+        } else {
+          held -= _fallDbPerSecond * step;
+          if (held < level) held = level;
+        }
+        source = held;
+      }
+
+      _shownHold[band] = reseat
+          ? source
+          : _shownHold[band] + (source - _shownHold[band]) * alpha;
     }
   }
 
@@ -218,6 +289,7 @@ class _SpectrumAnalyzerModuleState extends State<SpectrumAnalyzerModule> {
         colors: colors,
         graticule: _graticule!,
         response: widget.response,
+        hold: widget.hold,
         state: this,
         repaint: widget.clock,
       ),
@@ -231,6 +303,7 @@ class _SpectrumPainter extends MeterPainter {
     required this.colors,
     required this.graticule,
     required this.response,
+    required this.hold,
     required this.state,
     required Listenable repaint,
   }) : _fill = (Paint()..strokeCap = StrokeCap.butt),
@@ -255,6 +328,7 @@ class _SpectrumPainter extends MeterPainter {
   final OaaColors colors;
   final ScaleGraticule graticule;
   final SpectrumResponse response;
+  final SpectrumHold hold;
   final _SpectrumAnalyzerModuleState state;
 
   final Paint _fill;
@@ -312,8 +386,8 @@ class _SpectrumPainter extends MeterPainter {
 
     if (!engine.hasSpectrum) return;
 
-    if (engine.generation != state._seenGeneration) {
-      state._advance(engine, response.timeConstant);
+    if (engine.generation != state._seenGeneration || state._heldMode != hold) {
+      state._advance(engine, response.timeConstant, hold);
       state._seenGeneration = engine.generation;
     }
 
@@ -339,7 +413,7 @@ class _SpectrumPainter extends MeterPainter {
       state._curve[band * 2 + 1] = y;
 
       state._hold[band * 2] = x;
-      state._hold[band * 2 + 1] = _y(plot, engine.spectrumPeak[band]);
+      state._hold[band * 2 + 1] = _y(plot, state._shownHold[band]);
     }
 
     canvas.save();
@@ -357,6 +431,7 @@ class _SpectrumPainter extends MeterPainter {
   bool shouldRepaint(_SpectrumPainter oldDelegate) =>
       oldDelegate.colors != colors ||
       oldDelegate.response != response ||
+      oldDelegate.hold != hold ||
       !identical(oldDelegate.engine, engine) ||
       !identical(oldDelegate.graticule, graticule);
 }

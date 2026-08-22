@@ -77,16 +77,20 @@ class DisplayClient {
 
   /// The host's playhead, or [Transport.none] when it has none to give.
   ///
-  /// Not part of [snapshot], and deliberately: transport is metadata about a DAW
-  /// and the engine must not learn what one is — see `Transport`. It arrives in
-  /// its own frame, on change rather than with every measurement, so a session
-  /// parked at bar 57 sends one and then nothing.
+  /// Not part of the *snapshot frame*, and deliberately: transport is metadata
+  /// about a DAW and the engine must not learn what one is — see `Transport`.
+  /// It arrives in its own frame, on change rather than with every measurement,
+  /// so a session parked at bar 57 sends one and then nothing. It is copied
+  /// onto [snapshot] as it is decoded, because a module is handed a
+  /// `MeterSource` and nothing else and the oscilloscope's tempo sync needs the
+  /// bar line; that is a field on the source, not a field on the wire.
   ///
-  /// **A notifier rather than a field on the snapshot, and nothing on the paint
-  /// path may listen to it.** While a DAW is rolling this changes at the publish
-  /// rate, so a `ValueListenableBuilder` around a readout would rebuild a widget
-  /// thirty times a second forever. Read it from a painter that repaints on the
-  /// clock, the way `TransportReadout` does.
+  /// **A notifier rather than only a field, and nothing on the paint path may
+  /// listen to it.** While a DAW is rolling this changes at the publish rate, so
+  /// a `ValueListenableBuilder` around a readout would rebuild a widget thirty
+  /// times a second forever. Read it from a painter that repaints on the clock,
+  /// the way `TransportReadout` does — or off the snapshot, the way a module
+  /// does.
   final ValueNotifier<Transport> transport = ValueNotifier(Transport.none);
 
   /// Whether the host has a playhead at all — the one part of a transport that
@@ -235,6 +239,10 @@ class DisplayClient {
             // could hold open with a playhead that has not moved.
             final decoded = DawTransportCodec.decode(_reader.payload);
             transport.value = decoded;
+            // The same value on the snapshot, which is what the modules read.
+            // A tablet running an oscilloscope in tempo sync needs the bar line
+            // the host's DAW is on, and it has no other way to reach it.
+            snapshot.transport = decoded;
             // The host closing its DAW is a *frame* — the plugin session ends,
             // the desktop's transport becomes `Transport.none`, and that change
             // goes out like any other. So the slot is taken away here as well

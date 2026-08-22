@@ -915,10 +915,12 @@ class _StatusBar extends ConsumerWidget {
                     TransportReadout(
                       transportOf: transportOf!,
                       repaint: clock,
-                      // The reserve this box does not spend belongs on the far
-                      // side of the ink, not between it and the elapsed clock.
-                      // See TransportAlign.
-                      align: TransportAlign.trailing,
+                      // Packed left, like the tablet's — and there is nothing
+                      // left over to push anywhere, because the box is the
+                      // width of the format the host is reporting rather than
+                      // of the widest one there is. See the note at the top of
+                      // `transport_readout.dart`.
+                      align: TransportAlign.leading,
                     ),
                     const SizedBox(width: Space.md),
                   ],

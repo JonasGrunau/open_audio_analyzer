@@ -119,10 +119,18 @@ one published, and says which in its own menu: `Response` is Fast (no
 averaging), Normal (120 ms) or Slow (500 ms), and Normal is the default. The
 averaging is one pole per band on the dB value being drawn — a display
 ballistic, in the sense a VU movement is one, not a power average of the signal.
-The measurement above is untouched: the analyser's peak-hold line is never
-averaged at any setting, `Spectrum` is what a report and the wire protocol carry
-whatever a module is set to, and every other module reading these bands — the
-spectrogram, the stereo cloud — draws them as published.
+The peak-hold line follows the same pole, so that it moves with the curve
+rather than snapping to a peak the curve is still easing towards — and `Peak
+hold` in the same menu says what it is a hold *of*. `Peaks`, the default, is
+`Spectrum peak` above: the level the engine measured, latched on every hop.
+`Envelope` is instead the highest the *drawn* curve has been, which is smooth
+wherever the curve is and reads lower than `Peaks` on a transient a slow
+response smoothed away.
+
+The measurement above is untouched by any of it: `Spectrum` and `Spectrum peak`
+are what a report and the wire protocol carry whatever a module is set to, and
+every other module reading these bands — the spectrogram, the stereo cloud —
+draws them as published.
 
 Spectrum pan needs a front pair. A one-channel source reports every band at `0`,
 for the same reason correlation reports `+1` — mono is dead centre, and it is
