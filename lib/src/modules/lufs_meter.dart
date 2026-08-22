@@ -120,12 +120,12 @@ class _LufsMeterPainter extends MeterPainter {
        // switching skins silently swapped which of these two bars looked like
        // the emphasised one. A meter fill is not a text colour.
        _short = (Paint()..color = colors.meterFill.withValues(alpha: 0.55)),
-       // The same pair again in the warning colour, for the part of a bar that
+       // The same pair again in [OaaColors.over], for the part of a bar that
        // stands above the target. The short-term bar keeps its 0.55 on both
        // sides of the line: a warning that also promoted the quieter bar to
        // full strength would say two things at once.
-       _momentaryOver = (Paint()..color = colors.warn),
-       _shortOver = (Paint()..color = colors.warn.withValues(alpha: 0.55)),
+       _momentaryOver = (Paint()..color = colors.over),
+       _shortOver = (Paint()..color = colors.over.withValues(alpha: 0.55)),
        _targetBand = (Paint()
          ..color = colors.textFaint.withValues(alpha: 0.18)),
        _targetLine = (Paint()

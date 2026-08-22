@@ -48,26 +48,49 @@ import '../clock/meter_clock.dart';
 /// short-term loudness against **how often** — how the programme was
 /// distributed, with time collapsed out of it. They share the target split and
 /// the palette so that the pair reads as one instrument — quieter than the
-/// target in [OaaColors.accent], louder in [OaaColors.warn] — and they do not
+/// target in [OaaColors.accent], louder in [OaaColors.over] — and they do not
 /// share a scale, deliberately.
 ///
-/// **The axis is the published range exactly**, −60 to 0 LUFS, not the −48 the
-/// loudness meters draw. `MeterScale.fractionOf` clamps, so a narrower axis
-/// would not drop the bins below its floor — it would stack every one of them
-/// onto the bottom column as a single tall bar, which is a shape the programme
-/// never had. An axis that disagrees with a neighbour by a labelled amount is a
-/// smaller problem than a picture that is wrong.
+/// ---------------------------------------------------------------------------
+/// The axis is fitted, and fitting is not narrowing
+///
+/// The axis was the published range exactly for eight phases — −60 to 0 LUFS,
+/// not the −48 the loudness meters draw — and the argument for it holds as far
+/// as it goes. `MeterScale.fractionOf` clamps, so an axis chosen without
+/// reference to the bins does not *drop* the ones below its floor: it stacks
+/// every one of them onto the bottom column as a single tall bar, which is a
+/// shape the programme never had. An axis that disagrees with a neighbour by a
+/// labelled amount is a smaller problem than a picture that is wrong.
+///
+/// What that argument never covered is what being right that way costs. A
+/// mastered programme's gated short-term distribution lives in eight to fifteen
+/// of those sixty decibels, so four fifths of the module drew nothing at all
+/// and the shape the reading is taken from was squeezed into the rest.
+///
+/// [DistributionScale.auto], the default, fits the window to what is drawn on
+/// it — every occupied bin, the gated range and the delivery target — pads it,
+/// rounds it outwards to whole ticks and then leaves it alone until the
+/// distribution grows past it. It cannot commit the failure above, because
+/// holding every occupied bin is the thing it is computed from; and it cannot
+/// flicker, because the window moves only when the content has left it. See
+/// [DistributionWindow]. What it costs is that two Loudness Distributions side
+/// by side can be drawn at two scales, which is what `Scale: Full range` is
+/// for.
 class LoudnessDistributionModule extends StatefulWidget {
   const LoudnessDistributionModule({
     required this.engine,
     required this.clock,
     required this.calibration,
+    this.scale = DistributionScale.auto,
     super.key,
   });
 
   final MeterSource engine;
   final MeterClock clock;
   final Calibration calibration;
+
+  /// How much of the loudness axis to draw. See [DistributionScale].
+  final DistributionScale scale;
 
   @override
   State<LoudnessDistributionModule> createState() =>
@@ -76,13 +99,86 @@ class LoudnessDistributionModule extends StatefulWidget {
 
 class _LoudnessDistributionModuleState
     extends State<LoudnessDistributionModule> {
-  /// The published range, exactly. Drawing a different one would either clip
-  /// bins that exist or invent axis that has no bins behind it.
-  static const _scale = MeterScale(
-    min: MeterShape.histogramMinLufs,
-    max: MeterShape.histogramMaxLufs,
-    step: 10,
-  );
+  /// The window the axis is drawn at.
+  ///
+  /// Under [DistributionScale.full] it is [DistributionWindow.full] and never
+  /// moves. Under [DistributionScale.auto] it is refitted from the published
+  /// measurement, and only when the distribution has grown past it — see
+  /// [DistributionWindow.next]. A `setState` here is what rebuilds the
+  /// graticule's paragraphs, which is why the fit has to be reluctant: it is
+  /// the one thing this module does that is not free per frame.
+  MeterScale _scale = DistributionWindow.full;
+
+  @override
+  void initState() {
+    super.initState();
+    _scale = _fitted(DistributionWindow.full);
+    if (widget.scale == DistributionScale.auto) {
+      widget.clock.measurements.addListener(_refit);
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant LoudnessDistributionModule old) {
+    super.didUpdateWidget(old);
+
+    if (!identical(old.clock, widget.clock) || old.scale != widget.scale) {
+      if (old.scale == DistributionScale.auto) {
+        old.clock.measurements.removeListener(_refit);
+      }
+      if (widget.scale == DistributionScale.auto) {
+        widget.clock.measurements.addListener(_refit);
+      }
+    }
+
+    // A new setting, a new source or a new delivery target all change what the
+    // window has to hold. The first two start the fit over — the window that
+    // was right for the previous engine's programme says nothing about this
+    // one's — where a target that moved inside the current window leaves it
+    // where it is.
+    final restart =
+        old.scale != widget.scale || !identical(old.engine, widget.engine);
+    if (restart || old.calibration != widget.calibration) {
+      _scale = _fitted(restart ? DistributionWindow.full : _scale);
+    }
+  }
+
+  @override
+  void dispose() {
+    if (widget.scale == DistributionScale.auto) {
+      widget.clock.measurements.removeListener(_refit);
+    }
+    _graticule?.dispose();
+    _targetValue.dispose();
+    _rangeValue.dispose();
+    super.dispose();
+  }
+
+  /// The window to draw at, given the setting and what the engine holds now.
+  MeterScale _fitted(MeterScale current) => switch (widget.scale) {
+    DistributionScale.full => DistributionWindow.full,
+    DistributionScale.auto => DistributionWindow.next(
+      current,
+      bins: widget.engine.histogram,
+      target: widget.calibration.lufsTarget,
+      rangeLow: widget.engine.loudnessRangeLow,
+      rangeHigh: widget.engine.loudnessRangeHigh,
+    ),
+  };
+
+  /// Called once per **published measurement** rather than once per frame, and
+  /// it marks nothing dirty unless the window actually moved.
+  ///
+  /// [MeterClock.measurements] rather than the clock itself because the
+  /// distribution is cumulative: a window that only ever widens must be
+  /// compared against every measurement that could widen it, and at 30 fps one
+  /// publish in three never reaches a painter. The scan is 120 floats and no
+  /// allocation, which is what makes that affordable.
+  void _refit() {
+    final next = _fitted(_scale);
+    if (next == _scale) return;
+    setState(() => _scale = next);
+  }
 
   // --- Buffers, allocated on resize and never on a frame --------------------
 
@@ -164,15 +260,7 @@ class _LoudnessDistributionModuleState
       ]);
 
     _fillUnder = fill(colors.accent);
-    _fillOver = fill(colors.warn);
-  }
-
-  @override
-  void dispose() {
-    _graticule?.dispose();
-    _targetValue.dispose();
-    _rangeValue.dispose();
-    super.dispose();
+    _fillOver = fill(colors.over);
   }
 
   @override
@@ -207,6 +295,163 @@ class _LoudnessDistributionModuleState
   }
 }
 
+/// The fitted axis: the narrowest round window that holds everything the
+/// module draws on it.
+///
+/// Static arithmetic on purpose. Where a window ends up *is* this feature, and
+/// reading that off a screenshot is a poor way to find out — `test/
+/// loudness_distribution_test.dart` calls these directly.
+///
+/// Three rules, in the order they matter:
+///
+///   1. **It holds every occupied bin.** `MeterScale.fractionOf` clamps, so a
+///      window that excluded one would not omit it — it would pile it onto the
+///      end column as programme that sat at a loudness it never sat at. The
+///      gated range and the delivery target are held for the smaller version of
+///      the same reason: both are drawn on this axis, and a caliper end or a
+///      target line pinned to the edge is a wrong reading rather than a missing
+///      one.
+///   2. **It is rounded outwards to whole ticks**, so the labels are round
+///      numbers and the window is quantised — two distributions that differ by
+///      a fraction of a decibel get the same axis instead of two axes that
+///      differ by a fraction of a decibel.
+///   3. **It moves as little as it can.** A window that tracked the content
+///      would slide under the picture on every published block, and a scale
+///      that moves while you read it is worse than one that wastes half its
+///      width. So the current window is kept while it still holds the content
+///      and is not [slack] times wider than it needs to be, and only refitted
+///      when one of those fails.
+abstract final class DistributionWindow {
+  /// The published range exactly, −60 to 0 LUFS: what the module drew before
+  /// the setting existed, and what [DistributionScale.full] still draws.
+  static const MeterScale full = MeterScale(
+    min: MeterShape.histogramMinLufs,
+    max: MeterShape.histogramMaxLufs,
+    step: 10,
+  );
+
+  /// How much loudness one published bin covers, in LU. Half a decibel.
+  static const double binWidth =
+      (MeterShape.histogramMaxLufs - MeterShape.histogramMinLufs) /
+      MeterShape.histogramBins;
+
+  /// Clearance either side of the outermost thing the window has to hold, in
+  /// LU. Enough that the silhouette closes down to the axis inside the plot
+  /// rather than against its edge, and that the target's dashes are never drawn
+  /// on the border.
+  static const double padding = 2;
+
+  /// The narrowest window worth drawing, in LU.
+  ///
+  /// A bin is [binWidth], so below about twenty the picture stops being a
+  /// distribution and becomes a magnified view of the engine's bin grid: steps
+  /// a dozen pixels wide, and a mode that jumps a whole column when one block
+  /// lands in the next bin. It is also what keeps a programme that has barely
+  /// started — one bin occupied, or none at all — from opening on an axis two
+  /// decibels wide that everything then immediately leaves.
+  static const double minSpan = 20;
+
+  /// The tick steps a fitted window may use, in LU. The 1-2-5 ladder every
+  /// scale that was ever printed uses, so the labels are numbers a reader
+  /// already counts in.
+  static const List<double> steps = [1, 2, 5, 10, 20];
+
+  /// The most labelled intervals a fitted window is allowed. Six 30 px labels
+  /// is about what the narrowest module this kind allows can print.
+  static const int maxIntervals = 6;
+
+  /// How much wider than what it holds a window may be before it is refitted.
+  ///
+  /// Only ever reached by a distribution that *shrank*, which within one
+  /// programme cannot happen — the histogram accumulates. So in practice this
+  /// is the rule that recovers the axis when the engine is reset or a new file
+  /// is analysed, and it is loose enough that ordinary rounding never trips it.
+  static const double slack = 1.6;
+
+  /// The window to draw at, given the one being drawn at now.
+  ///
+  /// Returns [current] unchanged in the overwhelming majority of calls, which
+  /// is the point: the caller compares by identity and rebuilds nothing.
+  /// Allocates only when the window actually moves.
+  static MeterScale next(
+    MeterScale current, {
+    required Float32List bins,
+    required double target,
+    required double rangeLow,
+    required double rangeHigh,
+  }) {
+    // The occupied span, as the outer edges of the outermost occupied bins.
+    // Ascending, so the first sets the floor and the last one seen sets the
+    // ceiling; no closure, because this runs once per published measurement.
+    var low = double.infinity;
+    var high = double.negativeInfinity;
+    for (var bin = 0; bin < MeterShape.histogramBins; bin++) {
+      if (bins[bin] <= 0) continue;
+      if (low.isInfinite) low = MeterShape.histogramMinLufs + bin * binWidth;
+      high = MeterShape.histogramMinLufs + (bin + 1) * binWidth;
+    }
+
+    // The two things drawn on this axis that are not bins.
+    if (!rangeLow.isNaN && rangeLow < low) low = rangeLow;
+    if (!rangeHigh.isNaN && rangeHigh > high) high = rangeHigh;
+    if (target.isFinite) {
+      if (target < low) low = target;
+      if (target > high) high = target;
+    }
+
+    // Nothing measured and no target to centre on: there is no information to
+    // fit to, and the published range is the only honest answer.
+    if (low.isInfinite || high.isInfinite) return full;
+
+    low -= padding;
+    high += padding;
+
+    if (current.min <= low &&
+        current.max >= high &&
+        current.span <= math.max(high - low, minSpan) * slack) {
+      return current;
+    }
+    return fit(low, high);
+  }
+
+  /// The window that holds [low] to [high]: at least [minSpan] wide, inside the
+  /// published range, and rounded out to whole ticks.
+  static MeterScale fit(double low, double high) {
+    if (high - low < minSpan) {
+      final centre = (low + high) / 2;
+      low = centre - minSpan / 2;
+      high = centre + minSpan / 2;
+    }
+
+    // Slid inside the published range rather than squeezed against it, so a
+    // programme sitting near 0 LUFS keeps the span it asked for instead of
+    // getting half of one.
+    if (low < full.min) {
+      high += full.min - low;
+      low = full.min;
+    }
+    if (high > full.max) {
+      low -= high - full.max;
+      high = full.max;
+      if (low < full.min) low = full.min;
+    }
+
+    for (final step in steps) {
+      var min = (low / step).floorToDouble() * step;
+      var max = (high / step).ceilToDouble() * step;
+      if (min < full.min) min = full.min;
+      // Rounding out from a value just under zero produces −0.0, which prints
+      // as "0" but is a different double from the one [full] holds — and this
+      // result is compared for equality against the window already on screen.
+      if (max > full.max || max == 0) max = full.max;
+      if ((max - min) / step <= maxIntervals) {
+        return MeterScale(min: min, max: max, step: step);
+      }
+    }
+    return full;
+  }
+}
+
 /// One logical pixel per column of the plot. Wide enough to tile exactly and
 /// narrow enough that the bins are drawn as the steps they are.
 const double _columnWidth = 1;
@@ -215,6 +460,13 @@ const double _columnWidth = 1;
 /// the Histogram's, turned through a right angle.
 const double _dashOn = 6;
 const double _dashPeriod = 11;
+
+/// Enough loudness to step back off a boundary and no more, in LU.
+///
+/// A column's span is half open — the bin its right edge lands exactly on
+/// belongs to the next column, and taking it here would draw every plateau one
+/// column wider than it is. Against a bin of half a decibel this is nothing.
+const double _epsilon = 1e-9;
 
 /// How far the caliper's end serifs reach into the plot, top and bottom.
 const double _serif = 4;
@@ -263,7 +515,7 @@ class _DistributionPainter extends MeterPainter {
          ..style = PaintingStyle.stroke
          ..strokeWidth = OaaStroke.mark),
        _edgeOver = (Paint()
-         ..color = colors.warn
+         ..color = colors.over
          ..style = PaintingStyle.stroke
          ..strokeWidth = OaaStroke.mark),
        _target = (Paint()
@@ -344,9 +596,18 @@ class _DistributionPainter extends MeterPainter {
     // programme spreads thin — a quarter of an hour of material rarely puts
     // more than a few percent in any one bin — and a plot fixed at 0..1 would
     // be an empty rectangle with a hairline along the bottom.
+    //
+    // The tallest bin **the window shows**, which under either setting is the
+    // tallest bin there is: `DistributionScale.full` shows all of them and
+    // `DistributionScale.auto` is fitted to hold every occupied one. Asking the
+    // window rather than the array is what keeps that true during the one frame
+    // after a refit where it might briefly not be.
+    final scale = graticule.scale;
     final bins = engine.histogram;
+    final windowLow = _binAt(scale.min);
+    final windowHigh = _binAt(scale.max - _epsilon);
     var tallest = 0.0;
-    for (var bin = 0; bin < MeterShape.histogramBins; bin++) {
+    for (var bin = windowLow; bin <= windowHigh; bin++) {
       final value = bins[bin];
       if (value > tallest) tallest = value;
     }
@@ -367,7 +628,7 @@ class _DistributionPainter extends MeterPainter {
 
     // Which columns have anything in them, so the edge can be held to the
     // occupied span. Run across the whole plot it would draw a bright line
-    // along the floor — in the warning colour to the right of the target — and
+    // along the floor — in the over colour to the right of the target — and
     // claim programme at loudnesses that had none.
     var firstInked = columns;
     var lastInked = -1;
@@ -376,19 +637,22 @@ class _DistributionPainter extends MeterPainter {
       // Every bin whose span overlaps this column's, and the loudest of them.
       //
       // One rule for both directions, which is what keeps the picture free of
-      // artefacts. Wider than the bins — the usual case — it draws each bin as
-      // the plateau it is. Narrower, which a module 80 pixels wide against 120
-      // published bins genuinely is, it takes the **loudest bin in the column**
-      // rather than their mean, exactly as the engine takes the loudest bin in
-      // a spectrum band and for the same reason: a mean at a coarser resolution
-      // hides a spike, and a spike in a loudness distribution is a section of
-      // the programme that sat at one level.
-      final lowBin = i * MeterShape.histogramBins ~/ columns;
-      var highBin =
-          ((i + 1) * MeterShape.histogramBins + columns - 1) ~/ columns - 1;
-      if (highBin >= MeterShape.histogramBins) {
-        highBin = MeterShape.histogramBins - 1;
-      }
+      // artefacts. Wider than the bins — which a fitted window usually is — it
+      // draws each bin as the plateau it is. Narrower, which a module 80 pixels
+      // wide against 120 published bins genuinely is, it takes the **loudest
+      // bin in the column** rather than their mean, exactly as the engine takes
+      // the loudest bin in a spectrum band and for the same reason: a mean at a
+      // coarser resolution hides a spike, and a spike in a loudness
+      // distribution is a section of the programme that sat at one level.
+      //
+      // Through the scale rather than by dividing the bin count by the column
+      // count, because the two are only the same thing when the axis is the
+      // whole published range. A fitted window shows a slice of the bins, and
+      // the old arithmetic would have drawn all 120 of them into it — the
+      // distribution compressed into a fifth of its width, at the very setting
+      // that exists to stop that happening.
+      final lowBin = _binAt(scale.valueAt(i / columns));
+      var highBin = _binAt(scale.valueAt((i + 1) / columns) - _epsilon);
       if (highBin < lowBin) highBin = lowBin;
 
       var value = 0.0;
@@ -582,6 +846,15 @@ class _DistributionPainter extends MeterPainter {
 
   double _x(Rect plot, double lufs) =>
       plot.left + graticule.scale.fractionOf(lufs) * plot.width;
+
+  /// The published bin a loudness falls in, held inside the array.
+  static int _binAt(double lufs) {
+    final bin =
+        ((lufs - MeterShape.histogramMinLufs) / DistributionWindow.binWidth)
+            .floor();
+    if (bin < 0) return 0;
+    return bin >= MeterShape.histogramBins ? MeterShape.histogramBins - 1 : bin;
+  }
 
   @override
   bool shouldRepaint(_DistributionPainter oldDelegate) =>

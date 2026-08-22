@@ -179,6 +179,15 @@ void main(List<String> arguments) {
   File('$out/style.css').writeAsStringSync(_css);
   stdout.writeln('  style.css');
 
+  // The favicon, as a file rather than as a data URI on every page. It was a
+  // URI while the mark was four rectangles and weighed a few hundred bytes;
+  // the wave is three kilobytes, which percent-encoded is five, which twenty
+  // pages is a hundred kilobytes of the same icon. A browser fetches this one
+  // once. The header still inlines it, because that copy is styled by the
+  // stylesheet and an <img> cannot be.
+  File('$out/$_markFile').writeAsStringSync(_mark);
+  stdout.writeln('  $_markFile'.padRight(28) + _markSource);
+
   // GitHub Pages serves a repository's `docs` through Jekyll unless told not
   // to, and Jekyll silently drops any file or directory beginning with an
   // underscore. Nothing here starts with one today; this costs a line and
@@ -585,7 +594,7 @@ String _shell(Page page, _Rendered rendered) {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${_escape(page.title)} — Open Audio Analyzer</title>
 <meta name="description" content="${_escape(_plain(page.blurb))}">
-<link rel="icon" href="data:image/svg+xml,${Uri.encodeComponent(_favicon)}">
+<link rel="icon" href="$_markFile" type="image/svg+xml">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -629,9 +638,18 @@ String _shell(Page page, _Rendered rendered) {
 /// Nothing could have caught it. The site has no test, the geometry was
 /// numbers in a string, and the constants sat 200 lines below the only place
 /// they were used. Reading the file instead means the site cannot hold a
-/// version of the mark at all: `assets/brand/oaa-mark.svg` follows
-/// `packaging/icon/make_icons.dart`, and this follows that.
-const String _markSource = 'assets/brand/oaa-mark.svg';
+/// version of the mark at all: `assets/brand/oaa-icon.svg` is written by
+/// `packaging/icon/make_icons.dart` from the drawing, and this follows that.
+///
+/// **It is the icon, with its tile, and not `oaa-mark.svg`.** It was the bare
+/// mark until 0.10.0, on the argument that a launcher gives an icon a square to
+/// fill and a browser tab does not. That argument held while the mark was teal
+/// and read on anything. The mark is white now, so the bare file is invisible
+/// on a pale tab strip and on a pale page — which is most of them.
+const String _markSource = 'assets/brand/oaa-icon.svg';
+
+/// What it is called in the built site.
+const String _markFile = 'oaa-icon.svg';
 
 /// [_markSource] with its XML prolog and comments taken off, ready to inline.
 ///
@@ -652,16 +670,9 @@ String get _brandMark => _mark
     .replaceFirst(RegExp(r'\saria-labelledby="[^"]*"'), '')
     .replaceFirst('<svg', '<svg aria-hidden="true"');
 
-/// The favicon, which is the same mark and carries no tile.
-///
-/// It had a graphite one, because it was a copy of the application icon. The
-/// icon has a tile because a launcher gives it a square to fill; a tab does
-/// not, and the bars on their own sit on whatever the browser's chrome is.
-String get _favicon => _mark;
-
 /// Whitespace is collapsed as well as the comments removed, because this is
-/// inlined into every page twice — once as markup and once percent-encoded into
-/// the favicon's data URI, where a newline costs three characters.
+/// inlined into the header of every page, and the file carries a generated
+/// banner that no reader of the site has any use for.
 String _readMark(File file) => file
     .readAsStringSync()
     .replaceAll(RegExp(r'<\?xml.*?\?>', dotAll: true), '')
@@ -757,7 +768,7 @@ body {
 }
 
 /* The mark is sized here rather than by the attributes on the file it is read
-   from, so that `assets/brand/oaa-mark.svg` can be any square it likes. */
+   from, so that `assets/brand/oaa-icon.svg` can be any square it likes. */
 .brand svg { width: 24px; height: 24px; flex: none; }
 
 .side nav { flex: 1; overflow-y: auto; }

@@ -1,0 +1,59 @@
+---
+/* /docs — the overview document, and the manual's table of contents.
+ *
+ * `docs/site/index.md` is a real document with real content, so this page is
+ * not only a list: it renders that document and puts the contents underneath
+ * it. A landing page that is nothing but eight links makes the reader choose
+ * before telling them what they are choosing between.
+ */
+import { render } from 'astro:content';
+
+import Docs from '../layouts/Docs.astro';
+import { PAGES, SECTIONS, href } from '../lib/docs.mjs';
+import { checkAnchors, documentFor } from '../lib/docs-content.mjs';
+
+/* Checked here rather than per page, so one build reports every missing
+   document and every dead cross-link instead of the first. */
+await checkAnchors(render);
+
+const page = PAGES.find((p) => p.slug === 'index');
+const { Content, headings } = await render(await documentFor(page));
+---
+
+<Docs
+  page={page}
+  headings={headings}
+  description="The documentation for Open Audio Analyzer: installing it, what every number means, the keyboard, the remote display protocol and building from source."
+>
+  <Content />
+
+  <section class="doc-index" slot="after">
+    <p class="label">Contents</p>
+    {
+      SECTIONS.map((section) => (
+        <div class="doc-index-sec">
+          <p class="label doc-index-h">{section.name}</p>
+          <ul class="doc-index-list">
+            {section.pages.map((p) => (
+              <li>
+                <a class="doc-index-a" href={href(p.slug)}>
+                  <span class="doc-index-t">{p.title}</span>
+                  <span class="doc-index-b" set:html={p.blurb.replace(/`([^`]+)`/g, '<code>$1</code>')} />
+                </a>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))
+    }
+  </section>
+</Docs>
+
+<style>
+  .doc-index-h {
+    margin-top: var(--s32);
+  }
+  .doc-index-sec:first-of-type .doc-index-h {
+    margin-top: var(--s24);
+  }
+</style>

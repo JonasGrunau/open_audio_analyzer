@@ -6,5 +6,16 @@
     "directory": "./dist",
     "not_found_handling": "404-page"
   },
-  "workers_dev": false
+  "workers_dev": false,
+  // Not decoration, because `workers_dev` is false: a Worker with neither a
+  // workers.dev subdomain nor a route uploads successfully and is then
+  // reachable at no URL at all, which reads as a broken deploy rather than as
+  // an unconfigured one. `custom_domain` also creates the DNS record and the
+  // certificate, so the domain is attached from this file rather than clicked
+  // together in the dashboard. `www` is sent to the apex by a Redirect Rule,
+  // which runs before the Worker — see README.
+  "routes": [
+    { "pattern": "open-audio-analyzer.com", "custom_domain": true },
+    { "pattern": "www.open-audio-analyzer.com", "custom_domain": true }
+  ]
 }

@@ -17,6 +17,10 @@ dependencies:
     path: ../../../packages/oaa_core
   oaa_ui:
     path: ../../../packages/oaa_ui
+  # The mock programme, shared with analyzer-demo so the stills and the live
+  # canvas cannot disagree about what the material did.
+  oaa_mock:
+    path: ../oaa_mock
 
 dev_dependencies:
   flutter_test:
@@ -27,15 +31,15 @@ flutter:
   fonts:
     - family: Inter
       fonts:
-        - asset: ../../../assets/fonts/Inter-Regular.ttf
+        - asset: assets/fonts/Inter-Regular.ttf
           weight: 400
-        - asset: ../../../assets/fonts/Inter-Medium.ttf
+        - asset: assets/fonts/Inter-Medium.ttf
           weight: 500
-        - asset: ../../../assets/fonts/Inter-SemiBold.ttf
+        - asset: assets/fonts/Inter-SemiBold.ttf
           weight: 600
     - family: Google Sans Code
       fonts:
-        - asset: ../../../assets/fonts/GoogleSansCode-Regular.ttf
+        - asset: assets/fonts/GoogleSansCode-Regular.ttf
           weight: 400
-        - asset: ../../../assets/fonts/GoogleSansCode-Medium.ttf
+        - asset: assets/fonts/GoogleSansCode-Medium.ttf
           weight: 500

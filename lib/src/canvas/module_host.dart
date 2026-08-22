@@ -154,6 +154,7 @@ class ModuleHost extends StatelessWidget {
         engine: engine,
         clock: clock,
         calibration: calibration,
+        scale: spec.distributionScale,
       ),
       ModuleKind.spectrumAnalyzer => SpectrumAnalyzerModule(
         engine: engine,
@@ -161,7 +162,11 @@ class ModuleHost extends StatelessWidget {
         response: spec.spectrumResponse,
         tilt: spec.spectrumTilt,
       ),
-      ModuleKind.spectrogram => SpectrogramModule(engine: engine, clock: clock),
+      ModuleKind.spectrogram => SpectrogramModule(
+        engine: engine,
+        clock: clock,
+        ramp: spec.colorRamp,
+      ),
       ModuleKind.oscilloscope => OscilloscopeModule(
         engine: engine,
         clock: clock,
@@ -174,6 +179,7 @@ class ModuleHost extends StatelessWidget {
         threshold: spec.scopeThresholdDb,
         autoThreshold: spec.scopeAutoThreshold,
         zoom: spec.scopeZoom,
+        ramp: spec.colorRamp,
         onOption: onOption,
       ),
       ModuleKind.phaseScope => PhaseScopeModule(engine: engine, clock: clock),

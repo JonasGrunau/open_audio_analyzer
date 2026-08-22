@@ -5,12 +5,13 @@
   "private": true,
   "scripts": {
     "measure": "node scripts/measure.mjs",
-    "dev": "npm run measure && astro dev",
-    "build": "npm run measure && astro build",
+    "dev": "astro dev",
+    "build": "astro build",
     "preview": "astro preview",
-    "deploy": "npm run build && wrangler deploy",
+    "deploy": "npm run analyzer && npm run build && wrangler deploy",
     "og": "'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' --headless=new --disable-gpu --hide-scrollbars --window-size=1200,630 --virtual-time-budget=6000 --screenshot=public/og.png \"file://$PWD/scripts/og.html\"",
-    "modules": "node scripts/render-modules.mjs"
+    "modules": "node scripts/render-modules.mjs",
+    "analyzer": "node scripts/render-analyzer.mjs"
   },
   "devDependencies": {
     "astro": "^7.2.4",

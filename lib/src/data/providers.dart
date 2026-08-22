@@ -231,6 +231,59 @@ class CalibrationLibraryController extends Notifier<List<Calibration>> {
     return true;
   }
 
+  /// Deletes every delivery target the user has saved, leaving the built-ins.
+  ///
+  /// Returns how many files were removed — zero is a legitimate answer and the
+  /// panel says so — or null if one of them could not be deleted, in which case
+  /// the store's own message goes to [storageNoticeProvider].
+  ///
+  /// **The files are enumerated, not the ids.** A target file may be called
+  /// anything: [save] names it after the id, but nothing stops somebody writing
+  /// `house.json` around an id of `atsc-a85`, and what has to be removed is what
+  /// exists. This is the one place in the library that reads the directory, and
+  /// it reads it to delete rather than to find out what the state is — the rule
+  /// the other direction breaks.
+  ///
+  /// A file that refuses to go stays in the library, because a reset that says a
+  /// target is gone and then finds it again at the next launch is worse than one
+  /// that admits it was partial. Nothing here touches
+  /// `settings.calibrationId`, for the same reason [remove] does not:
+  /// [calibrationProvider] is derived and already falls back when the id it
+  /// names has left the library.
+  Future<int?> resetToBuiltIns() async {
+    final store = ref.read(configStoreProvider);
+
+    var removed = 0;
+    String? failure;
+    final survivors = <Calibration>[];
+
+    for (final document in await store.readDirectory(ConfigDir.calibrations)) {
+      if (await store.delete(
+        '${ConfigDir.calibrations}/${document.fileName}',
+      )) {
+        removed++;
+        continue;
+      }
+
+      // One unwritable file does not cost the user the rest of the reset — the
+      // same reason one broken document does not fail the batch it was read in.
+      failure ??= store.lastError;
+      try {
+        survivors.add(Calibration.fromJson(document.json));
+      } on Object {
+        // Never in the library to begin with; startup skipped it too.
+      }
+    }
+
+    state = _merge(BuiltInCalibrations.all, survivors);
+
+    if (failure != null) {
+      ref.read(storageNoticeProvider.notifier).report(failure);
+      return null;
+    }
+    return removed;
+  }
+
   /// Shared with the CLI — see [mergeCalibrations].
   static List<Calibration> _merge(
     List<Calibration> base,
@@ -262,12 +315,31 @@ final skinLibraryProvider = NotifierProvider<SkinLibraryController, List<Skin>>(
 
 class SkinLibraryController extends Notifier<List<Skin>> {
   @override
-  List<Skin> build() {
-    final byId = {for (final skin in BuiltInSkins.all) skin.id: skin};
-    for (final skin in ref.watch(startupConfigProvider).skins) {
+  List<Skin> build() => _merge(ref.watch(startupConfigProvider).skins);
+
+  /// The two shipped skins, then the user's own.
+  ///
+  /// **A built-in cannot be shadowed, and this is where that is enforced.** A
+  /// user file that names `precision-instrument` is ignored rather than
+  /// replacing it. Delivery targets work the other way round on purpose — a
+  /// target is a claim about somebody else's published specification and has to
+  /// be correctable without a release — but a skin is not a claim about
+  /// anything. The two built-ins exist to *prove the roles are semantic*:
+  /// `daylight` inverts the entire lightness ordering, and if any painter had
+  /// reached for "the dark one" instead of a role it would be obvious
+  /// immediately. A pair of reference points a file on disk can quietly
+  /// redefine is a pair that proves nothing — and it is also the one
+  /// arrangement in which "put it back the way it was" has no answer.
+  ///
+  /// Copying one and editing the copy costs a single press, and leaves the
+  /// thing it was copied from still there to compare against.
+  static List<Skin> _merge(List<Skin> user) {
+    final byId = <String, Skin>{};
+    for (final skin in user) {
+      if (BuiltInSkins.byId(skin.id) != null) continue;
       byId[skin.id] = skin;
     }
-    return List.unmodifiable(byId.values);
+    return List.unmodifiable([...BuiltInSkins.all, ...byId.values]);
   }
 
   Skin? byId(String id) {
@@ -277,6 +349,24 @@ class SkinLibraryController extends Notifier<List<Skin>> {
     return null;
   }
 
+  /// Whether [id] names one of the two skins Open Audio Analyzer ships with.
+  ///
+  /// Which is the same question as whether it can be changed: it cannot. See
+  /// [_merge]. [save] and [remove] both refuse one, so that the rule lives in
+  /// the library rather than in whichever panel happens to be enforcing it.
+  bool isBuiltIn(String id) => BuiltInSkins.byId(id) != null;
+
+  /// Whether there is a file behind [id] — the thing [remove] would delete.
+  bool hasFile(String id) =>
+      !isBuiltIn(id) &&
+      (ref.read(startupConfigProvider).skins.any((skin) => skin.id == id) ||
+          _written.contains(id));
+
+  /// Ids written this session. `startupConfigProvider` is what was on disk *at
+  /// launch* and never changes after it, so without this a skin saved and then
+  /// deleted in one sitting would report as having no file to delete.
+  final Set<String> _written = {};
+
   /// Re-reads the skins directory.
   ///
   /// Authoring a skin means editing a JSON file, and the loop that makes that
@@ -284,20 +374,32 @@ class SkinLibraryController extends Notifier<List<Skin>> {
   /// makes an open format technically open and practically unused.
   Future<void> reload() async {
     final store = ref.read(configStoreProvider);
-    final byId = {for (final skin in BuiltInSkins.all) skin.id: skin};
+    final user = <Skin>[];
 
     for (final document in await store.readDirectory(ConfigDir.skins)) {
       final skin = Skin.fromJson(document.json);
-      if (skin != null) byId[skin.id] = skin;
+      if (skin != null) user.add(skin);
     }
 
-    state = List.unmodifiable(byId.values);
+    state = _merge(user);
   }
 
-  /// Writes a skin file. Used by "start a skin from this one", which is the
-  /// only way to get a complete, correct thirteen-role document without copying
-  /// it out of the source.
+  /// Writes a skin file.
+  ///
+  /// Refuses a built-in id outright rather than leaving that to the interface.
+  /// A rule a panel merely declines to offer is a rule the next panel will not
+  /// know about.
   Future<bool> save(Skin skin) async {
+    if (isBuiltIn(skin.id)) {
+      ref
+          .read(storageNoticeProvider.notifier)
+          .report(
+            '${skin.name} ships with Open Audio Analyzer and cannot be '
+            'changed. Save it as a new skin instead.',
+          );
+      return false;
+    }
+
     final store = ref.read(configStoreProvider);
     final written = await store.writeJson(
       '${ConfigDir.skins}/${slugify(skin.id)}.json',
@@ -309,16 +411,87 @@ class SkinLibraryController extends Notifier<List<Skin>> {
       return false;
     }
 
-    final byId = {for (final existing in state) existing.id: existing};
+    final byId = {
+      for (final existing in state)
+        if (!isBuiltIn(existing.id)) existing.id: existing,
+    };
     byId[skin.id] = skin;
-    state = List.unmodifiable(byId.values);
+    state = _merge(byId.values.toList());
+    _written.add(skin.id);
+    return true;
+  }
+
+  /// Deletes a user skin.
+  ///
+  /// Refuses a built-in for the same reason [save] does. Nothing is restored in
+  /// its place because nothing was displaced: a built-in is always in the
+  /// library, and `skinProvider` falls back to one when the settings name a
+  /// skin that has just been deleted.
+  Future<bool> remove(String id) async {
+    if (isBuiltIn(id)) return false;
+
+    final store = ref.read(configStoreProvider);
+    final removed = await store.delete(
+      '${ConfigDir.skins}/${slugify(id)}.json',
+    );
+
+    if (!removed) {
+      ref.read(storageNoticeProvider.notifier).report(store.lastError);
+      return false;
+    }
+
+    _written.remove(id);
+    state = List.unmodifiable([
+      for (final skin in state)
+        if (skin.id != id) skin,
+    ]);
     return true;
   }
 }
 
-/// The active skin. Falls back when the settings name one that is not installed
-/// — which is what happens the first time a preset is opened on another machine.
+/// The skin being edited, or null when the theme editor is not open.
+///
+/// **This is what makes the editor a preview rather than a form.** A skin the
+/// user is dragging a colour through is the skin in force: the canvas, the
+/// fourteen modules, the panel drawn over them and any tablet attached to the
+/// session all follow it, because they all read [skinProvider] and it answers
+/// with this when it is set. The alternative — a second palette that only the
+/// editor knows about — is two answers to "what colour is `accent`", and the
+/// one thing this application has never had is two.
+///
+/// Nothing here is written to disk. The draft is discarded when the editor
+/// closes; it is the Save button that turns it into a file, through
+/// [SkinLibraryController.save].
+final skinDraftProvider = NotifierProvider<SkinDraftController, Skin?>(
+  SkinDraftController.new,
+);
+
+class SkinDraftController extends Notifier<Skin?> {
+  @override
+  Skin? build() => null;
+
+  /// Starts previewing [skin]. Resolved, so a sparse document is previewed —
+  /// and edited — as the thirteen colours it will actually be drawn with.
+  void begin(Skin skin) => state = skin.resolved();
+
+  /// Replaces the draft. Called per pointer move while a colour is dragged.
+  void update(Skin skin) => state = skin;
+
+  /// Stops previewing. The committed skin comes back on the next frame.
+  void end() => state = null;
+}
+
+/// The active skin: the editor's draft if one is open, otherwise the one the
+/// settings name.
+///
+/// Falls back when the settings name a skin that is not installed — which is
+/// what happens the first time a preset is opened on another machine.
 final skinProvider = Provider<Skin>((ref) {
+  // The editor's draft outranks the library, and outranks it for every reader
+  // rather than for the canvas alone — see [skinDraftProvider].
+  final draft = ref.watch(skinDraftProvider);
+  if (draft != null) return draft;
+
   final id = ref.watch(settingsProvider.select((s) => s.skinId));
   final library = ref.watch(skinLibraryProvider);
 

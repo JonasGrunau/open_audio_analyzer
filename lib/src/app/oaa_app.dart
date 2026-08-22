@@ -22,6 +22,7 @@ import '../panels/calibration_editor.dart';
 import '../panels/preset_browser.dart';
 import '../panels/report_panel.dart';
 import '../panels/settings_panel.dart';
+import '../panels/theme_editor.dart';
 import '../panels/shortcuts_sheet.dart';
 import '../plugin/plugin_link.dart';
 import '../remote/display_screen.dart';
@@ -295,6 +296,12 @@ class _WorkspaceState extends ConsumerState<_Workspace>
         showPresetBrowser(context);
       case StartupPanel.calibration:
         showCalibrationEditor(context);
+      case StartupPanel.theme:
+        // Opened on whatever skin is active, which is what somebody
+        // screenshotting it wants: `--open-panel=theme` after picking Daylight
+        // renders the editor in the light palette, and the two are the pair
+        // worth looking at.
+        showThemeEditor(context, ref, base: ref.read(skinProvider));
       case StartupPanel.report:
         showReportPanel(context);
       case StartupPanel.shortcuts:
@@ -797,10 +804,14 @@ class _StatusBar extends ConsumerWidget {
               // ran 121 px past the edge at the smallest one the platform
               // allowed.
               //
-              // Below 500 the irreducible set — source, clock, target,
-              // SETTINGS, RESET — does not fit either, and there is no honest
-              // item left to drop. That is under half the supported minimum
-              // window and is left to the platform.
+              // Somewhere below 504 the irreducible set — source, clock,
+              // target, SETTINGS, RESET — does not fit either, and there is no
+              // honest item left to drop. 504 is the narrowest row
+              // `test/scaling_test.dart` sweeps and it fits — with 8 px to
+              // spare, which the chip and its seam took 24 of. A measured
+              // width rather than the round number this used to be, and either
+              // way barely half the supported minimum window: what happens
+              // below it is left to the platform.
               // The transport readout is the widest single item the bar can
               // gain — 92 px and its two gaps — and the only one that is not
               // always there, so it opens last and highest. It is measured the
@@ -810,10 +821,18 @@ class _StatusBar extends ConsumerWidget {
               // group moved by 161 px when one control there became three.
               // `test/scaling_test.dart` sweeps the bar with a real plugin
               // attached, which is the only state this item exists in.
-              final showTransport = transportOf != null && width >= 1230;
-              final showFormat = width >= 1065;
-              final showWordmark = width >= 955;
-              final showAnalyse = width >= 895;
+              // **Every one of them moved in the change that put the source
+              // in a chip**, because every one is a number about the *left
+              // group's* floor as much as about its own item: what overflows
+              // at the bottom of the bar is the group inside the `Expanded`,
+              // and that group's floor is now a bordered chip — its dot, plus
+              // 16 px of padding, plus the seam after it. 25 px for the five
+              // gates below the format readout, where that seam is 8; 40 for
+              // the format gate and the one above it, where it is 24. The
+              // margins are the ~35 px they were.
+              final showTransport = transportOf != null && width >= 1270;
+              final showFormat = width >= 1105;
+              final showAnalyse = width >= 920;
               // **Three gates where there was one, and PUBLISH outlives both
               // the things it enables.** Whether this machine has an
               // unauthenticated port open is the fact the bar exists to keep
@@ -824,10 +843,18 @@ class _StatusBar extends ConsumerWidget {
               // you go looking for, and a window this narrow is not one anybody
               // goes looking from. All three numbers are measured, like the rest
               // — see `test/scaling_test.dart`.
-              final showAttach = width >= 795;
-              final showPairingCode = width >= 710;
-              final showPublish = width >= 660;
-              final showHelp = width >= 520;
+              final showAttach = width >= 820;
+              final showPairingCode = width >= 735;
+              final showPublish = width >= 685;
+              // The lowest gate, so the item it drops is the last thing
+              // standing between the row and its irreducible set. The source
+              // picker gives ground with an ellipsis until it is down to its
+              // dot, and that is the group's floor: with `?` open at 524 px of
+              // row, the group had 34 px to put a 38 px chip in and ran 4 px
+              // past its edge. `test/scaling_test.dart` sweeps this band at
+              // five pixels with the longest names there are, which is the
+              // only stride and the only content that sees it.
+              final showHelp = width >= 555;
 
               return Row(
                 children: [
@@ -850,23 +877,14 @@ class _StatusBar extends ConsumerWidget {
                   Expanded(
                     child: Row(
                       children: [
-                        if (showWordmark) ...[
-                          Text(
-                            'OAA',
-                            style: OaaType.label.copyWith(
-                              color: colors.textPrimary,
-                              letterSpacing: 2,
-                            ),
-                          ),
-                          // `Space.md`, not `Space.lg`: the wordmark is three
-                          // proportional glyphs and OAA is about 3.4 px wider
-                          // than the mark it replaced, which was enough on its
-                          // own to run this row 0.136 px past its edge at
-                          // 1000 px with the longest target name. The gap the
-                          // wordmark owns gives that back rather than the
-                          // source picker losing it.
-                          const SizedBox(width: Space.md),
-                        ],
+                        // **No wordmark.** The window is the application's
+                        // name and the bar's job is what changes while you
+                        // work; three capitals that never change were the one
+                        // item here that said nothing about the signal. Its
+                        // gate went with it, and the gates above it are left
+                        // where they are — they are the widths at which the
+                        // row still *fits*, and it now fits with about 34 px
+                        // to spare above 955.
                         Flexible(
                           child: _SourcePicker(
                             label: sourceLabel,
@@ -874,7 +892,7 @@ class _StatusBar extends ConsumerWidget {
                           ),
                         ),
                         if (showFormat) ...[
-                          const SizedBox(width: Space.lg),
+                          const SizedBox(width: Space.md),
                           Text(
                             '${(source.sampleRate / 1000).toStringAsFixed(1)}'
                             ' kHz · ${source.channels} ch',
@@ -885,6 +903,42 @@ class _StatusBar extends ConsumerWidget {
                             softWrap: false,
                           ),
                         ],
+                        // **The seam between the two groups, and it is the
+                        // left group that pays for it.** The group's children
+                        // pack left, so the space after them is whatever the
+                        // window is not using — which is zero from the moment
+                        // the row is full. That used to mean the sample rate
+                        // ran flush into the playhead, and it was stated and
+                        // left alone; a bordered source chip makes it a
+                        // hairline touching the elapsed clock's digits, which
+                        // is the spacing mistake the eye does catch in a row
+                        // whose borders are its only horizontal line.
+                        //
+                        // Inside the `Expanded` rather than after it, which is
+                        // what makes it free: a fixed box out in the bar's own
+                        // row would add 24 px to a sum that does not shrink and
+                        // move every gate above. Here the picker gives up 24 px
+                        // of name it was going to ellipsise anyway, and the only
+                        // number that moves is the lowest gate — the left
+                        // group's floor is now the chip plus this.
+                        //
+                        // **Sized to what is on the other side of it, which
+                        // is the item this group ends with.** Above the format
+                        // gate that is a text readout and the seam is a
+                        // boundary between two groups, which is `Space.lg` and
+                        // is asserted as such — `test/scaling_test.dart` holds
+                        // the distance from the sample rate to the playhead,
+                        // the one thing in this row an overflow check cannot
+                        // see. Below it the group ends in a bordered chip and
+                        // the seam is a seam between controls, which is the
+                        // `Space.sm` every gap in the right-hand group is.
+                        //
+                        // Not a saving: 24 px at the bottom of the bar does
+                        // not exist. With the chip's own 16 it put the left
+                        // group's floor past the row at 600 px and past the
+                        // analyse gate at 1000, and 8 is what the item beside
+                        // it wants there anyway.
+                        SizedBox(width: showFormat ? Space.lg : Space.sm),
                       ],
                     ),
                   ),
@@ -896,22 +950,11 @@ class _StatusBar extends ConsumerWidget {
                   // the room — and the measurement's own clock next to the
                   // target it is being judged against.
                   if (showTransport) ...[
-                    // **The one gap in this row that has to be stated.** Every
-                    // other item is separated from the one before it by a
-                    // `SizedBox`; this is the seam between the `Expanded` group
-                    // and the right-hand one, and the group's children pack
-                    // left, so the space between them is whatever the window is
-                    // not using — which is zero from the moment the row is
-                    // full. The source name ellipsises before the row
-                    // overflows, so nothing failed: the sample rate and channel
-                    // count simply ran flush into the playhead for the whole
-                    // band between this gate and about 1310 px, and came apart
-                    // again only when the window shrank far enough to drop the
-                    // readout entirely.
-                    //
-                    // `Space.lg`, the token for a boundary between groups, and
-                    // the same one the format readout already sits behind.
-                    const SizedBox(width: Space.lg),
+                    // No gap of its own: the left group carries the boundary
+                    // now and carries it at every width, which is what the
+                    // conditional one here could not do — the gap existed only
+                    // when a plugin was attached and the window was wide enough
+                    // to show its readout.
                     TransportReadout(
                       transportOf: transportOf!,
                       repaint: clock,
@@ -1099,43 +1142,19 @@ class _SourcePicker extends ConsumerWidget {
             ],
         ];
       },
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: Space.xs + Space.xxs,
-            height: Space.xs + Space.xxs,
-            decoration: BoxDecoration(
-              // Bright means listening, dim means silence. Not the signal hue:
-              // this dot sits in the same bar as the readings, where `accent`
-              // already means "in spec" — a lit teal dot next to a loudness
-              // number reads as a verdict on it.
-              color: settings.sourceKind == AudioSourceKind.silence
-                  ? colors.textFaint
-                  : colors.textPrimary,
-              borderRadius: OaaRadius.allXs,
-            ),
-          ),
-          const SizedBox(width: Space.sm),
-          // **`Flexible`, not just a maximum.** A `ConstrainedBox` caps how wide
-          // the name may grow; it does not make it shrink. This `Row` is
-          // `mainAxisSize.min`, so a child that is not flexible is measured
-          // against unbounded width — the name took its full 220 px however
-          // little room the bar had, and the Row overflowed inside the picker
-          // where the status bar's own width gates could not see it.
-          Flexible(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 220),
-              child: Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                softWrap: false,
-                style: OaaType.label.copyWith(color: colors.textMuted),
-              ),
-            ),
-          ),
-        ],
+      // **The same shape as the delivery target's menu, because it is the same
+      // kind of thing.** Both report what a reading is rather than doing
+      // something, both open on a click, and one of them looked like a caption.
+      // The 220 px cap and the ellipsis inside the chip are what keep it
+      // shrinkable: a `ConstrainedBox` caps how wide the name may *grow* and
+      // does not make it shrink, and the picker sits in a `Flexible` in a row
+      // with no slack — see `BarChip`.
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 220),
+        child: BarChip(
+          text: label,
+          lit: settings.sourceKind != AudioSourceKind.silence,
+        ),
       ),
     );
   }
@@ -1149,11 +1168,18 @@ class _SourcePicker extends ConsumerWidget {
     final colors = OaaTheme.of(context);
     return PopupMenuItem<void>(
       onTap: onTap,
-      height: Space.xl,
-      child: Text(
-        text,
-        style: OaaType.body.copyWith(
-          color: selected ? colors.textPrimary : colors.textMuted,
+      height: OaaMenuRow.height,
+      // The row owns its padding, because the fill that marks the source
+      // currently being metered has to span it. See [OaaMenuRow].
+      padding: EdgeInsets.zero,
+      child: OaaMenuRow(
+        colors: colors,
+        selected: selected,
+        child: Text(
+          text,
+          style: OaaType.body.copyWith(
+            color: selected ? colors.textPrimary : colors.textMuted,
+          ),
         ),
       ),
     );
@@ -1181,13 +1207,18 @@ class _CalibrationPicker extends ConsumerWidget {
         for (final option in library)
           PopupMenuItem(
             value: option.id,
-            height: Space.xl,
-            child: Text(
-              option.name,
-              style: OaaType.body.copyWith(
-                color: option.id == calibration.id
-                    ? colors.textPrimary
-                    : colors.textMuted,
+            height: OaaMenuRow.height,
+            padding: EdgeInsets.zero,
+            child: OaaMenuRow(
+              colors: colors,
+              selected: option.id == calibration.id,
+              child: Text(
+                option.name,
+                style: OaaType.body.copyWith(
+                  color: option.id == calibration.id
+                      ? colors.textPrimary
+                      : colors.textMuted,
+                ),
               ),
             ),
           ),

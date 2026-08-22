@@ -55,27 +55,33 @@ Skin skinFromColors(
   isLight: colors.isLight,
   note: note,
   colors: {
-    SkinColor.background: _argb(colors.background),
-    SkinColor.panel: _argb(colors.panel),
-    SkinColor.panelRaised: _argb(colors.panelRaised),
-    SkinColor.hairline: _argb(colors.hairline),
-    SkinColor.hairlineStrong: _argb(colors.hairlineStrong),
-    SkinColor.textPrimary: _argb(colors.textPrimary),
-    SkinColor.textMuted: _argb(colors.textMuted),
-    SkinColor.textFaint: _argb(colors.textFaint),
-    SkinColor.accent: _argb(colors.accent),
-    SkinColor.warn: _argb(colors.warn),
-    SkinColor.over: _argb(colors.over),
-    SkinColor.meterTrack: _argb(colors.meterTrack),
-    SkinColor.meterFill: _argb(colors.meterFill),
+    SkinColor.background: skinArgb(colors.background),
+    SkinColor.panel: skinArgb(colors.panel),
+    SkinColor.panelRaised: skinArgb(colors.panelRaised),
+    SkinColor.hairline: skinArgb(colors.hairline),
+    SkinColor.hairlineStrong: skinArgb(colors.hairlineStrong),
+    SkinColor.textPrimary: skinArgb(colors.textPrimary),
+    SkinColor.textMuted: skinArgb(colors.textMuted),
+    SkinColor.textFaint: skinArgb(colors.textFaint),
+    SkinColor.accent: skinArgb(colors.accent),
+    SkinColor.warn: skinArgb(colors.warn),
+    SkinColor.over: skinArgb(colors.over),
+    SkinColor.meterTrack: skinArgb(colors.meterTrack),
+    SkinColor.meterFill: skinArgb(colors.meterFill),
   },
 );
 
+/// A `Color` back to the `0xAARRGGBB` the skin format stores.
+///
 /// `Color.value` is deprecated in favour of the floating-point channels, which
 /// do not round-trip through an 8-bit hex string. Every colour Open Audio
 /// Analyzer deals in came from one, so quantising back is exact rather than
 /// lossy.
-int _argb(Color color) =>
+///
+/// Public because the colour picker needs the same conversion — it edits a
+/// `Color` and writes a skin — and two implementations of it are two ways to
+/// round a channel.
+int skinArgb(Color color) =>
     (_channel(color.a) << 24) |
     (_channel(color.r) << 16) |
     (_channel(color.g) << 8) |

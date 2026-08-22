@@ -1,0 +1,47 @@
+name: oaa_analyzer_demo
+description: A canvas of the application's real modules, running live in a browser.
+publish_to: 'none'
+version: 0.1.0
+
+environment:
+  sdk: ^3.12.2
+
+dependencies:
+  flutter:
+    sdk: flutter
+  # The application itself. The modules on this canvas are the real ones.
+  oaa:
+    path: ../../..
+  oaa_core:
+    path: ../../../packages/oaa_core
+  oaa_ui:
+    path: ../../../packages/oaa_ui
+  oaa_mock:
+    path: ../oaa_mock
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+flutter:
+  uses-material-design: true
+  # Declared at the application level rather than taken from `oaa`, because
+  # `OaaType` asks for these families by their bare names and a package-level
+  # declaration would make them 'packages/oaa/Inter'. The files are copied in by
+  # scripts/lib/fonts.mjs before the build — naming them by relative path here
+  # instead puts `../../../` into the asset manifest, which 404s at runtime.
+  fonts:
+    - family: Inter
+      fonts:
+        - asset: assets/fonts/Inter-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/Inter-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Inter-SemiBold.ttf
+          weight: 600
+    - family: Google Sans Code
+      fonts:
+        - asset: assets/fonts/GoogleSansCode-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/GoogleSansCode-Medium.ttf
+          weight: 500

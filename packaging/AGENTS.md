@@ -5,8 +5,8 @@ GPL-3.0-or-later.
 
 | Path | Purpose |
 |------|---------|
-| `icon/make_icons.dart` | The mark, as geometry, rendered into every container the six platforms ask for — flat PNGs for the desktops, Android's adaptive icon, and one layered `AppIcon.icon` document per Apple platform. Writes into the platform directories as well as this one. |
-| `icon/oaa.svg` | The same mark as a vector, with the tile and the gradient, for `README.md`. **The one deliberate duplicate here** — its numbers are derived from `make_icons.dart` and are annotated as such. It is *not* installed into Linux's `scalable` hicolor directory: see the comment in the flatpak manifest. |
+| `icon/make_icons.dart` | The mark, read from `assets/brand/oaa-logo.svg` and rendered into every container the six platforms ask for — flat PNGs for the desktops, Android's adaptive icon, and one layered `AppIcon.icon` document per Apple platform. Carries a path rasteriser, because the mark is a stroked cubic path and no longer four rectangles. Writes into the platform directories, into `assets/brand/` and into `website/public/`, as well as this one. |
+| `icon/oaa.svg` | Generated. The same mark as a vector, with the tile and the ramp — a byte-identical copy of `assets/brand/oaa-icon.svg`. It was the one hand-maintained duplicate in this repository until 0.10.0, annotated with the numbers it had been transcribed from; it is written now. It is *not* installed into Linux's `scalable` hicolor directory: see the comment in the flatpak manifest. |
 | `android/play_store_icon.png` | Generated. 512 px, full bleed, no alpha. The Play Console asks for it by hand at upload; it is not built into the aab. |
 | `macos/make_pkg.sh` | Build, sign, three component packages, one distribution, and hand the result to `notarize.sh`. Replaced `make_dmg.sh`: a disk image can carry a plug-in but cannot install one. |
 | `macos/pkg/distribution.xml` | The installer's interface — the three rows, which of them is greyed out, and the macOS version gate on the two that are not. |
@@ -115,10 +115,10 @@ plug-in into a host DAW's search path; see the header of `linux/install.sh`.
   check on this machine and fails months later in front of the store. Its
   artwork is therefore square, full bleed and written as RGB. Android composites
   a background and a foreground and then crops the outer 18dp of a 108dp canvas
-  for parallax, so its foreground is the bars alone, inset to the middle 72.
+  for parallax, so its foreground is the wave alone, scaled into the middle 72.
   `_Shape` in `make_icons.dart` names the two shapes this program rasterises;
   Android's layers are VectorDrawables and Apple's are SVGs, all built from the
-  same numbers. Adding a platform means asking which of the three shapes it is,
+  same path. Adding a platform means asking which of the three shapes it is,
   not adding a fourth set of PNGs.
 
 - **Apple gets a layered document, and that is why there is no `appearances`
@@ -135,15 +135,30 @@ plug-in into a host DAW's search path; see the header of `linux/install.sh`.
 - **`icon.json`'s `fill` takes a system material, never your own gradient.**
   Handed one, `actool` does not report a bad key — it throws an exception and
   dies with a backtrace out of `IBICAbstractPlatformAdapter`, which reads like a
-  broken toolchain rather than a typo. The graphite ground is therefore a layer,
-  which is what Apple's own sample icons do with their backgrounds.
+  broken toolchain rather than a typo. The ramp is therefore a layer, which is
+  what Apple's own sample icons do with their backgrounds.
 
-- **The mark's bars do not climb in order, and that is load-bearing.** Four
-  bars rising left to right is the cellular signal glyph, drawn that way in the
-  status bar of every phone this icon sits on, and the shape is what the eye
-  reads — not the colour. The valley at the third bar is what makes it a meter.
-  `_Mark.tallest` finds the peak instead of assuming it is the last bar, so the
-  heights can move without anything else having to.
+- **The mark does not survive 16 px any more, and the four bars did.** They
+  were two pixels wide with a one-pixel cap and still read as four bars at four
+  heights with one of them in trouble; a wave with nine excursions across twelve
+  pixels reads as a smudge, and no stroke width fixes it — thickening closes the
+  gaps and makes a blob. `_Tile.strokeFloorPx` holds the line at one device
+  pixel so that it is at least *white* rather than a grey smear, which is the
+  most that can be done, and the sizes that decide this icon are now 32 and up.
+  The 16 px entries in the .ico and the hicolor tree are still written, because
+  Windows and the flatpak ask for them; what they carry is the ramp and a
+  silhouette. **Do not "fix" this by drawing a second, simpler mark for small
+  sizes** — two marks are two identities, and the one people see first is
+  whichever they happen to meet first.
+
+- **The corner is a superellipse, not a circular arc.** `_Tile.squircle` is the
+  exponent and `_Tile.corner` the radius, and the numbers are Apple's icon grid:
+  the edge stays straight for longer and then turns harder than a rounded
+  rectangle does. `_tileCoverage` evaluates the real curve, because a scanline
+  of it is one interval; `_tilePath` fits six cubics per corner for the
+  consumers that want a path, to 0.085% of the side. Neither Apple platform sees
+  either — both mask the icon with their own curve — so this is for Windows,
+  Linux, Android's legacy launcher and the image in the README.
 
 - **Every script says whether what it produced can actually be installed.**
   Signing needs secrets a fork does not have, so the absence of a certificate

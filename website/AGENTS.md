@@ -23,7 +23,7 @@ whether to download it, and somebody who already has.
 |------|-------------|
 | `README.md` | How to run, deploy and regenerate it, and how to point the domain at Cloudflare. The human-facing half of this file. |
 | `astro.config.mjs` | Static output, `format: 'file'`, stylesheets always inlined. The whole build configuration. |
-| `wrangler.jsonc` | Cloudflare Workers static assets. `not_found_handling: "404-page"` is what serves `404.html`; a Worker does not do that by itself. |
+| `wrangler.jsonc` | Cloudflare Workers static assets, and the two custom domains. `not_found_handling: "404-page"` is what serves `404.html`, and `routes` is what gives the Worker an address at all — `workers_dev` is false, so a deploy without them succeeds and is reachable nowhere. A Worker does neither by itself. |
 | `package.json` | The six scripts. `dev` and `build` both run `measure` first, so a fresh clone needs no extra step. |
 | `tsconfig.json` | Astro's strict preset, and nothing else. |
 | `src/layouts/Base.astro` | The shell every page is built from: head, JSON-LD, header, footer. The one place the canonical host and the two outbound links are written. |
@@ -38,7 +38,7 @@ whether to download it, and somebody who already has.
 | `scripts/og.html` | The Open Graph card as a page, so it uses the site's own tokens. Rendered by `npm run og` into `public/og.png`. |
 | `public/modules/*.webp` | The fourteen thumbnails. Committed output — see the rules. |
 | `public/og.png` | The Open Graph card. Committed for the same reason. |
-| `public/oaa.svg`, `public/favicon.svg`, `public/icon-180.png` | The mark, from `assets/brand/`. |
+| `public/oaa.svg`, `public/favicon.svg`, `public/icon-180.png` | The app icon. **Written by `packaging/icon/make_icons.dart`**, not copied here by hand — the first two are `assets/brand/oaa-icon.svg` byte for byte. `Base.astro` and `scripts/og.html` reference `oaa.svg` rather than inlining it, because both used to hold their own copy of the mark and both would have gone stale in 0.10.0. |
 | `public/robots.txt`, `public/sitemap.xml` | Written by hand. Four URLs do not need a generator. |
 | `tools/module-renderer/` | A Flutter web target that depends on `package:oaa` and renders one real module per page load against a mock `MeterSource`. Its own `README.md` documents the query string. Not in the root workspace, and not analysed by the repository's gates. |
 

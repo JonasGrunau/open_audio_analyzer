@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
@@ -27,6 +28,12 @@ import 'package:flutter/widgets.dart';
 /// button's, and its own pointer handling, because where a press landed is the
 /// value it sets.
 ///
+/// A control whose value is a *point* comes through [OaaFocusable.plane]. There
+/// is exactly one — the saturation/value square in the colour picker — and it
+/// exists because a range cannot be made to serve: [OaaFocusable.range] binds
+/// right *and* up to `onIncrease`, which is right for a slider drawn either way
+/// round and useless for a surface where the two axes are different quantities.
+///
 /// **The focus ring is a hairline in `textPrimary`, and selection is
 /// `hairlineStrong` at emphasis weight.** They are deliberately different in
 /// both colour and thickness, because focus and selection are separate facts
@@ -42,16 +49,19 @@ class OaaFocusable extends StatefulWidget {
     required this.onActivate,
     required this.builder,
     this.semanticLabel,
+    this.focusNode,
     this.button = true,
     this.toggled,
     this.selected,
     super.key,
   }) : onIncrease = null,
        onDecrease = null,
+       onNudge = null,
        valueLabel = null,
        increasedLabel = null,
        decreasedLabel = null,
-       _takesPointer = true;
+       nudgeLabels = null,
+       _kind = _FocusableKind.button;
 
   /// A control whose value is a range rather than a state: a slider.
   ///
@@ -84,12 +94,55 @@ class OaaFocusable extends StatefulWidget {
     required this.decreasedLabel,
     required this.builder,
     this.semanticLabel,
+    this.focusNode,
     super.key,
   }) : onActivate = null,
+       onNudge = null,
+       nudgeLabels = null,
        button = false,
        toggled = null,
        selected = null,
-       _takesPointer = false;
+       _kind = _FocusableKind.range;
+
+  /// A control whose value is a point on a surface: the colour picker's
+  /// saturation/value square, and nothing else so far.
+  ///
+  /// [OaaFocusable.range] cannot be bent into this. It binds right and up to
+  /// the same callback on purpose — a slider drawn horizontally is still
+  /// reached vertically by anybody who learned it on a volume control — and on
+  /// a plane the horizontal and vertical axes are two different quantities.
+  ///
+  /// So the four arrows are separate here, and [onNudge] receives which way in
+  /// units of one step: `Offset(-1, 0)` for left, `Offset(0, 1)` for down.
+  /// Holding shift multiplies the step by ten, because crossing a
+  /// two-hundred-pixel square one step at a time is not an interaction anybody
+  /// completes.
+  ///
+  /// **Assistive technology reaches it through custom actions rather than
+  /// through increase and decrease**, which are a one-dimensional pair and
+  /// would silently expose half the control. [nudgeLabels] names the four in
+  /// the words a screen reader reads out — "Less saturated", not "Left" — and
+  /// is required for that reason.
+  ///
+  /// Like a range, it installs no pointer handling of its own: where a press
+  /// landed *is* the value it sets, so [builder] brings the detector.
+  const OaaFocusable.plane({
+    required this.onNudge,
+    required this.valueLabel,
+    required this.nudgeLabels,
+    required this.builder,
+    this.semanticLabel,
+    this.focusNode,
+    super.key,
+  }) : onActivate = null,
+       onIncrease = null,
+       onDecrease = null,
+       increasedLabel = null,
+       decreasedLabel = null,
+       button = false,
+       toggled = null,
+       selected = null,
+       _kind = _FocusableKind.plane;
 
   /// The action. **Null disables the control** — it stops taking focus, stops
   /// responding to the keyboard and announces itself as disabled, which is the
@@ -111,6 +164,17 @@ class OaaFocusable extends StatefulWidget {
   /// duplicated.
   final String? semanticLabel;
 
+  /// Supplied by a control that has to be able to focus *itself*.
+  ///
+  /// A `FocusableActionDetector` is reached by Tab and not by a click, which is
+  /// right for a button — clicking one runs it, and there is nothing left to
+  /// do with the keyboard afterwards. It is wrong for a value: somebody who has
+  /// just clicked a point on a colour plane is exactly the person who wants to
+  /// nudge it one step, and being told to Tab back to the thing under their
+  /// pointer is not an answer. A control that wants that owns the node and
+  /// requests it on the way down.
+  final FocusNode? focusNode;
+
   /// False for a row that selects rather than acts.
   final bool button;
 
@@ -131,6 +195,16 @@ class OaaFocusable extends StatefulWidget {
   /// else, which is what tells the two apart.
   final String? valueLabel;
 
+  /// One step in a direction, for a plane control. `Offset(1, 0)` is one step
+  /// right; `Offset(0, -1)` is one step up. Magnitudes above one are a held
+  /// shift.
+  final void Function(Offset delta)? onNudge;
+
+  /// What the four directions of a plane control are called, in the order
+  /// left, right, up, down. Read out by assistive technology as the control's
+  /// custom actions.
+  final ({String left, String right, String up, String down})? nudgeLabels;
+
   /// What it would read out one step up, and one step down.
   ///
   /// **Not optional, and not decoration.** A semantics node that offers the
@@ -141,8 +215,9 @@ class OaaFocusable extends StatefulWidget {
   final String? increasedLabel;
   final String? decreasedLabel;
 
-  /// False for [OaaFocusable.range], whose builder brings its own detector.
-  final bool _takesPointer;
+  /// Which of the three shapes this is. Decides the announcement, the
+  /// shortcuts, the cursor and whether this widget installs a detector.
+  final _FocusableKind _kind;
 
   @override
   State<OaaFocusable> createState() => _OaaFocusableState();
@@ -154,11 +229,13 @@ class _OaaFocusableState extends State<OaaFocusable> {
 
   @override
   Widget build(BuildContext context) {
-    final range = widget.valueLabel != null;
+    final range = widget._kind == _FocusableKind.range;
+    final plane = widget._kind == _FocusableKind.plane;
     final enabled =
         widget.onActivate != null ||
         widget.onIncrease != null ||
-        widget.onDecrease != null;
+        widget.onDecrease != null ||
+        widget.onNudge != null;
 
     // Merged so the control and the text inside it are announced as one thing.
     // Without this a button reads as a button with no name, followed by a
@@ -178,16 +255,29 @@ class _OaaFocusableState extends State<OaaFocusable> {
         onTap: enabled ? widget.onActivate : null,
         onIncrease: widget.onIncrease,
         onDecrease: widget.onDecrease,
+        // Four named actions rather than an increase/decrease pair, because a
+        // plane has two axes and the pair describes one. Built here rather
+        // than in the widget so the labels stay next to what they invoke.
+        customSemanticsActions: plane ? _planeActions() : null,
         child: FocusableActionDetector(
           enabled: enabled,
+          focusNode: widget.focusNode,
           // A range control is dragged rather than clicked, and the cursor says
-          // which of the two it is before the press.
+          // which of the two it is before the press. A plane is dragged in both
+          // directions at once, which is what the crosshair means everywhere
+          // else.
           mouseCursor: !enabled
               ? SystemMouseCursors.basic
               : range
               ? SystemMouseCursors.resizeLeftRight
+              : plane
+              ? SystemMouseCursors.precise
               : SystemMouseCursors.click,
-          shortcuts: range ? _rangeShortcuts : null,
+          shortcuts: range
+              ? _rangeShortcuts
+              : plane
+              ? _planeShortcuts
+              : null,
           actions: <Type, Action<Intent>>{
             ActivateIntent: CallbackAction<ActivateIntent>(
               onInvoke: (_) {
@@ -206,6 +296,13 @@ class _OaaFocusableState extends State<OaaFocusable> {
                   return null;
                 },
               ),
+            if (plane)
+              OaaNudgeIntent: CallbackAction<OaaNudgeIntent>(
+                onInvoke: (intent) {
+                  widget.onNudge?.call(intent.delta);
+                  return null;
+                },
+              ),
           },
           // Guarded rather than assigned: these fire on every pointer move
           // across the control, and an unguarded setState would rebuild the
@@ -216,7 +313,7 @@ class _OaaFocusableState extends State<OaaFocusable> {
           onShowFocusHighlight: (value) {
             if (value != _focused) setState(() => _focused = value);
           },
-          child: widget._takesPointer
+          child: widget._kind == _FocusableKind.button
               ? GestureDetector(
                   onTap: widget.onActivate,
                   behavior: HitTestBehavior.opaque,
@@ -227,7 +324,26 @@ class _OaaFocusableState extends State<OaaFocusable> {
       ),
     );
   }
+
+  Map<CustomSemanticsAction, VoidCallback> _planeActions() {
+    final labels = widget.nudgeLabels!;
+    final nudge = widget.onNudge;
+    if (nudge == null) return const {};
+
+    return {
+      CustomSemanticsAction(label: labels.left): () =>
+          nudge(const Offset(-1, 0)),
+      CustomSemanticsAction(label: labels.right): () =>
+          nudge(const Offset(1, 0)),
+      CustomSemanticsAction(label: labels.up): () => nudge(const Offset(0, -1)),
+      CustomSemanticsAction(label: labels.down): () =>
+          nudge(const Offset(0, 1)),
+    };
+  }
 }
+
+/// Which of [OaaFocusable]'s three shapes a given instance is.
+enum _FocusableKind { button, range, plane }
 
 /// One step of a range control, from a key or from assistive technology.
 ///
@@ -247,4 +363,40 @@ const Map<ShortcutActivator, Intent> _rangeShortcuts = {
   SingleActivator(LogicalKeyboardKey.arrowUp): OaaAdjustIntent(up: true),
   SingleActivator(LogicalKeyboardKey.arrowLeft): OaaAdjustIntent(up: false),
   SingleActivator(LogicalKeyboardKey.arrowDown): OaaAdjustIntent(up: false),
+};
+
+/// One step of a plane control, in units of a step.
+class OaaNudgeIntent extends Intent {
+  const OaaNudgeIntent(this.delta);
+
+  /// Which way, and how far in steps. Screen coordinates: `y` grows downwards,
+  /// the same direction the surface is painted in, so a control converts one
+  /// axis and not the other.
+  final Offset delta;
+}
+
+/// The four arrows on two axes, and the same four with shift held for ten
+/// steps at a time.
+///
+/// **Shift is not a nicety.** The one plane control is a saturation/value
+/// square around two hundred pixels across; at one step a press, crossing it is
+/// a hundred presses, which is a control that is technically reachable and
+/// practically not.
+const Map<ShortcutActivator, Intent> _planeShortcuts = {
+  SingleActivator(LogicalKeyboardKey.arrowLeft): OaaNudgeIntent(Offset(-1, 0)),
+  SingleActivator(LogicalKeyboardKey.arrowRight): OaaNudgeIntent(Offset(1, 0)),
+  SingleActivator(LogicalKeyboardKey.arrowUp): OaaNudgeIntent(Offset(0, -1)),
+  SingleActivator(LogicalKeyboardKey.arrowDown): OaaNudgeIntent(Offset(0, 1)),
+  SingleActivator(LogicalKeyboardKey.arrowLeft, shift: true): OaaNudgeIntent(
+    Offset(-10, 0),
+  ),
+  SingleActivator(LogicalKeyboardKey.arrowRight, shift: true): OaaNudgeIntent(
+    Offset(10, 0),
+  ),
+  SingleActivator(LogicalKeyboardKey.arrowUp, shift: true): OaaNudgeIntent(
+    Offset(0, -10),
+  ),
+  SingleActivator(LogicalKeyboardKey.arrowDown, shift: true): OaaNudgeIntent(
+    Offset(0, 10),
+  ),
 };

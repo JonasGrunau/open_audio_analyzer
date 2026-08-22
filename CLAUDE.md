@@ -42,6 +42,7 @@ is still not built, and `docs/PLAN.md` for what was planned.
 | `packages/oaa_ui/lib/src/tokens.dart` | `Space`, `OaaControl`, `OaaRadius`, `OaaStroke`, `OaaColors`, `OaaType`. Nothing outside this file invents a spatial or colour value. |
 | `packages/oaa_ui/lib/src/scale.dart` | `MeterScale` and `ScaleGraticule`. Five modules draw a dB scale; two side by side whose ticks disagree look like a rendering bug. |
 | `packages/oaa_ui/lib/src/point_buckets.dart` | Marks sorted by the colour they are drawn in, one call per colour. What lets the stereo cloud redraw its whole accumulated grid every published frame instead of accumulating it into an image. The spectrogram drew through it too until its run counts on real material outgrew it — see its header. |
+| `packages/oaa_ui/lib/src/color_ramp.dart` | `ColorRamp`'s colours. Two modules paint a quantity as a colour rather than as a length, and they are handed *different* quantities on purpose — colour carries whatever the module's axes do not. The reasoning is in the file header; it is the only place it is written down. |
 | `engine/src/oaa_tap.h` | Capturing the system's own output on macOS with no driver — a Core Audio process tap, offered as one reserved device id. The engine's only Objective-C lives beside it in `oaa_tap_macos.m`, and it is the only source not built on every platform. |
 | `engine/src/oaa_spectrum.h` | The Hann STFT: a 4096-point window, zero-padded into a 16384-point transform. The two lengths are not the same thing and the header says why. One set of transforms serves all three frequency modules. |
 | `lib/src/canvas/module_host.dart` | The only place that knows which `ModuleKind`s exist as code. Exhaustive switch, no default arm. |
@@ -62,8 +63,8 @@ is still not built, and `docs/PLAN.md` for what was planned.
 | `cli/bin/oaa.dart` | The `oaa` analyser. Its exit code is the product — see `cli/AGENTS.md`. |
 | `lib/src/app/shortcuts.dart` | Every keyboard shortcut, as one table. The bindings, the `?` sheet and `docs/site/keyboard.md` are all derived from it; `test/shortcuts_test.dart` fails when the page has drifted. |
 | `lib/src/app/launch_options.dart` | `--config-dir` and `--open-panel`. Both exist to make something else testable — see the file. |
-| `tool/docs.dart` | The documentation site. No dependencies, so the `docs` job needs a Dart SDK and nothing else. The page list is written out, never globbed, and the mark is read from `assets/brand/oaa-mark.svg` rather than held — it was held once and went stale. |
-| `packaging/icon/make_icons.dart` | The app mark as geometry, rendered into every container the six platforms want — a rounded tile for the desktops, two layers on a 108dp canvas for Android, and a layered `AppIcon.icon` for macOS and iOS that the system lights itself. `oaa.svg` and `assets/brand/` are its vector twins and follow it, never the reverse. |
+| `tool/docs.dart` | The documentation site. No dependencies, so the `docs` job needs a Dart SDK and nothing else. The page list is written out, never globbed, and the mark is read from `assets/brand/oaa-icon.svg` rather than held — it was held once and went stale. |
+| `packaging/icon/make_icons.dart` | The app mark, **read** from `assets/brand/oaa-logo.svg` and rendered into every container the six platforms want — a rounded tile for the desktops, two layers on a 108dp canvas for Android, and a layered `AppIcon.icon` for macOS and iOS that the system lights itself. It carries a path rasteriser because the mark is a stroked cubic path. It also writes the rest of `assets/brand/`, `packaging/icon/oaa.svg` and `website/public/`'s icons, so nothing is a hand-kept twin any more. |
 | `.tool-versions` | Pins Flutter `3.44.5-stable`. CI pins the same; keep them in step. |
 
 ## Subdirectories
@@ -81,7 +82,7 @@ is still not built, and `docs/PLAN.md` for what was planned.
 | `docs/` | `PLAN.md`, `METRICS.md`, `WIRE.md`, and `site/` — the pages with no other home. | |
 | `tool/` | Repository scripts. Nothing here ships. | GPL-3.0-or-later |
 | `packaging/` | pkg, Windows installer, Linux tarball, AppImage, flatpak, and the app icon they all need. The first three carry the VST3 (and on macOS the AU) and so are built from the plugin job's artefacts, not from the app alone. | GPL-3.0-or-later |
-| `assets/` | The fonts the application bundles, and the logo the repository publishes. | GPL-3.0-or-later; fonts SIL OFL 1.1 |
+| `assets/` | The fonts the application bundles, and the logo the repository publishes. `brand/oaa-logo.svg` is the one drawing everything else is generated from. | GPL-3.0-or-later; fonts SIL OFL 1.1 |
 | `website/` | `open-audio-analyzer.com` — a static Astro site, and the Flutter target that photographs the modules for it. Deployed by hand; no job in `ci.yml` touches it. | GPL-3.0-or-later |
 
 **`plugin/` is the one AGPL directory**, because JUCE 7 and 8 are
@@ -307,7 +308,7 @@ is unaffected: it never links JUCE — it talks to the plugin over a socket.
   needed the fake DAW *and* the application running together, which is worth
   knowing: neither suite can be that check.
 
-  **`--open-panel=<name>` opens one of the five panels at startup**, in a debug
+  **`--open-panel=<name>` opens one of the six panels at startup**, in a debug
   build, which is how a panel gets looked at without clicking through to it:
   `open "build/macos/Build/Products/Debug/Open Audio Analyzer.app" --args --open-panel=settings`.
   **Not `open -a`** — that resolves an application *name* and refuses a relative
@@ -487,6 +488,7 @@ claim something about it:
 | The iOS build, its signing, or the TestFlight upload | `packaging/AGENTS.md`, `docs/site/building.md`'s credential table, `.github/AGENTS.md`, and `docs/site/install.md`'s iPadOS section. The IPA is **not** a release asset — if you make it one, `README.md`'s note and the publish step's exclusion both become wrong |
 | A switch on the fake DAW | `plugin/host/AGENTS.md`, and `README.md` if it is one of the gestures a person cannot perform on cue. `--help` in `FakeDawOptions.h` is the exhaustive list and the only one that has to be; the other two name the interesting ones and are prose |
 | A page the documentation site publishes, or its filename | The page list in `tool/docs.dart`. It is written out rather than globbed, so a renamed document fails the docs job instead of silently vanishing from the site |
+| The mark, the logo or the app icon | Nothing by hand — redraw `assets/brand/oaa-logo.svg` and run `dart run packaging/icon/make_icons.dart`, which writes every icon, every vector twin, the README's image and the site's favicon. Then `assets/AGENTS.md` if a file appeared or went, `CHANGELOG.md` ⚡, and `npm run og` in `website/` because the card carries the mark. **`packaging/icon/oaa.svg`, `website/public/`'s icons and everything in `assets/brand/` except `oaa-logo.svg` itself are generated: editing one by hand is a change the next run silently reverts.** |
 | A version, a stated requirement, an artefact filename, or how a module looks | `website/src/pages/download.astro` and `website/src/pages/index.astro`, and `npm run modules -- --only <id>` for the photograph. The site's facts are *derived* from this repository and nothing regenerates them — the macOS floor moved to 14.2 in the same change that added `website/`, and the download page still said 11 Big Sur. See `website/AGENTS.md` |
 | A phase reaching done | `README.md` Roadmap, `CLAUDE.md`'s status line, `docs/PLAN.md` |
 | Anything a user sees or configures | `README.md`, and `CHANGELOG.md` under ✨ or ⚡ |

@@ -21,10 +21,13 @@
 library;
 
 export 'src/check.dart';
+export 'src/color_ramp.dart';
+export 'src/color_field.dart';
 export 'src/drag_devices.dart';
 export 'src/focusable.dart';
 export 'src/glyph.dart';
 export 'src/grid_geometry.dart';
+export 'src/menu_row.dart';
 export 'src/meter_painter.dart';
 export 'src/module_frame.dart';
 export 'src/panel.dart';

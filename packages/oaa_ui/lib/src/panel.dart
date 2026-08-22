@@ -17,6 +17,7 @@ import 'package:flutter/material.dart';
 
 import 'focusable.dart';
 import 'glyph.dart';
+import 'menu_row.dart';
 import 'theme.dart';
 import 'tokens.dart';
 
@@ -87,6 +88,88 @@ Future<T?> showOaaPanel<T>({
     },
   );
 }
+
+/// Asks a yes-or-no question over whatever is already open, and answers false
+/// for every way of declining it.
+///
+/// **This is a modal over a modal, which the rest of this system avoids.** The
+/// in-place confirmation — a Delete button that becomes `Delete?` and takes a
+/// second press — is still what a destructive *row action* uses, and it is
+/// right there: the button is beside the thing it deletes, and nothing has to
+/// be dismissed to carry on. What it cannot do is answer for an action whose
+/// consequence is larger than the control that starts it. A changed word on a
+/// button is a confirmation somebody can press through in half a second without
+/// having read anything, and "every delivery target you have written is deleted
+/// from disk" is not a sentence that fits on a button.
+///
+/// So the shape is defined once, here, rather than per panel:
+///
+/// - **[width] is 420, not [PanelScaffold]'s 620.** A dialog exactly as wide as
+///   the panel underneath it reads as that panel having been replaced. It has
+///   to look like something laid *on top*, and the narrower box is what says so
+///   before a word of it is read.
+/// - **The affirmative button is last, and it is the destructive one.** The
+///   footer convention puts a destructive button hard left, before the spacer,
+///   because it is normally the alternative to what the panel is for. In a
+///   confirmation it *is* what the panel is for, so it takes the affirmative
+///   slot — and it is painted [ButtonEmphasis.destructive] rather than primary,
+///   because the accent hue means "go ahead" everywhere else in the interface.
+/// - **Declining has three doors and they are the same door.** Cancel, the ×
+///   and the scrim all answer false. The one-way-out rule is about a Done that
+///   is ambiguous next to a Close; two ways of saying no to the same question
+///   are not ambiguous, and a confirmation with no visible Cancel is one people
+///   answer yes to by accident.
+Future<bool> showOaaConfirm({
+  required BuildContext context,
+  required String title,
+  required String message,
+  required String confirmLabel,
+  String cancelLabel = 'Cancel',
+  bool destructive = true,
+}) async =>
+    await showOaaPanel<bool>(
+      context: context,
+      builder: (context) {
+        final colors = OaaTheme.of(context);
+        void answer({required bool yes}) => Navigator.of(context).pop(yes);
+
+        return PanelScaffold(
+          title: title,
+          width: 420,
+          onClose: () => answer(yes: false),
+          footer: Row(
+            children: [
+              const Spacer(),
+              OaaButton(
+                label: cancelLabel,
+                onPressed: () => answer(yes: false),
+              ),
+              const SizedBox(width: Space.sm),
+              OaaButton(
+                label: confirmLabel,
+                emphasis: destructive
+                    ? ButtonEmphasis.destructive
+                    : ButtonEmphasis.primary,
+                onPressed: () => answer(yes: true),
+              ),
+            ],
+          ),
+          // Body text rather than a `PanelNote`'s caption grey: this sentence
+          // is not an aside beneath some rows, it is the entire content of the
+          // dialog and the only thing the answer can be based on.
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: Space.sm),
+            child: Text(
+              message,
+              style: OaaType.body.copyWith(color: colors.textPrimary),
+            ),
+          ),
+        );
+      },
+    ) ??
+    // Dismissed by the scrim or by Escape, which the `Navigator` pops with no
+    // value at all. Silence is no.
+    false;
 
 /// A panel surface: title bar, scrolling body, optional footer.
 class PanelScaffold extends StatefulWidget {
@@ -221,13 +304,31 @@ class _PanelScaffoldState extends State<PanelScaffold> {
                         thickness: OaaStroke.emphasis * 2,
                         radius: OaaRadius.xs,
                         thumbVisibility: true,
-                        child: SingleChildScrollView(
-                          controller: _scroll,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: Space.lg,
-                            vertical: Space.md,
+                        // **And it is the only bar, which takes saying.**
+                        // `MaterialScrollBehavior` decorates every *vertical*
+                        // scrollable with a `Scrollbar` of its own on macOS,
+                        // Windows and Linux — nothing is asked for and nothing
+                        // is logged — so the bar above was the second one on
+                        // every desktop: the skin's thumb always visible on the
+                        // panel's edge, and Material's grey one fading in
+                        // beside it whenever the pointer touched the region.
+                        // Two thumbs of different widths tracking the same
+                        // content read as a rendering fault. It is invisible on
+                        // a tablet, where that behaviour adds nothing, and
+                        // invisible in a widget test, where the platform
+                        // defaults to Android.
+                        child: ScrollConfiguration(
+                          behavior: ScrollConfiguration.of(
+                            context,
+                          ).copyWith(scrollbars: false),
+                          child: SingleChildScrollView(
+                            controller: _scroll,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: Space.lg,
+                              vertical: Space.md,
+                            ),
+                            child: widget.child,
                           ),
-                          child: widget.child,
                         ),
                       ),
                     ),
@@ -793,41 +894,51 @@ class PanelMenu<T> extends StatelessWidget {
         for (final option in options)
           PopupMenuItem<T>(
             value: option.value,
-            height: OaaControl.height,
-            child: Row(
-              children: [
-                // A mark rather than a colour, because the palette reserves the
-                // signal hue for "in spec" and selection inside a panel is
-                // `hairlineStrong` — neither of which a line of text can wear.
-                // Geometry rather than a glyph for the reason in [_Caret].
-                SizedBox(
-                  width: Space.md,
-                  child: option.value == selected
-                      ? Align(
-                          alignment: Alignment.centerLeft,
-                          child: Container(
-                            width: Space.xs,
-                            height: Space.smd,
-                            decoration: BoxDecoration(
-                              color: colors.textPrimary,
-                              borderRadius: OaaRadius.allXs,
+            height: OaaMenuRow.height,
+            // The row owns its padding, because the fill that marks the
+            // current value has to span it. See [OaaMenuRow].
+            padding: EdgeInsets.zero,
+            child: OaaMenuRow(
+              colors: colors,
+              selected: option.value == selected,
+              child: Row(
+                children: [
+                  // The mark is the redundant half of the signal now that the
+                  // row itself is recessed, and it is kept for the skin whose
+                  // background step is too shallow to carry it alone. Not a
+                  // colour: the palette reserves the signal hue for "in spec"
+                  // and selection inside a panel is `hairlineStrong` — neither
+                  // of which a line of text can wear. Geometry rather than a
+                  // glyph for the reason in [_Caret].
+                  SizedBox(
+                    width: Space.md,
+                    child: option.value == selected
+                        ? Align(
+                            alignment: Alignment.centerLeft,
+                            child: Container(
+                              width: Space.xs,
+                              height: Space.smd,
+                              decoration: BoxDecoration(
+                                color: colors.textPrimary,
+                                borderRadius: OaaRadius.allXs,
+                              ),
                             ),
-                          ),
-                        )
-                      : null,
-                ),
-                Flexible(
-                  child: Text(
-                    option.label,
-                    overflow: TextOverflow.ellipsis,
-                    style: OaaType.body.copyWith(
-                      color: option.value == selected
-                          ? colors.textPrimary
-                          : colors.textMuted,
+                          )
+                        : null,
+                  ),
+                  Flexible(
+                    child: Text(
+                      option.label,
+                      overflow: TextOverflow.ellipsis,
+                      style: OaaType.body.copyWith(
+                        color: option.value == selected
+                            ? colors.textPrimary
+                            : colors.textMuted,
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
       ],
@@ -1070,6 +1181,7 @@ class OaaTextField extends StatelessWidget {
     this.hintText,
     this.onSubmitted,
     this.onChanged,
+    this.focusNode,
     this.numeric = false,
     this.autofocus = false,
     this.width,
@@ -1080,6 +1192,18 @@ class OaaTextField extends StatelessWidget {
   final String? hintText;
   final ValueChanged<String>? onSubmitted;
   final ValueChanged<String>? onChanged;
+
+  /// Supplied by a caller that has to know when the field is *finished* rather
+  /// than when it is submitted.
+  ///
+  /// Enter is not the only way out of a text field and it is not the common
+  /// one: people click away. A caller that commits on `onSubmitted` alone
+  /// loses everything typed by anybody who tabbed on — which is the whole
+  /// difference between "an edit commits when the edit ends" and "an edit
+  /// commits when you remember to press Enter". The colour picker's hex field
+  /// and the remote display's port both want this.
+  final FocusNode? focusNode;
+
   final bool numeric;
   final bool autofocus;
   final double? width;
@@ -1104,6 +1228,7 @@ class OaaTextField extends StatelessWidget {
         ),
         child: TextField(
           controller: controller,
+          focusNode: focusNode,
           autofocus: autofocus,
           style: style,
           // The caret is not an affirmative action, so it takes no part in the

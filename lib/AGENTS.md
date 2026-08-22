@@ -10,7 +10,7 @@ The application. GPL-3.0-or-later.
 | `src/clock/` | `MeterClock` — the only `Ticker` in the app. |
 | `src/data/` | Riverpod providers (configuration only) and `metric_reader.dart`. |
 | `src/modules/` | One file per meter module, all fourteen. Bodies only — the frame is the canvas's. |
-| `src/panels/` | Settings, presets, the delivery-target editor, the report. See its own `AGENTS.md`. |
+| `src/panels/` | Settings, presets, the delivery-target editor, the skin editor, the report. See its own `AGENTS.md`. |
 | `src/storage/` | Where configuration lives and how it is read and written. See its own `AGENTS.md`. |
 | `src/remote/` | Both ends of the remote display — the desktop host and the tablet client — plus mDNS. See its own `AGENTS.md`. |
 | `src/plugin/` | The listener the VST3 / AU plugin connects to, and the transport it sends. Loopback only. |
@@ -68,8 +68,11 @@ The application. GPL-3.0-or-later.
   that switches it off. The same arithmetic as a drag, with the publish rate in
   place of the pointer.
   A setting a mode makes inert is **greyed in the menu rather than dropped**:
-  `Trigger` under `Sync: Tempo` is the one, and a row that vanishes is a row
-  somebody hunts for while suspecting the wrong setting.
+  `Trigger` under `Sync: Tempo` and `Grid` under `Sync: Free` are the two, one
+  the mirror of the other, and a row that vanishes is a row somebody hunts for
+  while suspecting the wrong setting. `Time base` and `Division` are the
+  exception and not a third case — they are one setting spelled in whichever
+  unit the sync makes meaningful, so only one of them is ever a row.
   The two controls stand **side by side, one `Space.md` apart**, and each cell
   in a control is cut to what *that* control needs rather than to the widest in
   the strip. What makes two sliders agree is the track length, which is one

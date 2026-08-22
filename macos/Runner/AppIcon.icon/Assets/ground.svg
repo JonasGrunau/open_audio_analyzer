@@ -1,10 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024"
      width="1024" height="1024">
   <defs>
-    <linearGradient id="ground" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#1F2328"/>
-      <stop offset="1" stop-color="#0B0C0E"/>
+    <linearGradient id="oaa-ground" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#6EF2CC"/>
+      <stop offset="0.383" stop-color="#35E0C4"/>
+      <stop offset="0.608" stop-color="#32D8BD"/>
+      <stop offset="1" stop-color="#20AA92"/>
     </linearGradient>
   </defs>
-  <rect width="1024" height="1024" fill="url(#ground)"/>
+  <rect width="1024" height="1024" fill="url(#oaa-ground)"/>
 </svg>

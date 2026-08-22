@@ -298,6 +298,78 @@ void main() {
   // `packages/oaa_wire` holds: what reaches a tablet, what does not go on the
   // wire at all, and the one bit that cannot simply be sampled.
 
+  // Written for the theme editor: dragging a colour in it produces a new skin
+  // per pointer move, and `_RemoteClient.sendOnce` is documented as being for
+  // frames that are rare and must not be dropped — they queue behind whatever
+  // flush is outstanding. Sixty of those a second is the `_waiting` list
+  // growing for as long as somebody holds the pointer down.
+  group('a skin dragged rather than chosen', () {
+    Skin tinted(int argb) => BuiltInSkins.precisionInstrument
+        .resolved()
+        .copyWith(id: 'drag', name: 'Drag', colors: {SkinColor.accent: argb})
+        .resolved();
+
+    test('a burst is a handful of frames, and ends on the last one', () async {
+      await connect();
+
+      var seen = 0;
+      void count() => seen++;
+      client.skin.addListener(count);
+      addTearDown(() => client.skin.removeListener(count));
+
+      // Fifty distinct palettes with no pause between them: about a second of
+      // dragging, arriving as fast as the editor can produce it.
+      for (var i = 0; i < 50; i++) {
+        host.publishSkin(tinted(0xFF000000 | i));
+      }
+      await _settle();
+
+      // Un-throttled this is fifty. The exact number depends on how many
+      // cooldowns elapse while the loop runs, which is why the assertion is an
+      // order of magnitude rather than a count.
+      expect(seen, lessThan(10));
+      expect(seen, greaterThan(0));
+
+      // And the display is on the *last* colour, not on whichever one the timer
+      // happened to catch. A tablet that is behind is tolerable; a tablet that
+      // is quietly wrong is not.
+      await Future<void>.delayed(DisplayHost.skinInterval * 3);
+      await _settle();
+      expect(client.skin.value?.colors[SkinColor.accent], 0xFF000031);
+    });
+
+    test('a single change still lands immediately', () async {
+      await connect();
+
+      host.publishSkin(tinted(0xFFFF8800));
+      await _settle();
+      expect(client.skin.value?.colors[SkinColor.accent], 0xFFFF8800);
+    });
+
+    test(
+      'a display that joins mid-drag gets the colour on screen now',
+      () async {
+        await connect();
+
+        for (var i = 0; i < 20; i++) {
+          host.publishSkin(tinted(0xFF000000 | i));
+        }
+
+        // Not the last one broadcast — the last one published. The replay path
+        // reads the field, which is assigned on every call.
+        final joiner = DisplayClient(staleAfter: const Duration(seconds: 1));
+        addTearDown(() async {
+          await joiner.disconnect();
+          joiner.dispose();
+        });
+        await joiner.connect('127.0.0.1', host.port!);
+        await _settle();
+
+        expect(joiner.skin.value?.colors[SkinColor.accent], 0xFF000013);
+      },
+    );
+  });
+
   group('the transport', () {
     const parked = Transport(
       flags:

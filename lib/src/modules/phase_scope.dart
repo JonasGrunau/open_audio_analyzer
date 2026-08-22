@@ -329,7 +329,7 @@ class _PhaseScopePainter extends MeterPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final plotHeight = size.height - _correlationHeight - Space.xs;
+    final plotHeight = size.height - _correlationHeight - Space.smd;
     if (plotHeight < 40) return;
     final plot = Size(size.width, plotHeight);
 
@@ -410,7 +410,7 @@ class _PhaseScopePainter extends MeterPainter {
     );
     // Rounded at the two ends only: the bar is the one thing here that is not
     // part of the graticule, so it reads as a control rather than a scale.
-    final rounded = RRect.fromRectAndRadius(track, OaaRadius.xs);
+    final rounded = RRect.fromRectAndRadius(track, OaaRadius.sm);
     canvas.drawRRect(rounded, _correlationTrack);
 
     final correlation = engine.correlation;

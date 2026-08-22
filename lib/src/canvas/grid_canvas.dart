@@ -286,6 +286,26 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
           _ModuleAction.smoothing,
           'Smoothing: ${module.histogramSmoothing.label}',
         ),
+      // How much of the loudness axis the picture is given, which is a
+      // question only this module has: it draws a distribution that occupies a
+      // fifth of the published range, against an axis that publishes all of it.
+      // See `DistributionScale`.
+      if (module.kind == ModuleKind.loudnessDistribution)
+        oaaMenuItem(
+          context,
+          _ModuleAction.distributionScale,
+          'Scale: ${module.distributionScale.label}',
+        ),
+      // The spectrogram's only setting, and the one row the oscilloscope shares
+      // with it: which colours a level is drawn in. Both modules answer with a
+      // hue rather than with a length, so both have the same choice to make and
+      // it is spelled the same way in both menus. See `ColorRamp`.
+      if (module.kind == ModuleKind.spectrogram)
+        oaaMenuItem(
+          context,
+          _ModuleAction.colorRamp,
+          'Colour: ${module.colorRamp.label}',
+        ),
       // The one control the oscilloscope has, and it is two settings in one:
       // it sets how much time the width holds *and*, by doing so, whether
       // the display is triggered or rolls. See `ScopeTimeBase`.
@@ -313,25 +333,28 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
             'Division: ${module.scopeDivision.label}',
           ),
         // What starts the window, which only a free-running one has a choice
-        // about — a tempo-locked window is already placed by the bar line. So
-        // it is **disabled rather than dropped**, and in the same row of the
-        // menu either way: a row that vanishes is a row somebody hunts for, and
-        // the setting they would suspect is the trigger itself rather than the
-        // sync two rows above it. The *threshold* it fires at is not a row at
-        // all — it is a slider on the module, because it is chosen by watching
-        // the picture. See `ScopeTrigger`.
+        // about — a tempo-locked window is already placed by the bar line. And
+        // what the division's width is multiplied by, which only a tempo-locked
+        // one has a choice about, for the mirror of that reason: there is no
+        // triplet of a millisecond. So each is **disabled rather than dropped**,
+        // and in the same row of the menu either way: a row that vanishes is a
+        // row somebody hunts for, and the setting they would suspect is the one
+        // that disappeared rather than the sync above it. The *threshold* the
+        // trigger fires at is not a row at all — it is a slider on the module,
+        // because it is chosen by watching the picture. See `ScopeTrigger` and
+        // `ScopeGrid`.
         oaaMenuItem(
           context,
           _ModuleAction.trigger,
           'Trigger: ${module.scopeTrigger.label}',
           enabled: module.scopeSync == ScopeSync.free,
         ),
-        if (module.scopeSync == ScopeSync.tempo)
-          oaaMenuItem(
-            context,
-            _ModuleAction.grid,
-            'Grid: ${module.scopeGrid.label}',
-          ),
+        oaaMenuItem(
+          context,
+          _ModuleAction.grid,
+          'Grid: ${module.scopeGrid.label}',
+          enabled: module.scopeSync == ScopeSync.tempo,
+        ),
         // How the picture is arranged rather than what is in it, so it sits
         // under the settings that decide the window. See `ScopeStereo`.
         //
@@ -345,6 +368,14 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
           context,
           _ModuleAction.stereo,
           'Stereo: ${module.scopeStereo.label}',
+        ),
+        // Last, under the arrangement, because it changes neither what is
+        // measured nor where any of it is drawn — only what colour it is drawn
+        // in. The same row the spectrogram has, in the same words.
+        oaaMenuItem(
+          context,
+          _ModuleAction.colorRamp,
+          'Colour: ${module.colorRamp.label}',
         ),
       ],
     ];
@@ -380,6 +411,8 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
         await _showTiltMenu(globalPosition, module);
       case _ModuleAction.smoothing:
         await _showSmoothingMenu(globalPosition, module);
+      case _ModuleAction.distributionScale:
+        await _showDistributionScaleMenu(globalPosition, module);
       case _ModuleAction.timeBase:
         await _showTimeBaseMenu(globalPosition, module);
       case _ModuleAction.sync:
@@ -392,6 +425,8 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
         await _showStereoMenu(globalPosition, module);
       case _ModuleAction.trigger:
         await _showTriggerMenu(globalPosition, module);
+      case _ModuleAction.colorRamp:
+        await _showColorRampMenu(globalPosition, module);
       case _ModuleAction.duplicate:
         if (!_controller.duplicateModule(module.id)) {
           _report('No room on this tab for another ${module.kind.label}.');
@@ -413,9 +448,7 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
             context,
             metric,
             metric.label,
-            color: metric == module.metric
-                ? colors.textPrimary
-                : colors.textMuted,
+            selected: metric == module.metric,
           ),
       ],
     );
@@ -440,7 +473,7 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
             context,
             response,
             response.label,
-            color: response == current ? colors.textPrimary : colors.textMuted,
+            selected: response == current,
           ),
       ],
     );
@@ -458,12 +491,7 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
       position: menuPositionAt(context, globalPosition),
       items: [
         for (final tilt in SpectrumTilt.values)
-          oaaMenuItem(
-            context,
-            tilt,
-            tilt.label,
-            color: tilt == current ? colors.textPrimary : colors.textMuted,
-          ),
+          oaaMenuItem(context, tilt, tilt.label, selected: tilt == current),
       ],
     );
 
@@ -487,13 +515,33 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
             context,
             smoothing,
             smoothing.label,
-            color: smoothing == current ? colors.textPrimary : colors.textMuted,
+            selected: smoothing == current,
           ),
       ],
     );
 
     if (smoothing == null || !mounted) return;
     _controller.setModuleOption(module.id, 'smoothing', smoothing.id);
+  }
+
+  Future<void> _showDistributionScaleMenu(
+    Offset globalPosition,
+    ModuleSpec module,
+  ) async {
+    final colors = OaaTheme.of(context);
+    final current = module.distributionScale;
+    final scale = await showMenu<DistributionScale>(
+      context: context,
+      color: colors.panelRaised,
+      position: menuPositionAt(context, globalPosition),
+      items: [
+        for (final scale in DistributionScale.values)
+          oaaMenuItem(context, scale, scale.label, selected: scale == current),
+      ],
+    );
+
+    if (scale == null || !mounted) return;
+    _controller.setModuleOption(module.id, 'scale', scale.id);
   }
 
   Future<void> _showTimeBaseMenu(
@@ -508,12 +556,7 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
       position: menuPositionAt(context, globalPosition),
       items: [
         for (final base in ScopeTimeBase.values)
-          oaaMenuItem(
-            context,
-            base,
-            base.label,
-            color: base == current ? colors.textPrimary : colors.textMuted,
-          ),
+          oaaMenuItem(context, base, base.label, selected: base == current),
       ],
     );
 
@@ -530,12 +573,7 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
       position: menuPositionAt(context, globalPosition),
       items: [
         for (final sync in ScopeSync.values)
-          oaaMenuItem(
-            context,
-            sync,
-            sync.label,
-            color: sync == current ? colors.textPrimary : colors.textMuted,
-          ),
+          oaaMenuItem(context, sync, sync.label, selected: sync == current),
       ],
     );
 
@@ -559,7 +597,7 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
             context,
             division,
             division.label,
-            color: division == current ? colors.textPrimary : colors.textMuted,
+            selected: division == current,
           ),
       ],
     );
@@ -577,12 +615,7 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
       position: menuPositionAt(context, globalPosition),
       items: [
         for (final grid in ScopeGrid.values)
-          oaaMenuItem(
-            context,
-            grid,
-            grid.label,
-            color: grid == current ? colors.textPrimary : colors.textMuted,
-          ),
+          oaaMenuItem(context, grid, grid.label, selected: grid == current),
       ],
     );
 
@@ -599,12 +632,7 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
       position: menuPositionAt(context, globalPosition),
       items: [
         for (final mode in ScopeStereo.values)
-          oaaMenuItem(
-            context,
-            mode,
-            mode.label,
-            color: mode == current ? colors.textPrimary : colors.textMuted,
-          ),
+          oaaMenuItem(context, mode, mode.label, selected: mode == current),
       ],
     );
 
@@ -628,13 +656,33 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
             context,
             trigger,
             trigger.label,
-            color: trigger == current ? colors.textPrimary : colors.textMuted,
+            selected: trigger == current,
           ),
       ],
     );
 
     if (trigger == null || !mounted) return;
     _controller.setModuleOption(module.id, 'trigger', trigger.id);
+  }
+
+  Future<void> _showColorRampMenu(
+    Offset globalPosition,
+    ModuleSpec module,
+  ) async {
+    final colors = OaaTheme.of(context);
+    final current = module.colorRamp;
+    final ramp = await showMenu<ColorRamp>(
+      context: context,
+      color: colors.panelRaised,
+      position: menuPositionAt(context, globalPosition),
+      items: [
+        for (final ramp in ColorRamp.values)
+          oaaMenuItem(context, ramp, ramp.label, selected: ramp == current),
+      ],
+    );
+
+    if (ramp == null || !mounted) return;
+    _controller.setModuleOption(module.id, 'ramp', ramp.id);
   }
 
   // --- Build --------------------------------------------------------------
@@ -810,12 +858,14 @@ enum _ModuleAction {
   response,
   tilt,
   smoothing,
+  distributionScale,
   timeBase,
   trigger,
   sync,
   division,
   grid,
   stereo,
+  colorRamp,
 
   duplicate,
   delete,

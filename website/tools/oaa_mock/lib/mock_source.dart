@@ -52,6 +52,18 @@ class MockSource implements MeterSource {
   /// the browser the picture is final.
   final void Function()? onFrozen;
 
+  /// Advance by the wall clock instead of by [dt] a frame.
+  ///
+  /// The two consumers want opposite things here. A photograph has to be
+  /// reproducible, so the renderer steps a fixed amount per frame and the state
+  /// at frame *n* does not depend on how fast the machine drew it. A live canvas
+  /// has to be *believable*, and a fixed step is not: at whatever rate a browser
+  /// happens to tick, the programme runs at some unrelated speed — the first
+  /// version of this took twenty seconds of watching to get three seconds in,
+  /// with the loudness meters still showing dashes and the timeline empty.
+  /// A meter that runs slower than the audio is the one thing a meter may not do.
+  final bool realtime;
+
   final Float32List _peak = Float32List(MeterShape.maxChannels);
   final Float32List _rms = Float32List(MeterShape.maxChannels);
   final Float32List _vu = Float32List(MeterShape.maxChannels);
@@ -65,11 +77,17 @@ class MockSource implements MeterSource {
   int _frame = 0;
   double _t = 0.0;
   int _generation = 0;
+  final Stopwatch _wall = Stopwatch();
 
   /// Short-term readings gathered so far, for the distribution and the range.
   final List<double> _shortTerms = <double>[];
 
-  MockSource({this.dt = 0.094, this.captureAt = 4.0, this.onFrozen}) {
+  MockSource({
+    this.dt = 0.094,
+    this.captureAt = 4.0,
+    this.onFrozen,
+    this.realtime = false,
+  }) {
     for (var i = 0; i < MeterShape.spectrumBands; i++) {
       _spectrumPeak[i] = MeterShape.dbFloor;
     }
@@ -92,6 +110,7 @@ class MockSource implements MeterSource {
       return false;
     }
     _frame++;
+    if (realtime && !_wall.isRunning) _wall.start();
     _advance();
     return true;
   }
@@ -120,15 +139,30 @@ class MockSource implements MeterSource {
   /// range of almost nothing, and the range and the histogram are two of the
   /// fourteen modules. So the material has a quiet opening, a body, a break and
   /// a louder final section — which is what produces a range worth reading.
+  ///
+  /// **And it repeats.** The first version of this ran the four sections once
+  /// and then held the last one for ever, which is invisible over the fourteen
+  /// seconds a thumbnail runs and obvious over the seventy the front page's
+  /// still does: the histogram's minute-wide axis came out as a flat line and
+  /// the range collapsed to 2.5 LU. Each repetition is trimmed a little
+  /// differently so that a minute of it does not read as a loop either.
   double _sectionLevel(double t) {
-    if (t < 3.0) return 0.42; // opening, well below the body
-    if (t < 10.0) return 0.86; // body
-    if (t < 13.0) return 0.55; // break
-    return 1.0; // final section, the loudest thing here
+    const bar = 24.0;
+    final phase = t % bar;
+    final repeat = 0.88 + 0.12 * _noise((t / bar).floorToDouble() * 1.7, 53);
+
+    final section = phase < 3.0
+        ? 0.42 // opening, well below the body
+        : phase < 11.0
+        ? 0.86 // body
+        : phase < 15.0
+        ? 0.55 // break
+        : 1.0; // the loudest thing here
+    return section * repeat;
   }
 
   void _advance() {
-    _t = _frame * dt;
+    _t = realtime ? _wall.elapsedMicroseconds / 1e6 : _frame * dt;
     _generation++;
 
     final section = _sectionLevel(_t);

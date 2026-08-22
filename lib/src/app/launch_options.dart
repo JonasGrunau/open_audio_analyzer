@@ -47,6 +47,7 @@ enum StartupPanel {
   settings('settings'),
   presets('presets'),
   calibration('calibration'),
+  theme('theme'),
   report('report'),
   shortcuts('shortcuts');
 

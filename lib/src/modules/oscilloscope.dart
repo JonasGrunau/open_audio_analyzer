@@ -98,11 +98,31 @@ import '../clock/meter_clock.dart';
 /// the left channel into both and two identical traces would be a stereo image
 /// nobody has.
 ///
+/// [ColorRamp.rgb] does not change that rule, and it is worth being exact about
+/// which question a colour answers here. What it colours is the **balance of a
+/// column's audio across three bands** — red is its bass, green its mids, blue
+/// its highs, so a kick is red, a hat is blue and a full-spectrum hit is white,
+/// which is how DJ software has drawn a waveform for twenty years. It is taken
+/// from the spectrum the engine published for the same block the column's
+/// samples came from, and recorded *with* the column, so a beat two seconds ago
+/// keeps the colour it had rather than being repainted by whatever is playing
+/// now. Both channels are drawn through the one palette and the second of an
+/// overlaid pair is still the dimmer one: a colour in this module names a set of
+/// frequencies, never a channel.
+///
 /// [ScopeZoom] scales what is drawn and nothing that is measured. Anything that
 /// reached full scale is drawn in the over colour whatever the zoom is set to,
 /// so a clipped passage is visible as a red band rather than as a flat top
 /// somebody has to notice — and a trace running off the lane is a trace that is
 /// zoomed, which is a different thing and looks like one.
+///
+/// **That mark says less at [ColorRamp.rgb], and it is left alone anyway.** Red
+/// there is what a bass-heavy column is drawn in, so the clip band no longer
+/// stands out by colour — what still distinguishes it is that a clipped column
+/// runs the full height of the lane. The alternative is a second colour for
+/// clipping, and there is no colour left to spend: a three-band mix reaches all
+/// of them. `over` is the one ink on this canvas that means "past a limit" and
+/// it is not worth making it mean two things in one module.
 ///
 /// ---------------------------------------------------------------------------
 /// The sweep, which is the third way this module finds a window
@@ -162,6 +182,7 @@ class OscilloscopeModule extends StatefulWidget {
     this.threshold = ScopeThreshold.defaultDb,
     this.autoThreshold = false,
     this.zoom = ScopeZoom.defaultScale,
+    this.ramp = ColorRamp.skin,
     this.onOption,
     super.key,
   });
@@ -200,6 +221,12 @@ class OscilloscopeModule extends StatefulWidget {
   /// How tall full scale is drawn, as a multiplier. See [ScopeZoom].
   final double zoom;
 
+  /// Which colours the trace is drawn in. See [ColorRamp] — at
+  /// [ColorRamp.skin] it is the accent hue at one weight per channel, which is
+  /// what this module has always drawn; at [ColorRamp.rgb] each column takes the
+  /// colour of its own balance of bass, mids and highs.
+  final ColorRamp ramp;
+
   /// Writes one of this module's own settings back to the layout.
   ///
   /// **Null is what a surface with no editable layout looks like**, and it is
@@ -236,6 +263,46 @@ const double _laneLabelAbove = Space.lg;
 /// traces are separable where they cross, and not so much that the right
 /// channel reads as a shadow of the left.
 const double _dim = 0.55;
+
+/// Steps each of the three band weights is quantised into at [ColorRamp.rgb].
+///
+/// A column's colour is a mix of its low, mid and high content — see
+/// `ColorRamp.mixAt` — and the display is drawn as one `drawRawPoints` per
+/// colour, through [PointBuckets], so the palette has to be a closed set. Five
+/// steps per channel is 125 of them, of which only the faces where one channel
+/// is full are reachable; what is actually drawn per frame is the handful of
+/// colours the material is making, because a bucket nobody filled costs nothing.
+///
+/// Five and not more because these are *weights*, not levels: the eye reads
+/// "mostly bass with some air" off a colour and never reads it to a quarter of a
+/// band. Nothing about the audio is quantised — only the ink.
+const int _mixSteps = 5;
+
+/// Colours in the scope's palette, and the index of the one that is not a mix.
+///
+/// **A slice with no spectrum behind it is not given a colour.** A source that
+/// publishes no bands has made no statement about balance, so the trace stays
+/// the accent — the same ink the whole module uses at [ColorRamp.skin] — rather
+/// than being handed the middle of a palette, which would be a colour claiming
+/// a mix nobody measured.
+const int _mixColors = _mixSteps * _mixSteps * _mixSteps;
+const int _noMix = _mixColors;
+
+/// How far under the loudest of the three bands a band stops counting.
+///
+/// The mix is taken in **decibels relative to the loudest band**, and this is
+/// the window. In linear power a kick sits 25 dB over a hat, so a mix weighted
+/// by power is red on every piece of music ever made — the first version of this
+/// was, and it looked like a fault. Twenty-four decibels is wide enough that a
+/// hat under a kick still tints the column and narrow enough that the noise
+/// floor between beats does not.
+const double _mixRangeDb = 24;
+
+/// The floor a band has to clear to count at all.
+///
+/// The spectrogram's own floor, for the same reason it has one: below this a
+/// band is the room rather than the programme.
+const double _mixFloorDb = -84;
 
 /// What the plot keeps for itself before the strip may have its sixteen pixels.
 ///
@@ -335,6 +402,14 @@ class _OscilloscopeModuleState extends State<OscilloscopeModule> {
   /// The loudest the trigger's own quantity has been, for `AUTO`.
   final _AutoLevel _auto = _AutoLevel();
 
+  /// The columns sorted by the hue they are drawn in, at [ColorRamp.rgb].
+  ///
+  /// Kept here rather than in the painter because [PointBuckets] grows its
+  /// buffers to the widest frame it has been asked for and then reuses them, and
+  /// a painter is rebuilt every time the height slider moves a pixel. Untouched
+  /// at [ColorRamp.skin], where the whole display is one colour and one call.
+  final PointBuckets _buckets = PointBuckets(_mixColors + 1);
+
   ui.Paragraph? _leftLabel;
   ui.Paragraph? _rightLabel;
 
@@ -411,7 +486,7 @@ class _OscilloscopeModuleState extends State<OscilloscopeModule> {
   /// Nothing here marks the tree dirty. Pixels still arrive on the clock's
   /// throttled notification, at the rate the user asked for.
   void _measured() {
-    _history.ingest(widget.engine);
+    _history.ingest(widget.engine, coloured: widget.ramp == ColorRamp.rgb);
     _auto.ingest(widget.engine);
     // Only while the box is checked, and only when the decibel it prints
     // actually moved. On steady material the peak holds and this does nothing
@@ -469,6 +544,7 @@ class _OscilloscopeModuleState extends State<OscilloscopeModule> {
         trigger: widget.trigger,
         threshold: _threshold,
         zoom: _zoom,
+        ramp: widget.ramp,
         repaint: widget.clock,
       ),
     );
@@ -938,6 +1014,21 @@ class _ScopeHistory {
   int _rawWrite = 0;
   int _rawFilled = 0;
 
+  /// Which colour each column is drawn in at [ColorRamp.rgb]: the balance of
+  /// low, mid and high content in the block it came from, quantised into
+  /// [_mixColors] — or [_noMix] for a column nothing was published for, and for
+  /// one whose block carried no spectrum.
+  ///
+  /// **Recorded with the column, not read off the newest measurement.** The
+  /// colour is part of what the display remembers: a kick two seconds ago was
+  /// red then and has to still be red now, and a display that coloured its whole
+  /// history from the block being drawn would flash the entire waveform on every
+  /// beat.
+  Uint8List _tone = Uint8List(0);
+
+  /// The colour the measurement being folded in belongs to, or [_noMix].
+  int _blockTone = _noMix;
+
   /// One min/max pair per column, per channel. NaN is a column no audio was
   /// published for, and it is drawn as a gap rather than as silence.
   Float32List _minL = Float32List(0);
@@ -1031,6 +1122,12 @@ class _ScopeHistory {
   /// Points in [_traceL] / [_traceR], or zero when the display is columns.
   int traceCount = 0;
 
+  /// The colour per column, and the one the newest block sits in — which is what
+  /// a *trace* is drawn in, because a polyline is one colour and a trace window
+  /// is a fraction of a block wide.
+  Uint8List get tone => _tone;
+  int get blockTone => _blockTone;
+
   Float32List get minL => _minL;
   Float32List get maxL => _maxL;
   Float32List get minR => _minR;
@@ -1094,6 +1191,7 @@ class _ScopeHistory {
       _maxR = Float32List(columns);
       _traceL = Float32List(columns);
       _traceR = Float32List(columns);
+      _tone = Uint8List(columns);
       segments = Float32List(columns * 4);
       overSegments = Float32List(columns * 4);
       // The view above is into the buffer that has just been replaced.
@@ -1118,7 +1216,22 @@ class _ScopeHistory {
   }
 
   /// Folds one published measurement in.
-  void ingest(MeterSource engine) {
+  ///
+  /// [coloured] is whether the display is drawing [ColorRamp.rgb], and it gates
+  /// the only thing here that reads anything but the scope buffer: **the band
+  /// mix is not taken when nothing is going to draw it.** A 512-band pass
+  /// forty-seven times a second for a setting that is off by default is work
+  /// this module does not do, and a source is only asked for a spectrum by a
+  /// display that is colouring by one.
+  ///
+  /// What that costs is at the moment of the switch: columns folded in before it
+  /// carry no balance and keep the accent until they scroll off, which is a
+  /// second at the default span and stays there indefinitely on a held sweep.
+  /// The alternative is clearing the display to change a colour, which is worse
+  /// — the spectrogram repaints its history in place for exactly this reason and
+  /// this module cannot, because what it would have to repaint from is a
+  /// measurement it never took.
+  void ingest(MeterSource engine, {required bool coloured}) {
     // Measurements arrive before the first paint, which is what configures
     // this. There is nothing yet to fold them into, and nothing on screen for
     // them to be missing from.
@@ -1134,6 +1247,12 @@ class _ScopeHistory {
 
     final elapsed = engine.elapsedSeconds;
     if (elapsed.isNaN) return;
+
+    // The colour every column this measurement fills will be drawn in. Taken
+    // once per publish rather than per column: one publish is one analysis
+    // block, and its spectrum is the spectrum *of* that block — the two describe
+    // the same 1024 frames, which is exactly what makes the colour honest.
+    _blockTone = coloured ? _mixOf(engine) : _noMix;
 
     if (_elapsed < 0 || elapsed < _elapsed) {
       // The first measurement, or the engine was reset under us. Neither can be
@@ -1273,6 +1392,7 @@ class _ScopeHistory {
           _maxL[_swept] = _pMaxL;
           _minR[_swept] = _pMinR;
           _maxR[_swept] = _pMaxR;
+          _tone[_swept] = _blockTone;
           _pEmpty = true;
           _swept++;
         }
@@ -1365,6 +1485,7 @@ class _ScopeHistory {
     _maxL[_syncedColumn] = _pMaxL;
     _minR[_syncedColumn] = _pMinR;
     _maxR[_syncedColumn] = _pMaxR;
+    _tone[_syncedColumn] = _blockTone;
     _pEmpty = true;
   }
 
@@ -1496,6 +1617,59 @@ class _ScopeHistory {
     _fill = 0;
   }
 
+  /// The balance of this block's three bands, as an index into the scope's
+  /// palette.
+  ///
+  /// Low, mid and high are the three thirds of the analyser's axis — 20–200 Hz,
+  /// 200 Hz–2 kHz, 2–20 kHz, see `kLowBandTop` — summed as power from the bands
+  /// the engine published, then compared **in decibels against the loudest of
+  /// the three** over [_mixRangeDb]. That last step is the whole trick: bass
+  /// carries an order of magnitude more power than air does in every piece of
+  /// music, so a mix weighted by power draws all of them red, and a mix weighted
+  /// by decibels draws what somebody would say they were hearing.
+  ///
+  /// **Nothing here measures anything.** Every number comes from the bands the
+  /// engine published for this block; when there are none — a source with no
+  /// spectrum, or a passage with nothing above the floor — the answer is [_noMix]
+  /// and the module keeps its accent, which claims nothing.
+  static int _mixOf(MeterSource engine) {
+    if (!engine.hasSpectrum) return _noMix;
+    final spectrum = engine.spectrum;
+    final bands = spectrum.length;
+    if (bands < 3) return _noMix;
+    final power = [0.0, 0.0, 0.0];
+    for (var band = 0; band < bands; band++) {
+      final db = spectrum[band];
+      if (db.isNaN || db <= _mixFloorDb) continue;
+      final tone = band / (bands - 1);
+      final of = tone < kLowBandTop
+          ? 0
+          : tone < kMidBandTop
+          ? 1
+          : 2;
+      power[of] += math.pow(10, db / 10).toDouble();
+    }
+
+    var loudest = 0.0;
+    for (final band in power) {
+      if (band > loudest) loudest = band;
+    }
+    if (!(loudest > 0)) return _noMix;
+
+    var index = 0;
+    for (final band in power) {
+      // Decibels below the loudest band, as a weight over the window. A band
+      // that is not there at all is `-infinity` and clamps to nothing, which is
+      // what the arithmetic does on its own.
+      final under = band <= 0
+          ? _mixRangeDb
+          : 10 * math.log(loudest / band) / math.ln10;
+      final weight = (1 - under / _mixRangeDb).clamp(0.0, 1.0);
+      index = index * _mixSteps + (weight * (_mixSteps - 1)).round();
+    }
+    return index;
+  }
+
   void _pushColumn() {
     if (_pEmpty) {
       _pushBlank();
@@ -1505,6 +1679,7 @@ class _ScopeHistory {
     _maxL[_cursor] = _pMaxL;
     _minR[_cursor] = _pMinR;
     _maxR[_cursor] = _pMaxR;
+    _tone[_cursor] = _blockTone;
     _cursor = (_cursor + 1) % _columns;
     _pEmpty = true;
   }
@@ -1514,6 +1689,7 @@ class _ScopeHistory {
     _maxL[_cursor] = double.nan;
     _minR[_cursor] = double.nan;
     _maxR[_cursor] = double.nan;
+    _tone[_cursor] = _noMix;
     _cursor = (_cursor + 1) % _columns;
   }
 
@@ -1534,6 +1710,7 @@ class _ScopeHistory {
     _maxL.fillRange(0, _maxL.length, double.nan);
     _minR.fillRange(0, _minR.length, double.nan);
     _maxR.fillRange(0, _maxR.length, double.nan);
+    _tone.fillRange(0, _tone.length, _noMix);
   }
 
   // --- Reading ------------------------------------------------------------
@@ -1620,6 +1797,15 @@ class _ScopeHistory {
       _maxL[column] = hi;
       _minR[column] = loR;
       _maxR[column] = hiR;
+      // **The newest block's hue across the whole window, not a hue per
+      // column.** A triggered window is 5 to 200 ms — a fraction of one
+      // published block at the short end and nine of them at the long — and
+      // these columns are re-cut out of the raw ring every frame rather than
+      // accumulated, so there is no column here that a single measurement
+      // filled. One colour for one window is the honest shape of that: it says
+      // where the energy sits in the audio being shown, which at this span is
+      // one sound rather than a sequence of them.
+      _tone[column] = _blockTone;
     }
   }
 }
@@ -1641,6 +1827,7 @@ class _OscilloscopePainter extends MeterPainter {
     required this.trigger,
     required this.threshold,
     required this.zoom,
+    required this.ramp,
     required Listenable repaint,
   }) : _grid = (Paint()
          ..color = colors.hairline
@@ -1676,7 +1863,42 @@ class _OscilloscopePainter extends MeterPainter {
          ..color = colors.over
          ..strokeWidth = OaaStroke.mark
          ..strokeCap = StrokeCap.butt),
-       super(repaint: repaint);
+       super(repaint: repaint) {
+    // One ink per palette entry and a dimmed twin of each, built here because a
+    // painter is built when the skin, the ramp or a setting moves and never on
+    // the frame path. Nothing at all at [ColorRamp.skin] — there is one colour
+    // there and `_signal` is already it.
+    if (ramp != ColorRamp.rgb) return;
+    for (var bucket = 0; bucket <= _mixColors; bucket++) {
+      // Unpacked in the order `_mixOf` packed it: low, then mid, then high, each
+      // a weight in five steps. The last bucket is not a mix — a block with no
+      // spectrum behind it keeps the accent, because nothing is known about its
+      // balance. See [_noMix].
+      final steps = _mixSteps - 1;
+      final ink = bucket == _noMix
+          ? colors.accent
+          : ramp.mixAt(
+              bucket ~/ (_mixSteps * _mixSteps) / steps,
+              bucket ~/ _mixSteps % _mixSteps / steps,
+              bucket % _mixSteps / steps,
+              colors,
+            );
+      _hueInk.add(
+        Paint()
+          ..color = ink
+          ..strokeWidth = OaaStroke.hairline
+          ..strokeCap = StrokeCap.butt
+          ..isAntiAlias = false,
+      );
+      _hueInkDim.add(
+        Paint()
+          ..color = ink.withValues(alpha: _dim)
+          ..strokeWidth = OaaStroke.hairline
+          ..strokeCap = StrokeCap.butt
+          ..isAntiAlias = false,
+      );
+    }
+  }
 
   final MeterSource engine;
   final OaaColors colors;
@@ -1690,6 +1912,11 @@ class _OscilloscopePainter extends MeterPainter {
   final double threshold;
   final double zoom;
 
+  /// Which colours the trace is drawn in. See [ColorRamp] — at
+  /// [ColorRamp.skin] `_signal` and `_second` are the whole of it and the two
+  /// lists below stay empty.
+  final ColorRamp ramp;
+
   final Paint _grid;
   final Paint _centre;
   final Paint _signal;
@@ -1697,6 +1924,11 @@ class _OscilloscopePainter extends MeterPainter {
   final Paint _level;
   final Paint _over;
   final Paint _overMark;
+
+  /// One ink per palette entry, and the same again at the weight the second of
+  /// two overlaid channels is drawn at. Indexed by entry, [_noMix] included.
+  final List<Paint> _hueInk = [];
+  final List<Paint> _hueInkDim = [];
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -1782,7 +2014,13 @@ class _OscilloscopePainter extends MeterPainter {
       final high = channel == 0 ? history.maxL : history.maxR;
       // Only the second of two channels sharing a row is dimmed. In lanes it
       // is on its own centre line and there is nothing to tell it apart from.
-      final ink = rows == 1 && channel == 1 ? _second : _signal;
+      final dim = rows == 1 && channel == 1;
+      // At [ColorRamp.rgb] a *trace* is one colour — the newest block's, which is
+      // what its whole window is — so the ink is picked here rather than per
+      // point. The columns pick theirs per column; see [_paintColumns].
+      final ink = ramp == ColorRamp.rgb
+          ? (dim ? _hueInkDim : _hueInk)[history.blockTone]
+          : (dim ? _second : _signal);
 
       if (history.traceCount > 0) {
         _paintTrace(
@@ -1795,7 +2033,7 @@ class _OscilloscopePainter extends MeterPainter {
           ink,
         );
       } else {
-        _paintColumns(canvas, history, low, high, centre, half, ink);
+        _paintColumns(canvas, history, low, high, centre, half, ink, dim: dim);
       }
     }
 
@@ -1911,6 +2149,15 @@ class _OscilloscopePainter extends MeterPainter {
 
   // --- The signal ---------------------------------------------------------
 
+  /// The columns, each drawn between the extremes of the samples that landed in
+  /// it.
+  ///
+  /// **At [ColorRamp.rgb] the columns are sorted into hue buckets on the way
+  /// out** and drawn as one `drawRawPoints` per colour, which is what lets a
+  /// column carry the hue of the audio in it without becoming a draw call of its
+  /// own. Everything about *where* a column is drawn is shared: the loop below
+  /// runs once and the last few lines are the only place the two settings
+  /// differ.
   void _paintColumns(
     Canvas canvas,
     _ScopeHistory history,
@@ -1918,11 +2165,16 @@ class _OscilloscopePainter extends MeterPainter {
     Float32List high,
     double centre,
     double half,
-    Paint ink,
-  ) {
+    Paint ink, {
+    required bool dim,
+  }) {
     final columns = history.columns;
     final segments = history.segments;
     final over = history.overSegments;
+    final rainbow = ramp == ColorRamp.rgb;
+    final buckets = state._buckets;
+    final tone = history.tone;
+    if (rainbow) buckets.clear();
     var drawn = 0;
     var clipped = 0;
 
@@ -1998,6 +2250,8 @@ class _OscilloscopePainter extends MeterPainter {
         over[clipped * 4 + 2] = x;
         over[clipped * 4 + 3] = bottom;
         clipped++;
+      } else if (rainbow) {
+        buckets.run(tone[slot], x, top, bottom);
       } else {
         segments[drawn * 4] = x;
         segments[drawn * 4 + 1] = top;
@@ -2007,10 +2261,14 @@ class _OscilloscopePainter extends MeterPainter {
       }
     }
 
-    segments.fillRange(drawn * 4, segments.length, _parked);
-    ink.isAntiAlias = false;
-    ink.strokeWidth = OaaStroke.hairline;
-    canvas.drawRawPoints(ui.PointMode.lines, segments, ink);
+    if (rainbow) {
+      buckets.draw(canvas, ui.PointMode.lines, dim ? _hueInkDim : _hueInk);
+    } else {
+      segments.fillRange(drawn * 4, segments.length, _parked);
+      ink.isAntiAlias = false;
+      ink.strokeWidth = OaaStroke.hairline;
+      canvas.drawRawPoints(ui.PointMode.lines, segments, ink);
+    }
     if (clipped > 0) {
       over.fillRange(clipped * 4, over.length, _parked);
       _over.isAntiAlias = false;
@@ -2095,5 +2353,6 @@ class _OscilloscopePainter extends MeterPainter {
       oldDelegate.trigger != trigger ||
       oldDelegate.threshold != threshold ||
       oldDelegate.zoom != zoom ||
+      oldDelegate.ramp != ramp ||
       !identical(oldDelegate.engine, engine);
 }

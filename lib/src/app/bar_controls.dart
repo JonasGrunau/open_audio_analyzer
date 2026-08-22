@@ -48,13 +48,29 @@ const double _barControlHeight = Space.lg;
 /// measured against was indistinguishable from the four that do something.
 /// Tone is the right axis to separate them on — it survives the metrics being
 /// identical, which is what keeps the row a row.
+///
+/// **Two menus in the bar wear this shape, and they are the two that report
+/// what a reading is.** The delivery target is what every PASS and FAIL is a
+/// verdict against; the signal source is what is being measured at all. The
+/// source spent eight phases as a dot and a bare word beside four bordered
+/// controls, which read as a caption rather than as the menu it is — the
+/// commonest thing anybody changes in the bar was the one item in it that did
+/// not look changeable. It carries [lit] because it has a state the target does
+/// not.
 class BarChip extends StatelessWidget {
-  const BarChip({required this.text, super.key});
+  const BarChip({required this.text, this.lit, super.key});
 
   /// Shown in capitals. The value keeps its own capitals everywhere else —
   /// a target the user named is theirs, and the menu, the settings panel and
   /// every report print it as they typed it.
   final String text;
+
+  /// A state dot before the text: bright for true, dim for false.
+  ///
+  /// Null for a chip that reports a choice rather than a state — a delivery
+  /// target is never on or off. The signal source is: bright means listening,
+  /// dim means silence.
+  final bool? lit;
 
   @override
   Widget build(BuildContext context) {
@@ -68,23 +84,60 @@ class BarChip extends StatelessWidget {
       ),
       // `Center`, not `Container.alignment`: an aligned `Container` expands to
       // whatever bounded width it is offered, and this one is offered 220 px by
-      // the `ConstrainedBox` around the calibration picker — so the chip would
-      // be 220 px wide whatever it said. A width factor of 1 shrink-wraps the
-      // text and still centres it in the fixed height.
+      // the `ConstrainedBox` around either picker — so the chip would be 220 px
+      // wide whatever it said. A width factor of 1 shrink-wraps the row and
+      // still centres it in the fixed height.
       child: Center(
         widthFactor: 1,
-        // Calibration names run long ("Streaming (−14 LUFS)"), and this chip
-        // sits in a Row that has no slack. Ellipsis rather than overflow.
-        child: Text(
-          text.toUpperCase(),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          softWrap: false,
-          style: OaaType.label.copyWith(color: colors.textMuted),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (lit != null) ...[
+              _Dot(lit: lit!, colors: colors),
+              const SizedBox(width: Space.sm),
+            ],
+            // `Flexible`, so the name gives ground before the row does.
+            // Calibration names run long ("Streaming (−14 LUFS)") and a device
+            // name is whatever an interface calls itself, and both chips sit in
+            // a Row that has no slack: without this the text is measured against
+            // unbounded width and takes it, inside the chip where the bar's own
+            // width gates cannot see it.
+            Flexible(
+              child: Text(
+                text.toUpperCase(),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                softWrap: false,
+                style: OaaType.label.copyWith(color: colors.textMuted),
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
+}
+
+/// The source chip's state dot.
+///
+/// Not the signal hue: this sits in the same bar as the readings, where
+/// `accent` already means "in spec" — a lit teal dot next to a loudness number
+/// reads as a verdict on it.
+class _Dot extends StatelessWidget {
+  const _Dot({required this.lit, required this.colors});
+
+  final bool lit;
+  final OaaColors colors;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: Space.xs + Space.xxs,
+    height: Space.xs + Space.xxs,
+    decoration: BoxDecoration(
+      color: lit ? colors.textPrimary : colors.textFaint,
+      borderRadius: OaaRadius.allXs,
+    ),
+  );
 }
 
 /// A button in the status bar.

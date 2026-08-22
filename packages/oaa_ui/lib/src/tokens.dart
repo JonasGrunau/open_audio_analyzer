@@ -139,13 +139,26 @@ class OaaColors {
     this.isLight = false,
   });
 
-  /// The canvas behind everything.
+  /// The canvas behind everything, and the well a menu's current value sits in.
+  ///
+  /// **It has to be the deepest of the three surfaces.** A menu is drawn on
+  /// [panelRaised] and marks the row it already holds by recessing it to this
+  /// colour, so a skin that names a background lighter than its own raised
+  /// panel marks that row by *raising* it — which is the direction the whole
+  /// interface avoids, and nothing in the widget suite would notice. See
+  /// `OaaMenuRow`; `test/menu_row_test.dart` holds the inequality for the
+  /// shipped skins.
   final Color background;
 
   /// A module or panel surface.
   final Color panel;
 
-  /// A surface that sits on top of a panel — menus, selected rows.
+  /// A surface that sits on top of a panel — a menu, a selected row, a chosen
+  /// segment.
+  ///
+  /// A *menu's* selected row is the exception and goes the other way, to
+  /// [background]: the menu is already drawn on this, so there is no step up
+  /// left to take.
   final Color panelRaised;
 
   /// The only border colour.

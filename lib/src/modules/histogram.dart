@@ -31,17 +31,16 @@ import '../clock/meter_clock.dart';
 ///
 /// Colour is the target and nothing else. Everything under the calibration's
 /// LUFS target is drawn in [OaaColors.accent], everything over it in
-/// [OaaColors.warn], and the split is a clip rather than a per-column verdict —
-/// a short-term reading above target is not a delivery failure and must not be
-/// coloured as though somebody had classified it as one. It is the *area* over
-/// the line that carries the meaning, and the eye adds that up on its own.
+/// [OaaColors.over], and the split is a clip rather than a per-column verdict.
+/// It is the *area* over the line that carries the meaning, and the eye adds
+/// that up on its own — a column that straddles the target has no single
+/// verdict to be coloured by, which is why the boundary is a clip and not a
+/// classification.
 ///
-/// **[OaaColors.warn] and not [OaaColors.over]**, which this drew in for two
-/// phases. `over` is the colour of a ceiling that has been exceeded — a clipped
-/// sample, a true peak past the limit — and spending it on "louder than the
-/// number you are aiming at" left the module contradicting the sentence above
-/// it. Every bar in the application now marks the same thing the same way: over
-/// the target is amber, and red is still a failure.
+/// [OaaColors.over] is the application's one mark for "past the number you set",
+/// and every module that draws against the delivery target uses it: the two
+/// bars of the LUFS Meter, the three arcs of the Super Meter, this, and the
+/// Loudness Distribution.
 ///
 /// ---------------------------------------------------------------------------
 /// Not to be confused with the Loudness Distribution
@@ -228,13 +227,13 @@ class _HistogramModuleState extends State<HistogramModule> {
       ]);
 
     _fillUnder = fill(colors.accent, 0.70, 0.16);
-    _fillOver = fill(colors.warn, 0.70, 0.16);
+    _fillOver = fill(colors.over, 0.70, 0.16);
     // The momentary band is the same two colours held well back. It is context
     // for the short-term line, not a second reading, and at equal weight the
     // eye reads the *top* of the band as the measurement — which is the fast
     // meter, the one a loudness display exists to look past.
     _bandUnder = fill(colors.accent, 0.26, 0.05);
-    _bandOver = fill(colors.warn, 0.26, 0.05);
+    _bandOver = fill(colors.over, 0.26, 0.05);
   }
 
   @override
@@ -460,6 +459,15 @@ class _HistogramPainter extends MeterPainter {
          ..color = colors.accent
          ..style = PaintingStyle.stroke
          ..strokeWidth = OaaStroke.mark),
+       // The same edge past the target, in [OaaColors.over]. The fill under it
+       // already splits there; an outline that did not would run one colour
+       // straight through the boundary and read as the line the eye lands on
+       // *disagreeing* with the area it bounds. The Loudness Distribution has
+       // split its own silhouette this way from the start — see `_edgeOver`.
+       _curveOver = (Paint()
+         ..color = colors.over
+         ..style = PaintingStyle.stroke
+         ..strokeWidth = OaaStroke.mark),
        _grid = (Paint()
          ..color = colors.hairline
          ..strokeWidth = OaaStroke.hairline
@@ -482,6 +490,7 @@ class _HistogramPainter extends MeterPainter {
   final _HistogramModuleState state;
 
   final Paint _curve;
+  final Paint _curveOver;
   final Paint _grid;
   final Paint _target;
 
@@ -693,10 +702,21 @@ class _HistogramPainter extends MeterPainter {
       state._fillOver!,
     );
 
-    canvas.save();
-    canvas.clipRect(plot);
-    canvas.drawRawPoints(ui.PointMode.polygon, curve, _curve);
-    canvas.restore();
+    // The curve, split at the target like everything under it. Two clipped
+    // passes of the same buffer rather than two polylines: a column that
+    // straddles the line has no single verdict, and cutting where the target
+    // actually is means the outline changes colour on exactly the pixel row the
+    // fill does.
+    void edge(Rect region, Paint paint) {
+      if (region.height <= 0) return;
+      canvas.save();
+      canvas.clipRect(region);
+      canvas.drawRawPoints(ui.PointMode.polygon, curve, paint);
+      canvas.restore();
+    }
+
+    edge(Rect.fromLTRB(plot.left, targetY, plot.right, plot.bottom), _curve);
+    edge(Rect.fromLTRB(plot.left, plot.top, plot.right, targetY), _curveOver);
   }
 
   void _paintTarget(

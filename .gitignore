@@ -103,3 +103,11 @@ packaging/linux/flatpak/staging/
 *.keystore
 *.jks
 *.mobileprovision
+
+# graphify's knowledge graph. Derived entirely from the tree it sits in — the
+# post-commit hook rebuilds graph.json and GRAPH_REPORT.md from whatever the
+# commit touched, so a tracked copy would be rewritten by the same commit that
+# invalidated it and every diff would carry a few thousand regenerated lines.
+# `.graphifyignore` is the input and *is* tracked: it defines the corpus, and a
+# graph built from a different corpus is a different graph.
+graphify-out/

@@ -13,14 +13,19 @@ publishes. GPL-3.0-or-later, except the two font families, which are SIL OFL
 | `fonts/GoogleSansCode-Regular.ttf` | Scale ticks and secondary numbers. |
 | `fonts/GoogleSansCode-Medium.ttf` | The one big reading in a module. |
 | `fonts/GoogleSansCode-LICENSE.txt` | SIL OFL 1.1. Ships with any binary that bundles the family. |
-| `brand/oaa-mark.svg` | The mark alone, for anything too small or too square for the name. Read at build time by `tool/docs.dart`, which inlines it as the site's header mark and favicon. The only file in `brand/`. |
+| `brand/oaa-logo.svg` | **The drawing.** An Inkscape document: the wave, in white, over the teal ramp, on a 500-unit square. The only artwork in this repository that is edited by hand, and the file every icon and every twin below is generated from. |
+| `brand/oaa-logo-background.svg` | Generated. The ramp on its own, full bleed and square. |
+| `brand/oaa-mark.svg` | Generated. The wave on its own, white, on nothing. **For a dark surface only** — it is white, so on a pale page it is not there. |
+| `brand/oaa-icon.svg` | Generated. The app icon: the wave on the ramp in a squircle tile. The one to reach for when the background is not known. Read at build time by `tool/docs.dart`, which inlines it as the site's header mark and writes it out as the favicon. |
+| `brand/oaa-icon.png` | Generated. The same icon at 512 px with transparent corners, for `README.md` and anywhere else that wants an image rather than a vector. |
+| `brand/oaa-mark-old.svg` | The four-bar mark, retired in 0.10.0. Kept because it is on every release before it. |
 
 ## Rules
 
 - **`brand/` is not declared in `pubspec.yaml`, and must not be.** The
   application has no SVG renderer — there is no `flutter_svg` in the dependency
-  list and nothing here asks for one — so an `assets:` entry would copy eight
-  kilobytes of artwork into every pkg, Windows installer, tarball, AppImage and
+  list and nothing here asks for one — so an `assets:` entry would copy the
+  artwork into every pkg, Windows installer, tarball, AppImage and
   flatpak for code that cannot read it. These files are for the README, the
   documentation site and anywhere else the project is shown; the artwork the
   *application* ships is `packaging/icon/`, which is rendered to PNG at build
@@ -28,26 +33,33 @@ publishes. GPL-3.0-or-later, except the two font families, which are SIL OFL
   opposite case and is declared — in the application's pubspec rather than in
   `oaa_ui`, for a reason written down beside the declaration.
 
-- **The mark belongs to `packaging/icon/make_icons.dart`.** `brand/` holds a
-  third and fourth copy of the same four bars, which is one more duplicate than
-  this repository would like and is accepted for the same reason `oaa.svg` is:
-  the consumers want a vector and writing an SVG emitter costs more than the
-  twenty lines it would save. There were a fifth and sixth copy — two constants
-  inside `tool/docs.dart` — and they are gone: the site reads `oaa-mark.svg`,
-  because that pair went stale the first time the mark was redrawn and
-  published the previous identity on every page until somebody looked. The consequence is a rule — **the mark changes in
-  `make_icons.dart` first, and is brought across afterwards.** A logo and an
-  icon that disagree about the shape are two identities, and the one people see
-  first is whichever they happen to meet first.
+- **`oaa-logo.svg` is the only file here anybody edits, and the direction of
+  that used to be the other way round.** Until 0.10.0 the mark was four rounded
+  rectangles whose numbers lived in `_Mark` in
+  `packaging/icon/make_icons.dart`, and everything in `brand/` was a hand-copied
+  transcription of them under a rule saying the mark changed there first and was
+  brought across afterwards. That rule was workable for four rectangles and is
+  not for a wave with three hundred control points, so it is gone: the drawing
+  is the master, `make_icons.dart` parses the one path and the one gradient out
+  of it, and it writes every other file in this directory. **Redraw
+  `oaa-logo.svg`, run `dart run packaging/icon/make_icons.dart`, commit what it
+  changed.** Nothing here is brought across by hand any more.
 
-- **There is no logo lockup yet, and this file used to say there were two.**
-  `oaa-logo.svg` and `oaa-logo-light.svg` were listed here, and referenced from
-  `oaa-mark.svg`'s header as the file its geometry came from, and neither has
-  ever existed in this repository. The table is read as an inventory, so a row
-  for a file nobody wrote is worse than no row: it sends the next reader
-  looking for artwork, and it made the mark's own header cite a source that is
-  not there. When the lockup is drawn, the three rules below are what it has to
-  satisfy — they are requirements, not a description of something that exists.
+- **`make_icons.dart` insists on one visible `<path>` and at least two gradient
+  stops, and stops with a message when it does not find them.** Inkscape keeps
+  hidden layers in the document, which is why "visible" is the test — the logo
+  file carries objects the export did not want, set to `display:none`. If a
+  redraw splits the wave into two paths or converts a corner to an arc, the
+  program says so and nothing is written; that is the design, because the
+  alternative is sixty wrong files committed in silence.
+
+- **There is still no lockup with the name set beside the mark.** `oaa-logo.svg`
+  exists now and is the square logo — the wave on its ramp — not a wordmark
+  lockup. This file once listed `oaa-logo.svg` and `oaa-logo-light.svg` as
+  though both were drawn when neither was, which sent readers looking for
+  artwork that was not there; the row above describes what the file actually
+  is. When a lockup is drawn, the three rules below are what it has to satisfy —
+  they are requirements, not a description of something that exists.
 
 - **The wordmark must be outlines, not a `<text>` element.** Inter is not
   installed on the machines that will see the logo, so `<text>` would render in
@@ -61,19 +73,35 @@ publishes. GPL-3.0-or-later, except the two font families, which are SIL OFL
   is loaded as an image, which is how both GitHub and the documentation site
   load it, so a single self-switching file would be a file that renders in one
   theme and is invisible in the other. Pick by background: one on the
-  application's own graphite, one on white or a pale page. The mark itself
-  needs neither, because it carries no background and its bars read on both.
+  application's own graphite, one on white or a pale page. The *mark* needed
+  neither while it was teal bars, which read on both; it is white now, so it has
+  the same problem and `oaa-icon.svg` is the answer to it — the icon brings its
+  own ground, so one file covers every background.
 
 - **Never put two hyphens in a row inside these files' comments.** It ends an
   XML comment, the parser rejects the whole document, and every renderer that
   loads it through an `<img>` shows a broken-image glyph and reports nothing —
-  not to the console, not anywhere. The first cut of `oaa-logo.svg` had rules
-  drawn in hyphens across its header and was dead on arrival in a way that
+  not to the console, not anywhere. An early logo draft had rules drawn in
+  hyphens across its header and was dead on arrival in a way that
   `flutter analyze` and every test in this repository would have called clean.
-  Look at the file in a browser after editing the header.
+  The generated files carry a header written by `_brandHeader` in
+  `make_icons.dart`, so the rule now applies there as much as here. Look at the
+  file in a browser after editing either.
 
-- **The accent stays on the mark.** `OaaColors.accent` means a measured signal
-  and `packages/oaa_ui/lib/src/tokens.dart` is emphatic that nothing else may
-  borrow it; a teal wordmark beside a teal mark is the accent meaning two
-  things inside one logo. The bars are teal, the tallest is capped in `over`,
-  and the name is `textPrimary` on dark or `background` on light.
+- **The teal is the ground now, and the mark is white.** It was the other way
+  round until 0.10.0: the bars were `OaaColors.accent` on graphite, with the
+  tallest capped in `over`. The ramp the wave sits on runs `#6EF2CC` to
+  `#20AA92` and passes through `#35E0C4`, which is `OaaColors.accent` exactly,
+  so the icon is still built on the palette's one signal hue — it is the field
+  rather than the figure. The rule it was protecting is unchanged and now
+  applies to the wordmark alone: `packages/oaa_ui/lib/src/tokens.dart` is
+  emphatic that nothing borrows the accent to mean anything but a measured
+  signal, so the name is `textPrimary` on dark or `background` on light, never
+  teal.
+
+- **The white mark cannot go on a pale surface, and the old one could.** Four
+  teal bars read on anything, so `oaa-mark.svg` was safe to hand to any
+  consumer; the wave is white and on white it is not there. That is why
+  `tool/docs.dart` inlines `oaa-icon.svg` and not `oaa-mark.svg`, and why the
+  favicon moved with it — a tab strip is pale on most machines. Reach for the
+  bare mark only where the background is known to be dark.

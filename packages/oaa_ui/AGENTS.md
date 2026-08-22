@@ -12,12 +12,15 @@ exactly once.
 | `src/readout.dart` | `ReadoutPainter` (cached paragraph layout) and `ReadingState`. |
 | `src/text_cache.dart` | `layoutParagraph` for static labels and `ValueParagraph` for changing ones — the cache that re-lays out only when a *formatted string* differs. |
 | `src/scale.dart` | `MeterScale` and `ScaleGraticule`. Five modules draw a dB scale, and two side by side whose ticks disagree look like a rendering bug. |
+| `src/color_ramp.dart` | What `ColorRamp` paints, and the one place the argument for it is written down: colour carries whatever a module's axes do not. The spectrogram's level ramp — the skin's, or the rainbow — and the oscilloscope's three-band mix, where red, green and blue *are* the bass, the mids and the highs. |
 | `src/grid_geometry.dart` | Grid cells to pixels. The one place the 24×16 canvas becomes a rectangle. |
 | `src/point_buckets.dart` | Marks sorted by the colour they are drawn in, so a display of tens of thousands of them is a few dozen `drawRawPoints` calls. Behind the stereo cloud; the spectrogram drew through it too until real material's run counts outgrew it. |
-| `src/panel.dart` | `PanelScaffold` and the controls panels are assembled from, plus `showOaaPanel`. |
+| `src/panel.dart` | `PanelScaffold` and the controls panels are assembled from, plus `showOaaPanel` and `showOaaConfirm`. |
+| `src/menu_row.dart` | `OaaMenuRow` — one row of a popup menu, and the fill that marks the value the menu holds. Every menu in the application is built through it: the panel control, the status bar's two pickers and a module's dozen settings. The one widget here handed its palette rather than reading it, for the reason in its header. |
 | `src/qr.dart` | `QrCode` — just enough QR to carry one address, byte mode at error level M — and `OaaQrCode`, which paints it. The one widget here that does not take its colours from the skin: a code is read by thresholding a camera image, and dark-on-light is a property of the format rather than a choice. Held against ZXing by `test/qr_test.dart`. |
 | `src/glyph.dart` | `OaaMark` and `OaaGlyph` — the closed set of marks the interface draws, as paths. There is no icon font, and a mark that is a codepoint is a mark that can go missing. |
-| `src/skin_palette.dart` | The one adapter between a `Skin` (data, in `oaa_core`) and a `OaaColors`. |
+| `src/skin_palette.dart` | The one adapter between a `Skin` (data, in `oaa_core`) and a `OaaColors`, plus `skinArgb` — the one place a `Color` is quantised back to the eight-bit hex the format stores. |
+| `src/color_field.dart` | `OaaColorWell` — a colour as a boxed control — and `OaaColorPicker` — a saturation/value plane, a hue strip, a hex field and an opacity slider. The two controls behind the skin editor, and the only two here that were not in the closed control table below before they were written. |
 | `src/slider.dart` | `OaaSlider` — a value dragged rather than picked, and one of the two controls here that live on a meter rather than in a panel. Continuous while it is dragged and committed once at the end, because its callers' values are layout state. Disabled it still draws where the value has got to, because the case for disabling one is that something else is moving it. |
 | `src/check.dart` | `OaaCheck` — a boolean on a meter: a box, and the word it switches. The other control that lives on the measurement surface, and not `OaaToggle` because a panel's switch is two pixels taller than a slider's whole row and draws its on state in `accent`, which nothing on a module may borrow. |
 | `src/focusable.dart` | `OaaFocusable` — keyboard focus, Enter/Space activation and the screen-reader identity every control Open Audio Analyzer paints itself would otherwise be missing. `OaaFocusable.range` is the same thing for a value: the arrows instead of Enter, a slider's announcement instead of a button's, and the control's own pointer handling, because where a press landed *is* the value it sets. |
@@ -32,6 +35,16 @@ exactly once.
 - **No shadows.** Depth is background steps and hairlines. Shadows imply
   floating cards; measurement gear is machined panels sitting flush. This
   includes Material's own — see the Panels section.
+- **Selection is a fill, and in a menu the fill goes *down*.** A list row and a
+  segment take `panelRaised`, a step up from the panel they sit on. A menu is
+  already drawn on `panelRaised`, so its current value takes `background`
+  instead — the row is recessed and the options you can still choose sit on the
+  raised surface. Marking it by making it the lightest row in the menu, which is
+  what every menu here did before the fill, emphasises the one choice pressing
+  cannot change and leaves the live options reading as the disabled ones.
+  `test/menu_row_test.dart` asserts the direction as an inequality, in both
+  skins, because nothing about a screenshot says which way round it is meant to
+  be.
 - **Every number uses `OaaType`'s tabular figures.** A readout whose digits
   change width jitters while you watch it.
 - **A `BoxDecoration` may not combine `borderRadius` with a non-uniform
@@ -77,6 +90,19 @@ an ink response needs. The reasons all three are load-bearing are in the file;
 the palette one cost a phase of panels that could not follow a skin change while
 they were open, which is precisely when skins are chosen.
 
+`showOaaConfirm` is the one shape built on top of it rather than beside it: a
+yes-or-no question over whatever is already open, returning false for Cancel,
+the × and the scrim alike. **It is a modal over a modal, which this system
+otherwise refuses**, and it exists for the one case the in-place confirmation
+cannot carry — an action whose consequence is larger than the control that
+starts it, where a button reading `Reset?` is a sentence nobody has read.
+Settings' delivery-target reset is the only caller; `lib/src/panels/AGENTS.md`
+has the test for when a second one would be justified. Two conventions bend
+inside it and both are argued in the function's own header: it is **420** wide,
+because a dialog exactly as wide as the panel under it reads as that panel
+having been replaced, and its destructive button is **last**, in the affirmative
+slot, because in a confirmation the destructive action *is* the affirmative one.
+
 `PanelScaffold(title:, child:, onClose:, footer:, width: 620)`.
 
 - The title is sentence case in the source. The title bar uppercases it.
@@ -92,15 +118,17 @@ they were open, which is precisely when skins are chosen.
   else, and selection *inside* a panel is `hairlineStrong`. The exception buys
   the affirmative button and nothing else.
 - **One way out per panel.** A Done next to a Close is two.
-- **`width:` is for a panel of rows, and the keyboard sheet is the one
-  exception.** 620 is a column of labels and controls read left to right in
-  short lines; the sheet is a reference *table* read by scanning down it, and at
-  that width its seventeen rows did not fit the scaffold's 760 px of height, so
-  it scrolled and cut its own footnote in half. It takes 880 and two columns.
-  A second panel wanting the same is a panel to look at twice — but this is the
-  shape that fixes it, and the way it is kept honest is
-  `test/scaling_test.dart`, which fails if the sheet ever needs to scroll at the
-  smallest window the application supports.
+- **`width:` is for a panel of rows, and there are two exceptions.** 620 is a
+  column of labels and controls read left to right in short lines; the keyboard
+  sheet is a reference *table* read by scanning down it, and at that width its
+  seventeen rows did not fit the scaffold's 760 px of height, so it scrolled and
+  cut its own footnote in half. It takes 880 and two columns. A confirmation
+  takes 420, through `showOaaConfirm` rather than by writing a number, because a
+  dialog the same width as the panel under it reads as a replacement rather than
+  as something laid on top. A third panel wanting its own width is a panel to
+  look at twice — but these are the shapes that fix those two, and the way the
+  sheet is kept honest is `test/scaling_test.dart`, which fails if it ever needs
+  to scroll at the smallest window the application supports.
 - **A panel makes room for the software keyboard, and asks its own context how
   much room.** `PanelScaffold` pads its bottom by
   `MediaQuery.viewInsetsOf(context).bottom`, which is the keyboard's height in
@@ -123,6 +151,21 @@ they were open, which is precisely when skins are chosen.
   its keycaps run past the edge, where a `Row` clips them in release with
   nothing said.
 
+- **A scrolling region says it does not want the platform's scrollbar, or it
+  gets a second one.** `MaterialScrollBehavior` wraps every *vertical*
+  scrollable in a `Scrollbar` of its own on macOS, Windows and Linux — asked
+  for by nothing, logged nowhere — so `PanelScaffold`'s own 4 px thumb in
+  `hairlineStrong` had Flutter's 8 px grey one immediately inside it, fading in
+  on every scroll. The body is wrapped in
+  `ScrollConfiguration(behavior: …copyWith(scrollbars: false))` for that reason.
+  Two things make this class of defect hard to see: a tablet gets no ambient
+  bar, so only a desktop run shows it, and the platform in a widget test
+  defaults to Android, so the whole panel suite passed throughout. A test for it
+  therefore names its platforms and counts by the *controller* a bar was handed
+  rather than by widget type — the second bar is a private `RawScrollbar`
+  subclass, and a multiline `EditableText` inside the body carries a third that
+  `EditableText` insists on and that never draws. `test/panels_test.dart`.
+
 ### The body
 
 | Use | For |
@@ -133,6 +176,7 @@ they were open, which is precisely when skins are chosen.
 | `PanelNote(text, tone:, mark:)` | Prose below the rows it explains. `tone:` only for the ones that are warnings, and `mark:` with it — a panel is mostly caption-sized prose in one grey, and one step of colour is enough to see once you are looking and not enough to stop you scrolling past. |
 | `PanelActions(children:)` | The button row that ends a section. |
 | `SegmentedControl` / `OaaButton` / `OaaToggle` / `OaaTextField` / `PanelMenu` | The controls. There are no others. |
+| `OaaColorWell` + `OaaColorPicker` | A colour, in the one panel that edits thirteen of them. **The decision this table asks for, made and written down:** a text field alone very nearly won — the format is hex, `Skin.parseColor` already takes every spelling of it, and zero new controls is a real argument in a system whose premise is that a closed set cannot drift. What decided it is that typing hex is a way of *recording* a colour you have already chosen, and nobody chooses one that way. The field is still underneath and is still what commits. |
 
 Anything reached for outside this table is a decision to make here first.
 
@@ -161,6 +205,23 @@ not, because what they show is a device name, a target or something typed, and
 shouting a user's own words at them is a different statement. The segmented
 control was the exception for eight phases and it read as prose that happened to
 have a box around it: `Test tone` beside a `RESCAN` in the row below.
+
+**A control whose value is a *point* comes through `OaaFocusable.plane`.**
+There is exactly one — the colour picker's saturation/value square — and it
+exists because `.range` cannot be bent into it: `.range` binds right *and* up
+to `onIncrease`, which is right for a slider drawn either way round and useless
+for a surface whose two axes are different quantities. So the four arrows are
+separate, shift multiplies the step by ten (a two-hundred-pixel square is a
+hundred presses across at one step a time, which is reachable and not usable),
+and assistive technology gets four *named custom actions* rather than an
+increase/decrease pair that would silently expose half the control.
+
+**A control that has to focus itself takes `OaaFocusable`'s `focusNode`.** A
+`FocusableActionDetector` is reached by Tab and not by a click, which is right
+for a button — clicking one runs it — and wrong for a value: somebody who has
+just clicked a point on a colour plane is exactly the person about to nudge it,
+and being told to Tab back to the thing under their pointer is not an answer.
+The picker owns its nodes and requests them on the way down.
 
 **A control that opens something is a `OaaFocusable`, not a `PopupMenuButton`.**
 The Open Audio Analyzer theme sets `NoSplash` and a transparent highlight, so a

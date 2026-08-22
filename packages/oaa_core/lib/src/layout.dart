@@ -438,6 +438,47 @@ enum HistogramSmoothing {
   }
 }
 
+/// What the Loudness Distribution's loudness axis spans.
+///
+/// [full] is the published range exactly, −60 to 0 LUFS, and it is what the
+/// module drew before this setting existed. It is the honest axis and it is
+/// usually a waste of the module: the gated short-term distribution of a
+/// mastered programme occupies eight to fifteen of those sixty decibels, so
+/// four fifths of the width is empty and the shape that carries the reading is
+/// squeezed into the rest.
+///
+/// [auto] fits the axis to what is actually drawn on it — every occupied bin,
+/// the gated range, and the delivery target — and then rounds that outwards to
+/// a whole number of ticks. **Fitting is not the same as narrowing**, which is
+/// the distinction the module's own axis note is about: `MeterScale.fractionOf`
+/// clamps, so an axis chosen without reference to the bins stacks everything
+/// below its floor onto the bottom column as one tall bar the programme never
+/// had. A fitted axis cannot do that, because containing every occupied bin is
+/// the thing it is computed from.
+enum DistributionScale {
+  /// The narrowest round window that holds everything the module draws.
+  auto('auto', 'Auto'),
+
+  /// −60 to 0 LUFS, whatever the programme did.
+  full('full', 'Full range');
+
+  const DistributionScale(this.id, this.label);
+
+  /// Stable identifier for presets and the wire protocol. Never change one of
+  /// these; add a new setting instead.
+  final String id;
+
+  /// What the module's menu says.
+  final String label;
+
+  static DistributionScale? fromId(String id) {
+    for (final scale in DistributionScale.values) {
+      if (scale.id == id) return scale;
+    }
+    return null;
+  }
+}
+
 /// How much time the oscilloscope's display spans, left edge to right.
 ///
 /// A 1-2-5 sequence, because that is the sequence every time-base knob has ever
@@ -681,6 +722,11 @@ enum ScopeDivision {
 /// again. It applies to the bar widths too, which is unusual and harmless —
 /// two thirds of a bar is a legitimate thing to want to look at, and refusing
 /// it would be a special case to explain.
+///
+/// **A free-running window has no grid**, because it has no division to modify
+/// — its width is a number of milliseconds and there is no triplet of one. The
+/// row is greyed rather than dropped for the same reason [ScopeTrigger]'s is
+/// under [ScopeSync.tempo], and it is the same rule read the other way round.
 enum ScopeGrid {
   straight('straight', 'Straight', 1),
   triplet('triplet', 'Triplet', 2 / 3),
@@ -748,6 +794,14 @@ enum ScopeStereo {
 /// something is always on screen. It needs nothing from the user, which is why
 /// it is the default.
 ///
+/// **Its row says `Off` and its id is `auto`.** A bench scope calls this mode
+/// Auto, but the row it sits in is spelled `Trigger:`, and `Trigger: Auto`
+/// reads as an automatic trigger — the opposite of a display that is not
+/// triggered at all. The id keeps the older word because it is written into
+/// every saved preset and into the wire protocol, and a renamed id does not
+/// fail: [fromId] falls through to the default and the layout quietly forgets
+/// what it was set to.
+///
 /// [transient] is the sweep, and it is the mode for looking at *one event*. The
 /// display waits, armed, until the signal rises through [ScopeThreshold]; from
 /// that sample it draws forward across the whole width once and then holds what
@@ -757,8 +811,8 @@ enum ScopeStereo {
 /// capture on screen instead of drawing a picture of the noise floor.
 ///
 /// The two differ in what they do when there is no trigger, which is the same
-/// distinction a bench scope's Auto and Normal make: [auto] free-runs and shows
-/// whatever the newest audio was, [transient] holds. That is the whole reason
+/// distinction a bench scope draws between its Auto and Normal modes: [auto]
+/// free-runs and shows whatever the newest audio was, [transient] holds. That is the whole reason
 /// both exist — a free-running window is unreadable for a transient and a held
 /// one is useless for a continuous tone.
 ///
@@ -943,6 +997,56 @@ abstract final class ScopeZoom {
   static double _log2(double value) => math.log(value) / math.ln2;
 }
 
+/// Which colours the spectrogram and the oscilloscope draw in.
+///
+/// Two of the fourteen modules answer with a colour rather than with a length,
+/// and there are two good ways to choose that colour. [skin] is the one they
+/// were born with: level runs a ramp from the module's own ground through
+/// `accent` to `warn`, brightness rising the whole way, carrying whichever skin
+/// the user chose. It is restrained, it is honest about how much a colour can
+/// say, and it is what these modules open on.
+///
+/// [rgb] gives the frequency axis to the hue circle instead — **bass red, mids
+/// green, highs blue into white** — and lets brightness carry the level. That is
+/// the scheme every piece of DJ software colours a waveform with, and on these
+/// two modules it says something a level ramp cannot: a hue names a *band*, so
+/// a kick is red, a snare is amber and a hat is blue, at a glance, before any
+/// level has been read. The oscilloscope takes the same ramp: each column is
+/// drawn in the hue of where the energy in it sat, which is what makes a
+/// waveform readable as music rather than as an envelope.
+///
+/// It costs two things, which is why it is not the default rather than a reason
+/// to withhold it. A rainbow reads as more precise than the measurement behind
+/// it — the eye finds edges between hues that are not edges in the data — and
+/// roughly eight percent of men cannot separate its red end from its green, for
+/// whom the bass and the mids become one colour. The ramp also brings its own
+/// dark ground, so on a light skin the module stops matching the interface
+/// around it.
+///
+/// **Nothing measured changes, and no geometry moves.** The same cell, the same
+/// column, the same sample, in a different colour — every reading, every report
+/// and every byte on the wire is identical at both settings.
+enum ColorRamp {
+  skin('skin', 'Skin'),
+  rgb('rgb', 'Full RGB');
+
+  const ColorRamp(this.id, this.label);
+
+  /// Stable identifier for presets and the wire protocol. Never change one of
+  /// these; add a new ramp instead.
+  final String id;
+
+  /// What the module's menu says.
+  final String label;
+
+  static ColorRamp? fromId(String id) {
+    for (final ramp in ColorRamp.values) {
+      if (ramp.id == id) return ramp;
+    }
+    return null;
+  }
+}
+
 /// One module on a tab.
 ///
 /// [options] is an untyped map on purpose. Every module has its own settings —
@@ -1007,6 +1111,18 @@ class ModuleSpec {
   HistogramSmoothing get histogramSmoothing =>
       HistogramSmoothing.fromId(options['smoothing'] as String? ?? '') ??
       HistogramSmoothing.normal;
+
+  /// How much of the loudness axis the Loudness Distribution spans. See
+  /// [DistributionScale].
+  ///
+  /// Defaults to [DistributionScale.auto] rather than to the published range
+  /// the module drew before the setting existed — the same call
+  /// [histogramSmoothing] makes and for the same reason. A distribution given
+  /// a fifth of the width is a picture nobody can read the shape of, and the
+  /// full axis is one menu row away.
+  DistributionScale get distributionScale =>
+      DistributionScale.fromId(options['scale'] as String? ?? '') ??
+      DistributionScale.auto;
 
   /// How much time the oscilloscope shows at once.
   ///
@@ -1075,6 +1191,25 @@ class ModuleSpec {
   /// nothing can run past it — the only setting at which the *height* of the
   /// trace is a reading rather than a view.
   double get scopeZoom => ScopeZoom.fromJson(options['zoom']);
+
+  /// Which colours the spectrogram and the oscilloscope draw in. See
+  /// [ColorRamp].
+  ///
+  /// Defaults to [ColorRamp.skin], which is what both modules did before the
+  /// setting existed — and it is the one default here chosen *against* the
+  /// picture that looks best at a glance. A rainbow is the more striking
+  /// spectrogram and the less honest one; [ColorRamp] says why, and the menu
+  /// row is one click away.
+  /// **Read without a cast, unlike its neighbours above.** `as String?` throws
+  /// on a value that is a number, and an option map is written by other
+  /// versions of this application and by hand — `"ramp": 0` in a preset
+  /// somebody edited would take the whole canvas down rather than draw a
+  /// spectrogram. [ScopeThreshold.fromJson] and [ScopeZoom.fromJson] are
+  /// written the same way for the same reason.
+  ColorRamp get colorRamp {
+    final raw = options['ramp'];
+    return (raw is String ? ColorRamp.fromId(raw) : null) ?? ColorRamp.skin;
+  }
 
   /// What a LUFS module's integration counts from.
   ///

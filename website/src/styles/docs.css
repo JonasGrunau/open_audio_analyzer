@@ -1,0 +1,570 @@
+/*
+  Open Audio Analyzer — the documentation, set as documentation.
+
+  A global stylesheet rather than a scoped one because the pages are Markdown
+  rendered to HTML at build time: Astro scopes a component's CSS by stamping an
+  attribute onto the elements it compiled, and it did not compile these.
+
+  The front page and this share a palette, a spacing scale and three faces. What
+  differs is who is reading and why. The front page argues; a manual is read
+  under pressure by somebody with a deadline and a master that is two decibels
+  too loud. So three things change here:
+
+    1. Body text is `--text`, not `--muted`. Muted is right for copy that sits
+       under a bright heading and wrong for four hundred lines somebody is
+       working through.
+    2. Structure is louder than prose. Every h2 carries a rule, because in a
+       document this long the reader is scanning for a section far more often
+       than reading from the top.
+    3. Nothing moves. There is no motion on these pages beyond a link changing
+       colour.
+*/
+
+/* --- the three columns ---------------------------------------------------
+   Contents, document, section list. The document is the only one that
+   scrolls with the page; the other two are rails.
+   ------------------------------------------------------------------------ */
+
+.doc {
+  display: grid;
+  grid-template-columns: 15rem minmax(0, 1fr) 14rem;
+  gap: var(--s48);
+  align-items: start;
+  padding-block: var(--s48) var(--s96);
+}
+
+.doc-rail {
+  position: sticky;
+  top: calc(var(--s48) + var(--s24));
+  max-height: calc(100vh - var(--s96));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-bottom: var(--s24);
+}
+
+/* A scrollbar in a rail is a hairline, or the rail reads as a second page. */
+.doc-rail::-webkit-scrollbar {
+  width: 2px;
+}
+.doc-rail::-webkit-scrollbar-thumb {
+  background: var(--hair-strong);
+}
+.doc-rail {
+  scrollbar-width: thin;
+  scrollbar-color: var(--hair-strong) transparent;
+}
+
+/* --- contents ------------------------------------------------------------ */
+
+.doc-nav {
+  border-right: 1px solid var(--hair);
+  padding-right: var(--s24);
+}
+
+.doc-nav-sec {
+  margin-top: var(--s32);
+  padding-bottom: var(--s8);
+  border-bottom: 1px solid var(--hair);
+}
+
+.doc-nav-sec:first-child {
+  margin-top: 0;
+}
+
+.doc-nav-a {
+  display: block;
+  margin-top: var(--s8);
+  padding: var(--s4) 0 var(--s4) var(--s12);
+  border-left: 2px solid transparent;
+  font-size: 0.875rem;
+  color: var(--muted);
+  transition: color 140ms linear, border-color 140ms linear;
+}
+
+.doc-nav-a:hover {
+  color: var(--text);
+  border-left-color: var(--hair-strong);
+}
+
+/* The page you are on, marked the way the application marks a selected
+   module: the accent on the edge, not a fill behind the label. */
+.doc-nav-a[aria-current='page'] {
+  color: var(--signal);
+  border-left-color: var(--signal);
+}
+
+/* --- the document's own header -------------------------------------------
+   One readout line above the title, carrying the section on the left and the
+   file the page is generated from on the right. That path is the point: these
+   documents live beside the code, and the person who has just found the
+   mistake should be able to see where to send the fix without going looking.
+   ------------------------------------------------------------------------ */
+
+.doc-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s16);
+  padding-bottom: var(--s12);
+  border-bottom: 1px solid var(--hair);
+  flex-wrap: wrap;
+}
+
+.doc-src {
+  font-family: var(--readout);
+  font-size: 0.6875rem;
+  color: var(--faint);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  border-bottom: 1px solid transparent;
+  transition: color 140ms linear, border-color 140ms linear;
+}
+
+.doc-src:hover {
+  color: var(--muted);
+  border-bottom-color: var(--hair-strong);
+}
+
+.doc-title {
+  margin-top: var(--s32);
+  font-size: clamp(2rem, 3.6vw, 2.75rem);
+}
+
+.doc-blurb {
+  margin-top: var(--s16);
+  font-family: var(--prose);
+  font-size: 1.125rem;
+  line-height: 1.55;
+  color: var(--muted);
+  max-width: 56ch;
+  text-wrap: pretty;
+}
+
+/* --- on this page --------------------------------------------------------- */
+
+.doc-toc {
+  border-left: 1px solid var(--hair);
+  padding-left: var(--s24);
+}
+
+.doc-toc-list {
+  list-style: none;
+  margin: var(--s16) 0 0;
+  padding: 0;
+}
+
+.doc-toc-a {
+  display: block;
+  padding: var(--s4) 0;
+  font-size: 0.8125rem;
+  line-height: 1.35;
+  color: var(--faint);
+  transition: color 140ms linear;
+}
+
+.doc-toc-a:hover {
+  color: var(--text);
+}
+
+.doc-toc-3 {
+  padding-left: var(--s12);
+  font-size: 0.75rem;
+}
+
+/* Set by scripts/toc.js, which watches the headings rather than the scroll
+   position — a heading is "current" from the moment it passes the top of the
+   window until the next one does. */
+.doc-toc-a[data-current] {
+  color: var(--signal);
+}
+
+/* --- what comes next ------------------------------------------------------ */
+
+.doc-next {
+  margin-top: var(--s96);
+  padding-top: var(--s24);
+  border-top: 1px solid var(--hair);
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--s16);
+}
+
+.doc-next-a {
+  border: 1px solid var(--hair);
+  padding: var(--s16);
+  transition: border-color 140ms linear;
+  min-width: 0;
+}
+
+.doc-next-a:hover {
+  border-color: var(--hair-strong);
+}
+
+.doc-next-a.is-next {
+  grid-column: 2;
+  text-align: right;
+}
+
+.doc-next-k {
+  display: block;
+  color: var(--faint);
+}
+
+.doc-next-t {
+  display: block;
+  margin-top: var(--s8);
+  font-family: var(--display);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+/* --- the rendered Markdown ------------------------------------------------
+   Everything below this point styles HTML nobody wrote by hand.
+   ------------------------------------------------------------------------ */
+
+.md {
+  margin-top: var(--s48);
+  font-family: var(--prose);
+  font-size: 1.0625rem;
+  line-height: 1.68;
+  color: var(--text);
+}
+
+.md > * + * {
+  margin-top: var(--s24);
+}
+
+.md p {
+  max-width: 68ch;
+  text-wrap: pretty;
+}
+
+.md strong {
+  font-weight: 600;
+  color: #fff;
+}
+
+.md em {
+  font-style: italic;
+}
+
+/* Headings. A rule on the h2 because in a four-hundred-line manual the reader
+   is looking for a section far more often than reading from the top. */
+.md h2 {
+  margin-top: var(--s64);
+  padding-top: var(--s24);
+  border-top: 1px solid var(--hair);
+  font-size: clamp(1.375rem, 2vw, 1.75rem);
+}
+
+.md h3 {
+  margin-top: var(--s48);
+  font-size: 1.125rem;
+}
+
+.md h4 {
+  margin-top: var(--s32);
+  font-family: var(--display);
+  font-size: 0.9375rem;
+  font-weight: 650;
+  color: var(--muted);
+}
+
+.md h2 + *,
+.md h3 + *,
+.md h4 + * {
+  margin-top: var(--s16);
+}
+
+/* The `#` beside a heading: present for a pointer that is over the heading and
+   for a keyboard that has focused it, absent otherwise. It occupies its space
+   at all times, so revealing it moves nothing. */
+.h-linked {
+  position: relative;
+}
+
+.h-anchor {
+  position: absolute;
+  left: -1.25ch;
+  top: 0;
+  width: 1.25ch;
+  font-family: var(--readout);
+  font-weight: 400;
+  color: var(--signal);
+  opacity: 0;
+  transition: opacity 140ms linear;
+}
+
+/* Drawn rather than written into the document — see the plugin. */
+.h-anchor::before {
+  content: '#';
+}
+
+.h-linked:hover .h-anchor,
+.h-anchor:focus-visible {
+  opacity: 1;
+}
+
+@media (max-width: 1080px) {
+  /* No margin to hang it in. */
+  .h-anchor {
+    display: none;
+  }
+}
+
+/* Lists. The marker is chrome and is drawn as chrome. */
+.md ul,
+.md ol {
+  padding-left: var(--s24);
+  max-width: 68ch;
+}
+
+.md li + li {
+  margin-top: var(--s8);
+}
+
+.md li::marker {
+  color: var(--faint);
+}
+
+.md li > ul,
+.md li > ol {
+  margin-top: var(--s8);
+}
+
+/* Tables, set the way the site's specification tables are set: hairline rules,
+   no zebra fill, the first column in the display face because it is a name and
+   the rest in prose because they are sentences. */
+.md .table-scroll {
+  margin-top: var(--s24);
+}
+
+.md table {
+  width: 100%;
+  min-width: 30rem;
+  border-collapse: collapse;
+  text-align: left;
+  font-family: var(--display);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.md th {
+  font-size: 0.625rem;
+  font-weight: 600;
+  font-variation-settings: 'wdth' 110;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--faint);
+  padding: 0 var(--s16) var(--s12) 0;
+  border-bottom: 1px solid var(--hair-strong);
+  vertical-align: bottom;
+  white-space: nowrap;
+}
+
+.md td {
+  padding: var(--s12) var(--s16) var(--s12) 0;
+  border-bottom: 1px solid var(--hair);
+  vertical-align: top;
+  color: var(--muted);
+}
+
+.md td:first-child {
+  color: var(--text);
+}
+
+.md th:last-child,
+.md td:last-child {
+  padding-right: 0;
+}
+
+/* Code. A listing, in the face the application draws every number in. */
+.md pre {
+  margin: 0;
+  padding: var(--s16);
+  border: 1px solid var(--hair);
+  overflow-x: auto;
+  font-family: var(--readout);
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  -webkit-overflow-scrolling: touch;
+}
+
+.md pre:focus-visible {
+  outline: 2px solid var(--signal);
+  outline-offset: 2px;
+}
+
+/* Inline code is a chip in running text. The site's rule is `nowrap`, which is
+   right for an identifier and wrong for `/Library/Audio/Plug-Ins/VST3` on a
+   phone — a manual is full of paths, and one that pushes the page sideways is
+   worse than one that breaks a path over two lines. */
+.md :not(pre) > code {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* A quotation here is always an aside — a caveat, a note on a standard. */
+.md blockquote {
+  border-left: 2px solid var(--hair-strong);
+  padding-left: var(--s24);
+  color: var(--muted);
+  max-width: 68ch;
+}
+
+.md hr {
+  border: 0;
+  border-top: 1px solid var(--hair);
+  margin-block: var(--s48);
+}
+
+.md a {
+  color: inherit;
+  border-bottom: 1px solid var(--faint);
+  transition: border-color 140ms linear, color 140ms linear;
+}
+
+.md a:hover {
+  border-bottom-color: var(--signal);
+}
+
+/* The anchor beside a heading is not prose and takes none of this. */
+.md a.h-anchor {
+  border-bottom: 0;
+}
+
+.md img {
+  max-width: 100%;
+  height: auto;
+}
+
+/* --- the index at /docs --------------------------------------------------- */
+
+.doc-index {
+  margin-top: var(--s64);
+  padding-top: var(--s32);
+  border-top: 1px solid var(--hair);
+}
+
+.doc-index-sec + .doc-index-sec {
+  margin-top: var(--s48);
+}
+
+.doc-index-list {
+  list-style: none;
+  margin: var(--s16) 0 0;
+  padding: 0;
+  border-top: 1px solid var(--hair);
+}
+
+.doc-index-a {
+  display: grid;
+  grid-template-columns: 12rem minmax(0, 1fr);
+  gap: var(--s24);
+  align-items: baseline;
+  padding: var(--s16) 0;
+  border-bottom: 1px solid var(--hair);
+  transition: background 140ms linear;
+}
+
+.doc-index-a:hover {
+  background: var(--panel);
+}
+
+.doc-index-t {
+  font-family: var(--display);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--text);
+  transition: color 140ms linear;
+}
+
+.doc-index-a:hover .doc-index-t {
+  color: var(--signal);
+}
+
+.doc-index-b {
+  font-family: var(--prose);
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+/* --- narrower ------------------------------------------------------------- */
+
+@media (max-width: 1240px) {
+  .doc {
+    grid-template-columns: 14rem minmax(0, 1fr);
+    gap: var(--s32);
+  }
+  /* The section list is the first thing to go: it is a convenience, and the
+     document's own headings are still in the document. */
+  .doc-toc {
+    display: none;
+  }
+}
+
+@media (max-width: 900px) {
+  .doc {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+    padding-block: var(--s32) var(--s64);
+  }
+
+  /* Not a rail any more. Eight pages is short enough to lay flat above the
+     document, so there is nothing to open and nothing to script — but they run
+     across rather than down, because eight stacked lines between the reader and
+     the first paragraph is most of a phone screen. */
+  .doc-nav {
+    position: static;
+    max-height: none;
+    overflow: visible;
+    border-right: 0;
+    border-bottom: 1px solid var(--hair);
+    padding: 0 0 var(--s24);
+    margin-bottom: var(--s32);
+  }
+
+  .doc-nav-sec {
+    margin-top: var(--s24);
+    border-bottom: 0;
+    padding-bottom: 0;
+  }
+
+  .doc-nav-sec:first-child {
+    margin-top: var(--s16);
+  }
+
+  .doc-nav-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s8);
+    margin-top: var(--s8);
+  }
+
+  .doc-nav-a {
+    margin-top: 0;
+    padding: var(--s4) var(--s12);
+    border: 1px solid var(--hair);
+    border-left-width: 1px;
+  }
+
+  .doc-nav-a[aria-current='page'] {
+    border-color: var(--signal);
+  }
+
+  .doc-index-a {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--s4);
+  }
+
+  .doc-next {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .doc-next-a.is-next {
+    grid-column: 1;
+    text-align: left;
+  }
+}

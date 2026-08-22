@@ -152,18 +152,25 @@ Future<Uint8List> _shoot(WidgetTester tester, GlobalKey key) async {
   return pixels;
 }
 
-/// Whether the pixel at [x], [y] is the accent curve.
+/// Whether the pixel at [x], [y] is the curve, in **either** of its colours.
 ///
-/// Accent is `0xFF35E0C4` — far more green than red — and nothing else the
-/// module draws is. The graticule is a near-black hairline, the target dashes
-/// and every label are grey, where red and green are within a few counts of
-/// each other, and the fill under the curve reaches only 0.16 alpha at the
-/// floor, which lands at a difference of about 30. A margin of 64 separates the
-/// stroke from all of them, including where its antialiased end covers half a
+/// The curve is `accent` up to the delivery target and `over` past it, so a
+/// predicate that knows only one of them stops finding the curve halfway up the
+/// plot — which is not a failure, it is a *lower* reading: `_curveTop` returns
+/// the target's row instead of the peak's, and a test comparing two heights
+/// quietly compares one height against a constant.
+///
+/// Both colours are far off the grey axis in opposite directions — accent
+/// `0xFF35E0C4` is much greener than red, over `0xFFFF4D4D` much redder than
+/// green — and nothing else the module draws is either. The graticule is a
+/// near-black hairline; the target dashes and every label are grey, where the
+/// two channels are within a few counts; the fill under the curve reaches only
+/// 0.16 alpha at the floor, about 30 counts apart. A margin of 64 separates the
+/// stroke from all of them, including where an antialiased end covers half a
 /// pixel.
 bool _isCurve(Uint8List pixels, int x, int y) {
   final i = (y * _size.width.toInt() + x) * 4;
-  return pixels[i + 1] - pixels[i] > 64;
+  return (pixels[i + 1] - pixels[i]).abs() > 64;
 }
 
 /// The x of every column carrying the curve within [rows] of the bottom edge.

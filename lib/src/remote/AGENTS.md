@@ -27,6 +27,25 @@ halves live here.
 
 ## Rules
 
+- **The skin is the one published thing that is rate-limited, and the theme
+  editor is why.** `DisplayHost.publishSkin` coalesces to one frame every
+  150 ms and always delivers the last value. Dragging a colour in
+  `lib/src/panels/theme_editor.dart` produces a new `Skin` per pointer move —
+  sixty a second — and every one of those would be a `sendOnce`, which
+  `_RemoteClient` documents as being for frames that are "rare, small and must
+  not be dropped": they queue in `_waiting` behind whatever flush is
+  outstanding, and on a tablet slow enough to still be flushing that queue grows
+  for as long as the pointer is down. It is the same failure `_waiting` was
+  added to fix, arriving from the other side.
+
+  **Trailing, not leading-only.** Dropping the middle of a drag is the point;
+  dropping the *last* frame would leave a display on whatever colour the pointer
+  happened to be over when the timer fired — quietly wrong rather than merely
+  behind. The replayed copy a joining display gets is assigned on every call and
+  never held, so a tablet that attaches mid-drag is handed the colour that is on
+  screen now. A layout and a delivery target need none of this: neither can
+  change at pointer rate.
+
 - **This directory owns a socket, not a design system.** `remote_control.dart`
   and `publish_settings.dart` are what a desktop user looks at — three controls
   in the status bar and one section of the settings panel — and the first of

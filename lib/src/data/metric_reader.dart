@@ -56,10 +56,21 @@ ReadingState classify(Metric metric, double value, Calibration calibration) {
   if (value.isNaN) return ReadingState.unavailable;
 
   return switch (metric) {
+    // Over the target is [ReadingState.over], under it is neutral. Being
+    // *louder* than the number you set is the one thing every meter in the
+    // application marks in red — the LUFS meter's bars, the super meter's
+    // arcs, the histogram and the loudness distribution all cut at this exact
+    // line — and a Number Box or an Alert Meter watching LUFS-I has to agree
+    // with the bar beside it. It read as plain text for eight phases, so the
+    // same over-target mix was red on one module and uncoloured on another.
+    // Quiet is not over: under the target stays neutral, which is also what
+    // keeps the colour from meaning two opposite things at once.
     Metric.lufsIntegrated =>
       calibration.meetsLoudnessTarget(value)
           ? ReadingState.inSpec
-          : ReadingState.neutral,
+          : (value > calibration.lufsTarget + calibration.lufsTolerance
+                ? ReadingState.over
+                : ReadingState.neutral),
 
     Metric.truePeak || Metric.truePeakMax => _peakKind(value, calibration),
 

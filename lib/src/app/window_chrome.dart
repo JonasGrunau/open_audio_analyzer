@@ -4,9 +4,9 @@
 ///
 /// Open Audio Analyzer's window has no title bar on macOS. The frame belongs to
 /// Flutter from the top edge down and AppKit keeps drawing only the three
-/// window buttons, which now sit inside the status bar on the same row as OAA
-/// and the source — see `macos/Runner/MainFlutterWindow.swift` for the window
-/// side of it.
+/// window buttons, which now sit inside the status bar on the same row as the
+/// source and the delivery target — see `macos/Runner/MainFlutterWindow.swift`
+/// for the window side of it.
 ///
 /// Three consequences land here:
 ///
@@ -53,7 +53,7 @@ abstract final class WindowChrome {
   /// take the row off the buttons rather than with them.
   ///
   /// 80 leaves the same gap after the buttons that [Space.md] leaves before
-  /// `OAA` on a platform that still has a title bar of its own.
+  /// the source chip on a platform that still has a title bar of its own.
   static double get statusBarLeading => Platform.isMacOS ? 80 : Space.md;
 
   static OaaColors? _applied;

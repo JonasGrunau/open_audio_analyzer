@@ -30,6 +30,7 @@ import 'package:oaa_core/oaa_core.dart';
 import 'package:oaa_ui/oaa_ui.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -213,6 +214,16 @@ PresetSpec _preset(String name) => PresetSpec(
   ],
 );
 
+/// A delivery target the user wrote, for the cases about removing one.
+const _houseTarget = Calibration(
+  id: 'house',
+  name: 'House standard',
+  lufsTarget: -12,
+  lufsTolerance: 0.5,
+  truePeakMax: -1,
+  loudnessRangeMax: 14,
+);
+
 /// A publish service for a panel that has to be handed one.
 ///
 /// The settings panel takes one because its Publish section reads live state
@@ -344,6 +355,101 @@ void main() {
       await _tap(tester, find.text('30 FPS'));
 
       expect(container.read(settingsProvider).targetFps, 30);
+    });
+
+    // The one destructive action in the application that asks in a dialog
+    // rather than by taking a second press — see `lib/src/panels/AGENTS.md` for
+    // why this one is the exception.
+    group('resetting the delivery targets', () {
+      /// Scoped to the confirmation, because the settings panel behind it still
+      /// has its own `RESET` in the tree and an unscoped `find.text` matches
+      /// both. The dialog is the newest route, so its scaffold is the last one.
+      Finder inDialog(String text) => find.descendant(
+        of: find.byType(PanelScaffold).last,
+        matching: find.text(text),
+      );
+
+      /// The settings panel with one saved target, and its file on disk for the
+      /// reset to find.
+      Future<(ProviderContainer, ConfigStore)> open(WidgetTester tester) async {
+        final container = await _container(
+          tester,
+          const StartupConfig(calibrations: [_houseTarget]),
+        );
+        final store = container.read(configStoreProvider);
+        await tester.runAsync(
+          () => store.writeJson(
+            '${ConfigDir.calibrations}/house.json',
+            _houseTarget.toJson(),
+          ),
+        );
+        await _open(tester, container, SettingsPanel(remote: _remoteService()));
+        return (container, store);
+      }
+
+      testWidgets('asks first, and deletes when told to', (tester) async {
+        final (container, store) = await open(tester);
+        Iterable<String> ids() =>
+            container.read(calibrationLibraryProvider).map((c) => c.id);
+        expect(ids(), contains('house'));
+
+        await _tap(tester, find.text('RESET'));
+        expect(find.text('RESET DELIVERY TARGETS'), findsOneWidget);
+        // Nothing has happened yet. A dialog that opened after the deletion
+        // would be a receipt, not a confirmation.
+        expect(ids(), contains('house'));
+
+        await _tap(tester, inDialog('RESET'));
+        await _untilStored(tester, () => !ids().contains('house'));
+
+        expect(ids().length, BuiltInCalibrations.all.length);
+        expect(
+          await tester.runAsync(
+            () => store.readJson('${ConfigDir.calibrations}/house.json'),
+          ),
+          isNull,
+        );
+        expect(find.textContaining('One saved target removed'), findsOneWidget);
+      });
+
+      testWidgets('cancelling touches nothing', (tester) async {
+        final (container, store) = await open(tester);
+
+        await _tap(tester, find.text('RESET'));
+        await _tap(tester, inDialog('CANCEL'));
+        await tester.pumpAndSettle();
+
+        expect(
+          container.read(calibrationLibraryProvider).map((c) => c.id),
+          contains('house'),
+        );
+        expect(
+          await tester.runAsync(
+            () => store.readJson('${ConfigDir.calibrations}/house.json'),
+          ),
+          isNotNull,
+        );
+        // Back to the settings panel, with the dialog gone rather than stacked.
+        expect(find.text('RESET DELIVERY TARGETS'), findsNothing);
+        expect(find.text('SETTINGS'), findsOneWidget);
+      });
+
+      // Escape pops a route with no value at all, which is neither true nor
+      // false. Read as yes, that is a destructive action performed by the key
+      // people press to get out of things.
+      testWidgets('dismissing is a no', (tester) async {
+        final (container, _) = await open(tester);
+
+        await _tap(tester, find.text('RESET'));
+        await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+        await tester.pumpAndSettle();
+
+        expect(find.text('RESET DELIVERY TARGETS'), findsNothing);
+        expect(
+          container.read(calibrationLibraryProvider).map((c) => c.id),
+          contains('house'),
+        );
+      });
     });
 
     testWidgets('the restore toggle writes through', (tester) async {
@@ -604,6 +710,74 @@ void main() {
       expect(note.height, greaterThan(mark.height * 1.5));
       expect(mark.center.dy, closeTo(note.center.dy, 0.5));
     });
+  });
+
+  // One bar, on the platforms that would otherwise supply a second one
+  // themselves. `MaterialScrollBehavior` wraps every vertical scrollable in a
+  // `Scrollbar` on macOS, Windows and Linux without being asked, so the
+  // settings panel — the tallest in the application and the one that always
+  // scrolls — carried the skin's thumb and Material's grey one side by side.
+  //
+  // The default platform in a widget test is Android, where that behaviour adds
+  // nothing, so every panel test in this file passed throughout. Parameterised
+  // over all five for that reason: the count is one everywhere, and Android and
+  // iOS are here to catch a fix that suppressed the panel's own bar along with
+  // the ambient one.
+  group("a panel has one scrollbar", () {
+    for (final platform in TargetPlatform.values) {
+      testWidgets('on ${platform.name}', (tester) async {
+        // Reset inside the body rather than in a tear-down: the binding checks
+        // for a still-set foundation debug variable before tear-downs run.
+        debugDefaultTargetPlatformOverride = platform;
+        try {
+          await _open(
+            tester,
+            await _container(tester),
+            SettingsPanel(remote: _remoteService()),
+          );
+
+          // The panel's own viewport, which is the outermost of several: every
+          // `EditableText` in the body builds a `Scrollable` of its own, and
+          // `SelectableText` — the configuration path, in the Session section —
+          // is multiline, which is a case `EditableText` deliberately gives a
+          // bar of its own whatever the ambient configuration says. Its content
+          // fits, so nothing is ever drawn for it; counting by *type* over the
+          // whole tree would fail on it and say nothing about the panel.
+          final scrollable = tester.state<ScrollableState>(
+            find
+                .descendant(
+                  of: find.byType(PanelScaffold),
+                  matching: find.byType(Scrollable),
+                )
+                .first,
+          );
+          // It scrolls, or there is nothing for a bar to be drawn for and the
+          // count below is one about nothing.
+          expect(scrollable.position.maxScrollExtent, greaterThan(0));
+
+          // One bar drives *this* viewport. Counted by the controller rather
+          // than by the widget type, because the second bar was neither a
+          // `RawScrollbar` nor findable as one: `MaterialScrollBehavior` builds
+          // a `Scrollbar` around a private subclass, Cupertino's builds
+          // another, and both are handed the same controller the panel gave its
+          // scroll view. That is the thing that makes a bar this panel's.
+          final controller = scrollable.widget.controller;
+          expect(controller, isNotNull);
+          expect(
+            find.byWidgetPredicate(
+              (widget) => switch (widget) {
+                RawScrollbar(controller: final c) => c == controller,
+                Scrollbar(controller: final c) => c == controller,
+                _ => false,
+              },
+            ),
+            findsOneWidget,
+          );
+        } finally {
+          debugDefaultTargetPlatformOverride = null;
+        }
+      });
+    }
   });
 
   // The keyboard, which is a thing only a tablet has and therefore a thing no

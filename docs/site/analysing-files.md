@@ -67,9 +67,14 @@ shipping.
 
 `--list-targets` prints the built-ins. Your own live beside them as JSON in
 `calibrations/` under the [configuration
-directory](install.html#where-oaa-keeps-your-configuration), and the CLI reads
+directory](install.html#where-open-audio-analyzer-keeps-your-configuration), and the CLI reads
 the same library the application does — so a target you defined once in the
 interface is available to a build script by name.
+
+**Reset**, beside Edit in Settings → Meters, deletes every one of those files
+and leaves the built-ins. `--target` naming one it removed exits with
+`unknown target`, so a pipeline that names a target of your own stops rather
+than measuring against something else.
 
 Point either at a different library with `--config-dir`.
 

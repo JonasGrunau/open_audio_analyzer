@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="packaging/icon/oaa.svg" alt="Open Audio Analyzer" width="128" height="128">
+<img src="assets/brand/oaa-icon.png" alt="Open Audio Analyzer" width="128" height="128">
 
 <h1>Open Audio Analyzer</h1>
 
@@ -114,19 +114,19 @@ plus a painter, reads the same `MeterSource`, and repaints from the same clock.
 | **Alert Meter** | One measurement, watched, with the worst it has been latched. |
 | **Validator** | The delivery decision, as a table. |
 | **Histogram** | Loudness against time: how the programme moved, and when it was over target. Both bands averaged over a window its menu names. |
-| **Loudness Distribution** | How much of the programme was spent at each loudness, bracketed between the two percentiles LRA is the distance between, with the reading on the bracket. |
+| **Loudness Distribution** | How much of the programme was spent at each loudness, bracketed between the two percentiles LRA is the distance between, with the reading on the bracket. The axis fits itself to the programme — a distribution that occupies eight of the sixty published decibels is drawn across the module rather than into a fifth of it — and `Scale` in its menu gives the whole −60 to 0 range back. |
 | **Spectrum Analyzer** | Level against frequency, log-spaced, tilted so a mix reads roughly flat, with a peak hold. |
-| **Spectrogram** | Frequency against time, with level as brightness. |
-| **Oscilloscope** | The waveform itself, one lane per channel or both overlaid: triggered at scope speeds, rolling from half a second up, locked to the DAW's bar grid when a plugin is attached, or swept from a transient at a level you set. Height and trigger threshold are sliders on the module, because both are chosen by watching the picture move; `AUTO` beside the threshold takes it from the loudest transient instead, six decibels under so the sweep starts inside the attack rather than on top of it. |
+| **Spectrogram** | Frequency against time, with level as colour. `Colour` chooses the ramp: the skin's own, whose brightness rises monotonically through the accent hue, or `Full RGB` — the spectrogram rainbow, indigo through green and yellow to red and white, which separates far more steps of level than one hue can. The skin ramp is what it opens on. |
+| **Oscilloscope** | The waveform itself, one lane per channel or both overlaid: triggered at scope speeds, rolling from half a second up, locked to the DAW's bar grid when a plugin is attached, or swept from a transient at a level you set. Height and trigger threshold are sliders on the module, because both are chosen by watching the picture move; `AUTO` beside the threshold takes it from the loudest transient instead, six decibels under so the sweep starts inside the attack rather than on top of it. `Colour: Full RGB` draws each column in the colour of its own balance of bass, mids and highs — red, green and blue as the three channels, so a kick is red, a hat is blue and a full-spectrum hit is white — taken from the spectrum measured for the block that column's samples came from and kept with the column, so the history holds still. It opens on the accent hue it always had. |
 | **Phase Scope** | A goniometer: left against right, rotated so mono stands upright. |
 | **Stereo Cloud** | Where each frequency sits in the stereo image, accumulated over time. |
 
 Every one of these that draws a bar, an arc or an area against the delivery
-target splits it at the target and draws the part above in `warn` — the LUFS
+target splits it at the target and draws the part above in `over` — the LUFS
 Meter's two bars, the Super Meter's three arcs, the Histogram and the Loudness
 Distribution. The split is a clip at the target, not a verdict on the whole
-shape: what carries the meaning is how much of the reading is over. `over`
-stays what it has always been, a ceiling that has actually been exceeded.
+shape: what carries the meaning is how much of the reading is over. `over` is
+the one mark for "past the number you set", wherever it is drawn.
 
 ---
 
@@ -186,13 +186,13 @@ Three consequences worth naming, because they are what usually goes wrong:
 |---|---|
 | Number box, LUFS, Alert, Validator | Cached `ui.Paragraph`, rebuilt on string change only |
 | Digital meter | Batched `drawRect`, one reused `Paint` |
-| VU meter | Dial face pre-rendered once to a `ui.Image`; only the needle repaints |
+| VU meter | The whole face redrawn each frame — four `drawArc`s and eleven `drawLine`s, cheaper to draw than to cache and keep in step with a resize. The needle is one `Path`, reset and refilled rather than reallocated; the scale labels are cached paragraphs, each placed only where it clears the boxes already placed |
 | Spectrum analyzer | `drawRawPoints` over the native `Float32List` — C writes screen-space x,y directly. The drawn level is a one-pole average of the published bands, at the time constant its `Response` menu names, plus the fixed per-band offset its `Tilt` menu names; the line above it is the envelope of that curve and follows the same pole |
 | Phase scope | The last forty frames of samples in a ring, one `drawRawPoints` each at its age's brightness — the trail is the frames, not a faded picture |
 | Stereo cloud | A decayed accumulator per two-pixel cell, emitted as points sorted into brightness buckets |
-| Spectrogram | Run-length columns kept as data and redrawn every published frame, one `drawRawPoints` per palette step |
+| Spectrogram | One byte of palette step per cell as the record, one RGBA buffer beside it shifted a column per published frame and uploaded as a pixel-backed `ui.Image` that paint draws with a single `drawImageRect`. Bounded by the module's area and independent of what the signal does. A skin or a `Colour` change rebuilds the 48-step palette and re-renders the buffer from the record, moving no cell |
 | Histogram | Ten columns a second into a fixed ring of loudness values, redrawn whole every frame as three `drawRawPoints`. Kept as measurements, not pixels, so it survives a resize — and raw, with `Smoothing` applied by one running-sum pass on the way out, so the setting redraws the whole programme rather than taking effect from where it was chosen |
-| Loudness distribution | The engine's 120 published bins as one-pixel columns that tile exactly — one `drawRawPoints` for the fill and one for the silhouette's top edge, each clipped twice so either side of the target takes its own colour. One stroke per bin, half a pixel oversized against seams, composited every overlap twice and drew a fence |
+| Loudness distribution | The engine's 120 published bins as one-pixel columns that tile exactly, over an axis fitted to what is drawn on it — every occupied bin, the gated range and the target — rounded out to whole ticks and left alone until the distribution grows past it, so the scale never slides while it is being read — one `drawRawPoints` for the fill and one for the silhouette's top edge, each clipped twice so either side of the target takes its own colour. One stroke per bin, half a pixel oversized against seams, composited every overlap twice and drew a fence |
 
 ---
 
@@ -407,7 +407,10 @@ is Spotify, Apple Music, YouTube, Amazon and Tidal, all of which normalise to
 about the same place, so one target with their names in its note beats five
 identical entries — plus **Spotify Loud**, **Podcast (−16 LUFS)**,
 **EBU R 128**, **ATSC A/85** and **CD / no normalisation**. Anything else is a
-JSON file you write; see [Configuration](#-configuration).
+JSON file you write; see [Configuration](#-configuration). **Reset**, beside
+Edit in Settings, deletes every target you wrote and puts those six back — which
+is also how a correction to a built-in is undone, since a correction *is* a file
+shadowing it. It asks in a dialog before it does, and says how many files went.
 
 ---
 
@@ -471,9 +474,23 @@ paths — the `oaa` CLI and a unit test — and on macOS it returns a sandbox
 container keyed by bundle identifier, which moves your entire configuration the
 first time a build is signed differently.
 
-### 🎨 Writing a skin
+### 🎨 Skins
 
-A skin names as many of thirteen colour **roles** as it likes and inherits the
+**Settings → Appearance → Edit skin** opens the editor. Every role is a swatch
+that opens a colour picker, the canvas behind the panel follows the pointer as
+you drag — as does any tablet mirroring the session — and each role prints its
+contrast ratio against the surface it has to be read on, with the ones below the
+floor that role is held to marked. Nothing is written until you save.
+
+**Precision Instrument and Daylight cannot be changed or deleted.** They are the
+pair that proves the roles are semantic — Daylight inverts the entire lightness
+ordering, so a painter that had reached for "the dark one" instead of a role
+would be obvious immediately — and a reference point a file on disk can quietly
+redefine is not one. Editing either previews normally; **Save as new** keeps it,
+and leaves the original there to compare against.
+
+A skin is also a JSON file, and the editor changes nothing about that.
+It names as many of thirteen colour **roles** as it likes and inherits the
 rest, so changing one colour is a three-line file:
 
 ```json
@@ -492,9 +509,10 @@ ground.
 
 They are *semantic* roles rather than literal colours — `over` is "the colour
 that means over a limit", used for nothing else — which is what lets a skin
-apply to a module written after it. Settings → Appearance → **Duplicate for
-editing** writes the palette you are looking at out in full as a starting point,
-and **Reload from disk** picks up your edits without a restart.
+apply to a module written after it. A file named after a built-in is ignored
+rather than shadowing it. **New skin** writes the palette you are looking at out
+in full as a starting point, and **Reload from disk** picks up hand edits
+without a restart.
 
 A delivery target is the same idea:
 
@@ -525,8 +543,8 @@ measurement gear is machined panels sitting flush, not floating cards.
 
 ```
 bg      #0B0C0E     accent  #35E0C4   in spec
-panel   #121417     warn    #F2B01E   over target
-hairline#1F2328     over    #FF4D4D   past a ceiling
+panel   #121417     warn    #F2B01E   close to a limit
+hairline#1F2328     over    #FF4D4D   past the target
 text    #E6E8EB / #8A9199 / #565E67
 ```
 
@@ -1185,7 +1203,7 @@ GPL-3.0-or-later for the application; MIT for the engine and domain model. See
 
 <div align="center">
 
-<img src="packaging/icon/oaa.svg" alt="" width="44" height="44">
+<img src="assets/brand/oaa-icon.png" alt="" width="44" height="44">
 
 <p><sub>📖 <a href="https://jonasgrunau.github.io/open_audio_analyzer/index.html">jonasgrunau.github.io/open_audio_analyzer</a></sub></p>
 

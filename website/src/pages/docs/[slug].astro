@@ -1,0 +1,32 @@
+---
+/* Every documentation page but the overview.
+ *
+ * `build.format: 'file'` and `trailingSlash: 'never'`, so this writes
+ * `dist/docs/install.html` and the address is `/docs/install` — the same shape
+ * as the rest of the site, and the reason the overview is `pages/docs.astro`
+ * rather than an `index` inside this directory.
+ */
+import { render } from 'astro:content';
+
+import Docs from '../../layouts/Docs.astro';
+import { PAGES, plainBlurb } from '../../lib/docs.mjs';
+import { documentFor } from '../../lib/docs-content.mjs';
+
+export function getStaticPaths() {
+  const routes = [];
+  for (const page of PAGES) {
+    if (page.slug === 'index') continue;
+    routes.push({ params: { slug: page.slug }, props: { page } });
+  }
+  return routes;
+}
+
+const { page } = Astro.props;
+const { Content, headings } = await render(await documentFor(page));
+
+const description = plainBlurb(page) + ' Open Audio Analyzer documentation.';
+---
+
+<Docs page={page} headings={headings} description={description}>
+  <Content />
+</Docs>

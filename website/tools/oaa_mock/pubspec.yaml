@@ -1,0 +1,14 @@
+name: oaa_mock
+description: A MeterSource that plays a plausible programme, for the website's demos.
+publish_to: 'none'
+version: 0.1.0
+
+environment:
+  sdk: ^3.12.2
+
+dependencies:
+  # Nothing else, and in particular not oaa_engine or Flutter. This is a
+  # MeterSource and a MeterSource is a thing you read numbers out of — the same
+  # reason oaa_wire's decoder can be pure Dart.
+  oaa_core:
+    path: ../../../packages/oaa_core

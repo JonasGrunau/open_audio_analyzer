@@ -33,10 +33,16 @@ The shell everything else is mounted in. GPL-3.0-or-later.
   narrow widths through the `LayoutBuilder` rather than squeezing them.
 
 - **Adding anything to the bar means re-checking every drop-out gate, and
-  re-checking them means measuring.** There are seven — transport, format,
-  wordmark, analyse, attach, pairing code, publish — plus help, and they are
+  re-checking them means measuring.** There are six — transport, format,
+  analyse, attach, pairing code, publish — plus help, and they are
   arithmetic on each other rather than independent numbers: one control becoming
-  three moved every gate above it by 165 px. The row is a sum of fixed widths, so it
+  three moved every gate above it by 165 px, and putting the source in a chip
+  moved every single one of them — 25 px for the five below the format readout
+  and 40 px for the format gate and the one above it, which is the chip's
+  border and padding plus the seam that now follows it. A gate is a statement
+  about the *left group's* floor as much as about its own item: what overflows
+  at the bottom of the bar is the group inside the `Expanded`, not the bar's
+  own row. The row is a sum of fixed widths, so it
   does not shrink — it overflows, which is a striped warning in debug and
   silently clipped controls in release. One gate at 860 px was carried for a
   phase on the strength of looking right at every window anybody had opened,
@@ -80,10 +86,16 @@ The shell everything else is mounted in. GPL-3.0-or-later.
   playhead and without one.
 
 - **Everything in the status bar is a `BarButton`, a `BarChip` or a
-  `BarSwitch`.** Not a `TextButton`, and not `OaaButton` either — `oaa_ui`'s
+  `BarSwitch`, and the two menus are both chips.** The delivery target and the
+  signal source report what a reading *is* — what it is measured against, and
+  what is being measured — so they wear the same shape, and the source carries
+  a state dot the target has no use for. The source spent eight phases as a
+  bare dot and a word beside four bordered controls, which reads as a caption
+  rather than as a menu: the commonest thing anybody changes in the bar was the
+  one item in it that did not look changeable. Not a `TextButton`, and not `OaaButton` either — `oaa_ui`'s
   buttons are sized for a panel, where a control has a row to itself, and these
-  are sized for a 40 px bar that also holds the source, the clock, the
-  calibration and the frame rate. `BarSwitch` is the third because a state you
+  are sized for a 40 px bar that also holds the source, the clock and the
+  calibration. `BarSwitch` is the third because a state you
   set is not a state you press, and it is not `OaaToggle` for a reason that is
   about colour rather than size: `OaaToggle` fills with `accent`, and `accent`
   in this row means "in spec". All three take their height from

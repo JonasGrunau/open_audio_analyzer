@@ -201,6 +201,61 @@ void main() {
       expect(restored.name, BuiltInCalibrations.ebuR128.name);
     });
 
+    test(
+      'resetting removes the user’s files whatever they are called',
+      () async {
+        // A target's id and the name of the file holding it are two different
+        // things — `save` derives one from the other, and nothing stops a
+        // hand-written file from doing otherwise. The reset removes what exists.
+        final store = await _store();
+        final container = _container(
+          store,
+          const StartupConfig(calibrations: [_houseTarget]),
+        );
+        await store.writeJson(
+          '${ConfigDir.calibrations}/house.json',
+          _houseTarget.toJson(),
+        );
+        await store.writeJson('${ConfigDir.calibrations}/anything.json', {
+          ...BuiltInCalibrations.ebuR128.toJson(),
+          'true_peak_max': -2,
+        });
+
+        final notifier = container.read(calibrationLibraryProvider.notifier);
+        expect(await notifier.resetToBuiltIns(), 2);
+
+        expect(
+          container.read(calibrationLibraryProvider).map((c) => c.id),
+          BuiltInCalibrations.all.map((c) => c.id),
+        );
+        expect(
+          await store.readJson('${ConfigDir.calibrations}/house.json'),
+          isNull,
+        );
+        expect(
+          await store.readJson('${ConfigDir.calibrations}/anything.json'),
+          isNull,
+        );
+      },
+    );
+
+    test('resetting a library nobody has added to removes nothing', () async {
+      // Zero is an answer, not a failure: the panel says the built-ins were
+      // already the whole list rather than claiming to have deleted something.
+      final container = _container(await _store());
+
+      expect(
+        await container
+            .read(calibrationLibraryProvider.notifier)
+            .resetToBuiltIns(),
+        0,
+      );
+      expect(
+        container.read(calibrationLibraryProvider).length,
+        BuiltInCalibrations.all.length,
+      );
+    });
+
     test('a user target loaded at startup is in the library', () async {
       final container = _container(
         await _store(),

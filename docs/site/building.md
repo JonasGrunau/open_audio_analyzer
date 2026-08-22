@@ -91,8 +91,8 @@ flutter run -d macos --dart-entrypoint-args --open-panel=settings
 `--config-dir` points settings, presets, targets and skins somewhere
 disposable, so an experiment cannot eat the configuration you actually use.
 `--open-panel` opens one panel once the first frame is up — `settings`,
-`presets`, `calibration`, `report` or `shortcuts` — which is how a panel gets
-looked at without clicking through to it. It is a debug-build affordance and a
+`presets`, `calibration`, `theme`, `report` or `shortcuts` — which is how a
+panel gets looked at without clicking through to it. It is a debug-build affordance and a
 release build says so rather than ignoring it.
 
 On a built macOS bundle, pass them with `open --args`:
@@ -233,11 +233,14 @@ dart run packaging/icon/make_icons.dart
 
 Regenerates every size and shape the six platforms ask for — the five desktop
 downloads, Android's adaptive icon, and the layered `AppIcon.icon` that macOS
-and iOS render for themselves — into the platform directories and `packaging/`.
-The mark is described once, as geometry, in that file; `packaging/icon/oaa.svg`
-is its vector twin and carries the same numbers, and `assets/brand/` is the
-same mark without its tile. The outputs are committed, so a release runner
-never runs this.
+and iOS render for themselves — into the platform directories, `packaging/`,
+`assets/brand/` and `website/public/`.
+
+The mark is *read*, not described: `assets/brand/oaa-logo.svg` is the drawing,
+and everything else — the icon with its tile, the mark on its own, the ramp on
+its own, the favicon the site serves — is written from it. Redraw that one file
+and run this; nothing is brought across by hand. The outputs are committed, so
+a release runner never runs this.
 
 ## The documentation site
 

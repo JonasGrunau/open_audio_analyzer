@@ -23,6 +23,24 @@ RelativeRect menuPositionAt(BuildContext context, Offset globalPosition) {
 
 /// A row of one of those menus.
 ///
+/// [selected] marks the value the menu currently holds, for the menus that hold
+/// one — a module's metric, its scale, its trigger. It is a parameter rather
+/// than a colour the caller mixes because there were twelve call sites writing
+/// `x == current ? textPrimary : textMuted` by hand, which is twelve places for
+/// the convention to drift and, when it turned out to be the wrong way round,
+/// twelve places to change it. What it looks like is [OaaMenuRow]'s to decide.
+///
+/// **`null` is not `false`.** A menu of actions — add a module, rename a tab —
+/// holds no value, and every row in it is something you can do: those pass
+/// nothing and are set in [OaaColors.textPrimary]. `false` is the stronger
+/// claim that this row is an option in a menu that *has* a current value and is
+/// not it, which is the only thing that earns [OaaColors.textMuted]. Collapsing
+/// the two greys out every action menu in the application.
+///
+/// [color] is what is left of the old parameter: a row whose ink means
+/// something other than selection. Two do — the destructive Delete in the
+/// module and tab menus.
+///
 /// [enabled] is `false` for a setting that is *in* this menu but does nothing
 /// where the module currently stands — the oscilloscope's trigger under a
 /// tempo-locked window is the one. It greys and stops answering rather than
@@ -36,17 +54,28 @@ PopupMenuItem<T> oaaMenuItem<T>(
   T value,
   String label, {
   Color? color,
+  bool? selected,
   bool enabled = true,
 }) {
   final colors = OaaTheme.of(context);
   return PopupMenuItem<T>(
     value: value,
-    height: Space.xl,
+    height: OaaMenuRow.height,
     enabled: enabled,
-    child: Text(
-      label,
-      style: OaaType.body.copyWith(
-        color: enabled ? color ?? colors.textPrimary : colors.textFaint,
+    // The row owns its padding, because the fill that marks the current value
+    // has to span it. See [OaaMenuRow].
+    padding: EdgeInsets.zero,
+    child: OaaMenuRow(
+      colors: colors,
+      selected: selected ?? false,
+      child: Text(
+        label,
+        style: OaaType.body.copyWith(
+          color: enabled
+              ? color ??
+                    (selected == false ? colors.textMuted : colors.textPrimary)
+              : colors.textFaint,
+        ),
       ),
     ),
   );

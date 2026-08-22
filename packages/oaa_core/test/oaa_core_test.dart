@@ -260,6 +260,60 @@ void main() {
     });
   });
 
+  group('ColorRamp', () {
+    ModuleSpec module(ModuleKind kind, Map<String, Object?> options) =>
+        ModuleSpec(
+          id: 'm',
+          kind: kind,
+          rect: const GridRect(column: 0, row: 0, columns: 12, rows: 7),
+          options: options,
+        );
+
+    test('both modules open on the skin ramp', () {
+      // The default is the picture the two modules drew before the setting
+      // existed, which is also the honest one — see ColorRamp. A preset that
+      // says nothing must not come back rainbowed.
+      expect(
+        module(ModuleKind.spectrogram, const {}).colorRamp,
+        ColorRamp.skin,
+      );
+      expect(
+        module(ModuleKind.oscilloscope, const {}).colorRamp,
+        ColorRamp.skin,
+      );
+    });
+
+    test('the ids are the ones written into presets', () {
+      expect(ColorRamp.fromId('skin'), ColorRamp.skin);
+      expect(ColorRamp.fromId('rgb'), ColorRamp.rgb);
+      expect(
+        module(ModuleKind.spectrogram, {'ramp': 'rgb'}).colorRamp,
+        ColorRamp.rgb,
+      );
+    });
+
+    test('a ramp this build does not have is the default, not a failure', () {
+      // An option map is written by other versions of this application and by
+      // hand. A name nothing recognises leaves the module drawing something.
+      expect(ColorRamp.fromId('turbo'), isNull);
+      expect(
+        module(ModuleKind.spectrogram, {'ramp': 'turbo'}).colorRamp,
+        ColorRamp.skin,
+      );
+      expect(
+        module(ModuleKind.spectrogram, {'ramp': 7}).colorRamp,
+        ColorRamp.skin,
+      );
+    });
+
+    test('the ramp survives a round trip through a preset', () {
+      final restored = ModuleSpec.fromJson(
+        module(ModuleKind.oscilloscope, {'ramp': 'rgb'}).toJson(),
+      );
+      expect(restored!.colorRamp, ColorRamp.rgb);
+    });
+  });
+
   group('SpectrumTilt', () {
     test('the pivot is the one level a tilt does not move', () {
       for (final tilt in SpectrumTilt.values) {

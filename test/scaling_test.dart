@@ -109,9 +109,9 @@ Size _canvasFor(Size window) =>
 /// an input miniaudio will fall back to, which is the difference between this
 /// developer's laptop and a headless CI runner. The source label costs the row
 /// nothing anyway: the picker is `Flexible` and shortens with an ellipsis, so
-/// it can give back everything but its dot — and a target name at the cap
-/// squeezes it that far, which is what makes this the case that catches the
-/// picker's own row overflowing as well. The fixed width in the bar is the
+/// it can give back everything but its dot, its border and the seam after it —
+/// and a target name at the cap squeezes it that far, which is what makes this
+/// the case that catches the picker's own row overflowing as well. The fixed width in the bar is the
 /// target chip, and that is what this sets.
 const _longNames = StartupConfig(
   settings: AppSettings(
@@ -247,12 +247,19 @@ Future<void> _pumpAppWithPlugin(
 
   // **And the readout keeps its distance from the item in front of it**, which
   // an overflow check cannot see: the seam between the bar's `Expanded` group
-  // and its right-hand one is the only one in the row with no `SizedBox` of its
-  // own, so the space there used to be whatever the window was not using. The
+  // and its right-hand one was the only one in the row with no `SizedBox` of
+  // its own, so the space there was whatever the window was not using. The
   // source name ellipsises before the row overflows, so from the readout's gate
   // up to about 1310 px the row fitted perfectly with the sample rate and
   // channel count printed flush against the playhead, and every width in this
   // sweep was green while it did.
+  //
+  // The seam is a `SizedBox` now — the source became a bordered chip, and a
+  // hairline touching the elapsed clock's digits is the same defect one step
+  // narrower — so this holds a width the layout states rather than one it
+  // happens to have left over. That is worth keeping: the box is sized to
+  // whichever item the group ends with, and this is the assertion that says
+  // which one the readout is entitled to.
   final readout = find.byType(TransportReadout);
   if (readout.evaluate().isEmpty) return;
 
@@ -356,6 +363,11 @@ void main() {
     // clock, the delivery target, SETTINGS and RESET — starts to fit at all.
     // Below that there is nothing left to drop that the bar's own rule allows
     // dropping, and it is a third of the supported minimum window.
+    //
+    // 600 fits with 8 px to spare, of which the source chip's border and its
+    // seam took 24: this is the number the whole file is anchored to and it is
+    // no longer a round one. A change that widens the left group by ten pixels
+    // fails here first, which is the right place to find out.
     for (var width = 600.0; width <= 2560.0; width += 20) {
       testWidgets('at ${width.toInt()} px', (tester) async {
         await _pumpApp(tester, Size(width, 900));

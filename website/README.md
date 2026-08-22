@@ -13,29 +13,24 @@ Every command below is run from this directory.
 
 ## What is unusual about it
 
-The meter bridge on the front page is not an animation. `scripts/measure.mjs` synthesises a
-twenty-second stereo programme and measures it, at build time, against the same published
-definitions the application uses:
+Nothing on this site draws a meter of its own.
 
-| Stage | What it does |
-|---|---|
-| K-weighting | ITU-R BS.1770-4 stage-1 shelf and stage-2 RLB, coefficients as printed for 48 kHz |
-| Gating | EBU R128: 400 ms blocks at 75% overlap, absolute gate −70 LUFS, relative gate −10 LU |
-| LRA | EBU Tech 3342: 3 s windows, −20 LU relative gate, 10th to 95th percentile |
-| True peak | 4× oversampling through a 48-tap, 4-phase polyphase FIR |
-| Spectrum | 2048-point Hann, mapped onto 64 log-spaced bands with peak-per-bin |
+The fourteen thumbnails in the module catalogue are photographs of the real modules, and the panel on
+the front page is a photograph of the real canvas with the running application one press behind it.
+Both come from Flutter web targets that depend on `package:oaa` and render the actual widgets — no
+second implementation, nothing to keep in step.
 
-It writes `src/data/bridge.json` — a 600-frame timeline of real measurements, about 96 kB — which
-`src/scripts/bridge.js` plays back through the painters in `src/scripts/painters.js`. Those painters
-draw the bridge and nothing else — the fourteen thumbnails below it are photographs of the real
-modules, for the reason given further down.
+That is a deliberate reversal. The front page used to open with a meter bridge this site drew itself
+in JavaScript, fed by a twenty-second programme measured at build time with a reimplementation of
+BS.1770. The numbers were real and the pictures were not: an approximation of a measurement display
+is the one thing this project should not publish, because the two drift apart silently and a picture
+of a meter that disagrees with the meter is worse than no picture. It is the argument `MeterSource`
+makes for why the application refuses to write its meters twice — see
+`packages/oaa_core/lib/src/meter_source.dart`.
 
-The script is deterministic: a seeded PRNG, no wall-clock, no input files. `npm run measure` produces
-the same file on any machine, so every number on the front page is checkable by reading one file.
-
-The current build measures **−10.2 LUFS integrated** against a −14 LUFS target and **−0.21 dBTP**
-against a −1.0 ceiling, so the validator on the front page shows a genuine two-line delivery
-failure. That is deliberate — a demo that always passes teaches nothing.
+`scripts/measure.mjs` is what fed that bridge. Nothing calls it now; it is left in place rather than
+deleted because it is a working, self-contained implementation of the gated loudness path, but it is
+not part of any build.
 
 ## Running it
 
@@ -46,8 +41,9 @@ npm run build      # measures, then builds to dist/
 npm run preview    # serves dist/
 ```
 
-`src/data/bridge.json` is generated and git-ignored; `npm run dev` and `npm run build` both run
-`npm run measure` first, so a fresh clone works with no extra step.
+Neither needs a Flutter toolchain: the thumbnails and the still in front of the analyzer are
+committed, and the compiled analyzer is git-ignored and built by `npm run deploy`. The front page
+checks whether it is present and omits the button when it is not.
 
 ## Deploying to Cloudflare
 
@@ -62,22 +58,29 @@ npm run deploy              # build + wrangler deploy
 
 ### Pointing open-audio-analyzer.com at it
 
-1. Add the domain as a zone in the Cloudflare dashboard and move its nameservers to the pair
-   Cloudflare gives you (this is at the registrar, not in Cloudflare).
-2. Once the zone is active: **Workers & Pages → open-audio-analyzer → Settings → Domains & Routes →
-   Add → Custom domain**, and add both `open-audio-analyzer.com` and `www.open-audio-analyzer.com`.
-   Cloudflare creates the DNS records and issues the certificate.
-3. To send `www` to the apex, add a **Redirect Rule** (Rules → Redirect Rules): if hostname equals
-   `www.open-audio-analyzer.com`, then a 301 to
-   `https://open-audio-analyzer.com` preserving path and query.
+Both custom domains are declared in `wrangler.jsonc`, so `wrangler deploy` attaches them, creates
+their DNS records and issues their certificates. Two things are left over, because no file in this
+directory can hold either:
 
-`not_found_handling: "404-page"` in `wrangler.jsonc` is what makes `404.html` serve for unknown
-paths — a Worker serving static assets does not do that by default.
+1. The domain has to be a zone in the same Cloudflare account as the Worker, with its nameservers
+   moved to the pair Cloudflare gives you — that move is at the registrar, not in Cloudflare. A
+   domain registered *through* Cloudflare Registrar arrives as both already.
+2. To send `www` to the apex, add a **Redirect Rule** (Rules → Redirect Rules): if hostname equals
+   `www.open-audio-analyzer.com`, then a 301 to `https://open-audio-analyzer.com` preserving path
+   and query. Redirect Rules run ahead of Workers, so `www` being a custom domain does not stop it
+   from being redirected.
+
+Two lines in `wrangler.jsonc` do something a Worker serving static assets does not do by itself.
+`not_found_handling: "404-page"` is what makes `404.html` serve for unknown paths. And the `routes`
+are what give the Worker a URL at all: `workers_dev` is false, so a deploy without them succeeds,
+prints a version id, and is reachable at no address — which looks like a broken site rather than an
+unconfigured one.
 
 ### Deploying from CI instead
 
 `wrangler deploy` in a GitHub Action needs one repository secret, `CLOUDFLARE_API_TOKEN`, with the
-**Edit Cloudflare Workers** template scoped to this account:
+**Edit Cloudflare Workers** template scoped to this account — it carries Workers Routes and SSL and
+Certificates as well, which is what the custom domains in `wrangler.jsonc` need:
 
 ```yaml
 - run: npm ci && npm run build
@@ -107,7 +110,17 @@ npm run modules -- --only spectrogram,histogram
 npm run modules -- --keep-png                    # keep the full-resolution captures
 ```
 
-About 120 kB of WebP for the fourteen, at twice their logical size. The script drives Chrome over the
+Every one is the same 390x256 frame, and the two bar meters are narrower than the frame and sit
+centred in it, because a pair of vertical bars stretched to 390 px is a pair of squat slabs.
+
+**Captured at two device pixels per logical one, and the frame sized to where it lands.** More
+resolution is not sharper here, which took three tries to see. At 4x the pictures came out 1,440 px
+wide and the browser resampled them down to the ~390 px the catalogue gives them — a 3.5x downscale
+that averages three and a half source pixels into every destination one, which hairlines and
+six-pixel labels do not survive. They got *softer* the more resolution they were given. Drawn at 390
+logical pixels and captured at two device pixels each, they land 1:1 on a retina display and nothing
+is resampled. Change the column count or the padding in `.cat-shot` and `FRAME_W` has to move with
+it. The script drives Chrome over the
 DevTools protocol rather than with `--headless --screenshot`, because it has to wait for the *picture*
 rather than for a stopwatch: the page sets `globalThis.oaaRenderReady` once the mock programme has
 frozen and the final frame is painted. `--virtual-time-budget` looks like the answer to that and is
@@ -121,6 +134,38 @@ nothing.
 
 Like `public/og.png`, the output is committed: rendering it needs Flutter, Chrome and `cwebp`, and CI
 should not need any of them.
+
+## The live analyzer
+
+`tools/analyzer-demo` is a Flutter web target that depends on `package:oaa` and runs a canvas of eight
+real modules — the same `ModuleHost`, the same painters, the same `GridGeometry`, one `MeterClock` —
+against the same mock `MeterSource` the thumbnails use. Depending on the application drags in the
+engine, and the engine is a native library reached over `dart:ffi`; it builds anyway, because dart2js
+only compiles what `main()` reaches and nothing here reaches `OaaEngine`.
+
+```sh
+npm run analyzer                 # build the demo, then shoot the still in front of it
+npm run analyzer -- --no-build
+```
+
+Two outputs, treated differently:
+
+- `public/analyzer/` is about 5 MB of compiled Flutter and is **git-ignored**. `npm run deploy` builds
+  it; `npm run build` alone does not, so working on the site needs no Flutter toolchain. The front
+  page checks whether it is there and omits the button when it is not, so a site built without it is
+  complete rather than broken.
+- `public/analyzer-still.webp` **is committed**, because the facade needs it on every build.
+
+The front page does not load any of it on arrival: it shows the still, and swaps in an iframe when a
+reader presses the button, prefetching on hover so the press feels immediate. An iframe rather than
+mounting Flutter into the page, because Flutter installs document-level keyboard, scroll and focus
+handling that fights an ordinary document — and its own route can carry the COOP/COEP headers the
+threaded renderer wants without imposing them site-wide.
+
+CanvasKit is **not** vendored: Flutter fetches it from `www.gstatic.com`, which keeps 12 MB of
+WebAssembly out of the repository at the cost of one third-party request, and only for readers who
+press the button. To self-host it, keep `canvaskit/` from the build (`render-analyzer.mjs` deletes it)
+and set `canvasKitBaseUrl` in the bootstrap.
 
 ## Regenerating the Open Graph card
 

@@ -7,6 +7,7 @@ The panels that sit over the canvas. GPL-3.0-or-later.
 | `settings_panel.dart` | Signal and capture device, refresh rate and delivery target, publishing, skins, session. The hub the others open from. Its Publish section is `PublishSection`, composed from `lib/src/remote/` because it reads a live socket. |
 | `preset_browser.dart` | Save the current arrangement; open or delete a saved one. |
 | `calibration_editor.dart` | The six numbers a delivery target is. |
+| `theme_editor.dart` | The thirteen colours a skin is. Previews by *being* the skin — every change goes into `skinDraftProvider`, which `skinProvider` answers with — and prints each role's contrast ratio against the surface it has to be read on. The two built-ins are fixed and it says so before anything is dragged. |
 | `report_panel.dart` | Offline analysis: drop a file, watch it run, cancel it, export the result. |
 | `report_card.dart` | The report as a **PNG** — a fixed layout drawn deliberately, not a screenshot of the panel, so two people exporting the same report get the same picture. It lives here rather than beside the other exports in `oaa_core` because rendering needs `dart:ui`. |
 | `shortcuts_sheet.dart` | The keyboard shortcuts, drawn from the table in `lib/src/app/shortcuts.dart`. Holds no list of its own. The one panel that is wider than 620 and laid out in two columns, because it is a reference table rather than a column of controls — see `packages/oaa_ui/AGENTS.md` § Panels, and `test/scaling_test.dart`, which fails if it ever needs to scroll again. |
@@ -51,9 +52,19 @@ structure differs from the panels in this directory.
   edit ends, and there is nothing left for a button to do. An Apply button was
   the first shape of it and is the shape this rule forbids.
 
-- **A destructive action confirms in place.** The delete button becomes
-  `Delete?` and takes a second press. No modal over a modal, and no undo stack
-  for files.
+- **A destructive action confirms in place, until it deletes more than the row
+  it is in.** The delete button becomes `Delete?` and takes a second press. No
+  undo stack for files.
+
+  **The exception is an action whose consequence does not fit on the button, and
+  there is exactly one.** Settings → Meters → **Reset** removes every file in
+  `calibrations/` — targets somebody wrote months ago, and corrections they made
+  to the built-ins, none of which is visible from that row. A changed word on a
+  button can be pressed through in half a second by somebody who has read
+  nothing, so this one goes through `showOaaConfirm`, which is a modal over a
+  modal and says in its own header why it is allowed to be. The test of which
+  applies: can the sentence describing what will be lost fit on the button? One
+  skin, one preset, the target the row is about — yes. A whole library — no.
 
 - **Say why something failed, where it failed.** A save that did not happen puts
   the store's own message in the panel — not a log line, and never nothing.

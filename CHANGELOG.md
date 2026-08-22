@@ -9,6 +9,166 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### ✨ Added
+- A skin editor. Settings → Appearance → **Edit skin** opens all thirteen colour
+  roles with a picker on each, and the canvas behind the panel repaints as you
+  drag — as does a tablet mirroring the session. Every role prints its contrast
+  ratio against the surface it is read on, and the ones below the floor that
+  role is held to are marked with the reason; a low-contrast palette still
+  saves, because refusing to save what is already on screen is worse than a
+  warning. Skins remain plain JSON files and hand-editing them is unchanged.
+- Skins can be deleted from the editor, which previously meant finding the file.
+- **Reset**, beside Edit on Settings → Meters → Delivery target, deletes every
+  target you have saved and puts the built-in six back. It asks first, in a
+  dialog naming what goes, and afterwards says how many files it removed.
+  Targets you wrote by hand are gone from the disk, so this is also how a
+  correction to a built-in is undone without going looking for its JSON file.
+- The VU Meter marks where the needle reached. A mark rides the scale at the
+  loudest point of the last second and a half and then falls back to the
+  needle, because a 300 ms movement is slow by design and the loudest moment of
+  a phrase is over before the needle has finished describing it. It is the same
+  quantity the needle draws, held rather than measured a second time.
+- The VU Meter prints its reading and its reference along the bottom of the
+  face: the deflection in VU on the left, and which dBFS level reads as 0 VU on
+  the right. The second one is the genuinely confusing thing about a VU meter
+  and the face now says it out loud. A module too small for either drops it and
+  keeps the dial.
+- **The Spectrogram and the Oscilloscope can be drawn in full colour.**
+  `Colour: Full RGB` in either module's menu replaces the skin's one-hue ramp,
+  and what it paints is the quantity that module's axes leave uncoloured. On the
+  Spectrogram that is the **level**: the spectrogram rainbow, indigo through
+  green and yellow to red and white, which separates far more steps of level than
+  one hue can. On the Oscilloscope it is the **band balance**, because a waveform
+  has no frequency axis at all: red, green and blue are its bass, its mids and
+  its highs, split at 200 Hz and 2 kHz, so a kick is red, a hat is blue and a
+  full-spectrum hit is white, the way DJ software has coloured audio for twenty
+  years. That balance is taken in decibels against the loudest of the three bands
+  rather than in power — bass carries an order of magnitude more power than air
+  does, and a power mix draws every piece of music red — and it is recorded with
+  the column, so the picture holds its colours instead of being repainted by
+  whatever is playing now. A column whose source published no spectrum keeps the
+  accent rather than being handed a colour that would claim a balance nobody
+  measured. **Off by default in both**, because a rainbow reads as more precise
+  than the measurement behind it, it collapses for the eight percent of men who
+  cannot separate red from green, and on the Spectrogram it brings its own dark
+  ground into a light skin. Nothing measured changes at either setting: no
+  reading, no report and no byte on the wire moves.
+
+### ⚡ Changed
+- **A menu marks the value it holds by recessing that row, not by brightening
+  it.** Every dropdown in the application — the delivery target, the signal
+  source, and a module's dozen settings — used to print its current value as the
+  lightest row in the menu, which put the emphasis on the one choice pressing
+  cannot change and left the options you can still take looking greyed out. The
+  chosen row now sits in a darker well and the alternatives sit on the menu's
+  own surface, which is how selection reads everywhere else in the interface.
+  Nothing about what the menus contain or choose changed.
+- The signal source in the status bar is a bordered chip, the same shape the
+  delivery target beside it has always had. It is the menu people open most and
+  it was drawn as a dot and a bare word in a row of bordered controls, which
+  reads as a caption rather than as something you can click. The dot stays,
+  inside the chip: bright while something is being metered, dim on Silence.
+- **The `OAA` wordmark is gone from the status bar.** The window carries the
+  application's name; the bar carries what changes while you work, and three
+  capitals that never change were the one item in it saying nothing about the
+  signal. Every width at which the bar drops an item moved with it — the
+  controls at the narrow end now leave 25 to 40 px earlier than they did,
+  because a bordered chip cannot give back the width a bare word could. All of
+  them still have keyboard shortcuts except the three remote controls, which is
+  unchanged.
+- The sample rate no longer prints flush against the DAW's playhead. The gap
+  between the source group and the readings is a fixed one now rather than
+  whatever the window had left over, so it is there at every width instead of
+  only on a wide one.
+- The VU Meter has a face. The scale is a band along the rim rather than a
+  hairline arc, red above 0 VU over a tinted ring, and the needle is a taper
+  under a machined hub — so how far up the scale the programme is can be read
+  from the rim before the needle is read at all. Nothing about the movement,
+  the ballistics or the reading changed.
+- The Loudness Distribution fits its loudness axis to the programme instead of
+  always drawing −60 to 0 LUFS. A mastered programme's gated distribution
+  occupies eight to fifteen of those sixty decibels, so the picture the LRA
+  reading is taken from was squeezed into a fifth of the module with the rest
+  left blank; the axis now holds every occupied bin, the gated range and the
+  delivery target, rounds outwards to whole ticks, and stays where it is until
+  the distribution grows past it. No reading changes — the same bins are drawn
+  against a shorter stretch of the same scale. `Scale: Full range` in the
+  module's menu restores the published axis, which is the one to pick when two
+  distributions are being compared side by side.
+- **Open Audio Analyzer has a new logo, and every icon it ships follows it.** A
+  white waveform on a teal ramp, replacing the four teal bars on graphite. The
+  app icon, the installers' icons, the Android launcher icon, the layered icon
+  macOS and iOS render, the favicon, the documentation site's header, the
+  README and the social card all change together. The tile is also a rounder
+  shape than it was, because the one macOS 26 and iOS 26 draw is rounder than
+  the one every version before them drew. Nothing about what the application
+  measures or displays is affected.
+- The icon reads less well at 16 px than the one it replaces, and that is a
+  real cost rather than an oversight. Four bars at four heights survived being
+  two pixels wide; a waveform with nine excursions across twelve pixels does
+  not, and no stroke weight rescues it. The line is held at one device pixel so
+  that it stays white instead of smearing to grey, and the sizes the icon is
+  now designed around are 32 px and up. Where this shows is the Windows
+  Explorer list view and a Linux panel at its smallest setting.
+- **Precision Instrument and Daylight can no longer be replaced.** A skin file
+  naming one of their two ids used to shadow the built-in; it is now ignored,
+  and the skin editor offers *Save as new* rather than an in-place save. The two
+  shipped skins are what proves the thirteen colour roles are semantic rather
+  than aliases for particular colours, and a reference point a file on disk can
+  quietly redefine is not one. **If you had such a file it is inert now** —
+  rename its `id` and it comes back as a skin of its own. Delivery targets are
+  unaffected and still shadow their built-ins, because a target is a claim about
+  somebody else's published specification and has to be correctable without a
+  release.
+
+### 🐛 Fixed
+- The VU Meter no longer draws a needle for a reading nobody measured. The
+  per-channel arrays are NaN while a remote display's link to the host is
+  quiet, and the dial rested at the bottom of its scale with exactly the
+  confidence it reads a quiet passage with; the face now shows no needle and
+  the reading is an em dash. Only a tablet display could reach this.
+- The VU Meter's scale numbers no longer overprint each other on a small
+  module: −5 and −3 sit close together on a face that crowds towards the bottom
+  in voltage, and at the narrowest widths they collided into one smear. The
+  face now sheds the numbers it has no room for, keeping 0 and both ends.
+- **A panel that scrolls draws one scrollbar rather than two.** Settings, and
+  every other panel tall enough to scroll, carried the skin's own thumb on its
+  right edge and a second, wider grey one immediately inside it, which faded in
+  whenever the panel was scrolled. The second was supplied by Flutter, which
+  decorates a scrolling region on macOS, Windows and Linux without being asked;
+  the panel now declines it. Tablets never showed it.
+
+### 🚧 Internal
+- The remote display's skin frame is rate-limited to one every 150 ms, with the
+  last value always delivered. Dragging a colour in the new editor produces a
+  palette per pointer move, and those frames are queued rather than dropped —
+  unthrottled they grew that queue for as long as the pointer was down.
+- The artwork and the program that renders it swapped places.
+  `assets/brand/oaa-logo.svg` is now the drawing, hand-edited, and
+  `packaging/icon/make_icons.dart` reads it; previously the mark was four
+  rectangles described as numbers in that program and every vector in the
+  repository was a hand-copied transcription of them, kept in step by a rule
+  saying the mark changed there first and was brought across afterwards. That
+  rule does not scale to a path with three hundred control points. The program
+  now also writes `packaging/icon/oaa.svg`, the rest of `assets/brand/` and the
+  website's icons, which removes the last four files anybody kept by hand.
+- `make_icons.dart` grew a path rasteriser — an SVG path parser, a cubic
+  flattener and a scanline fill — because the mark is a stroked cubic path and
+  the old renderer only knew rectangles. Still no dependencies. The stroke is
+  drawn as the union of a rectangle per segment and a disc per vertex rather
+  than by offsetting the outline, which is the same shape and is not a research
+  problem.
+- The tile's corner is measured rather than remembered. Three macOS 26 system
+  icons were rendered through `NSWorkspace`, thresholded to a silhouette and
+  fitted: a corner of a third of the side on a superellipse of exponent 2.7,
+  where the shape Apple drew from iOS 7 to iOS 18 was 22.37% on an exponent
+  near 4. The first cut of this release used the remembered numbers and looked
+  visibly square next to everything else in the Dock.
+- The documentation site serves its favicon as a file instead of inlining it
+  into every page as a data URI. The mark was a few hundred bytes when that
+  choice was made and is three kilobytes now, which across twenty pages was a
+  hundred kilobytes of the same icon.
+
 ## [0.9.0] — 2026-08-22
 
 ### 📐 Measurement
@@ -112,13 +272,15 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   caught until the next crossing. It works at every time base — the roll above
   200 ms is replaced by the sweep rather than left in place — so the attack of
   one kick can be looked at instead of a picture that lands somewhere different
-  every pass. `Trigger: Auto`, which is the default and what the module did
+  every pass. `Trigger: Off`, which is the default and what the module did
   before, is unchanged: a rising zero crossing below 200 ms, a rolling display
   above it, and always something on screen. A threshold nothing reaches leaves
   the last capture where it is, which is the mode working rather than failing.
   `Trigger` stays in the module's menu under `Sync: Tempo`, greyed rather than
   dropped: a bar-locked window is placed by the bar line and has no use for it,
-  and a row that vanishes is a row somebody hunts for.
+  and a row that vanishes is a row somebody hunts for. `Grid` is now greyed
+  under `Sync: Free` for the same reason instead of being dropped — there is no
+  triplet of a millisecond.
 - **The oscilloscope's height and trigger threshold are sliders on the
   module**, `HEIGHT` and `THRESHOLD` in a strip along the bottom of the plot,
   and the threshold is drawn across the lane at the height it is set to. Both
@@ -201,28 +363,64 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   question instead of answering one. A display with nothing behind it, which is
   a tablet that opened straight into one, still lands on the picker, because
   there is nowhere else for it to go.
-- The phase scope's correlation bar and the super meter's three arcs have
-  rounded ends. On the bar the fill is clipped to the same corners, so ±1
-  fills the rounded tip rather than sitting square over it; on the arcs the
-  track carries the same cap as the fill, so neither end of the scale is
-  overrun, and the M, S and I names step a little further round the open end to
-  keep their clearance from ink the arcs did not have before.
-- **Everything drawn against the delivery target is amber above it.** The LUFS
+- The phase scope's correlation bar and the super meter's three rings have
+  rounded ends. On the bar the fill is clipped to the same corners, so ±1 fills
+  the rounded tip rather than sitting square over it. On the gauge it is the
+  *scale* that is rounded, at both extremes of the sweep: a reading's own moving
+  end stays square, because a round tip is half a ring of ink standing past the
+  number it points at, which on that scale is most of a decibel nobody measured.
+  The M, S and I names step a little further round the open end to keep their
+  clearance from ink the rings did not have before.
+- **Everything drawn against the delivery target is red above it.** The LUFS
   meter's momentary and short-term bars and the super meter's three arcs are
-  now cut at the target and drawn in `warn` past it, where they were one colour
-  from the floor to the reading; the histogram and the loudness distribution
-  already split at the target and drew the far side in `over`, and that side is
-  now `warn` as well. One rule in four modules: over the target is amber, and
-  red still means a ceiling has actually been exceeded. The cut is a clip at
-  the target rather than a verdict on the whole shape, so what it shows is how
-  much of the reading is over — a momentary peak 3 LU above a −14 target is
-  three quarters grey with an amber cap, not an amber bar.
-- The super meter's target tick is drawn at 3 px rather than 2. It is radial,
-  so antialiasing spreads it over two pixel columns, and it now also crosses
-  the amber above the target — at the old weight it read as an edge between two
-  colours rather than as the mark the whole gauge is aimed at.
+  now cut at the target and drawn in `over` past it, where they were one colour
+  from the floor to the reading. The histogram and the loudness distribution
+  already split at the target and already used `over`, so their picture is
+  unchanged. One rule in four modules, and red is the single mark for past the
+  number you set. The cut is a clip at the target rather than a verdict on the
+  whole shape, so what it shows is how much of the reading is over — a momentary
+  peak 3 LU above a −14 target is three quarters grey with a red cap, not a red
+  bar.
+- The histogram's outline turns red past the delivery target, where it stayed
+  the accent colour across the whole programme. The fill under it already split
+  there, so the line the eye lands on ran one colour straight through the
+  boundary and disagreed with the area it bounds. Cut at the target like
+  everything else, on the same pixel row as the fill.
+- **The super meter's innermost ring no longer turns entirely red when the mix
+  is over its target.** The ring takes its verdict's colour for its whole
+  length — which is what makes an in-spec reading a green ring rather than a
+  green tip — and once over-target became a red verdict that meant the arc ran
+  red from the bottom of the scale to the reading, with its own target tick
+  stranded in the middle of it and the same colour on both sides. At −11 against
+  a −14 target, three quarters of the arc claimed to be over when a quarter of
+  it was. It is now drawn like the other two rings: neutral up to the target,
+  red past it, so the red segment is the size of the miss. In spec it is still
+  green end to end, and the centre readout is red either way.
+- **The super meter's three target ticks read as one mark, and are drawn at 3 px
+  rather than 2.** The same grey on three rings is not the same *appearance*:
+  the backdrop at the target is the track on a ring that has not reached it,
+  that ring's fill on one that has, and red on the far side of the line —
+  measured at L* 24, 39 and 51 in one ordinary frame, so a single grey stood
+  +36, +21 and +9 above what surrounded it and read as three different greys. No
+  choice of shade fixes that, because the backdrop moves with the audio, so each
+  tick is now laid in a slot of the meter's own track colour — the mark reads as
+  cut back to the empty scale, and a ring that has not reached the target shows
+  no notch at all, because there is nothing there to cut. Local contrast is +36
+  on all three rings at every reading and under every skin. The extra weight is because the mark is *radial*: antialiasing
+  spreads it across two pixel columns where an axis-aligned rule lands on whole
+  ones, and it now has red on one side of it as well.
 
 ### 🐛 Fixed
+- **A mix over its loudness target is red in the Number Box and the Alert Meter,
+  where it used to be drawn as a reading with no opinion.** `LUFS-I` past the
+  target and its tolerance returned a neutral state, so the delivery report
+  called the same mix a failure while the meter beside it printed the number in
+  plain text — and the bars and arcs that cut at the target now paint that
+  region red, which made the disagreement plain. Under the target is still
+  neutral: quiet is not over. Amber is unchanged and still means approaching —
+  true peak inside the last decibel before the ceiling is the case it exists
+  for. The rule now has a test; it had none, which is how this stood for eight
+  phases.
 - **The macOS application and its plug-ins load again on every macOS they claim
   to support, and the floor is now 14.2.** The engine holds a strong reference
   to `CATapDescription` — the Core Audio class behind System Output — and a

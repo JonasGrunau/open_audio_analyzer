@@ -25,9 +25,8 @@ import 'package:flutter/widgets.dart';
 import 'package:oaa/src/canvas/module_host.dart';
 import 'package:oaa/src/clock/meter_clock.dart';
 import 'package:oaa_core/oaa_core.dart';
+import 'package:oaa_mock/oaa_mock.dart';
 import 'package:oaa_ui/oaa_ui.dart';
-
-import 'mock_source.dart';
 
 /// Set on `globalThis` once the programme has frozen and a frame has been
 /// painted holding its final reading.

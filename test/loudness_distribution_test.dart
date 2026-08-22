@@ -22,6 +22,17 @@
 // Pixel reads because nothing else can see either one. A label composited under
 // a translucent accent fill is laid out at exactly the same offset as one on top
 // of it.
+//
+// ---------------------------------------------------------------------------
+// And the fitted axis, which is arithmetic and is tested as arithmetic
+//
+// `DistributionWindow` decides how much of the −60..0 LUFS range the module
+// draws, and every property worth holding it to is a statement about numbers:
+// it holds every occupied bin, it lands on round ticks, it is never narrower
+// than a picture can use, and it stays where it is while the distribution does.
+// The last case in the file is the one that has to be pixels, because what the
+// setting is *for* — the distribution getting the width — is a claim about how
+// much of the module the picture covers.
 
 import 'dart:typed_data';
 import 'dart:ui' as ui;
@@ -72,13 +83,15 @@ class _Fake implements MeterSource {
   double get lufsIntegrated => -14;
 
   /// A range wide enough to hold the reading between its ends, so the caliper
-  /// is in its dimension-line arrangement rather than its narrow one.
+  /// is in its dimension-line arrangement rather than its narrow one. Fields
+  /// rather than getters because the fitted axis is computed from them, and a
+  /// case that moves the percentiles is how that gets checked.
   @override
-  double get loudnessRange => 12.5;
+  double loudnessRange = 12.5;
   @override
-  double get loudnessRangeLow => -22.0;
+  double loudnessRangeLow = -22.0;
   @override
-  double get loudnessRangeHigh => -9.5;
+  double loudnessRangeHigh = -9.5;
   @override
   double get loudnessRangeGate => -34;
 
@@ -95,10 +108,16 @@ class _Fake implements MeterSource {
 /// ticker created beside the tree outlives it and the binding then reports an
 /// animation still running after disposal.
 class _Harness extends StatefulWidget {
-  const _Harness({required this.source, required this.boundary});
+  const _Harness({
+    required this.source,
+    required this.boundary,
+    this.scale = DistributionScale.auto,
+    super.key,
+  });
 
   final MeterSource source;
   final GlobalKey boundary;
+  final DistributionScale scale;
 
   @override
   State<_Harness> createState() => _HarnessState();
@@ -130,6 +149,7 @@ class _HarnessState extends State<_Harness>
                 engine: widget.source,
                 clock: clock,
                 calibration: BuiltInCalibrations.streaming,
+                scale: widget.scale,
               ),
             ),
           ),
@@ -244,6 +264,68 @@ void main() {
     );
   });
 
+  testWidgets('a fitted axis gives the distribution the width it has', (
+    tester,
+  ) async {
+    // How many columns of the module the picture is drawn into, at each
+    // setting. The same programme both times: a mode at −15.5 LUFS with its
+    // percentiles either side of it, which is where a real pair sits — the
+    // fake's default range is deliberately wider than its bins for the caliper
+    // cases above, and that is not a distribution any programme produces.
+    Future<int> inked(DistributionScale scale) async {
+      final key = GlobalKey();
+      final source = _Fake()
+        ..loudnessRangeLow = -18
+        ..loudnessRangeHigh = -13
+        ..loudnessRange = 5;
+      // Keyed, so the second setting gets its own state and therefore its own
+      // clock: `_HarnessState` binds the clock to the source it was built with,
+      // and a reused state would tick the previous case's engine while the
+      // module read this one's — a module that never repaints and a picture
+      // that is never drawn.
+      await tester.pumpWidget(
+        _Harness(
+          key: ValueKey(scale),
+          source: source,
+          boundary: key,
+          scale: scale,
+        ),
+      );
+      source.mode(-15.5);
+      await tester.pump(const Duration(milliseconds: 17));
+
+      final pixels = await _shoot(tester, key);
+      var columns = 0;
+      for (var x = 0; x < _size.width.toInt(); x++) {
+        for (var y = 0; y < _size.height.toInt(); y++) {
+          if (_isPicture(pixels, x, y)) {
+            columns++;
+            break;
+          }
+        }
+      }
+      return columns;
+    }
+
+    final full = await inked(DistributionScale.full);
+    final auto = await inked(DistributionScale.auto);
+
+    expect(
+      full,
+      lessThan(_size.width * 0.2),
+      reason:
+          'a 8 LU distribution on a 60 LU axis should be a fifth of the module',
+    );
+    expect(
+      auto,
+      greaterThan(full * 2),
+      reason:
+          'the fitted axis draws the same distribution into no more of the '
+          'module than the published range does — the columns are still being '
+          'mapped to bins as though the axis were −60..0',
+    );
+  });
+
   testWidgets('an empty distribution still says what the range is', (
     tester,
   ) async {
@@ -261,5 +343,124 @@ void main() {
       greaterThan(40),
       reason: 'no reading on a module with no distribution yet',
     );
+  });
+
+  group('the fitted window', () {
+    /// A distribution occupying [low] to [high] LUFS and nothing else.
+    Float32List bins(double low, double high) {
+      final bins = Float32List(MeterShape.histogramBins);
+      for (var bin = 0; bin < MeterShape.histogramBins; bin++) {
+        final lufs = MeterShape.histogramMinLufs + bin * 0.5;
+        if (lufs >= low && lufs <= high) bins[bin] = 1;
+      }
+      return bins;
+    }
+
+    MeterScale fitted(
+      MeterScale current,
+      Float32List bins, {
+      double target = -14,
+      double rangeLow = double.nan,
+      double rangeHigh = double.nan,
+    }) => DistributionWindow.next(
+      current,
+      bins: bins,
+      target: target,
+      rangeLow: rangeLow,
+      rangeHigh: rangeHigh,
+    );
+
+    test('holds every occupied bin, and is narrower for doing it', () {
+      final scale = fitted(
+        DistributionWindow.full,
+        bins(-20, -12),
+        rangeLow: -19,
+        rangeHigh: -13,
+      );
+
+      expect(scale.min, lessThanOrEqualTo(-20));
+      expect(scale.max, greaterThanOrEqualTo(-12));
+      expect(
+        scale.span,
+        lessThan(DistributionWindow.full.span / 2),
+        reason: 'an axis fitted to 8 LU of programme is still most of 60',
+      );
+    });
+
+    test('holds a delivery target the programme never reached', () {
+      // Quiet material against a streaming target: the dashed line is drawn on
+      // this axis, and an axis that clamped it would put it on the edge of the
+      // plot as a reading that is simply wrong.
+      final scale = fitted(DistributionWindow.full, bins(-40, -32));
+      expect(scale.min, lessThanOrEqualTo(-40));
+      expect(scale.max, greaterThanOrEqualTo(-14));
+    });
+
+    test('lands on round ticks, at every loudness a programme can sit at', () {
+      for (var centre = -55.0; centre <= -5.0; centre += 1) {
+        final scale = fitted(
+          DistributionWindow.full,
+          bins(centre - 4, centre + 4),
+          target: centre,
+        );
+        final where = 'at $centre LUFS';
+
+        expect(scale.min % scale.step, isZero, reason: where);
+        expect(scale.max % scale.step, isZero, reason: where);
+        expect(
+          scale.ticks.length,
+          lessThanOrEqualTo(DistributionWindow.maxIntervals + 1),
+          reason: where,
+        );
+        expect(
+          scale.span,
+          greaterThanOrEqualTo(DistributionWindow.minSpan),
+          reason: where,
+        );
+        expect(scale.min, greaterThanOrEqualTo(MeterShape.histogramMinLufs));
+        expect(scale.max, lessThanOrEqualTo(MeterShape.histogramMaxLufs));
+        expect(scale.min, lessThanOrEqualTo(centre - 4), reason: where);
+        expect(scale.max, greaterThanOrEqualTo(centre + 4), reason: where);
+      }
+    });
+
+    test('stays where it is while the distribution stays inside it', () {
+      final first = fitted(DistributionWindow.full, bins(-20, -12));
+      final second = fitted(first, bins(-19.5, -12.5));
+
+      expect(
+        identical(second, first),
+        isTrue,
+        reason:
+            'the window was refitted for a distribution that had not left it, '
+            'which is a scale that slides under the reader',
+      );
+    });
+
+    test('and moves when the programme grows past it', () {
+      final first = fitted(DistributionWindow.full, bins(-20, -12));
+      final second = fitted(first, bins(-40, -12));
+
+      expect(second, isNot(first));
+      expect(second.min, lessThanOrEqualTo(-40));
+    });
+
+    test('a programme that used the whole range gets the whole axis', () {
+      expect(
+        fitted(DistributionWindow.full, bins(-59, -1)),
+        DistributionWindow.full,
+      );
+    });
+
+    test('and one that has not started yet opens on the target', () {
+      final scale = fitted(
+        DistributionWindow.full,
+        Float32List(MeterShape.histogramBins),
+      );
+
+      expect(scale.min, lessThan(-14));
+      expect(scale.max, greaterThan(-14));
+      expect(scale.span, greaterThanOrEqualTo(DistributionWindow.minSpan));
+    });
   });
 }

@@ -1,26 +1,23 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024"
-     width="1024" height="1024" role="img" aria-labelledby="oaa-icon-title">
+<!--
+  SPDX-License-Identifier: GPL-3.0-or-later
+
+  The application's mark, with the icon's rounded square taken off.
+
+  packaging/icon/make_icons.dart draws the mark in white on a teal ground,
+  which is what an app icon needs and the wrong thing for a browser tab: at
+  16 px the ground is most of what you see, and the waveform inside it is four
+  grey pixels. Here the ground is gone, the viewBox is cropped to the mark
+  itself (measured: 129,280 767x464 in the original 1024 square) so it fills
+  the tab, and the strokes carry the signal colour rather than white, which
+  survives both a light and a dark tab bar.
+
+  Keep runs of hyphens out of any comment added here. Two in a row end an XML
+  comment and every renderer that loads the file through an img element then
+  shows a broken image with no error anywhere.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="106 105 813 813"
+     width="813" height="813" role="img" aria-labelledby="oaa-icon-title">
   <title id="oaa-icon-title">Open Audio Analyzer</title>
-
-  <defs>
-    <linearGradient id="ground" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#1F2328"/>
-      <stop offset="1" stop-color="#0B0C0E"/>
-    </linearGradient>
-  </defs>
-
-  <!-- The tile. -->
-  <rect x="0" y="0" width="1024" height="1024" rx="204.8" fill="url(#ground)"/>
-
-  <!-- Four bars: up, peak, valley, up. -->
-  <g fill="#35E0C4">
-    <path d="M204.8,460.6138a22.3418,22.3418 0 0 1 22.3418,-22.3418h67.0255a22.3418,22.3418 0 0 1 22.3418,22.3418v336.2444a22.3418,22.3418 0 0 1 -22.3418,22.3418h-67.0255a22.3418,22.3418 0 0 1 -22.3418,-22.3418z"/>
-    <path d="M372.3636,227.1418a22.3418,22.3418 0 0 1 22.3418,-22.3418h67.0255a22.3418,22.3418 0 0 1 22.3418,22.3418v569.7164a22.3418,22.3418 0 0 1 -22.3418,22.3418h-67.0255a22.3418,22.3418 0 0 1 -22.3418,-22.3418z"/>
-    <path d="M539.9273,571.2058a22.3418,22.3418 0 0 1 22.3418,-22.3418h67.0255a22.3418,22.3418 0 0 1 22.3418,22.3418v225.6524a22.3418,22.3418 0 0 1 -22.3418,22.3418h-67.0255a22.3418,22.3418 0 0 1 -22.3418,-22.3418z"/>
-    <path d="M707.4909,350.0218a22.3418,22.3418 0 0 1 22.3418,-22.3418h67.0255a22.3418,22.3418 0 0 1 22.3418,22.3418v446.8364a22.3418,22.3418 0 0 1 -22.3418,22.3418h-67.0255a22.3418,22.3418 0 0 1 -22.3418,-22.3418z"/>
-  </g>
-
-  <!-- and the tallest one is over. -->
-  <path d="M372.3636,227.1418a22.3418,22.3418 0 0 1 22.3418,-22.3418h67.0255a22.3418,22.3418 0 0 1 22.3418,22.3418v112.8262h-111.7091z" fill="#FF4D4D"/>
+  <path d="m722.47 437.751c-45.986 0-43.143 108.368-64.841 157.445-3.648 8.156-13.582 7.119-15.978-1.696-24.639-91.426-13.39-313.574-80.212-313.574-69.955 0-52.666 287.469-79.893 404.615-2.017 8.902-12.176 9.662-15.147 1.023-28.762-83.577-25.535-265.889-79.957-265.889-56.309 0-51.515 152.727-73.566 214.258-2.911 8.244-12.528 8.507-15.755 0.439-16.075-40.57-21.22-122.406-81.938-122.406H144.458c-8.793 0-15.946 8.668-15.946 19.299 0 10.641 7.162 19.375 15.946 19.375h70.722c50.236 0 33.171 134.743 91.206 134.743 53.816 0 47.999-146.577 71.041-211.551 2.814-8.039 12.208-7.806 14.891 0.293 25.726 79.167 25.246 269.949 84.4 269.949 66.375 0 42.726-303.829 78.071-410.764 2.657-8.156 12.272-8.58 15.308-0.438 32.884 87.018 15.563 314.27 74.907 314.27 52.378 0 55.51-104.653 71.265-156.167 2.585-8.2 11.921-8.785 15.149-1.023 16.489 38.712 27.035 99.472 76.698 99.472h71.424c8.793 0 15.947-8.668 15.947-19.299 0-10.671-7.162-19.337-15.947-19.337h-71.424c-42.28 0-35.696-112.931-85.646-112.931z" fill="#35E0C4" stroke="#35E0C4" stroke-width="13.976"/>
 </svg>

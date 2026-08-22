@@ -4,3 +4,8 @@ dist/
 .wrangler/
 src/data/bridge.json
 .DS_Store
+
+# The compiled live analyzer demo — about 3 MB of Flutter, rebuilt by
+# `npm run analyzer` and by `npm run deploy`. The still in front of it
+# (public/analyzer-still.webp) *is* committed, because every build needs it.
+public/analyzer/

@@ -26,4 +26,5 @@ export 'src/report.dart';
 export 'src/report_export.dart';
 export 'src/settings.dart';
 export 'src/skin.dart';
+export 'src/skin_contrast.dart';
 export 'src/transport.dart';

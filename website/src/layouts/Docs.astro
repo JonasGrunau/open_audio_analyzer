@@ -1,0 +1,131 @@
+---
+/* One documentation page: contents, the document, its sections.
+ *
+ * The three-column shape is the ordinary one for a manual and is ordinary on
+ * purpose — somebody arriving here has a question, and a documentation site
+ * with an original navigation is a documentation site you have to learn before
+ * you can use it. What is not ordinary is the readout above the title: every
+ * page says which file in the repository it was rendered from and links to it.
+ * These documents live beside the code, two of them are normative and held by
+ * tests, and the reader who has just found the mistake should be able to see
+ * where the fix goes without going looking.
+ */
+import Base from './Base.astro';
+import '../styles/docs.css';
+import { PAGES, SECTIONS, href, sourceUrl } from '../lib/docs.mjs';
+
+interface Props {
+  /** The manifest entry for this page — see src/lib/docs.mjs. */
+  page: { source: string; slug: string; title: string; blurb: string; section: string };
+  description: string;
+  /** From `render(entry)`. h2 and h3 only; anything deeper is not a landmark. */
+  headings?: { depth: number; slug: string; text: string }[];
+}
+
+const { page, description, headings = [] } = Astro.props;
+
+const toc = headings.filter((h) => h.depth === 2 || h.depth === 3);
+
+/* Previous and next in manifest order, so the manual can be read straight
+   through by somebody who has not decided yet what they are looking for. */
+const order = PAGES.findIndex((p) => p.slug === page.slug);
+const previous = PAGES[order - 1];
+const next = PAGES[order + 1];
+---
+
+<Base
+  title={`${page.title} — Open Audio Analyzer`}
+  description={description}
+  path={href(page.slug)}
+  slimFooter
+>
+  <div class="doc shell">
+    <nav class="doc-nav doc-rail" aria-label="Documentation">
+      <p class="label doc-nav-sec">Documentation</p>
+      <div class="doc-nav-group">
+        <a
+          class="doc-nav-a"
+          href="/docs"
+          aria-current={page.slug === 'index' ? 'page' : undefined}>Overview</a
+        >
+      </div>
+
+      {
+        SECTIONS.map((section) => (
+          <>
+            <p class="label doc-nav-sec">{section.name}</p>
+            <div class="doc-nav-group">
+              {section.pages.map((p) => (
+                <a
+                  class="doc-nav-a"
+                  href={href(p.slug)}
+                  aria-current={p.slug === page.slug ? 'page' : undefined}
+                >
+                  {p.nav}
+                </a>
+              ))}
+            </div>
+          </>
+        ))
+      }
+    </nav>
+
+    <article class="doc-main">
+      <div class="doc-head">
+        <p class="label">{page.section || 'Documentation'}</p>
+        <a class="doc-src" href={sourceUrl(page.source)} rel="noopener">{page.source} ↗</a>
+      </div>
+
+      <h1 class="doc-title">{page.title}</h1>
+      <p class="doc-blurb">{page.blurb}</p>
+
+      <div class="md">
+        <slot />
+      </div>
+
+      <slot name="after" />
+
+      {
+        (previous || next) && (
+          <nav class="doc-next" aria-label="Nearby pages">
+            {previous && (
+              <a class="doc-next-a" href={href(previous.slug)}>
+                <span class="label doc-next-k">Previous</span>
+                <span class="doc-next-t">{previous.title}</span>
+              </a>
+            )}
+            {next && (
+              <a class="doc-next-a is-next" href={href(next.slug)}>
+                <span class="label doc-next-k">Next</span>
+                <span class="doc-next-t">{next.title}</span>
+              </a>
+            )}
+          </nav>
+        )
+      }
+    </article>
+
+    {
+      toc.length > 1 && (
+        <nav class="doc-toc doc-rail" aria-label="On this page">
+          <p class="label">On this page</p>
+          <ul class="doc-toc-list">
+            {toc.map((h) => (
+              <li>
+                <a
+                  class={`doc-toc-a${h.depth === 3 ? ' doc-toc-3' : ''}`}
+                  href={`#${h.slug}`}
+                  data-toc={h.slug}
+                >
+                  {h.text}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </nav>
+      )
+    }
+  </div>
+
+  {toc.length > 1 && <script src="../scripts/toc.js"></script>}
+</Base>

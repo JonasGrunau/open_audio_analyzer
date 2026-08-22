@@ -14,6 +14,7 @@ import '../remote/remote_display_service.dart';
 import '../storage/config_store.dart';
 import 'calibration_editor.dart';
 import 'preset_browser.dart';
+import 'theme_editor.dart';
 
 /// Opens the settings panel.
 ///
@@ -246,11 +247,57 @@ class _SettingsPanelState extends ConsumerState<SettingsPanel> {
                 onPressed: () =>
                     showCalibrationEditor(context, base: calibration),
               ),
+              const SizedBox(width: Space.sm),
+              OaaButton(
+                label: 'Reset',
+                emphasis: ButtonEmphasis.destructive,
+                onPressed: _resetCalibrations,
+              ),
             ],
           ),
         ),
       ],
     );
+  }
+
+  /// Deletes every delivery target the user has written, once they have said so
+  /// in as many words.
+  ///
+  /// **This one asks in a dialog rather than by taking a second press**, which
+  /// is the exception to the rule in `lib/src/panels/AGENTS.md` and the reason
+  /// [showOaaConfirm] exists. The in-place confirmation is right where the
+  /// consequence fits on the button — one skin, one preset, the thing the row
+  /// is about. Here one press removes every file in `calibrations/`, including
+  /// corrections to the built-ins that somebody may have written by hand
+  /// months ago, and none of that is visible from the row.
+  Future<void> _resetCalibrations() async {
+    final confirmed = await showOaaConfirm(
+      context: context,
+      title: 'Reset delivery targets',
+      message:
+          'This deletes every delivery target you have saved and puts the '
+          'built-in six back. Targets you wrote by hand, and corrections you '
+          'made to a built-in, are removed from the configuration directory. '
+          'It cannot be undone.',
+      confirmLabel: 'Reset',
+    );
+    if (!confirmed || !mounted) return;
+
+    final removed = await ref
+        .read(calibrationLibraryProvider.notifier)
+        .resetToBuiltIns();
+    if (!mounted) return;
+
+    setState(() {
+      _status = switch (removed) {
+        // The store already said why, and it said it about a specific file.
+        null =>
+          ref.read(storageNoticeProvider) ?? 'Could not remove every target.',
+        0 => 'Nothing to reset — the built-in targets were the whole list.',
+        1 => 'Delivery targets reset. One saved target removed.',
+        _ => 'Delivery targets reset. $removed saved targets removed.',
+      };
+    });
   }
 
   // --- Appearance -----------------------------------------------------------
@@ -262,8 +309,9 @@ class _SettingsPanelState extends ConsumerState<SettingsPanel> {
     return PanelSection(
       title: 'Appearance',
       note:
-          'Skins are JSON files with thirteen named colours. A skin may set as '
-          'few as one of them and inherit the rest.',
+          'A skin is thirteen named colours. Edit one here and the canvas '
+          'follows while you drag; it is also a JSON file you can write by '
+          'hand, and one that sets as few as one colour inherits the rest.',
       children: [
         for (final skin in skins)
           PanelListRow(
@@ -276,10 +324,13 @@ class _SettingsPanelState extends ConsumerState<SettingsPanel> {
         PanelActions(
           children: [
             OaaButton(label: 'Reload from disk', onPressed: _reloadSkins),
-            OaaButton(
-              label: 'Duplicate for editing',
-              onPressed: _duplicateSkin,
-            ),
+            OaaButton(label: 'New skin', onPressed: _newSkin),
+            // No accent. `PanelActions` is not the footer, and the footer is
+            // the only place a primary button is allowed — see
+            // `packages/oaa_ui/AGENTS.md` § Panels. On the measurement surface
+            // the signal hue means "in spec", and a section's action is not a
+            // verdict.
+            OaaButton(label: 'Edit skin', onPressed: () => _editSkin(active)),
           ],
         ),
       ],
@@ -292,12 +343,18 @@ class _SettingsPanelState extends ConsumerState<SettingsPanel> {
     setState(() => _status = 'Skins reloaded.');
   }
 
-  /// Writes the active skin out as a complete, editable document.
+  Future<void> _editSkin(Skin skin) =>
+      showThemeEditor(context, ref, base: skin);
+
+  /// Opens the editor on a copy of the active skin.
   ///
-  /// A skin file may be sparse, but a *starting point* must not be: somebody
-  /// opening their first skin wants to see all thirteen roles with the values
-  /// they are currently looking at, so that changing one is obviously safe.
-  Future<void> _duplicateSkin() async {
+  /// **Nothing is written yet.** The copy exists only as the editor's draft
+  /// until Save, so somebody who opens this to see what a skin editor looks
+  /// like and closes it again has not left a file behind. What they get in the
+  /// meantime is a complete document — a skin file may be sparse, but a
+  /// *starting point* must not be: all thirteen roles at the values currently
+  /// on screen, so that changing one is obviously safe.
+  Future<void> _newSkin() async {
     final active = ref.read(skinProvider).resolved();
     final taken = {for (final skin in ref.read(skinLibraryProvider)) skin.id};
 
@@ -306,23 +363,16 @@ class _SettingsPanelState extends ConsumerState<SettingsPanel> {
       id = '${active.id}-copy-$suffix';
     }
 
-    final copy = Skin(
-      id: id,
-      name: '${active.name} copy',
-      colors: active.colors,
-      isLight: active.isLight,
-      note: 'Edit this file and press Reload from disk.',
+    await showThemeEditor(
+      context,
+      ref,
+      base: Skin(
+        id: id,
+        name: '${active.name} copy',
+        colors: active.colors,
+        isLight: active.isLight,
+      ),
     );
-
-    final saved = await ref.read(skinLibraryProvider.notifier).save(copy);
-    if (!mounted) return;
-
-    setState(() {
-      _status = saved
-          ? 'Wrote $id.json to the skins folder.'
-          : ref.read(storageNoticeProvider) ?? 'Could not write the skin.';
-    });
-    if (saved) ref.read(settingsProvider.notifier).setSkinId(id);
   }
 
   // --- Session --------------------------------------------------------------

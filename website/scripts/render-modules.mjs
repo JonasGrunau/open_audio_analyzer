@@ -34,14 +34,15 @@
 // doing it — which is why the output is committed, exactly as public/og.png is,
 // rather than being regenerated in CI.
 
-import { createServer } from 'node:http';
-import { execFileSync, spawn } from 'node:child_process';
-import { mkdirSync, readFileSync, writeFileSync, rmSync, statSync, existsSync } from 'node:fs';
-import { mkdtemp, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { extname, join, resolve } from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { mkdirSync, writeFileSync, rmSync, statSync, existsSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+
+import { browser, serve } from './lib/headless.mjs';
+import { syncFonts } from './lib/fonts.mjs';
 
 const ROOT = resolve(import.meta.dirname, '..');
+const REPO = resolve(ROOT, '..');
 const RENDERER = join(ROOT, 'tools/module-renderer');
 const SERVE = join(RENDERER, 'build/web');
 const OUT = join(ROOT, 'public/modules');
@@ -52,17 +53,23 @@ const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 
 /// The frame every module is photographed into, so the catalogue is a grid of
 /// identically sized pictures rather than fourteen different shapes.
-const FRAME_W = 360;
-const FRAME_H = 236;
+const FRAME_W = 390;
+const FRAME_H = 256;
 
 /// Device pixels per logical pixel.
 ///
-/// **Three, not two.** At two the images came out at exactly 1:1 on a retina
-/// display — 720 device pixels of picture in a 360 px slot at devicePixelRatio
-/// 2 — which is no headroom at all: a slightly wider column, or a reader zoomed
-/// in one notch, and the browser is upscaling. On hairlines and six-pixel
-/// labels that reads as soft immediately.
-const SCALE = 3;
+/// **Two, and the frame sized to match where it lands.** More is not sharper
+/// here, which took a while to see: at 4x these came out 1,440 px wide and the
+/// browser resampled them down to the ~390 px the catalogue gives them, which
+/// is a 3.5x downscale that averages three and a half source pixels into every
+/// destination one. Hairlines and six-pixel labels do not survive that — the
+/// pictures got *softer* the more resolution they were given.
+///
+/// A module drawn at FRAME_W logical pixels and captured at two device pixels
+/// each lands 1:1 on a retina display at the size the grid actually gives it,
+/// and the browser resamples nothing. Change the column count or the padding
+/// and FRAME_W has to move with it.
+const SCALE = 2;
 
 /// Give up on a module rather than hanging the whole run.
 const READY_TIMEOUT_MS = 90_000;
@@ -122,6 +129,7 @@ if (!existsSync(CHROME)) {
 // --- Build ------------------------------------------------------------------
 
 if (!flag('--no-build')) {
+  syncFonts(REPO, RENDERER);
   console.log('Building the renderer…');
   try {
     execFileSync('flutter', ['build', 'web', '--release', '--no-wasm-dry-run'], {
@@ -138,158 +146,31 @@ if (!existsSync(SERVE)) {
   process.exit(1);
 }
 
-// --- Serve ------------------------------------------------------------------
+// --- Serve, and a browser to point at it ------------------------------------
 
-const TYPES = {
-  '.html': 'text/html',
-  '.js': 'text/javascript',
-  '.mjs': 'text/javascript',
-  '.json': 'application/json',
-  '.wasm': 'application/wasm',
-  '.ttf': 'font/ttf',
-  '.otf': 'font/otf',
-  '.png': 'image/png',
-  '.svg': 'image/svg+xml',
-};
+const server = await serve(SERVE, PORT);
+const chrome = await browser({ window: '900,700' });
 
-const server = createServer((req, res) => {
-  const path = decodeURIComponent(new URL(req.url, 'http://x').pathname);
-  const file = join(SERVE, path === '/' ? 'index.html' : path);
-  if (!file.startsWith(SERVE)) return void res.writeHead(403).end();
-  try {
-    const body = readFileSync(file);
-    res.writeHead(200, { 'content-type': TYPES[extname(file)] ?? 'application/octet-stream' });
-    res.end(body);
-  } catch {
-    res.writeHead(404).end();
-  }
-});
-await new Promise((ok) => server.listen(PORT, '127.0.0.1', ok));
-
-// --- Chrome, over the DevTools protocol -------------------------------------
-
-const profile = await mkdtemp(join(tmpdir(), 'oaa-render-'));
-const chrome = spawn(
-  CHROME,
-  [
-    '--headless=new',
-    '--disable-gpu',
-    '--hide-scrollbars',
-    `--remote-debugging-port=${CDP_PORT}`,
-    `--user-data-dir=${profile}`,
-    '--no-first-run',
-    '--no-default-browser-check',
-    // Headless throttles animation in backgrounded pages, and every frame here
-    // is one step of the programme.
-    '--disable-backgrounding-occluded-windows',
-    '--disable-renderer-backgrounding',
-    '--window-size=900,700',
-    'about:blank',
-  ],
-  { stdio: 'ignore' },
-);
-
-const sleep = (ms) => new Promise((ok) => setTimeout(ok, ms));
-
-async function browserSocketUrl() {
-  for (let i = 0; i < 100; i++) {
-    try {
-      const res = await fetch(`http://127.0.0.1:${CDP_PORT}/json/version`);
-      return (await res.json()).webSocketDebuggerUrl;
-    } catch {
-      await sleep(100);
-    }
-  }
-  throw new Error('Chrome never opened its debugging port.');
-}
-
-/// The smallest CDP client that does this job: one socket, numbered commands,
-/// promises resolved by id. Node has had a WebSocket of its own since 22, so
-/// this needs nothing from npm.
-class Cdp {
-  constructor(socket) {
-    this.socket = socket;
-    this.next = 1;
-    this.pending = new Map();
-    socket.addEventListener('message', (event) => {
-      const message = JSON.parse(event.data);
-      const entry = this.pending.get(message.id);
-      if (!entry) return;
-      this.pending.delete(message.id);
-      message.error ? entry.reject(new Error(message.error.message)) : entry.resolve(message.result);
-    });
-  }
-
-  static async open(url) {
-    const socket = new WebSocket(url);
-    await new Promise((ok, fail) => {
-      socket.addEventListener('open', ok, { once: true });
-      socket.addEventListener('error', () => fail(new Error(`Cannot open ${url}`)), { once: true });
-    });
-    return new Cdp(socket);
-  }
-
-  send(method, params = {}, sessionId) {
-    const id = this.next++;
-    const message = { id, method, params };
-    if (sessionId) message.sessionId = sessionId;
-    this.socket.send(JSON.stringify(message));
-    return new Promise((resolve, reject) => this.pending.set(id, { resolve, reject }));
-  }
-
-  close() {
-    this.socket.close();
-  }
-}
-
-const cdp = await Cdp.open(await browserSocketUrl());
-
-async function shoot(module) {
-  const url =
+function urlFor(module) {
+  return (
     `http://127.0.0.1:${PORT}/index.html` +
     `?module=${module.id}&fw=${FRAME_W}&fh=${FRAME_H}` +
     (module.w ? `&w=${module.w}` : '') +
     (module.h ? `&h=${module.h}` : '') +
     (module.seconds ? `&seconds=${module.seconds}` : '') +
     (module.dt ? `&dt=${module.dt}` : '') +
-    (module.options ? `&${module.options}` : '');
-
-  // A fresh target per module: one page load, one module, nothing carried
-  // between shots.
-  const { targetId } = await cdp.send('Target.createTarget', { url });
-  const { sessionId } = await cdp.send('Target.attachToTarget', { targetId, flatten: true });
-
-  try {
-    const deadline = Date.now() + READY_TIMEOUT_MS;
-    for (;;) {
-      const { result } = await cdp.send(
-        'Runtime.evaluate',
-        { expression: 'globalThis.oaaRenderReady === true', returnByValue: true },
-        sessionId,
-      );
-      if (result.value === true) break;
-      if (Date.now() > deadline) {
-        throw new Error(`timed out after ${READY_TIMEOUT_MS / 1000}s waiting for the final frame`);
-      }
-      await sleep(100);
-    }
-
-    const { data } = await cdp.send(
-      'Page.captureScreenshot',
-      {
-        format: 'png',
-        // The module is pinned to the top-left corner at exactly W x H, so the
-        // clip is known rather than measured.
-        clip: { x: 0, y: 0, width: FRAME_W, height: FRAME_H, scale: SCALE },
-        captureBeyondViewport: true,
-      },
-      sessionId,
-    );
-    return Buffer.from(data, 'base64');
-  } finally {
-    await cdp.send('Target.closeTarget', { targetId });
-  }
+    (module.options ? `&${module.options}` : '')
+  );
 }
+
+/// The frame is pinned to the top-left corner at exactly this size, so the clip
+/// is known rather than measured.
+const shoot = (module) =>
+  chrome.shoot({
+    url: urlFor(module),
+    clip: { x: 0, y: 0, width: FRAME_W, height: FRAME_H },
+    scale: SCALE,
+  });
 
 // --- Shoot ------------------------------------------------------------------
 
@@ -306,15 +187,16 @@ for (const module of wanted) {
   let size;
   try {
     writeFileSync(png, await shoot(module));
-    // Lossy at a high quality, and -m 6 for the slowest, smallest search.
+    // q95, and `-sharp_yuv` because these are coloured hairlines on a dark
+    // ground: WebP's default chroma subsampling is what softens a teal 1 px
+    // rule against near-black, and that flag is the fix for exactly that.
     //
-    // Lossless was the obvious call for flat panels with hairlines on them, and
-    // it cost 720 kB for the fourteen — the spectrogram and the stereo cloud are
-    // fields of noise, which is the worst case there is for it. What actually
-    // made the old thumbnails look soft was pixel density, not the encoder: they
-    // landed at exactly 1:1 on a retina display. At 3x there is enough
-    // resolution that q90 has nothing visible left to give away.
-    execFileSync('cwebp', ['-quiet', '-q', '90', '-m', '6', png, '-o', webp]);
+    // Lossless is not worth it here — it costs 214 kB for the spectrogram alone,
+    // which is a field of noise, against 78 for this. What made the first set
+    // look soft was pixel density rather than the encoder: at 2x they landed at
+    // exactly 1:1 on a retina display, with no headroom for a wider column or a
+    // reader zoomed in one notch.
+    execFileSync('cwebp', ['-quiet', '-q', '95', '-sharp_yuv', '-m', '6', png, '-o', webp]);
     size = Number((statSync(webp).size / 1024).toFixed(1));
   } catch (error) {
     console.log(`  ${module.file.padEnd(22)}  failed: ${error.message}`);
@@ -335,20 +217,8 @@ for (const module of wanted) {
   if (!flag('--keep-png')) rmSync(png);
 }
 
-cdp.close();
+await chrome.close();
 server.close();
-
-// Chrome writes to its profile as it shuts down, so removing the directory the
-// instant after kill() races it and throws ENOTEMPTY. Wait for the process to
-// actually go, then tidy up — and never fail the run over a temp directory.
-const exited = new Promise((ok) => chrome.once('exit', ok));
-chrome.kill();
-await Promise.race([exited, sleep(5000)]);
-try {
-  await rm(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
-} catch {
-  console.log(`  (left ${profile} behind)`);
-}
 
 console.log(
   `\n${wanted.length} module${wanted.length === 1 ? '' : 's'} → ${OUT}\n` +

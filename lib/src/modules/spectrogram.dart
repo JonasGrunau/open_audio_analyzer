@@ -16,6 +16,19 @@ import '../clock/meter_clock.dart';
 /// analyser uses and two modules on one tab disagreeing about which way is up
 /// would be worse than either choice.
 ///
+/// Which colours the level is drawn in is [ColorRamp]: the skin's own ground into
+/// `accent` into `warn`, or the spectrogram rainbow — indigo, blue, cyan, green,
+/// yellow, orange, red, white. **Both ramps map the same quantity**, and it is
+/// the level rather than the frequency, because the frequency is already up the
+/// y axis: a hue per row would say nothing a glance at the axis does not, and it
+/// would leave the level with only brightness to be read from. [ColorRamp] owns
+/// the other half of that argument — the oscilloscope, which has no frequency
+/// axis, so colour there is the only thing that can carry one.
+///
+/// Only [_lut] changes between the two. The record, the floor, the ceiling and
+/// the step recorded per cell are identical at either setting, which is why
+/// switching re-renders the history in place rather than dropping it.
+///
 /// ---------------------------------------------------------------------------
 /// Why the history is pixels uploaded as an image — and why that is not the
 /// image accumulation that once crashed the application
@@ -48,7 +61,8 @@ import '../clock/meter_clock.dart';
 /// remounted the module.
 ///
 /// So the past is kept as **pixels**: one byte of palette step per cell (the
-/// measurement record, what a skin change re-renders from) and one RGBA buffer
+/// measurement record, what a skin or ramp change re-renders from) and one RGBA
+/// buffer
 /// beside it, shifted left a column per published frame and uploaded as a
 /// `ui.Image` that paint draws with a single `drawImageRect`. Recording is one
 /// op; rasterising is one textured quad. The same benchmark puts the whole of
@@ -72,11 +86,17 @@ class SpectrogramModule extends StatefulWidget {
   const SpectrogramModule({
     required this.engine,
     required this.clock,
+    this.ramp = ColorRamp.skin,
     super.key,
   });
 
   final MeterSource engine;
   final MeterClock clock;
+
+  /// Which colours the display is drawn in. See [ColorRamp] — [_lut] is sampled
+  /// from it, and a change to it re-renders every cell from the record without
+  /// touching the record.
+  final ColorRamp ramp;
 
   @override
   State<SpectrogramModule> createState() => _SpectrogramModuleState();
@@ -84,41 +104,34 @@ class SpectrogramModule extends StatefulWidget {
 
 const int _steps = 48;
 
-/// Background to accent to warn, in that order.
-///
-/// Deliberately not a rainbow. A hue ramp reads as more precise than it is —
-/// the eye finds edges between hues that are not edges in the data — and it
-/// stops working entirely for the eight percent of men who cannot separate red
-/// from green. Brightness within the palette's own colours is monotonic, which
-/// is the property that makes a spectrogram legible.
-Color _rampColor(double level, OaaColors colors) {
-  if (level < 0.55) {
-    return Color.lerp(colors.panel, colors.accent, level / 0.55)!;
-  }
-  return Color.lerp(colors.accent, colors.warn, (level - 0.55) / 0.45)!;
-}
-
 class _SpectrogramModuleState extends State<SpectrogramModule> {
   int _columns = 0;
   int _rows = 0;
 
   /// The palette step of every cell, row-major, newest column rightmost. This
-  /// is the record; the RGBA beside it is just the current skin's rendering of
-  /// it, re-derived in place when the skin changes.
+  /// is the record; the RGBA beside it is just the current palette's rendering
+  /// of it, re-derived in place when the skin or the ramp changes.
   Uint8List _stepOf = Uint8List(0);
 
   /// The same cells as straight RGBA bytes, the layout `ImageDescriptor.raw`
   /// takes. Written incrementally — a shift and one new column per published
-  /// frame — never re-derived except on a skin change.
+  /// frame — never re-derived except on a skin or ramp change.
   Uint8List _pixels = Uint8List(0);
 
   /// What [_upload] hands to `ImmutableBuffer`. A copy, so the working buffer
   /// can take the next column while a build is still reading this one.
   Uint8List _staging = Uint8List(0);
 
-  /// RGBA bytes per palette step, rewritten on a skin change.
+  /// RGBA bytes per palette step, rewritten when the skin or the ramp moves.
   final Uint8List _lut = Uint8List(_steps * 4);
-  Color? _builtFor;
+
+  /// What [_lut] was sampled from.
+  ///
+  /// The whole palette rather than its accent alone — `panel` and `warn` feed
+  /// the skin ramp too. [OaaColors] has value equality, so this costs a field
+  /// comparison per build and catches a skin whose accent did not move.
+  OaaColors? _lutColors;
+  ColorRamp? _lutRamp;
 
   /// What paint draws. Pixel-backed, at most one predecessor alive while its
   /// replacement is in flight.
@@ -155,7 +168,25 @@ class _SpectrogramModuleState extends State<SpectrogramModule> {
     _fillWithStepZero();
   }
 
-  /// Every cell to the panel colour — a blank record, which is what both a
+  /// Samples [ColorRamp] into [_lut], a colour per step of level.
+  ///
+  /// Called from `build`, so the palette is always there before the first paint
+  /// asks for it, and it returns at once when neither the skin nor the ramp has
+  /// moved.
+  void _buildLut(OaaColors colors, ColorRamp ramp) {
+    if (_lutColors == colors && _lutRamp == ramp) return;
+    _lutColors = colors;
+    _lutRamp = ramp;
+    for (var step = 0; step < _steps; step++) {
+      final color = ramp.colorAt(step / (_steps - 1), colors);
+      _lut[step * 4] = (color.r * 255).round();
+      _lut[step * 4 + 1] = (color.g * 255).round();
+      _lut[step * 4 + 2] = (color.b * 255).round();
+      _lut[step * 4 + 3] = (color.a * 255).round();
+    }
+  }
+
+  /// Every cell to the ramp's ground — a blank record, which is what both a
   /// fresh module and a resized one show until audio arrives.
   void _fillWithStepZero() {
     for (var p = 0; p < _pixels.length; p += 4) {
@@ -191,7 +222,7 @@ class _SpectrogramModuleState extends State<SpectrogramModule> {
     _upload();
   }
 
-  /// Re-renders every cell from its recorded step, for a skin change.
+  /// Re-renders every cell from its recorded step, for a skin or ramp change.
   void _repaintAll() {
     for (var cell = 0; cell < _stepOf.length; cell++) {
       final p = cell * 4;
@@ -260,15 +291,8 @@ class _SpectrogramModuleState extends State<SpectrogramModule> {
   Widget build(BuildContext context) {
     final colors = OaaTheme.of(context);
 
-    if (_builtFor != colors.accent) {
-      _builtFor = colors.accent;
-      for (var step = 0; step < _steps; step++) {
-        final color = _rampColor(step / (_steps - 1), colors);
-        _lut[step * 4] = (color.r * 255).round();
-        _lut[step * 4 + 1] = (color.g * 255).round();
-        _lut[step * 4 + 2] = (color.b * 255).round();
-        _lut[step * 4 + 3] = (color.a * 255).round();
-      }
+    if (_lutColors != colors || _lutRamp != widget.ramp) {
+      _buildLut(colors, widget.ramp);
       if (_stepOf.isNotEmpty) _repaintAll();
     }
 
@@ -276,6 +300,7 @@ class _SpectrogramModuleState extends State<SpectrogramModule> {
       painter: _SpectrogramPainter(
         engine: widget.engine,
         colors: colors,
+        ramp: widget.ramp,
         state: this,
         repaint: widget.clock,
       ),
@@ -287,9 +312,13 @@ class _SpectrogramPainter extends MeterPainter {
   _SpectrogramPainter({
     required this.engine,
     required this.colors,
+    required this.ramp,
     required this.state,
     required Listenable repaint,
-  }) : _background = (Paint()..color = colors.panel),
+    // The ramp's own ground, not the module's panel: the cells no signal
+    // reached are drawn in it, and a background that disagreed with them would
+    // put a seam down the display at the sliver the column flooring leaves.
+  }) : _background = (Paint()..color = ramp.groundOf(colors)),
        // Nearest-neighbour on purpose: the columns are 1 logical pixel and the
        // usual display scales are integer, so filtering would only blur the
        // newest edge. Antialiasing has no edge to work on either.
@@ -300,6 +329,7 @@ class _SpectrogramPainter extends MeterPainter {
 
   final MeterSource engine;
   final OaaColors colors;
+  final ColorRamp ramp;
   final _SpectrogramModuleState state;
 
   final Paint _background;
@@ -370,5 +400,7 @@ class _SpectrogramPainter extends MeterPainter {
 
   @override
   bool shouldRepaint(_SpectrogramPainter oldDelegate) =>
-      oldDelegate.colors != colors || !identical(oldDelegate.engine, engine);
+      oldDelegate.colors != colors ||
+      oldDelegate.ramp != ramp ||
+      !identical(oldDelegate.engine, engine);
 }

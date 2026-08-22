@@ -5,13 +5,21 @@ interface Props {
   title: string;
   description: string;
   path?: string;
+  /* The four-column footer is the front page's closing statement. Under a
+     documentation page it is a second navigation the reader did not ask for,
+     below content that is already long, so those pages take one line. */
+  slimFooter?: boolean;
 }
 
-const { title, description, path = '/' } = Astro.props;
+const { title, description, path = '/', slimFooter = false } = Astro.props;
 const site = 'https://open-audio-analyzer.com';
 const canonical = site + (path === '/' ? '' : path);
 const REPO = 'https://github.com/JonasGrunau/open_audio_analyzer';
-const DOCS = 'https://jonasgrunau.github.io/open_audio_analyzer/index.html';
+/* The documentation is part of this site: the repository's own Markdown,
+   rendered at /docs. It was a separate GitHub Pages deployment with its own
+   generator and its own visual language, which meant two sites to keep and a
+   header link that took the reader off the one they were on. */
+const DOCS = '/docs';
 const VERSION = '0.9.0';
 
 const nav = [
@@ -19,8 +27,13 @@ const nav = [
   { href: '/#measurement', label: 'Measurement' },
   { href: '/#reach', label: 'Plugin & CLI' },
   { href: '/#gaps', label: 'Known gaps' },
-  { href: '/download', label: 'Download' },
 ];
+
+/* Straight to the releases. There was a /download page repeating the release
+   assets and the install steps; both are already kept up to date in the
+   repository and in docs/site/install.md, and a third copy is a third thing to
+   forget when a filename changes. */
+const RELEASES = 'https://github.com/JonasGrunau/open_audio_analyzer/releases/latest';
 ---
 
 <!doctype html>
@@ -77,17 +90,11 @@ const nav = [
     <header class="bar">
       <div class="bar-in shell">
         <a class="mark" href="/" aria-label="Open Audio Analyzer, home">
-          <svg viewBox="0 0 1024 1024" width="18" height="18" aria-hidden="true" focusable="false">
-            <g fill="#35e0c4">
-              <rect x="204.8" y="438.3" width="111.7" height="380.9" rx="22.3" />
-              <rect x="372.4" y="204.8" width="111.7" height="614.4" rx="22.3" />
-              <rect x="539.9" y="548.9" width="111.7" height="270.3" rx="22.3" />
-              <rect x="707.5" y="327.7" width="111.7" height="491.5" rx="22.3" />
-            </g>
-            <path
-              d="M372.4,227.1a22.3,22.3 0 0 1 22.3,-22.3h67a22.3,22.3 0 0 1 22.3,22.3v112.8h-111.7z"
-              fill="#ff4d4d"></path>
-          </svg>
+          {/* The generated icon, referenced rather than inlined: it is the
+              same file the tab shows, so the browser fetches it once, and a
+              copy pasted in here is a copy that goes stale. See
+              `packaging/icon/make_icons.dart`. */}
+          <img src="/favicon.svg" width="18" height="18" alt="" />
           <span class="wordmark">Open Audio Analyzer</span>
         </a>
 
@@ -99,6 +106,7 @@ const nav = [
           <span class="num ver">{VERSION}</span>
           <a class="navlink" href={REPO} rel="noopener">Source</a>
           <a class="navlink" href={DOCS} rel="noopener">Docs</a>
+          <a class="bar-dl" href={RELEASES} rel="noopener">Download</a>
         </div>
       </div>
     </header>
@@ -107,59 +115,73 @@ const nav = [
       <slot />
     </main>
 
-    <footer class="foot">
-      <div class="shell">
-        <div class="foot-grid">
-          <div class="stack-16">
-            <p class="label">Open Audio Analyzer</p>
-            <p class="foot-p">
-              A free and open-source loudness and spectrum analyzer for desktop and tablets.
-              Version {VERSION}.
-            </p>
-            <p class="foot-p">
-              A free reimplementation of the ideas in <a
-                class="link-quiet"
-                href="https://process.audio/products/decibel"
-                rel="noopener">Decibel</a
-              > by process.audio, whose modular canvas is the best interaction model anybody has found
-              for this problem. The measurement work, the architecture and the visual language are our
-              own — and where Open Audio Analyzer cannot honestly match it, it says so rather than
-              approximating.
-            </p>
-          </div>
-
-          <div class="stack-12">
-            <p class="label">Project</p>
-            <a class="foot-a" href={REPO} rel="noopener">Repository</a>
-            <a class="foot-a" href={DOCS} rel="noopener">Documentation</a>
-            <a class="foot-a" href={`${REPO}/releases`} rel="noopener">Releases</a>
-            <a class="foot-a" href={`${REPO}/blob/main/CHANGELOG.md`} rel="noopener">Changelog</a>
-            <a class="foot-a" href={`${REPO}/issues`} rel="noopener">Issues</a>
-          </div>
-
-          <div class="stack-12">
-            <p class="label">Reference</p>
-            <a class="foot-a" href="https://jonasgrunau.github.io/open_audio_analyzer/metrics.html" rel="noopener">Metrics</a>
-            <a class="foot-a" href="https://jonasgrunau.github.io/open_audio_analyzer/keyboard.html" rel="noopener">Keyboard</a>
-            <a class="foot-a" href="https://jonasgrunau.github.io/open_audio_analyzer/wire.html" rel="noopener">Wire protocol</a>
-            <a class="foot-a" href="https://jonasgrunau.github.io/open_audio_analyzer/building.html" rel="noopener">Building</a>
-          </div>
-
-          <div class="stack-12">
-            <p class="label">Licence</p>
-            <p class="foot-lic"><span class="num">MIT</span> — engine, domain model, wire protocol</p>
-            <p class="foot-lic"><span class="num">GPL-3.0</span> — application, UI toolkit, CLI</p>
-            <p class="foot-lic"><span class="num">AGPL-3.0</span> — the plugin, because it links JUCE</p>
-            <p class="foot-lic"><span class="num">SIL OFL</span> — Inter and Google Sans Code</p>
-          </div>
-        </div>
-
-        <div class="foot-rule">
+    {slimFooter ? (
+      <footer class="foot foot-slim">
+        <div class="shell foot-slim-in">
           <span class="num">© 2026 Jonas Grunau</span>
-          <span class="num">open-audio-analyzer.com</span>
+          <span class="foot-slim-links">
+            <a class="foot-a" href="/">Home</a>
+            <a class="foot-a" href="/docs">Documentation</a>
+            <a class="foot-a" href={REPO} rel="noopener">Repository</a>
+            <a class="foot-a" href={RELEASES} rel="noopener">Download</a>
+          </span>
         </div>
-      </div>
-    </footer>
+      </footer>
+    ) : (
+      <footer class="foot">
+        <div class="shell">
+          <div class="foot-grid">
+            <div class="stack-16">
+              <p class="label">Open Audio Analyzer</p>
+              <p class="foot-p">
+                A free and open-source loudness and spectrum analyzer for desktop and tablets.
+                Version {VERSION}.
+              </p>
+              <p class="foot-p">
+                A free reimplementation of the ideas in <a
+                  class="link-quiet"
+                  href="https://process.audio/products/decibel"
+                  rel="noopener">Decibel</a
+                > by process.audio, whose modular canvas is the best interaction model anybody has found
+                for this problem. The measurement work, the architecture and the visual language are our
+                own — and where Open Audio Analyzer cannot honestly match it, it says so rather than
+                approximating.
+              </p>
+            </div>
+
+            <div class="stack-12">
+              <p class="label">Project</p>
+              <a class="foot-a" href={REPO} rel="noopener">Repository</a>
+              <a class="foot-a" href={DOCS} rel="noopener">Documentation</a>
+              <a class="foot-a" href={`${REPO}/releases`} rel="noopener">Releases</a>
+              <a class="foot-a" href="/docs/changelog">Changelog</a>
+              <a class="foot-a" href={`${REPO}/issues`} rel="noopener">Issues</a>
+            </div>
+
+            <div class="stack-12">
+              <p class="label">Reference</p>
+              <a class="foot-a" href="/docs/metrics">Metrics</a>
+              <a class="foot-a" href="/docs/keyboard">Keyboard</a>
+              <a class="foot-a" href="/docs/wire">Wire protocol</a>
+              <a class="foot-a" href="/docs/building">Building</a>
+            </div>
+
+            <div class="stack-12">
+              <p class="label">Licence</p>
+              <p class="foot-lic"><span class="num">MIT</span> — engine, domain model, wire protocol</p>
+              <p class="foot-lic"><span class="num">GPL-3.0</span> — application, UI toolkit, CLI</p>
+              <p class="foot-lic"><span class="num">AGPL-3.0</span> — the plugin, because it links JUCE</p>
+              <p class="foot-lic"><span class="num">SIL OFL</span> — Inter and Google Sans Code</p>
+            </div>
+          </div>
+
+          <div class="foot-rule">
+            <span class="num">© 2026 Jonas Grunau</span>
+            <span class="num">open-audio-analyzer.com</span>
+          </div>
+        </div>
+      </footer>
+    )}
   </body>
 </html>
 
@@ -215,6 +237,26 @@ const nav = [
     color: var(--text);
   }
 
+  /* The one thing in the bar that is an action rather than a signpost, so the
+     one thing that is drawn as a button — in the same accent as the hero's, and
+     to the same shape. */
+  .bar-dl {
+    display: inline-flex;
+    align-items: center;
+    height: 28px;
+    padding-inline: var(--s12);
+    background: var(--signal);
+    color: var(--ink);
+    font-size: 0.75rem;
+    font-weight: 600;
+    white-space: nowrap;
+    transition: background 140ms linear;
+  }
+
+  .bar-dl:hover {
+    filter: brightness(1.08);
+  }
+
   .bar-end {
     display: flex;
     align-items: center;
@@ -230,6 +272,31 @@ const nav = [
   }
 
   /* --- footer --- */
+
+  /* One line, for pages whose content is already the argument. */
+  .foot-slim {
+    padding-block: var(--s24);
+  }
+
+  .foot-slim-in {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--s24);
+    flex-wrap: wrap;
+    font-size: 0.6875rem;
+    color: var(--faint);
+    letter-spacing: 0.04em;
+  }
+
+  .foot-slim-links {
+    display: flex;
+    gap: var(--s24);
+  }
+
+  .foot-slim-links .foot-a {
+    font-size: 0.75rem;
+  }
 
   .foot {
     border-top: 1px solid var(--hair);
@@ -300,7 +367,27 @@ const nav = [
     .bar-in {
       gap: var(--s16);
     }
-    .bar-end {
+    /* The one thing in the bar that is an action rather than a signpost, so the
+     one thing that is drawn as a button — in the same accent as the hero's, and
+     to the same shape. */
+  .bar-dl {
+    display: inline-flex;
+    align-items: center;
+    height: 28px;
+    padding-inline: var(--s12);
+    background: var(--signal);
+    color: var(--ink);
+    font-size: 0.75rem;
+    font-weight: 600;
+    white-space: nowrap;
+    transition: background 140ms linear;
+  }
+
+  .bar-dl:hover {
+    filter: brightness(1.08);
+  }
+
+  .bar-end {
       margin-left: auto;
       gap: var(--s12);
     }

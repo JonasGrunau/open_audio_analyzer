@@ -2,10 +2,11 @@
 
 /// A skin: the palette, as data.
 ///
-/// The whole point of this file is that a skin is a JSON document a user writes
-/// in a text editor, not a Dart class somebody compiles. Decibel ships skins as
-/// opaque binary resources, which means the set of skins is whatever shipped;
-/// ours is whatever anybody drops in a directory. That only works if the palette
+/// The whole point of this file is that a skin is a JSON document rather than a
+/// Dart class somebody compiles. Decibel ships skins as opaque binary
+/// resources, which means the set of skins is whatever shipped; ours is
+/// whatever anybody drops in a directory — or writes in the editor, which
+/// produces exactly the same document and is not a second format. That only works if the palette
 /// is a closed, named set of *semantic* roles — "the colour that means over" —
 /// rather than a set of literal colours a painter picks from. A skin that had to
 /// name `spectrumPeakHoldLine` would break every time a module was added.
@@ -108,14 +109,62 @@ class Skin {
     },
   );
 
-  Skin copyWith({String? id, String? name, Map<SkinColor, int>? colors}) =>
-      Skin(
-        id: id ?? this.id,
-        name: name ?? this.name,
-        colors: colors ?? this.colors,
-        isLight: isLight,
-        note: note,
-      );
+  Skin copyWith({
+    String? id,
+    String? name,
+    Map<SkinColor, int>? colors,
+    bool? isLight,
+    String? note,
+  }) => Skin(
+    id: id ?? this.id,
+    name: name ?? this.name,
+    colors: colors ?? this.colors,
+    isLight: isLight ?? this.isLight,
+    note: note ?? this.note,
+  );
+
+  /// This skin with one role set to [argb].
+  Skin withColor(SkinColor role, int argb) =>
+      copyWith(colors: {...colors, role: argb});
+
+  /// Value equality, and it is load-bearing rather than tidy.
+  ///
+  /// Two things compare skins and both used to get identity by luck.
+  /// `skinProvider` cached one instance per skin, so nothing ever produced a
+  /// second equal one — until the theme editor, which produces a new [Skin]
+  /// per pointer move while a colour is being dragged. Without this,
+  /// `RemoteDisplayService`'s compare-and-send would put every one of those on
+  /// the wire, and the editor's own "is this dirty?" would answer yes to a
+  /// change that had been dragged back to where it started.
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    if (other is! Skin ||
+        other.id != id ||
+        other.name != name ||
+        other.isLight != isLight ||
+        other.note != note ||
+        other.colors.length != colors.length) {
+      return false;
+    }
+    for (final entry in colors.entries) {
+      if (other.colors[entry.key] != entry.value) return false;
+    }
+    return true;
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    name,
+    isLight,
+    note,
+    // Unordered, because two skins that name the same roles with the same
+    // values are the same skin whatever order the parser met the keys in.
+    Object.hashAllUnordered([
+      for (final entry in colors.entries) Object.hash(entry.key, entry.value),
+    ]),
+  );
 
   Map<String, Object?> toJson() => {
     'id': id,
@@ -210,6 +259,15 @@ class Skin {
 /// semantic: [daylight] inverts the entire lightness ordering, and if any
 /// painter had reached for "the dark one" instead of a role it would be obvious
 /// immediately.
+///
+/// **Which is also why neither can be changed or deleted.** A user file naming
+/// one of these two ids is ignored rather than shadowing it, and the editor
+/// offers to copy rather than to overwrite — see `SkinLibraryController` in the
+/// application. A reference point a file on disk can quietly redefine proves
+/// nothing, and it is the one arrangement in which "put it back the way it was"
+/// has no answer. Delivery targets go the other way on purpose: a target is a
+/// claim about somebody else's published specification and has to be
+/// correctable without a release.
 abstract final class BuiltInSkins {
   /// Graphite, one signal hue, no gradients. The default.
   ///

@@ -1,13 +1,27 @@
 ---
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import Base from '../layouts/Base.astro';
-import bridge from '../data/bridge.json';
+/* Written by `npm run analyzer` beside the still it describes, so the facade is
+   sized from the picture that exists rather than from a number typed here. */
+import still from '../data/analyzer-still.json';
+
+/* Whether `npm run analyzer` has been run.
+   `public/analyzer/` is about 4 MB of compiled Flutter and is git-ignored — so
+   a plain `npm run build` needs no Flutter toolchain, and `npm run deploy`
+   builds it first. Checking here means a site built without it offers the still
+   and no button, rather than a button onto a 404. */
+/* Resolved from the project root rather than from `import.meta.url`, which
+   during the build points at the compiled module and not at this file. */
+const hasDemo = existsSync(join(process.cwd(), 'public/analyzer/index.html'));
 
 const REPO = 'https://github.com/JonasGrunau/open_audio_analyzer';
 const DOCS = 'https://jonasgrunau.github.io/open_audio_analyzer';
 
 /* The catalogue. Every one of these is one ModuleFrame plus a painter in the
    application, reading the same MeterSource and repainting from the same
-   clock — which is why the thumbnails below can be the same painters. */
+   clock — and every thumbnail is a photograph of the real thing, taken by
+   `npm run modules`. See scripts/render-modules.mjs. */
 // The fourteen modules, each with the photograph of it taken from the running
 // application by `npm run modules`, and what the photograph shows. The images
 // carry the app's own frame and title bar, because they *are* the app's frame
@@ -22,7 +36,7 @@ const MODULES = [
   ['digital-meter', 'Digital Meter', 'Sample peak and RMS, per channel, up to 7.1.',
     'A Digital Meter: left and right bars with peak-hold lines held near the top of the scale.'],
   ['vu-meter', 'VU Meter', 'A needle, on the movement the engine models.',
-    'A VU Meter with the needle resting just below zero.'],
+    'A VU Meter reading −7.0 VU: a needle under a banded scale that turns red above 0 VU, with the peak mark left standing near the top of it.'],
   ['alert-meter', 'Alert Meter', 'One measurement, watched, with the worst it has been latched.',
     'An Alert Meter in red, showing true peak at −0.2 dBTP with −0.2 latched as the worst so far.'],
   ['validator', 'Validator', 'The delivery decision, as a table.',
@@ -151,9 +165,10 @@ const PLATFORMS = [
           approximating.
         </p>
         <div class="cta">
-          <a class="btn btn-primary" href="/download">Download 0.9.0</a>
+          <a class="btn btn-primary" href="https://github.com/JonasGrunau/open_audio_analyzer/releases/latest" rel="noopener">Download 0.9.0</a>
           <a class="btn" href={REPO} rel="noopener">Source</a>
           <a class="btn" href={`${DOCS}/index.html`} rel="noopener">Documentation</a>
+          {hasDemo && <a class="btn" href="#analyzer">Try it in the browser</a>}
         </div>
       </div>
 
@@ -184,121 +199,62 @@ const PLATFORMS = [
     </div>
   </section>
 
-  <!-- ===================== the live bridge ===================== -->
-  <section class="bridge-wrap shell" data-bridge aria-labelledby="bridge-h">
-    <div class="bridge-head">
-      <h2 id="bridge-h" class="label">Meter bridge</h2>
-      <p class="bridge-note">
-        A twenty-second stereo programme, synthesised and measured at build time by
-        <a class="link-quiet" href={`${REPO}/blob/main/README.md#-measurement`} rel="noopener">the
-        definitions below</a>, played back here through the same painters. The measuring script is
-        in this site's repository.
-      </p>
+  <!-- ===================== the live analyzer ===================== -->
+  <section class="section shell" id="analyzer">
+    <div class="section-head">
+      <div>
+        <p class="label">Live</p>
+        <h2>The application itself,<br />in this page</h2>
+      </div>
+      <p class="label section-note">Flutter web · mock MeterSource</p>
     </div>
 
-    <div class="grid24 bridge-a">
-      <div class="module b-lufs">
-        <div class="module-bar">
-          <span class="name">LUFS</span>
-          <span class="val"><span class="num" data-readout="m">—</span> / <span class="num" data-readout="s">—</span></span>
-        </div>
-        <div class="module-body"><canvas data-meter="lufs" aria-hidden="true"></canvas></div>
-      </div>
+    <p class="prose analyzer-say">
+      The picture below is a photograph of the real canvas, and pressing it replaces the photograph
+      with the running application: the same eight modules, the same <code>ModuleFrame</code>, the
+      same painters, laid out on the same <code>GridGeometry</code> and repainting from one
+      <code>MeterClock</code>. It is compiled from the same sources the desktop build is.
+    </p>
+    <p class="prose analyzer-say">
+      What is not real is where the numbers come from. There is no engine here — <code>dart:ffi</code>
+      has no web implementation — so a mock <code>MeterSource</code> plays a plausible programme
+      instead, the third implementation of that interface beside the native one and the socket the
+      tablet reads. Nothing on the canvas knows the difference, which is the point of the interface.
+      The readings are invented; the meters are not.
+    </p>
 
-      <div class="module b-super">
-        <div class="module-bar">
-          <span class="name">Super</span>
-          <span class="val num" data-readout="i">—</span>
-        </div>
-        <div class="module-body"><canvas data-meter="super" aria-hidden="true"></canvas></div>
-      </div>
+    <figure class="facade" data-facade>
+      <img
+        src="/analyzer-still.webp"
+        alt="Eight meter modules on one canvas: loudness bars, three concentric arcs, a spectrum analyser, a minute of loudness against time, a delivery verdict reading NOT READY, per-channel peak bars, a waveform and a latched true-peak alert."
+        width={still.width}
+        height={still.height}
+        loading="lazy"
+        decoding="async"
+      />
+      {
+        hasDemo && (
+          <button class="facade-go" type="button" data-facade-go>
+            <span class="facade-go-mark" aria-hidden="true">▶</span>
+            <span class="facade-go-text">
+              Open the live analyzer
+              <span class="facade-go-sub">Real meters, running in your browser</span>
+            </span>
+          </button>
+        )
+      }
+    </figure>
 
-      <div class="module b-spec">
-        <div class="module-bar">
-          <span class="name">Spectrum analyzer</span>
-          <span class="val">4096 pt · 512 bands · peak/bin</span>
-        </div>
-        <div class="module-body"><canvas data-meter="spectrum" aria-hidden="true"></canvas></div>
-      </div>
-
-      <div class="module b-valid">
-        <div class="module-bar">
-          <span class="name">Validator</span>
-          <span class="val">Streaming −14 LUFS</span>
-        </div>
-        <div class="module-body validator-body">
-          <table class="vtable">
-            <tbody>
-              <tr>
-                <th scope="row">Integrated</th>
-                <td class="num" data-readout="i" data-judge="true">—</td>
-                <td class="unit">LUFS</td>
-              </tr>
-              <tr>
-                <th scope="row">True peak</th>
-                <td class="num" data-readout="tpmax" data-judge="true">—</td>
-                <td class="unit">dBTP</td>
-              </tr>
-              <tr>
-                <th scope="row">Range</th>
-                <td class="num" data-readout="lra" data-judge="true">—</td>
-                <td class="unit">LU</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-
-    <div class="grid24 bridge-b">
-      <div class="module b-hist">
-        <div class="module-bar">
-          <span class="name">Histogram</span>
-          <span class="val">Short-term against time</span>
-        </div>
-        <div class="module-body"><canvas data-meter="histogram" aria-hidden="true"></canvas></div>
-      </div>
-
-      <div class="module b-sgram">
-        <div class="module-bar">
-          <span class="name">Spectrogram</span>
-          <span class="val">20 Hz – 20 kHz</span>
-        </div>
-        <div class="module-body"><canvas data-meter="spectrogram" aria-hidden="true"></canvas></div>
-      </div>
-
-      <div class="module b-dig">
-        <div class="module-bar"><span class="name">Digital</span></div>
-        <div class="module-body"><canvas data-meter="digital" aria-hidden="true"></canvas></div>
-      </div>
-
-      <div class="module b-num">
-        <div class="module-bar"><span class="name">Number box</span></div>
-        <div class="module-body"><canvas data-meter="numberbox" aria-hidden="true"></canvas></div>
-      </div>
-    </div>
-
-    <!-- The application's own status bar: what is being measured, and how far in. -->
-    <div class="statusbar" data-status data-state="held">
-      <span class="st-live"><span class="dot" aria-hidden="true"></span><span class="st-word"></span></span>
-      <span class="num st-i st-fmt">48 000 Hz · 2 ch · 24 bit</span>
-      <span class="num st-i"><span data-readout="time">00:00</span> / 00:20</span>
-      <span class="num st-i st-hide">Corr <span data-readout="corr">—</span></span>
-      <span class="num st-i st-hide">Crest <span data-readout="crest">—</span> dB</span>
-      <span class="num st-i st-target">Target · Streaming (−14 LUFS)</span>
-    </div>
-
-    <p class="bridge-foot prose">
-      Momentary reads a dash until 400 ms of signal exists, short-term until three seconds, and
-      integrated until one gating block clears the absolute gate. A quantity that is not measured
-      is <code>NaN</code> and never zero — zero is a legitimate reading for correlation, balance and
-      several dB quantities, so it cannot double as “no data” — and the UI renders it as an em dash.
-      A remote display that has lost its host shows dashes too: a frozen meter is indistinguishable
-      from a quiet passage.
+    <p class="prose analyzer-foot">
+      {
+        hasDemo
+          ? 'None of it is fetched until you press the button, so arriving here costs a photograph. There is no engine behind it and no audio \u2014 it is the interface itself, running, with a plausible programme played into it.'
+          : 'The live version is built by npm run analyzer, which needs a Flutter toolchain. This build does not have it, so the still is all there is here.'
+      }
     </p>
   </section>
 
-  <!-- ===================== modules ===================== -->
+
   <section class="section shell" id="modules">
     <div class="section-head">
       <div>
@@ -324,8 +280,8 @@ const PLATFORMS = [
               <img
                 src={`/modules/${shot}.webp`}
                 alt={alt}
-                width="340"
-                height="230"
+                width="390"
+                height="256"
                 loading="lazy"
                 decoding="async"
               />
@@ -594,6 +550,13 @@ const PLATFORMS = [
           what lets a skin apply to a module written after it.
         </p>
         <p class="prose">
+          There is an editor for them too. Every role gets a colour picker, the canvas repaints as
+          you drag — and so does any tablet mirroring the session — and each role shows its
+          contrast ratio against the surface it has to be read on, so a palette that puts a meter
+          track 1.1:1 against its own panel says so before you ship it. The two skins that come
+          with Open Audio Analyzer are fixed; copying one takes a press.
+        </p>
+        <p class="prose">
           A delivery target whose <code>id</code> matches one that ships <strong>replaces it
           everywhere</strong>, including in presets that already name it. So if you disagree with our
           reading of a published spec, your number wins, and it reaches the CLI’s exit code and not
@@ -695,15 +658,14 @@ const PLATFORMS = [
       </p>
 
       <div class="cta">
-        <a class="btn btn-primary" href="/download">Downloads and setup</a>
+        <a class="btn btn-primary" href="https://github.com/JonasGrunau/open_audio_analyzer/releases/latest" rel="noopener">Download 0.9.0</a>
         <a class="btn" href={`${REPO}/releases`} rel="noopener">Release notes</a>
       </div>
     </div>
   </section>
 
-  <script id="bridge-data" type="application/json" is:inline set:html={JSON.stringify(bridge)} />
   <script>
-    import '../scripts/bridge.js';
+    import '../scripts/facade.js';
   </script>
 </Base>
 
@@ -768,190 +730,131 @@ const PLATFORMS = [
     grid-column: 1 / -1;
   }
 
-  /* ---------- the bridge ---------- */
-
-  .bridge-wrap {
-    padding-bottom: var(--s96);
-  }
-
-  .bridge-head {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: var(--s24);
-    padding-bottom: var(--s12);
-    flex-wrap: wrap;
-  }
-
-  .bridge-note {
-    font-size: 0.8125rem;
-    color: var(--faint);
-    max-width: 62ch;
-  }
-
-  .bridge-a,
-  .bridge-b {
-    gap: var(--s8);
-  }
-
-  .bridge-b {
-    margin-top: var(--s8);
-  }
-
-  .bridge-a .module {
-    height: 208px;
-  }
-
-  .bridge-b .module {
-    height: 132px;
-  }
-
-  .module-body canvas {
-    display: block;
-    width: 100%;
-    height: 100%;
-  }
-
-  .b-lufs {
-    grid-column: span 4;
-  }
-  .b-super {
-    grid-column: span 4;
-  }
-  .b-spec {
-    grid-column: span 10;
-  }
-  .b-valid {
-    grid-column: span 6;
-  }
-  .b-hist {
-    grid-column: span 9;
-  }
-  .b-sgram {
-    grid-column: span 9;
-  }
-  .b-dig {
-    grid-column: span 3;
-  }
-  .b-num {
-    grid-column: span 3;
-  }
-
-  /* validator, as DOM rather than as pixels — a delivery verdict is the one
-     thing on this page a screen reader must be able to read. */
-  .validator-body {
-    display: flex;
-    align-items: center;
-    padding: var(--s8) var(--s12);
-  }
-
-  .vtable {
-    width: 100%;
-    border-collapse: collapse;
-  }
-
-  .vtable th {
-    text-align: left;
-    font-size: 0.6875rem;
-    font-weight: 500;
-    color: var(--muted);
-    padding: var(--s4) 0;
-    letter-spacing: 0.03em;
-  }
-
-  .vtable td {
-    text-align: right;
-    font-size: clamp(1rem, 1.5vw, 1.375rem);
-    color: var(--faint);
-    padding: var(--s4) 0;
-    line-height: 1.15;
-  }
-
-  .vtable td.unit {
-    width: 3.5em;
-    font-size: 0.625rem;
-    color: var(--faint);
-    font-family: var(--readout);
-    padding-left: var(--s8);
-    text-align: right;
-  }
-
-  /* ---------- status bar ---------- */
-
-  .statusbar {
-    margin-top: var(--s8);
-    border: 1px solid var(--hair);
-    background: var(--raised);
-    height: var(--s32);
-    display: flex;
-    align-items: center;
-    gap: var(--s16);
-    padding-inline: var(--s12);
-    font-size: 0.6875rem;
-    color: var(--faint);
-    overflow: hidden;
-  }
-
-  .st-live {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--s8);
-    font-family: var(--readout);
-    letter-spacing: 0.08em;
-    flex: none;
-  }
-
-  .dot {
-    width: 6px;
-    height: 6px;
-    background: var(--faint);
-    flex: none;
-  }
-
-  .st-word::after {
-    content: 'HELD';
-  }
-  [data-state='measuring'] .dot {
-    background: var(--signal);
-  }
-  [data-state='measuring'] .st-word {
-    color: var(--signal);
-  }
-  [data-state='measuring'] .st-word::after {
-    content: 'MEASURING';
-  }
-  [data-state='paused'] .st-word::after {
-    content: 'PAUSED · REDUCED MOTION';
-  }
-
-  .st-i {
-    white-space: nowrap;
-  }
-
-  .st-target {
-    margin-left: auto;
-    color: var(--muted);
-  }
-
-  .bridge-foot {
-    margin-top: var(--s32);
-    max-width: 78ch;
-    font-size: 1rem;
-  }
-
   /* ---------- catalogue ---------- */
 
   .mod-intro {
     margin-bottom: var(--s48);
   }
 
+  /* ---------- the live analyzer, behind a facade ---------- */
+
+  .analyzer-say {
+    max-width: 68ch;
+    margin-top: var(--s16);
+  }
+
+  /* A photograph of the real canvas, with the real thing one press away.
+     The aspect ratio is the still's own, declared so that nothing moves when
+     the image arrives or when the iframe replaces it. */
+  /* No aspect-ratio here: the still is in normal flow and its own width and
+     height attributes give the box its shape, so a re-shot still of a different
+     size cannot leave a strip of background down one edge. The iframe is laid
+     over it. */
+  .facade {
+    position: relative;
+    margin: var(--s32) 0 0;
+    background: var(--ink);
+    border: 1px solid var(--hair);
+    overflow: hidden;
+    line-height: 0;
+  }
+
+  .facade img {
+    width: 100%;
+    height: auto;
+  }
+
+  .facade img,
+  .facade iframe {
+    display: block;
+    border: 0;
+  }
+
+  /* Sits over the still rather than beside it, because the still is the button:
+     the thing you press is a picture of what you get. */
+  .facade-go {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--s12);
+    width: 100%;
+    background: color-mix(in srgb, var(--ink) 55%, transparent);
+    border: 0;
+    color: var(--text);
+    font-family: var(--ui);
+    font-size: 0.9375rem;
+    cursor: pointer;
+    transition: background 120ms linear;
+  }
+
+  .facade-go:hover,
+  .facade-go:focus-visible {
+    background: color-mix(in srgb, var(--ink) 40%, transparent);
+  }
+
+  .facade-go-mark {
+    display: grid;
+    place-items: center;
+    width: 2.75rem;
+    height: 2.75rem;
+    flex: none;
+    border: 1px solid var(--signal);
+    color: var(--signal);
+    font-size: 0.875rem;
+    /* The triangle's own sidebearing makes it look off-centre in a box. */
+    padding-left: 0.15em;
+  }
+
+  .facade-go-text {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    text-align: left;
+  }
+
+  /* A second line on the control, saying what pressing it gets you. */
+  .facade-go-sub {
+    font-family: var(--readout);
+    font-size: 0.75rem;
+    color: var(--muted);
+    letter-spacing: 0;
+  }
+
+  .analyzer-foot {
+    max-width: 68ch;
+    margin-top: var(--s16);
+    color: var(--faint);
+    font-size: 0.8125rem;
+  }
+
+  @media (max-width: 560px) {
+    /* At this width the label and the cost together are wider than the button,
+       and the mark alone says enough. */
+    .facade-go {
+      flex-direction: column;
+      gap: var(--s8);
+      padding: var(--s16);
+    }
+    .facade-go-text {
+      align-items: center;
+      text-align: center;
+    }
+  }
+
+  /* Three across, not four. A meter is a dense picture and fourteen of them at
+     a quarter of the page each is a contact sheet — at a third, the scale
+     labels and the readouts inside them are legible without opening anything.
+     The photographs are captured at four device pixels per logical one, which
+     is what keeps them sharp at this size. */
   .cat {
     list-style: none;
     margin: 0;
     padding: 0;
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: var(--s16);
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--s32);
   }
 
   /* No panel of its own, and no title bar. Each photograph already carries the
@@ -962,23 +865,28 @@ const PLATFORMS = [
     flex-direction: column;
   }
 
-  /* Fixed height, and the shot centred inside it. The modules are photographed
-     at the shape each is drawn for — a LUFS meter is a pair of vertical bars, a
-     spectrogram is a strip of time — so the images differ in aspect and this is
-     what keeps the fourteen captions on one line. The letterboxing is invisible:
-     the box and the module share a background. */
+  /* Every photograph is the same 360x236 frame, so nothing here has to line
+     the fourteen up — they already are. The two bar meters are narrower than
+     the frame and sit centred inside it, which the renderer does rather than
+     the stylesheet: the letterboxing is invisible because the frame and the
+     module share a background.
+
+     Captured at three device pixels per logical one. Two put them at exactly
+     1:1 on a retina display, which is no headroom — one notch of browser zoom
+     and hairlines and six-pixel labels are being upscaled. */
+  /* The mat around the picture. A meter photographed to the edge of its cell
+     reads as a screenshot that has been cropped too tight; the space is what
+     makes it a plate. It also fixes the displayed width, which the renderer is
+     tuned to — see FRAME_W in scripts/render-modules.mjs. */
   .cat-shot {
-    flex: none;
-    height: 230px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    padding: var(--s24);
+    background: var(--panel);
+    border: 1px solid var(--hair);
   }
 
   .cat-shot img {
-    max-width: 100%;
-    max-height: 100%;
-    width: auto;
+    display: block;
+    width: 100%;
     height: auto;
   }
 
@@ -1344,89 +1252,21 @@ const PLATFORMS = [
     }
 
     /* Twelve columns: thirds and quarters both still exact. */
-    .bridge-a,
-    .bridge-b {
-      grid-template-columns: repeat(12, minmax(0, 1fr));
-    }
-    .b-lufs,
-    .b-super {
-      grid-column: span 3;
-    }
-    .b-spec {
-      grid-column: span 6;
-    }
-    .b-valid {
-      grid-column: span 4;
-    }
-    .b-hist {
-      grid-column: span 8;
-    }
     .b-sgram {
       grid-column: span 6;
     }
     .b-dig,
-    .b-num {
-      grid-column: span 3;
-    }
   }
 
   @media (max-width: 720px) {
     .cat {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
-    .bridge-a,
-    .bridge-b {
-      grid-template-columns: repeat(6, minmax(0, 1fr));
-    }
-    .b-lufs,
-    .b-super {
-      grid-column: span 3;
-    }
-    .b-spec,
-    .b-valid {
-      grid-column: span 6;
-    }
-    /* The two heaviest painters come off the phone: a scrolled bitmap and a
-       whole-timeline redraw are not what a hero needs to cost on a battery. */
-    .b-hist,
-    .b-sgram {
-      display: none;
-    }
-    .b-dig {
-      grid-column: span 2;
-    }
-    .b-num {
-      grid-column: span 4;
-    }
-    .bridge-a .module {
-      height: 168px;
-    }
-    .st-hide {
-      display: none;
-    }
-    .st-target {
-      display: none;
-    }
   }
 
   @media (max-width: 460px) {
     .cat {
       grid-template-columns: minmax(0, 1fr);
-    }
-    /* LUFS and Super stay paired even here. A bar meter and a set of arcs are
-       both legible at half a phone's width, and stacking them would put eight
-       hundred pixels of bridge between the headline and the first sentence
-       about it. */
-    .bridge-a .module {
-      height: 150px;
-    }
-    .bridge-b .module {
-      height: 116px;
-    }
-    /* The status bar drops items rather than truncating one. A readout cut off
-       mid-string is worse than a readout that is not there. */
-    .st-fmt {
-      display: none;
     }
   }
 </style>

@@ -259,6 +259,16 @@ rather than the id means the display looks like the desktop it is displaying.
 Sending an id and hoping is how the two ends come to render the same session in
 different colours.
 
+**Rate-limited, and a client must not assume it sees every palette the host
+held.** A producer coalesces these to at most one every 150 ms and always
+delivers the last value, because a host with a colour picker open produces a new
+palette per pointer move and this frame is one that queues rather than being
+dropped. The layout has no such limit; neither does the delivery target.
+
+What that means for a consumer is only this: a SKIN frame is the palette *now*,
+never a step in a sequence to be animated or counted. A display that joins
+mid-change is sent the newest palette rather than the last one broadcast.
+
 ### `0x0005` — CALIBRATION
 
 Payload is UTF-8 JSON of the active `Calibration`, from

@@ -134,6 +134,31 @@ class _SuperMeterModuleState extends State<SuperMeterModule> {
   double _beyondFrom = double.nan;
   double _beyondTo = double.nan;
 
+  /// The wedge a ring has swept, rebuilt every frame.
+  ///
+  /// Separate from [_beyond] and deliberately **not** cached: it moves with the
+  /// reading, so there is nothing to cache. It is reset and refilled rather
+  /// than reallocated, because the frame path may not allocate — three rings at
+  /// the refresh rate is a `Path` a hundred and forty times a second otherwise.
+  final Path _swept = Path();
+
+  /// The sector from the bottom of the scale out to [to].
+  ///
+  /// [from] backs off far enough to clear the round cap at the start, which
+  /// must survive the clip — see the note on the caps in `_SuperMeterPainter`.
+  Path _sweptTo(Offset centre, double radius, double from, double to) {
+    _swept.reset();
+    _swept.moveTo(centre.dx, centre.dy);
+    _swept.arcTo(
+      Rect.fromCircle(center: centre, radius: radius),
+      from,
+      to - from,
+      false,
+    );
+    _swept.close();
+    return _swept;
+  }
+
   /// A wedge from [from] round to [to], apex at the centre.
   ///
   /// Deep enough to reach the outermost ring, which makes it the clip for all
@@ -215,11 +240,22 @@ class _SuperMeterPainter extends MeterPainter {
     required this.scale,
     required this.state,
     required Listenable repaint,
-  }) : // Round, and the track and the fill have to agree: a round cap puts
-       // half a ring of ink *beyond* each end of the sweep, so a butt track
-       // under a round fill would be overrun at both ends of the scale. Given
-       // the same cap, the fill's ends land exactly on the track's — and the
-       // half ring the pair gained at the open end is what [_labelGap] carries.
+  }) : // **The gauge's two ends are round; a reading's own end is square.**
+       //
+       // The track carries the rounded ends, so each ring finishes in one at
+       // both extremes of the sweep — and the half ring of ink a round cap puts
+       // *beyond* the sweep is what [_labelGap] carries at the open end.
+       //
+       // The fill is drawn with the same round cap and then **cut back to the
+       // reading** by [_SuperMeterModuleState._sweptTo], which is not the same
+       // as giving it a butt cap. A butt cap squares off *both* ends, and the
+       // start of a fill is not a value — it is the bottom of the scale, where
+       // a square edge sits inside the track's rounded end and leaves a dark
+       // crescent of track around it. Cutting instead keeps the round start,
+       // where it coincides with the track's, and squares only the moving end,
+       // which is the end that points at a number: a round tip is half a ring
+       // of ink standing past the reading, and on a 240 degree sweep of 48 LU
+       // that is most of a decibel nobody measured.
        _track = (Paint()
          ..color = colors.meterTrack
          ..style = PaintingStyle.stroke
@@ -233,14 +269,14 @@ class _SuperMeterPainter extends MeterPainter {
        // looked emphasised when the skin changed. Built here rather than in
        // `paint`, which is on the frame path and allocates nothing.
        _shortFill = colors.meterFill.withValues(alpha: 0.55),
-       // Where an arc runs past the target. The short-term ring keeps its 0.55
-       // so the three rings hold the same weights on both sides of the line —
-       // a warning that also promoted the middle ring would say two things at
-       // once.
+       // Where an arc runs past the target, in [OaaColors.over]. The short-term
+       // ring keeps its 0.55 so the three rings hold the same weights on both
+       // sides of the line — a warning that also promoted the middle ring would
+       // say two things at once.
        _over = (Paint()
          ..style = PaintingStyle.stroke
          ..strokeCap = StrokeCap.round),
-       _overShort = colors.warn.withValues(alpha: 0.55),
+       _overShort = colors.over.withValues(alpha: 0.55),
        // [OaaStroke.heavy] where every other target mark in the application
        // takes [OaaStroke.mark], because this one is *radial* and the others
        // are axis-aligned. A horizontal target line at 1.5 px is drawn with
@@ -249,10 +285,69 @@ class _SuperMeterPainter extends MeterPainter {
        // pixel columns at about half the alpha each. The nominal weight matched
        // and the contrast did not, which is why three deliberate ticks read as
        // three rendering artefacts. Two steps rather than one, because this
-       // mark is also crossed by the arcs themselves: it has to be found over
-       // the brightest ink on the module, not against the background.
+       // mark is also crossed by the arcs themselves, and by the over colour
+       // past it: it has to be found over the brightest ink on the module, not
+       // against the background.
+       // **[OaaColors.accent], because that is already what "in spec" means
+       // here.** The tick is the number the whole gauge is aimed at, and the
+       // integrated arc turns this same colour when it lands on it — so an arc
+       // arriving at the mark and taking the mark's colour is one statement
+       // told twice rather than two colours to learn. Grey said only "some
+       // furniture on the scale", which is what it looked like.
+       //
+       // It does not dilute the accent the way colouring all three *arcs*
+       // would. That was rejected because an arc is a reading and three
+       // coloured readings make the accent decorative; a target is a reference,
+       // and there is exactly one of them on this module — drawn three times
+       // because there are three rings to compare against it.
        _target = (Paint()
          ..color = colors.textMuted
+         ..style = PaintingStyle.stroke
+         ..strokeWidth = OaaStroke.heavy),
+       // The tick's own backdrop, and the reason the three ticks read as one
+       // mark instead of three.
+       //
+       // One colour on three rings is one colour and does not look like it: the
+       // backdrop at the target is the track on a ring that has not reached it,
+       // that ring's fill on one that has, and [OaaColors.over] past the line —
+       // measured at L* 24, 39 and 51 on the default skin in a single ordinary
+       // frame, so the *same* grey stood +36, +21 and +9 above what surrounded
+       // it. That is a real difference in contrast, not an illusion, and no
+       // choice of colour fixes it: whatever shade reads well on the near-white
+       // integrated arc is invisible on the track beside it. The accent was
+       // tried here and has a worse version of the problem — an in-spec
+       // integrated arc *is* the accent, so the mark vanished into it at 0/255
+       // separation exactly when the target mattered most.
+       //
+       // **So the mark brings its own surround.** A slot is laid down first and
+       // the tick drawn inside it, which makes the local contrast identical on
+       // every ring, at every reading and under every skin — no per-ring shade
+       // to tune, and nothing that moves when the audio does. A tick whose
+       // colour depended on the arc behind it would be a mark that changes as
+       // the programme changes, which is not a mark you can measure against. It
+       // also separates the under-target colour from the over-target one
+       // cleanly, where a bare tick straddles the boundary and reads as an edge
+       // between them.
+       //
+       // **[OaaColors.meterTrack], so the mark reads as cut back to the empty
+       // scale.** Each darker shade tried before it read as a border drawn
+       // *around* the tick rather than as room the tick sits in: `background` at
+       // L* 3 was a hard black slot, `hairline` at 13 a heavy one, and halfway
+       // between hairline and the track, at 19, still a visible outline. The
+       // track is the lightest shade that is still a recess — one step further
+       // and `hairlineStrong` at L* 41 is *lighter* than the track, which is a
+       // highlight, not a shadow.
+       //
+       // It also says something true. A ring that has not reached the target
+       // shows no notch at all, because there the slot and the track are the
+       // same colour and there is nothing to cut; a ring that has runs up to the
+       // mark, breaks back to bare scale for its width, and carries on. Opaque
+       // is not negotiable either way: a translucent slot takes a tint from
+       // whatever ring it falls on, which is the exact non-uniformity the slot
+       // exists to remove, and an opaque one holds the tick's surround identical
+       // on all three rings whatever they are drawing.
+       _targetSlot = (Paint()
+         ..color = colors.meterTrack
          ..style = PaintingStyle.stroke
          ..strokeWidth = OaaStroke.heavy),
        super(repaint: repaint);
@@ -267,6 +362,7 @@ class _SuperMeterPainter extends MeterPainter {
   final Paint _arc;
   final Paint _over;
   final Paint _target;
+  final Paint _targetSlot;
   final Color _shortFill;
   final Color _overShort;
 
@@ -277,6 +373,10 @@ class _SuperMeterPainter extends MeterPainter {
 
   /// The width of one ring, as a fraction of the outer radius.
   static const double _ringWidth = 0.115;
+
+  /// How far the target tick's slot stands out either side of it. See
+  /// [_targetSlot] for what the slot is for.
+  static const double _targetCase = 1.5;
 
   /// Where a ring's name sits, as a fraction of the ring's width, measured
   /// **along the arc** from its open end.
@@ -367,10 +467,32 @@ class _SuperMeterPainter extends MeterPainter {
     // is a fact about a number somebody delivered, and easing decides where a
     // shape is drawn, never what it says.
     final integrated = engine.lufsIntegrated;
-    final integratedColor = colorForState(
-      classify(Metric.lufsIntegrated, integrated, calibration),
-      colors,
+    final integratedState = classify(
+      Metric.lufsIntegrated,
+      integrated,
+      calibration,
     );
+    final integratedColor = colorForState(integratedState, colors);
+
+    // What the innermost ring is drawn in *below* the target, which is not
+    // always its verdict's colour.
+    //
+    // The ring takes the verdict for its whole length — that is what makes an
+    // in-spec reading a green ring rather than a green tip — with one exception.
+    // A verdict of [ReadingState.over] is *already* being drawn past the target
+    // by the pass further down, so painting the rest of the arc red as well
+    // erases the one thing the cut exists to show. At −11 against a −14 target
+    // the ring ran red from the bottom of the scale to the reading with its own
+    // target tick stranded in the middle of it, the same colour on both sides:
+    // three quarters of the arc claiming to be over when a quarter of it was.
+    // An over-target ring therefore falls back to the neutral colour below the
+    // line and lets the red segment carry the verdict — which it does more
+    // precisely, because its length is the size of the miss. Nothing is lost:
+    // the centre readout is red either way, and it is the reading that gets
+    // delivered.
+    final integratedBase = integratedState == ReadingState.over
+        ? colorForState(ReadingState.neutral, colors)
+        : integratedColor;
 
     for (var i = 0; i < 3; i++) {
       final radius = outer - i * (ring + gap);
@@ -389,30 +511,43 @@ class _SuperMeterPainter extends MeterPainter {
         // make the accent decorative, and an accent that is decoration cannot
         // also be a warning.
         _arc.color = i == 2
-            ? integratedColor
+            ? integratedBase
             : (i == 0 ? colors.meterFill : _shortFill);
         final sweep = scale.fractionOf(value) * _sweepAngle;
         if (sweep > 0) {
+          // Everything this ring draws is cut back to the reading, which is
+          // what squares the moving end while leaving the round start alone.
+          // The wedge opens half a ring early — `cap`, the round start's own
+          // angular size at this radius — so the clip passes over it untouched.
+          final cap = ring / 2 / (radius - ring / 2);
+          canvas.save();
+          canvas.clipPath(
+            state._sweptTo(
+              centre,
+              outer,
+              _startAngle - cap,
+              _startAngle + sweep,
+            ),
+          );
           canvas.drawArc(bounds, _startAngle, sweep, false, _arc);
 
-          // Whatever ran past the target, again, in the warning colour and
-          // clipped to the sector beyond the tick.
+          // Whatever ran past the target, again, in [OaaColors.over] and
+          // clipped to the sector beyond the tick as well — the two clips
+          // intersect, so this pass is bounded by the reading at one end and
+          // the target at the other.
           //
           // **The same arc redrawn under a clip, not a second arc starting at
-          // the target.** Two arcs meeting at the tick would meet round cap to
-          // round cap, and each cap is a semicircle half a ring long drawn
-          // *past* its own end — so the seam would be a lump straddling the
-          // target with the warning nosing half a ring into the good side of
-          // it. Clipping puts the colour boundary exactly where the target is,
-          // which is the only place it is true, and leaves the arc's own cap at
-          // the reading intact.
+          // the target.** Two arcs meeting at the tick would meet cap to cap,
+          // and the seam would be a lump straddling the target with the over
+          // colour nosing into the good side of it. Clipping puts the colour
+          // boundary exactly where the target is, which is the only place it is
+          // true.
           if (sweep > targetSweep) {
-            _over.color = i == 1 ? _overShort : colors.warn;
-            canvas.save();
+            _over.color = i == 1 ? _overShort : colors.over;
             canvas.clipPath(beyond);
             canvas.drawArc(bounds, _startAngle, sweep, false, _over);
-            canvas.restore();
           }
+          canvas.restore();
         }
       }
 
@@ -420,11 +555,13 @@ class _SuperMeterPainter extends MeterPainter {
       // without the eye travelling to a legend. Over the arcs, because the
       // reading it judges is drawn up to it and often past it.
       final inner = radius - ring;
-      canvas.drawLine(
-        centre + Offset(math.cos(targetAngle), math.sin(targetAngle)) * inner,
-        centre + Offset(math.cos(targetAngle), math.sin(targetAngle)) * radius,
-        _target,
-      );
+      final from =
+          centre + Offset(math.cos(targetAngle), math.sin(targetAngle)) * inner;
+      final to =
+          centre +
+          Offset(math.cos(targetAngle), math.sin(targetAngle)) * radius;
+      canvas.drawLine(from, to, _targetSlot);
+      canvas.drawLine(from, to, _target);
 
       // Ring name, at the open end of the gauge, on the ring's own centreline
       // and the same arc length from every arc — see [_labelGap].

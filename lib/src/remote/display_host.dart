@@ -143,6 +143,17 @@ class DisplayHost {
   /// measurements and nothing to draw them in.
   PresetSpec? _layout;
   Skin? _skin;
+
+  /// The skin published during a cooldown, waiting for it to end.
+  ///
+  /// [_holdingSkin] rather than a null check on [_heldSkin], because null is a
+  /// value this field carries — it means "the built-in skin" everywhere else on
+  /// this class, and a display left on the previous palette because somebody
+  /// went back to the default mid-drag is exactly the wrong-not-late failure
+  /// the trailing send exists to prevent.
+  Skin? _heldSkin;
+  bool _holdingSkin = false;
+  Timer? _skinCooldown;
   Calibration? _calibration;
 
   /// How many displays are attached, for the UI to show.
@@ -185,6 +196,10 @@ class DisplayHost {
     _timer = null;
     _pump?.cancel();
     _pump = null;
+    _skinCooldown?.cancel();
+    _skinCooldown = null;
+    _heldSkin = null;
+    _holdingSkin = false;
 
     // The displays go before anything is awaited. `server.close()` suspends,
     // and every turn between here and the resumption is one in which a frame
@@ -224,13 +239,64 @@ class DisplayHost {
   /// user-authored skin is a file on this machine's disk that the tablet has
   /// never seen. Sending the id and hoping is how two screens end up rendering
   /// the same session in different colours.
+  ///
+  /// **The one publish on this class that is rate-limited**, and the theme
+  /// editor is why. Dragging a colour in it produces a new [Skin] per pointer
+  /// move — sixty a second — and each would be a [_RemoteClient.sendOnce],
+  /// which is documented there as being for frames that are "rare, small and
+  /// must not be dropped": they queue in `_waiting` behind whatever flush is
+  /// outstanding, and on a tablet slow enough to still be flushing, that queue
+  /// grows for as long as the pointer is down. It is the same failure the
+  /// `_waiting` list was added to fix, arriving from the other side.
+  ///
+  /// A layout and a delivery target need nothing of the kind. Neither can
+  /// change at pointer rate: a layout arrives from a drag the canvas has
+  /// already debounced into a commit, and a target from a menu.
+  ///
+  /// [_skin] itself is assigned at once rather than on the cooldown, because it
+  /// is what [_accept] replays to a display that joins — and a tablet that
+  /// attaches mid-drag should be handed the colour that is on screen now, not
+  /// the one that was last broadcast.
   void publishSkin(Skin? skin) {
     _skin = skin;
+
+    if (_skinCooldown != null) {
+      _heldSkin = skin;
+      _holdingSkin = true;
+      return;
+    }
+
+    _broadcastSkin(skin);
+  }
+
+  /// Sends now and starts the cooldown, which sends whatever arrived during it.
+  ///
+  /// **Trailing, not leading-only.** Dropping the frames in the middle of a
+  /// drag is the point; dropping the last one would leave every attached
+  /// display on whatever colour the pointer happened to be over when the timer
+  /// last fired — a tablet that is quietly wrong rather than merely behind.
+  void _broadcastSkin(Skin? skin) {
     final frame = _skinFrame(skin);
     for (final client in _clients) {
       client.sendOnce(frame);
     }
+
+    _skinCooldown = Timer(skinInterval, () {
+      _skinCooldown = null;
+      if (!_holdingSkin) return;
+      final held = _heldSkin;
+      _heldSkin = null;
+      _holdingSkin = false;
+      _broadcastSkin(held);
+    });
   }
+
+  /// The shortest gap between two skin frames.
+  ///
+  /// Long enough that a two-second drag is a dozen frames rather than a
+  /// hundred and twenty; short enough that the tablet is following the colour
+  /// rather than being told about it afterwards.
+  static const Duration skinInterval = Duration(milliseconds: 150);
 
   /// Publishes the active delivery target.
   ///

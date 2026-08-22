@@ -7,8 +7,8 @@
         {
           "glass" : true,
           "hidden" : false,
-          "image-name" : "bars.svg",
-          "name" : "bars",
+          "image-name" : "wave.svg",
+          "name" : "wave",
           "opacity" : 1
         }
       ],
