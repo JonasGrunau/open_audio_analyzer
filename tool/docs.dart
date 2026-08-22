@@ -85,9 +85,9 @@ void main(List<String> arguments) {
   // The old site had a stylesheet, and the `docs` job checks it was written.
   // Kept as an empty file rather than dropped, so that a stale cache asking for
   // it gets a 200 and not a 404 in somebody's console.
-  File('$out/style.css').writeAsStringSync(
-    '/* The documentation moved to $_site */\n',
-  );
+  File(
+    '$out/style.css',
+  ).writeAsStringSync('/* The documentation moved to $_site */\n');
 
   // GitHub Pages runs Jekyll unless told not to, and Jekyll drops anything
   // beginning with an underscore. Nothing here starts with one; this costs a
