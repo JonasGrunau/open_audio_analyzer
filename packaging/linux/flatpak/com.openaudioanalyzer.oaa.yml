@@ -23,7 +23,7 @@
 # audio permission is not negotiable. The rest is the smallest set that leaves
 # Open Audio Analyzer able to do what it says on the box.
 
-app-id: dev.openaudioanalyzer.oaa
+app-id: com.openaudioanalyzer.oaa
 runtime: org.freedesktop.Platform
 runtime-version: '24.08'
 sdk: org.freedesktop.Sdk
@@ -65,14 +65,14 @@ modules:
       - mkdir -p /app/bin
       - ln -s /app/oaa/open-audio-analyzer /app/bin/open-audio-analyzer
 
-      - install -Dm644 oaa.desktop /app/share/applications/dev.openaudioanalyzer.oaa.desktop
-      - install -Dm644 dev.openaudioanalyzer.oaa.metainfo.xml
-        /app/share/metainfo/dev.openaudioanalyzer.oaa.metainfo.xml
+      - install -Dm644 oaa.desktop /app/share/applications/com.openaudioanalyzer.oaa.desktop
+      - install -Dm644 com.openaudioanalyzer.oaa.metainfo.xml
+        /app/share/metainfo/com.openaudioanalyzer.oaa.metainfo.xml
 
       - |
         for size in 16 32 48 64 128 256 512; do
-          install -Dm644 "icons/${size}x${size}/dev.openaudioanalyzer.oaa.png" \
-            "/app/share/icons/hicolor/${size}x${size}/apps/dev.openaudioanalyzer.oaa.png"
+          install -Dm644 "icons/${size}x${size}/com.openaudioanalyzer.oaa.png" \
+            "/app/share/icons/hicolor/${size}x${size}/apps/com.openaudioanalyzer.oaa.png"
         done
       # **No scalable icon here, deliberately.** `flatpak-builder` finishes
       # with `appstreamcli compose`, which loads every icon it finds through

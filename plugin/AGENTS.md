@@ -245,9 +245,37 @@ One consequence: `cmake --build . --target OaaPlugin_VST3` produces an unsigned
 bundle, since the signing target is a different one. `cmake --build <dir>` —
 the documented command, and what CI runs — builds `all` and signs.
 
-Signing is ad-hoc (`OAA_CODESIGN_IDENTITY`, default `-`). A copy extracted from a
-downloaded archive additionally carries `com.apple.quarantine`, which no build
-can remove; `README.md`'s **In a DAW** tells a user to strip it.
+Signing is ad-hoc (`OAA_CODESIGN_IDENTITY`, default `-`). A real identity also
+gets `--timestamp --options runtime`, because notarisation requires both and
+neither is a default; ad-hoc gets neither, since a timestamp authority has no
+certificate to countersign.
+
+**A signature is not what gets a download past Gatekeeper — a notarisation
+ticket is.** `ci.yml` runs `packaging/macos/notarize.sh` on the built bundles
+before it archives them, which is the only order that works: the ticket is a
+file *inside* the bundle, so an archive made first would not contain it.
+Stapling writing into an already-signed bundle is safe, and is the one
+exception to this file's rule above — the ticket lands at
+`Contents/CodeResources`, beside `Contents/_CodeSignature/` rather than inside
+it, and codesign's default resource rules exclude it. `notarize.sh` re-verifies
+anyway.
+
+Without credentials the bundles are signed and not notarised, and a copy
+extracted from a downloaded archive additionally carries
+`com.apple.quarantine`, which no build can remove. On macOS 15 and later that
+combination is a modal a user **cannot override in System Settings**: the "Open
+Anyway" button is only ever populated for a blocked *launch*, and a plugin is
+loaded into a host process, which is a library load. Their only options are
+`xattr -dr com.apple.quarantine` — which `README.md`'s **In a DAW** tells them
+— or Move to Trash.
+
+**Both macOS architectures, and a deployment target of 11.0.** Set at the top of
+`CMakeLists.txt`, with the reasoning there. CMake defaults both to the machine
+doing the build, so the plugin in every release up to 0.5.0 was arm64-only with
+`minos 26.0` in its load commands: unloadable on an Intel Mac, unloadable on any
+macOS older than the runner, and indistinguishable to a DAW from a plugin that
+was never copied in. Check a built bundle with `lipo -info` and
+`otool -l | grep -A3 LC_BUILD_VERSION`, not by whether it loads here.
 
 The Dart half of the protocol test is
 `packages/oaa_wire/test/plugin_golden_test.dart`, and the app-side ingest is

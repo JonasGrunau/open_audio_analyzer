@@ -94,8 +94,17 @@ without checking out a framework by hand.
 On macOS each bundle is signed once it is fully built, then verified with
 `codesign --verify --strict`, which fails the build rather than producing a
 bundle a DAW would refuse. Signing is ad-hoc; `-DOAA_CODESIGN_IDENTITY=<id>`
-uses a Developer ID instead. A bundle you built yourself carries no quarantine
-flag, so nothing has to be stripped from it.
+uses a Developer ID instead, and adds the hardened runtime and a secure
+timestamp, both of which notarisation requires and neither of which is a
+default. A bundle you built yourself carries no quarantine flag, so nothing has
+to be stripped from it.
+
+The bundles are built for **arm64 and x86_64, targeting macOS 11**. Both are
+CMake variables whose defaults are the machine doing the build, which is how
+every release up to 0.5.0 shipped an arm64-only plugin that also refused to load
+on any macOS older than the runner's. Pass
+`-DCMAKE_OSX_ARCHITECTURES=arm64` for a build you will only ever load on the
+machine that made it — it halves the compile.
 
 `plugin/` is the one **AGPL-3.0-or-later** directory, because JUCE 7 and 8 are
 AGPL-or-commercial. Nothing there may move into `engine/` or `oaa_core/`, which
@@ -123,16 +132,22 @@ has no secrets, and a build that stopped there would be useless to it.
 | Variable | For |
 | --- | --- |
 | `OAA_SIGNING_IDENTITY` | macOS Developer ID, e.g. `Developer ID Application: Name (TEAMID)` |
-| `OAA_NOTARY_PROFILE` | A `xcrun notarytool store-credentials` profile |
+| `OAA_NOTARY_PROFILE` | A `xcrun notarytool store-credentials` profile. Your own machine only — it lives in *that machine's* keychain, so a CI runner given this name finds nothing |
+| `OAA_NOTARY_APPLE_ID`, `OAA_NOTARY_TEAM_ID`, `OAA_NOTARY_PASSWORD` | The same credentials in a form a runner can be handed. The password is an [app-specific password](https://support.apple.com/en-us/102654), not the Apple ID's own |
+| `OAA_SIGNING_CERTIFICATE`, `OAA_SIGNING_CERTIFICATE_PASSWORD` | base64 of a `.p12` and its export password, for a machine whose keychain is empty. `packaging/macos/keychain.sh` imports it; on your own Mac use Keychain Access and skip both |
 | `OAA_WINDOWS_CERT` | Path to a `.pfx` |
 | `OAA_WINDOWS_CERT_PASS` | Its password |
 | `OAA_WINDOWS_PUBLISHER` | The certificate's subject, **exactly** — e.g. `CN=Jonas Grunau` |
 
 Two things that will otherwise cost you an afternoon:
 
-- **A signed but un-notarised dmg is still refused by Gatekeeper.** The
-  quarantine flag needs notarisation, not merely a signature. Both variables,
-  or neither.
+- **A signed but un-notarised download is still refused by Gatekeeper.** The
+  quarantine flag needs notarisation, not merely a signature. This is true of
+  the plugin bundles as well as the dmg, and the plugin's version of the
+  refusal is worse: a modal with nothing in System Settings to override it,
+  because "Open Anyway" is only offered for a blocked launch and loading a
+  plugin is a library load. An identity and notarisation credentials, or
+  neither.
 - **`OAA_WINDOWS_PUBLISHER` must equal the certificate subject byte for byte.**
   Not the display name, not a tidied version of it. A mismatch fails at install
   time with `0x800B0100`, which reads as "the signature is invalid" and sends

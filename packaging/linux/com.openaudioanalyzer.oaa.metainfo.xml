@@ -12,8 +12,8 @@
   the binary a user installs from here; see README.md for the full split.
 -->
 <component type="desktop-application">
-  <id>dev.openaudioanalyzer.oaa</id>
-  <launchable type="desktop-id">dev.openaudioanalyzer.oaa.desktop</launchable>
+  <id>com.openaudioanalyzer.oaa</id>
+  <launchable type="desktop-id">com.openaudioanalyzer.oaa.desktop</launchable>
 
   <name>Open Audio Analyzer</name>
   <summary>Loudness and spectrum metering for mixing, mastering and delivery</summary>
@@ -21,7 +21,7 @@
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>GPL-3.0-or-later</project_license>
 
-  <developer id="dev.openaudioanalyzer">
+  <developer id="com.openaudioanalyzer">
     <name>The Open Audio Analyzer contributors</name>
   </developer>
 

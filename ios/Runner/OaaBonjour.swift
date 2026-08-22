@@ -29,7 +29,7 @@ import dnssd
 /// end stays the one Dart implementation.
 final class OaaBonjour: NSObject, FlutterPlugin, FlutterStreamHandler {
   /// Must match `bonjourChannel` in `lib/src/remote/mdns/bonjour_discovery.dart`.
-  private static let channelName = "dev.openaudioanalyzer.oaa/bonjour"
+  private static let channelName = "com.openaudioanalyzer.oaa/bonjour"
 
   /// Must match `oaaServiceName` in `lib/src/remote/mdns/mdns_service.dart` and
   /// the `NSBonjourServices` entry in `Info.plist`. All three are the same fact

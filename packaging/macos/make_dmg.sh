@@ -36,11 +36,16 @@
 #                   first launch after download, because the quarantine flag
 #                   requires notarisation, not merely a signature. This state
 #                   surprises people; it is called out below.
-#   Signed+notarised  OAA_SIGNING_IDENTITY and OAA_NOTARY_PROFILE both set.
+#   Signed+notarised  the credentials `notarize.sh` documents as well.
 #                   The only combination a user can double-click.
 #
 #   OAA_SIGNING_IDENTITY  e.g. "Developer ID Application: Name (TEAMID)"
-#   OAA_NOTARY_PROFILE    a `xcrun notarytool store-credentials` profile name
+#
+# The identity has to be *in a keychain* for codesign to find it, which is a
+# separate problem on a machine that was created for this job:
+# `packaging/macos/keychain.sh` is what puts it there, and `ci.yml` runs it
+# before this. The notarisation credentials are `notarize.sh`'s to explain —
+# there are two forms and only one of them works on a runner.
 #
 # The hardened runtime is required for notarisation and is always requested.
 # The microphone entitlement is in the .entitlements files and must survive
@@ -121,23 +126,22 @@ hdiutil create \
 rm -rf "$staging"
 
 # --- Notarise --------------------------------------------------------------
+#
+# `notarize.sh` rather than a notarytool call of its own. The plugin bundles
+# need the same submit-wait-staple and a second copy of it would drift; the
+# shared one also knows that `notarytool --wait` can exit 0 having been told no,
+# which the version that lived here did not, and which would have stapled
+# nothing onto a dmg and called it notarised.
+#
+# Stapling is what makes the dmg work on a machine with no network: without it
+# Gatekeeper has to ask Apple at first launch, and somebody on a plane gets a
+# refusal for a build that was notarised weeks ago.
 
-if [ -n "${OAA_NOTARY_PROFILE:-}" ]; then
-  echo "==> notarytool submit (this waits for Apple)"
-  xcrun notarytool submit "$dmg" --keychain-profile "$OAA_NOTARY_PROFILE" --wait
-  # Stapling is what makes the dmg work on a machine with no network. Without
-  # it Gatekeeper has to ask Apple at first launch, and an engineer on a plane
-  # gets a refusal for a build that was notarised weeks ago.
-  xcrun stapler staple "$dmg"
-  xcrun stapler validate "$dmg"
-  echo "==> signed, notarised and stapled"
-elif [ -n "${OAA_SIGNING_IDENTITY:-}" ]; then
-  echo "==> signed but NOT notarised."
-  echo "    Gatekeeper will still refuse this on first launch after download."
-  echo "    Set OAA_NOTARY_PROFILE to finish the job."
-else
+sh "$root/packaging/macos/notarize.sh" "$dmg"
+
+if [ -z "${OAA_SIGNING_IDENTITY:-}" ]; then
   echo "==> ad-hoc signed. This dmg will not open on another Mac without the"
-  echo "    user right-clicking Open and accepting a warning. Test builds only."
+  echo "    user overriding Gatekeeper by hand. Test builds only."
 fi
 
 echo "$dmg"

@@ -14,7 +14,7 @@
 /// no error to report.
 ///
 /// Taking the lock is a platform call, so it is a channel:
-/// `android/app/src/main/kotlin/dev/openaudioanalyzer/oaa/OaaMulticastLock.kt`.
+/// `android/app/src/main/kotlin/com/openaudioanalyzer/oaa/OaaMulticastLock.kt`.
 /// Everywhere else this is a no-op, and deliberately not a `Platform.isAndroid`
 /// check at the call sites — a search either needs a lock or it does not, and
 /// the two callers should not each have to know which platforms those are.
@@ -41,7 +41,7 @@ import 'package:flutter/services.dart';
 
 /// The channel `OaaMulticastLock` answers on.
 const MethodChannel multicastLockChannel = MethodChannel(
-  'dev.openaudioanalyzer.oaa/multicast_lock',
+  'com.openaudioanalyzer.oaa/multicast_lock',
 );
 
 /// Lifting Android's multicast filter, for as long as somebody is listening.

@@ -89,3 +89,17 @@ packaging/linux/flatpak/staging/
 # replay logs contain transcript content — never publish these.
 # Leading ** so it matches inside the workspace packages too, not just the root.
 **/.omc/
+
+# Signing material, and this entry is the fix for a mistake rather than a
+# precaution. Exporting a Developer ID from Keychain Access to base64 it into a
+# CI secret leaves a .p12 in whatever directory you were standing in, and a
+# `git add -A` from the repository root then commits a private key. That
+# happened here; the only reason the key never left the machine is that the
+# commit had not been pushed. Extensions rather than one filename, because the
+# next export will be called something else.
+*.p12
+*.pfx
+*.p8
+*.keystore
+*.jks
+*.mobileprovision

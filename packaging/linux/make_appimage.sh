@@ -79,19 +79,19 @@ cp -r "$bundle"/* "$appdir/usr/bin/"
 # they live, and once at the root of the AppDir, which is where appimagetool
 # looks. Symlinks rather than copies so there is one of each to edit.
 install -Dm644 packaging/linux/oaa.desktop \
-  "$appdir/usr/share/applications/dev.openaudioanalyzer.oaa.desktop"
-ln -sf usr/share/applications/dev.openaudioanalyzer.oaa.desktop \
-  "$appdir/dev.openaudioanalyzer.oaa.desktop"
+  "$appdir/usr/share/applications/com.openaudioanalyzer.oaa.desktop"
+ln -sf usr/share/applications/com.openaudioanalyzer.oaa.desktop \
+  "$appdir/com.openaudioanalyzer.oaa.desktop"
 
 for size in 16 32 48 64 128 256 512; do
-  install -Dm644 "packaging/linux/icons/${size}x${size}/dev.openaudioanalyzer.oaa.png" \
-    "$appdir/usr/share/icons/hicolor/${size}x${size}/apps/dev.openaudioanalyzer.oaa.png"
+  install -Dm644 "packaging/linux/icons/${size}x${size}/com.openaudioanalyzer.oaa.png" \
+    "$appdir/usr/share/icons/hicolor/${size}x${size}/apps/com.openaudioanalyzer.oaa.png"
 done
-cp packaging/linux/icons/256x256/dev.openaudioanalyzer.oaa.png "$appdir/dev.openaudioanalyzer.oaa.png"
-ln -sf dev.openaudioanalyzer.oaa.png "$appdir/.DirIcon"
+cp packaging/linux/icons/256x256/com.openaudioanalyzer.oaa.png "$appdir/com.openaudioanalyzer.oaa.png"
+ln -sf com.openaudioanalyzer.oaa.png "$appdir/.DirIcon"
 
-install -Dm644 packaging/linux/dev.openaudioanalyzer.oaa.metainfo.xml \
-  "$appdir/usr/share/metainfo/dev.openaudioanalyzer.oaa.metainfo.xml"
+install -Dm644 packaging/linux/com.openaudioanalyzer.oaa.metainfo.xml \
+  "$appdir/usr/share/metainfo/com.openaudioanalyzer.oaa.metainfo.xml"
 
 # The licences travel with the binary. Both bundled font families are SIL OFL
 # 1.1 and their licence files must ship with anything they are embedded in.

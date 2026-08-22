@@ -275,8 +275,26 @@ jobs:
           path: plugin/build/_deps
           key: juce-${{ runner.os }}-${{ hashFiles('plugin/CMakeLists.txt') }}
 
+      # A runner is a machine with an empty keychain, so the identity the build
+      # is about to hand `codesign` has to be put into one first. This step is
+      # the half that was missing for three releases: the workflow read an
+      # OAA_SIGNING_IDENTITY secret and passed the *name* of a certificate that
+      # was never anywhere on the machine. With no secret set it imports
+      # nothing and says so, and the build below ad-hoc signs exactly as it has
+      # always done.
+      - name: Signing certificate
+        if: runner.os == 'macOS'
+        env:
+          OAA_SIGNING_CERTIFICATE: ${{ secrets.OAA_SIGNING_CERTIFICATE }}
+          OAA_SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.OAA_SIGNING_CERTIFICATE_PASSWORD }}
+        run: sh packaging/macos/keychain.sh
+
+      # The identity is a configure-time variable rather than an environment
+      # one, because the target that reads it is generated at configure time.
+      # It is declared on all three platforms and defaults to "-", so one line
+      # serves every runner and nothing warns about a variable it did not read.
       - name: Configure
-        run: cmake -B plugin/build -S plugin -DCMAKE_BUILD_TYPE=Release
+        run: cmake -B plugin/build -S plugin -DCMAKE_BUILD_TYPE=Release -DOAA_CODESIGN_IDENTITY="${{ secrets.OAA_SIGNING_IDENTITY || '-' }}"
 
       - name: Build
         if: runner.os != 'Windows'
@@ -346,6 +364,24 @@ jobs:
         run: |
           flutter pub get
           xvfb-run -a flutter test test/plugin_to_display_e2e_test.dart
+
+      # After the build because a bundle has to be signed before Apple will
+      # notarise it, and before the Archive because the ticket that stapling
+      # writes is a *file inside the bundle* — an archive made first would not
+      # contain it, and the download would be refused exactly as an
+      # unnotarised one is. Without credentials this prints what that costs and
+      # succeeds, so a fork's release still produces artefacts.
+      - name: Notarise
+        if: runner.os == 'macOS'
+        env:
+          OAA_NOTARY_APPLE_ID: ${{ secrets.OAA_NOTARY_APPLE_ID }}
+          OAA_NOTARY_TEAM_ID: ${{ secrets.OAA_NOTARY_TEAM_ID }}
+          OAA_NOTARY_PASSWORD: ${{ secrets.OAA_NOTARY_PASSWORD }}
+        run: |
+          cd plugin/build/OaaPlugin_artefacts/Release
+          set -- VST3/*.vst3
+          if [ -d AU ]; then set -- "$@" AU/*.component; fi
+          sh "$GITHUB_WORKSPACE/packaging/macos/notarize.sh" "$@"
 
       # VST3 everywhere, AU where JUCE built one. Standalone is deliberately
       # left out: it is a window around a plugin whose whole purpose is to
@@ -471,10 +507,24 @@ jobs:
           channel: stable
           cache: true
 
+      - name: Signing certificate
+        env:
+          OAA_SIGNING_CERTIFICATE: ${{ secrets.OAA_SIGNING_CERTIFICATE }}
+          OAA_SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.OAA_SIGNING_CERTIFICATE_PASSWORD }}
+        run: sh packaging/macos/keychain.sh
+
+      # OAA_NOTARY_PROFILE is deliberately *not* here. It names an
+      # `xcrun notarytool store-credentials` profile in a machine's keychain, so
+      # a runner reading it finds nothing — which is how this job read a
+      # notarisation secret for three releases and shipped an unnotarised dmg
+      # without failing. The trio below is the form a runner can be given; see
+      # packaging/macos/notarize.sh.
       - name: Build and package
         env:
           OAA_SIGNING_IDENTITY: ${{ secrets.OAA_SIGNING_IDENTITY }}
-          OAA_NOTARY_PROFILE: ${{ secrets.OAA_NOTARY_PROFILE }}
+          OAA_NOTARY_APPLE_ID: ${{ secrets.OAA_NOTARY_APPLE_ID }}
+          OAA_NOTARY_TEAM_ID: ${{ secrets.OAA_NOTARY_TEAM_ID }}
+          OAA_NOTARY_PASSWORD: ${{ secrets.OAA_NOTARY_PASSWORD }}
         run: sh packaging/macos/make_dmg.sh
 
       - uses: actions/upload-artifact@v4
@@ -583,7 +633,7 @@ jobs:
       - name: Validate metainfo
         run: |
           appstreamcli validate --explain \
-            packaging/linux/dev.openaudioanalyzer.oaa.metainfo.xml
+            packaging/linux/com.openaudioanalyzer.oaa.metainfo.xml
 
       - name: Build and package
         run: sh packaging/linux/make_flatpak.sh
@@ -599,7 +649,7 @@ jobs:
           tree=build/packaging/flatpak-build/files
           if [ -d "$tree" ]; then
             appstreamcli compose --print-report=full --no-net \
-              --components=dev.openaudioanalyzer.oaa \
+              --components=com.openaudioanalyzer.oaa \
               --prefix=/ --origin=oaa \
               --result-root=/tmp/asc-result --data-dir=/tmp/asc-data \
               --icons-dir=/tmp/asc-icons "$tree" || true

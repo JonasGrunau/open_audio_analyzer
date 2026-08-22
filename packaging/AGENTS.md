@@ -8,16 +8,18 @@ GPL-3.0-or-later.
 | `icon/make_icons.dart` | The mark, as geometry, rendered into every container the six platforms ask for — flat PNGs for the desktops, Android's adaptive icon, and one layered `AppIcon.icon` document per Apple platform. Writes into the platform directories as well as this one. |
 | `icon/oaa.svg` | The same mark as a vector, with the tile and the gradient, for `README.md`. **The one deliberate duplicate here** — its numbers are derived from `make_icons.dart` and are annotated as such. It is *not* installed into Linux's `scalable` hicolor directory: see the comment in the flatpak manifest. |
 | `android/play_store_icon.png` | Generated. 512 px, full bleed, no alpha. The Play Console asks for it by hand at upload; it is not built into the aab. |
-| `macos/make_dmg.sh` | Build, sign, notarise, disk image. |
+| `macos/make_dmg.sh` | Build, sign, disk image, and hand the result to `notarize.sh`. |
+| `macos/keychain.sh` | Imports a Developer ID `.p12` into a keychain of its own, for a machine that has none — a CI runner. Refuses to run outside CI without `OAA_KEYCHAIN_FORCE`, because it *replaces* the login keychain search list. |
+| `macos/notarize.sh` | Submit, wait, staple, verify. Takes a dmg, a pkg or any number of bundles, and is the only implementation of this — the plugin's macOS bundles go through it too, from `ci.yml`. |
 | `windows/AppxManifest.xml` | The msix manifest, with two placeholders. |
 | `windows/make_msix.ps1` | Build, stage, `makeappx`, `signtool`. |
 | `windows/images/` | Generated msix logos. |
 | `linux/oaa.desktop` | The desktop entry, shared by the AppImage and the flatpak. |
-| `linux/dev.openaudioanalyzer.oaa.metainfo.xml` | AppStream metadata. Required by flatpak, read by GNOME Software and KDE Discover. |
+| `linux/com.openaudioanalyzer.oaa.metainfo.xml` | AppStream metadata. Required by flatpak, read by GNOME Software and KDE Discover. |
 | `linux/icons/` | Generated hicolor PNGs. |
 | `linux/make_appimage.sh` | Build, AppDir, `appimagetool`. |
 | `linux/make_flatpak.sh` | Build, stage, `flatpak-builder`, bundle. |
-| `linux/flatpak/dev.openaudioanalyzer.oaa.yml` | The flatpak manifest. Packages a bundle that was already built. |
+| `linux/flatpak/com.openaudioanalyzer.oaa.yml` | The flatpak manifest. Packages a bundle that was already built. |
 
 Output always lands in `build/packaging/`. `ci.yml`'s packaging jobs run
 all four on a tag and on demand.
@@ -73,6 +75,14 @@ all four on a tag and on demand.
   quarantine flag needs notarisation, not merely a signature. `make_dmg.sh`
   distinguishes all three states in what it prints, because the middle one is
   the surprising one.
+
+- **A notarisation secret that a runner cannot use looks exactly like one it
+  can.** `OAA_NOTARY_PROFILE` names a profile in a *machine's* keychain, so
+  `ci.yml` read that secret for three releases, found nothing behind it, took
+  the un-notarised branch and published. Same shape of failure as the missing
+  certificate import next to it: the name of a credential is not the
+  credential. `notarize.sh` accepts the runner-shaped form as well and says
+  which one it used.
 
 - **`OAA_WINDOWS_PUBLISHER` must equal the certificate's subject byte for
   byte.** A mismatch fails at *install* time with `0x800B0100`, which reads as

@@ -112,12 +112,12 @@ distribution simply refuses to start on an older one.
 
 ```sh
 flatpak install --user Open.Audio.Analyzer-0.5.0-x86_64.flatpak
-flatpak run dev.openaudioanalyzer.oaa
+flatpak run com.openaudioanalyzer.oaa
 ```
 
 The flatpak carries its own runtime, so the glibc caveat above does not apply.
 It is granted audio, network and filesystem access — [the manifest says why for
-each](https://github.com/JonasGrunau/open_audio_analyzer/blob/main/packaging/linux/flatpak/dev.openaudioanalyzer.oaa.yml).
+each](https://github.com/JonasGrunau/open_audio_analyzer/blob/main/packaging/linux/flatpak/com.openaudioanalyzer.oaa.yml).
 
 For system audio on either, PipeWire's own loopback or `pactl load-module
 module-null-sink` gives you a monitor source Open Audio Analyzer can open.
@@ -151,12 +151,28 @@ xattr -dr com.apple.quarantine \
 ```
 
 **The `xattr` line is not optional on macOS.** Your browser marks every file it
-downloads, the mark survives being unpacked, and Gatekeeper then refuses to load
-the bundle — silently. The plugin is simply absent from the DAW's browser, with
-nothing logged and no message anywhere, which is indistinguishable from having
-copied it to the wrong place. The bundles are signed, but ad-hoc rather than
-notarised: enough for macOS to load them, not enough to clear the flag for you.
-A plugin you built yourself has no flag to remove.
+downloads, the mark survives being unpacked, and Gatekeeper then refuses to
+load the bundle. What the refusal looks like depends on which macOS you are on,
+and neither version of it names the real problem:
+
+- **macOS 15 and later** put up a modal — *"Apple could not verify 'Open Audio
+  Analyzer.vst3' is free of malware that may harm your Mac"*, or on some
+  versions *"will damage your computer. You should move it to the Trash"* —
+  **and there is nothing in System Settings to override it with.** The "Open
+  Anyway" button under Privacy & Security is only ever populated for a blocked
+  *launch*. A plugin is loaded *into* your DAW, which is a library load, so no
+  button ever appears and the dialog's only other choice is Move to Trash. The
+  `xattr` line is the only way past it.
+- **Earlier versions** fail silently instead. The plugin is simply absent from
+  the DAW's browser with nothing logged and no message anywhere, which is
+  indistinguishable from having copied it to the wrong folder.
+
+A plugin you built yourself has no flag to remove. A downloaded one needs
+either the line above or a *notarised* bundle — a Developer ID signature alone
+does not clear the flag, which is the part that surprises people. Whether a
+given release is notarised depends on whether the project's signing credentials
+were present when it was built; `packaging/macos/notarize.sh` documents them,
+and `xattr` works either way.
 
 **Ableton Live also has to be told to look there** — Preferences → Plug-Ins →
 *Use VST3 Plug-In System Folders*. It then appears under **Open Audio

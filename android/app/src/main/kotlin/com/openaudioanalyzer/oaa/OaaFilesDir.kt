@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-package dev.openaudioanalyzer.oaa
+package com.openaudioanalyzer.oaa
 
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.plugin.common.MethodCall
@@ -32,7 +32,7 @@ import io.flutter.plugin.common.MethodChannel
 class OaaFilesDir : FlutterPlugin, MethodChannel.MethodCallHandler {
   /** Must match `filesDirChannel` in `lib/src/storage/android_files_dir.dart`. */
   private companion object {
-    const val CHANNEL = "dev.openaudioanalyzer.oaa/files_dir"
+    const val CHANNEL = "com.openaudioanalyzer.oaa/files_dir"
   }
 
   private var channel: MethodChannel? = null

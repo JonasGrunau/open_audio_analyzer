@@ -125,7 +125,7 @@ void main() {
       // The one platform where nothing in the environment can be made to
       // answer: no HOME, and a temporary directory of `/data/local/tmp` that
       // belongs to no app, so the iPad's container trick yields nothing either.
-      const files = '/data/user/0/dev.openaudioanalyzer.oaa/files';
+      const files = '/data/user/0/com.openaudioanalyzer.oaa/files';
       expect(
         resolveConfigRoot(
           operatingSystem: 'android',
@@ -161,7 +161,7 @@ void main() {
         resolveConfigRoot(
           operatingSystem: 'linux',
           environment: {'HOME': '/home/jo'},
-          androidFilesDirectory: '/data/user/0/dev.openaudioanalyzer.oaa/files',
+          androidFilesDirectory: '/data/user/0/com.openaudioanalyzer.oaa/files',
         ),
         '/home/jo/.config/oaa',
       );
@@ -187,7 +187,7 @@ void main() {
             temporaryDirectory:
                 '/private/var/mobile/Containers/Data/App/A1/tmp',
             androidFilesDirectory:
-                '/data/user/0/dev.openaudioanalyzer.oaa/files',
+                '/data/user/0/com.openaudioanalyzer.oaa/files',
           ),
           '/tmp/oaa',
         );

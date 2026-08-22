@@ -27,7 +27,7 @@ import 'host_discovery.dart';
 /// cancelling stops it, so the native side owns no state the Dart side has to
 /// remember to tear down.
 const EventChannel bonjourChannel = EventChannel(
-  'dev.openaudioanalyzer.oaa/bonjour',
+  'com.openaudioanalyzer.oaa/bonjour',
 );
 
 /// The one subscription this channel is allowed to have, shared by everything

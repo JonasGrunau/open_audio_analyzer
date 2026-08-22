@@ -163,3 +163,21 @@ The jobs are split by what they need, and that split is deliberate:
   unsigned artefact and says so rather than failing. A release job that quietly
   published something a user cannot install would be worse than one that failed;
   a fork that could not build at all would be worse than both.
+- **A secret this workflow reads is not the same as a secret it can use, and
+  both failures were silent.** Two of them, found together while chasing a
+  user's report that a DAW called the plugin harmful. The
+  `dmg` job passed `OAA_SIGNING_IDENTITY` to `codesign --sign` on a runner whose
+  keychain was empty and where **nothing imported a certificate** — the identity
+  was a name with nothing behind it. And `OAA_NOTARY_PROFILE` names a profile
+  stored in a *machine's* keychain, which a fresh runner cannot have, so the
+  notarisation branch could never be taken. Neither failed a job, because the
+  secrets had never been set either and the scripts' no-credential branches ran
+  instead: each gap kept the other invisible. `packaging/macos/keychain.sh`
+  now runs before anything signs, in both the `plugin` and `dmg` jobs, and the
+  notary credentials are passed in the runner-shaped form.
+- **The `plugin` job signs at configure time and notarises before it archives.**
+  `-DOAA_CODESIGN_IDENTITY` is a cache variable because the target that reads it
+  is generated, so it belongs on the `cmake -B` line and not in `env:`; and the
+  notarisation ticket is a file inside the bundle, so `Notarise` has to run
+  between `Build` and `Archive` or the artefact ships without it and is refused
+  exactly as an unnotarised one is.

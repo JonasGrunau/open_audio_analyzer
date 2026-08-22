@@ -17,7 +17,7 @@
 /// **Deliberately not `path_provider`**, for the reason in that resolver's
 /// header: a plugin needs a binding, and half of what reads these paths does not
 /// have one. The native half is
-/// `android/app/src/main/kotlin/dev/openaudioanalyzer/oaa/OaaFilesDir.kt`.
+/// `android/app/src/main/kotlin/com/openaudioanalyzer/oaa/OaaFilesDir.kt`.
 ///
 /// An Android tablet remembered nothing between launches for eight phases
 /// because of the missing line this file replaces. It is a display: it forgot
@@ -29,7 +29,7 @@ import 'package:flutter/services.dart';
 
 /// The channel `OaaFilesDir` answers on.
 const MethodChannel filesDirChannel = MethodChannel(
-  'dev.openaudioanalyzer.oaa/files_dir',
+  'com.openaudioanalyzer.oaa/files_dir',
 );
 
 /// `getFilesDir()`, or null if the platform will not name one.

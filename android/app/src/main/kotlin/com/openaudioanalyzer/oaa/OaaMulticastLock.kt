@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-package dev.openaudioanalyzer.oaa
+package com.openaudioanalyzer.oaa
 
 import android.content.Context
 import android.net.wifi.WifiManager
@@ -42,7 +42,7 @@ import io.flutter.plugin.common.MethodChannel
 class OaaMulticastLock : FlutterPlugin, MethodChannel.MethodCallHandler {
   /** Must match `multicastLockChannel` in `mdns/multicast_lock.dart`. */
   private companion object {
-    const val CHANNEL = "dev.openaudioanalyzer.oaa/multicast_lock"
+    const val CHANNEL = "com.openaudioanalyzer.oaa/multicast_lock"
 
     /** What `dumpsys wifi` shows while this is held. */
     const val TAG = "Open Audio Analyzer mDNS"

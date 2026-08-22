@@ -44,7 +44,7 @@ is still not built, and `docs/PLAN.md` for what was planned.
 | `packages/oaa_core/lib/src/layout.dart` | `ModuleSpec` / `TabSpec` / `PresetSpec` — the serialised layout model. |
 | `packages/oaa_core/lib/src/meter_source.dart` | `MeterSource` — everything a module is allowed to read. `OaaEngine` implements it; so does the remote display's decoder. |
 | `docs/WIRE.md` | The wire protocol, normative. Three implementations, none written against another. |
-| `ios/Runner/OaaBonjour.swift` | One of the application's **four** platform channels, and every one of them exists because a platform will not answer a question through the environment. iOS refuses an app the multicast socket every other platform browses with, so a tablet searches through the system's Bonjour responder instead; `lib/src/remote/mdns/host_discovery.dart` is where the two meet. The others: `lib/src/app/window_chrome.dart` over `oaa/window_chrome`, which removes the macOS title bar, and Android's two — `OaaMulticastLock.kt`, without which its multicast socket receives nothing, and `OaaFilesDir.kt`, without which it has nowhere to save. Both Android halves are registered in `android/app/src/main/kotlin/dev/openaudioanalyzer/oaa/MainActivity.kt`. |
+| `ios/Runner/OaaBonjour.swift` | One of the application's **four** platform channels, and every one of them exists because a platform will not answer a question through the environment. iOS refuses an app the multicast socket every other platform browses with, so a tablet searches through the system's Bonjour responder instead; `lib/src/remote/mdns/host_discovery.dart` is where the two meet. The others: `lib/src/app/window_chrome.dart` over `oaa/window_chrome`, which removes the macOS title bar, and Android's two — `OaaMulticastLock.kt`, without which its multicast socket receives nothing, and `OaaFilesDir.kt`, without which it has nowhere to save. Both Android halves are registered in `android/app/src/main/kotlin/com/openaudioanalyzer/oaa/MainActivity.kt`. |
 | `packages/oaa_core/lib/src/grid.dart` | Every rule about where a module may go, as pure functions. No pixels. |
 | `lib/src/canvas/grid_canvas.dart` | The canvas: drag, resize, selection, the preview overlay. |
 | `lib/src/canvas/workspace.dart` | The one path every layout edit takes, and the undo history. |
@@ -365,6 +365,30 @@ is unaffected: it never links JUCE — it talks to the plugin over a socket.
   rebuild before believing a signing change**: an incremental build hides this
   entire class of failure, because the file that invalidates the seal is already
   present when the seal is computed.
+
+- **A signature is not what gets a downloaded bundle past Gatekeeper — a
+  notarisation ticket is,** and the plugin's version of that refusal cannot be
+  overridden by the user at all. "Open Anyway" in Privacy & Security is only
+  ever populated for a blocked *launch*; a plugin is loaded into a DAW's
+  process, which is a library load, so macOS 15 and later put up a modal whose
+  only other button is Move to Trash. `packaging/macos/notarize.sh` is the one
+  implementation of submit-wait-staple, used by the plugin bundles and the dmg,
+  and `ci.yml` runs it **between `Build` and `Archive`** because the ticket is a
+  file inside the bundle. Two things that make this easy to get wrong: a
+  Developer ID signature needs `--timestamp --options runtime` or Apple rejects
+  the submission, and a *secret naming* a credential is not the credential —
+  `OAA_SIGNING_IDENTITY` on a runner with an empty keychain and
+  `OAA_NOTARY_PROFILE` naming a profile that lives on somebody's Mac both read
+  as configured and did nothing. `packaging/macos/keychain.sh` is the missing
+  half of the first.
+
+- **A macOS bundle's architecture and deployment target default to the machine
+  that built it.** Both are set at the top of `plugin/CMakeLists.txt`; before
+  they were, the released plugin was arm64-only with `minos 26.0`, so it could
+  not load on an Intel Mac or on any macOS older than the release runner — and a
+  DAW reports a bundle whose slice does not match exactly as it reports one that
+  is not installed. `lipo -info` and `otool -l | grep -A3 LC_BUILD_VERSION` on
+  the shipped artefact are the check; loading it on the build machine is not.
 
 - **Bump `OAA_ABI_VERSION` when `oaa.h` changes shape,** and regenerate the
   bindings (`cd packages/oaa_engine && dart run ffigen --config ffigen.yaml`).

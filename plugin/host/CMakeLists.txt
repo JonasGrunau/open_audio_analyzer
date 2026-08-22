@@ -53,7 +53,7 @@ juce_add_gui_app(OaaFakeDaw
   PRODUCT_NAME    "oaa-fake-daw"
   COMPANY_NAME    "Open Audio Analyzer"
   COMPANY_WEBSITE "https://github.com/JonasGrunau/open_audio_analyzer"
-  BUNDLE_ID       "dev.openaudioanalyzer.oaa.fakedaw"
+  BUNDLE_ID       "com.openaudioanalyzer.oaa.fakedaw"
   ${OAA_HOST_ARGS}
 )
 

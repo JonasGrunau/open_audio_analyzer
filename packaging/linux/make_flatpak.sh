@@ -57,7 +57,7 @@ mkdir -p "$staging"
 
 cp -r "$bundle" "$staging/bundle"
 cp packaging/linux/oaa.desktop "$staging/"
-cp packaging/linux/dev.openaudioanalyzer.oaa.metainfo.xml "$staging/"
+cp packaging/linux/com.openaudioanalyzer.oaa.metainfo.xml "$staging/"
 cp -r packaging/linux/icons "$staging/icons"
 cp LICENSE "$staging/"
 mkdir -p "$staging/fonts"
@@ -75,12 +75,12 @@ flatpak-builder \
   --repo="$out/flatpak-repo" \
   --force-clean \
   "$out/flatpak-build" \
-  "$manifest_dir/dev.openaudioanalyzer.oaa.yml"
+  "$manifest_dir/com.openaudioanalyzer.oaa.yml"
 
 flatpak build-bundle \
   "$out/flatpak-repo" \
   "$result" \
-  dev.openaudioanalyzer.oaa
+  com.openaudioanalyzer.oaa
 
 rm -rf "$staging"
 

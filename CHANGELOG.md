@@ -9,6 +9,50 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### ✨ Added
+- macOS releases can be notarised, which is what lets a downloaded plugin or dmg
+  be opened with no further steps. A Developer ID signature now also carries the
+  hardened runtime and a secure timestamp, both of which Apple requires before it
+  will notarise anything and neither of which was being requested.
+
+### 🐛 Fixed
+- The macOS plugin bundles are built for Apple silicon **and** Intel, and load on
+  macOS 11 and later. Every release up to 0.5.0 shipped a bundle built for
+  whichever machine the release ran on — Apple silicon only, and requiring that
+  machine's own macOS version or newer — which a DAW reports in exactly the way
+  it reports a plugin that was never installed.
+- The instructions for a downloaded macOS plugin now describe what macOS 15 and
+  later actually do when the quarantine flag is still on it: a modal saying the
+  plugin cannot be verified free of malware, or that it will damage your
+  computer, **with nothing in System Settings to override it** — the "Open
+  Anyway" button there is only offered for a blocked launch, and loading a plugin
+  into a DAW is a library load. The fix has not changed and is still
+  `xattr -dr com.apple.quarantine`; what was wrong was the description of the
+  symptom, which called the failure silent and sent people looking for a
+  different problem.
+- The README no longer claims the macOS build is distributed "signed with a
+  Developer ID and notarised". It has never been either.
+
+### ⚡ Changed
+- The application identifier is now `com.openaudioanalyzer.oaa`, and the
+  plugin's is `com.openaudioanalyzer.oaa.plugin`. Both were under `dev.`, which
+  reversed a domain nobody held; these reverse `open-audio-analyzer.com`. The
+  hyphens do not survive the trip, and cannot: an Android `applicationId` and a
+  Kotlin package are Java identifiers and reject `-`, while Apple's
+  `CFBundleIdentifier` accepts only letters, digits, `-` and `.` and so rejects
+  the `_` that Android would want in its place. Stripping them is the one form
+  that is legal on all six platforms. The Linux application id, the AppStream
+  and flatpak ids, the msix identity and the hicolor icon filenames all move
+  with it.
+
+### 🚧 Internal
+- CI imports a signing certificate before anything signs. `OAA_SIGNING_IDENTITY`
+  was being handed to `codesign` on runners whose keychain was empty, and
+  `OAA_NOTARY_PROFILE` named a credential that only exists on a developer's own
+  machine, so neither secret could have worked on a runner — and neither failed a
+  job, because they had never been set and the scripts took their no-credential
+  branches instead.
+
 ## [0.5.0] — 2026-08-22
 
 ### ✨ Added

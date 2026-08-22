@@ -517,7 +517,7 @@ void main() {
   // root of its AppDir.
   for (final size in [16, 32, 48, 64, 128, 256, 512]) {
     _write(
-      'packaging/linux/icons/${size}x$size/dev.openaudioanalyzer.oaa.png',
+      'packaging/linux/icons/${size}x$size/com.openaudioanalyzer.oaa.png',
       _pngOf(size),
     );
   }

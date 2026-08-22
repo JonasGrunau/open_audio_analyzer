@@ -55,6 +55,46 @@
 
 cmake_minimum_required(VERSION 3.22)
 
+# ---------------------------------------------------------------------------
+# What a downloaded macOS bundle has to be able to run on
+#
+# Neither of these was set until this comment was written, and CMake's default
+# for both is whatever machine did the build. The plugin in every release up to
+# 0.5.0 was therefore built by a `macos-latest` runner as arm64 alone, with
+# `minos 26.0` in its load commands — a bundle that cannot load on an Intel Mac
+# and cannot load on any macOS older than the runner's, while `README.md`
+# promised "macOS 11+, universal" one table above. `lipo -info` and
+# `otool -l | grep -A3 LC_BUILD_VERSION` on the shipped artefact are how that
+# was eventually seen; a DAW shows you nothing, because a bundle whose slice
+# does not match and a bundle that is not there are the same event to a host.
+#
+# 11.0 because that is what the app's dmg claims, and because it is the first
+# macOS with Apple silicon. `engine/src/oaa_tap_macos.m` already expects a
+# target far below the 14.2 its Core Audio process tap needs — its `@available`
+# guard and the weak linking that guard protects are written for exactly this,
+# and were doing nothing while the target was the runner's own OS.
+#
+# The cost is a compile of both architectures, roughly doubling a job that only
+# runs on a release. Pass `-DCMAKE_OSX_ARCHITECTURES=arm64` for a local build
+# you are only going to load on this machine.
+#
+# **`FORCE`, and the emptiness test rather than `NOT DEFINED`.** CMake creates
+# both of these as *empty* cache entries of its own on Apple. A plain
+# `set(... CACHE ...)` therefore does nothing at all once a build directory
+# exists — and does the right thing in a fresh one, which is the worst of the
+# two: a first build that is universal and every rebuild after it single-arch,
+# from a line that reads correctly. `if(NOT <var>)` is true for both the empty
+# default and the undefined case, and false for a value somebody passed on the
+# command line, which is the one thing that has to win.
+if(NOT CMAKE_OSX_ARCHITECTURES)
+  set(CMAKE_OSX_ARCHITECTURES "arm64;x86_64" CACHE STRING
+    "macOS architectures for the plugin bundles. Ignored off Apple." FORCE)
+endif()
+if(NOT CMAKE_OSX_DEPLOYMENT_TARGET)
+  set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0" CACHE STRING
+    "Oldest macOS the plugin bundles load on. Ignored off Apple." FORCE)
+endif()
+
 project(oaa_plugin
   VERSION 0.5.0
   DESCRIPTION "Open Audio Analyzer — headless metering plugin"
@@ -164,13 +204,13 @@ juce_add_plugin(OaaPlugin
   PRODUCT_NAME              "Open Audio Analyzer"
   COMPANY_NAME              "Open Audio Analyzer"
   COMPANY_WEBSITE           "https://github.com/JonasGrunau/open_audio_analyzer"
-  # The application is `dev.openaudioanalyzer.oaa`; this is that identity
+  # The application is `com.openaudioanalyzer.oaa`; this is that identity
   # with the format bundles hanging off it. It said
   # `io.github.jonasgrunau.bel` until the plugin was first published —
   # the rename to Open Audio Analyzer moved every other identifier and
   # missed this one, because nothing built the plugin to notice. A host
   # caches a plugin by this string, so it moves now or it never moves.
-  BUNDLE_ID                 "dev.openaudioanalyzer.oaa.plugin"
+  BUNDLE_ID                 "com.openaudioanalyzer.oaa.plugin"
 
   # Four characters each, at least one uppercase — an Audio Unit requirement,
   # not a JUCE one, and a lowercase-only code fails validation at load time in
@@ -312,14 +352,29 @@ target_link_libraries(OaaPlugin PUBLIC
 # honestly claim. `-DOAA_CODESIGN_IDENTITY=<identity>` signs with a Developer ID
 # instead; the release does not, and `README.md` says so rather than letting
 # somebody discover it from Gatekeeper.
+# Declared on every platform so that one `cmake` line in `ci.yml` can pass it
+# to all three runners without CMake warning that nobody read it.
+set(OAA_CODESIGN_IDENTITY "-" CACHE STRING
+  "codesign identity for the macOS bundles. \"-\" is ad-hoc. Ignored off Apple.")
+
 if(APPLE)
-  set(OAA_CODESIGN_IDENTITY "-" CACHE STRING
-    "codesign identity for the macOS bundles. \"-\" is ad-hoc.")
+  # A secure timestamp and the hardened runtime are both *required* for
+  # notarisation and neither is a default. Apple rejects a submission missing
+  # either one by name, which is the good case; the bad case is what happened
+  # here for four releases, where nothing was ever submitted and so nothing
+  # ever objected. Ad-hoc gets neither — `--timestamp` asks Apple's timestamp
+  # authority to countersign a signature with no certificate in it, and fails
+  # the build of anybody who has no Developer ID and wanted a plugin.
+  set(oaa_codesign_options)
+  if(NOT OAA_CODESIGN_IDENTITY STREQUAL "-")
+    list(APPEND oaa_codesign_options --timestamp --options runtime)
+  endif()
 
   foreach(oaa_format IN LISTS OAA_FORMATS)
     if(TARGET OaaPlugin_${oaa_format})
       add_custom_target(OaaPlugin_${oaa_format}_signed ALL
-        COMMAND codesign --force --sign "${OAA_CODESIGN_IDENTITY}"
+        COMMAND codesign --force ${oaa_codesign_options}
+                --sign "${OAA_CODESIGN_IDENTITY}"
                 "$<TARGET_BUNDLE_DIR:OaaPlugin_${oaa_format}>"
         COMMAND codesign --verify --strict
                 "$<TARGET_BUNDLE_DIR:OaaPlugin_${oaa_format}>"

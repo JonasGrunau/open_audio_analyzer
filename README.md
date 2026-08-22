@@ -401,7 +401,7 @@ lets you select it, which beats retyping any of the above.
 
 **The macOS app is deliberately not sandboxed**, and that is what makes the
 first row true. A sandboxed app's `HOME` is redirected into
-`~/Library/Containers/dev.openaudioanalyzer.oaa/Data`, which would put your
+`~/Library/Containers/com.openaudioanalyzer.oaa/Data`, which would put your
 presets somewhere you would never find them and stop either override from
 pointing anywhere outside it — defeating the point of keeping configuration in
 files you can edit, mail and version. The trade is that Open Audio Analyzer
@@ -593,10 +593,12 @@ site](https://jonasgrunau.github.io/open_audio_analyzer/install.html).
 > requires the app sandbox, and a sandboxed application has its home directory
 > redirected into `~/Library/Containers` — which put every preset, skin and
 > delivery target somewhere no user goes looking and no override could escape.
-> Open Audio Analyzer is distributed directly, signed with a Developer ID and
-> notarised. See `macos/Runner/*.entitlements`, which carries the reasoning,
-> and `packaging/macos/make_dmg.sh`, which repeats it where somebody signing a
-> build will be standing.
+> Open Audio Analyzer is distributed directly instead. The dmg is signed with a
+> Developer ID and notarised when a release is built with the credentials for
+> both — `packaging/macos/make_dmg.sh` prints which of its three states it was
+> in, because "signed" and "a user can double-click it" are not the same thing.
+> See `macos/Runner/*.entitlements`, which carries the sandbox reasoning, and
+> that script, which repeats it where somebody signing a build will be standing.
 
 The scripts that build these live in [`packaging/`](packaging/AGENTS.md), one
 per platform, and `ci.yml`'s packaging jobs run all four on a tag and on
@@ -794,19 +796,33 @@ Folders*.
 
 **If you unpacked a release archive on macOS, strip the quarantine flag.**
 A browser marks every file it downloads, the mark survives extraction, and
-Gatekeeper then refuses the load — silently, so the plugin is simply absent from
-the DAW's browser with nothing logged anywhere:
+Gatekeeper then refuses the load. On macOS 15 and later that refusal is a modal
+saying the plugin cannot be verified free of malware, or that it will damage
+your computer, **with no way to override it in System Settings** — the "Open
+Anyway" button there is only ever offered for a blocked *launch*, and loading a
+plugin into a DAW is a library load, so nothing appears for you to click. On
+earlier versions it is silent instead, and the plugin is simply absent from the
+DAW's browser with nothing logged anywhere. Either way:
 
 ```sh
 xattr -dr com.apple.quarantine ~/Library/Audio/Plug-Ins/VST3/"Open Audio Analyzer.vst3"
 ```
 
-The macOS bundles are **ad-hoc signed, not notarised**. The build signs each one
-*after* every step that writes into it and then verifies the result, so
-`codesign --verify --strict` and `auval` are both clean — but ad-hoc is not a
-Developer ID, and only the flag above gets a downloaded copy past Gatekeeper.
-Build it yourself and there is no flag to remove. `-DOAA_CODESIGN_IDENTITY=<id>`
-signs with a real identity instead.
+The build signs each macOS bundle *after* every step that writes into it and
+then verifies the result, so `codesign --verify --strict` and `auval` are both
+clean. Signing is ad-hoc by default, and **ad-hoc is not a Developer ID**: only
+the flag above gets an ad-hoc copy past Gatekeeper. Build it yourself and there
+is no flag to remove. `-DOAA_CODESIGN_IDENTITY=<id>` signs with a real identity,
+and `packaging/macos/notarize.sh` is what then gets a download past Gatekeeper
+without the user doing anything — a signature on its own does not, which is the
+step people skip.
+
+The bundles are universal and load on **macOS 11 and later**, the same floor the
+dmg claims. Releases up to 0.5.0 were neither: CMake defaults both the
+architecture and the deployment target to whatever machine did the build, so
+the runner shipped an arm64-only bundle that no Intel Mac and no older macOS
+could load — and a bundle whose slice does not match is, to a DAW, the same
+event as a bundle that is not there.
 
 The plugin connects to the app on `127.0.0.1:47822` and keeps retrying, so it
 does not matter which of the two you start first. Its window is a status panel —

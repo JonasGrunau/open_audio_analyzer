@@ -26,7 +26,7 @@
   IgnorableNamespaces="uap rescap">
 
   <Identity
-    Name="dev.openaudioanalyzer.oaa"
+    Name="com.openaudioanalyzer.oaa"
     Publisher="{{PUBLISHER}}"
     Version="{{VERSION}}"
     ProcessorArchitecture="x64" />
