@@ -20,6 +20,15 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   written for a person rather than for that field.
 
 ### ⚡ Changed
+- Every menu in the application marks the value it holds with a check and a
+  band across the whole row. The band used to be the darkest colour in the skin,
+  which in Precision Instrument put a near-black hole in a menu that is itself
+  nearly black, and it stopped short of the menu's edges so the current value
+  read as a chip sitting in the list rather than as one of its rows. It is a
+  wash of the colour the rest of the interface already uses for selection now,
+  it reaches both sides, and the check says which row it is without anybody
+  having to compare two greys. Menus of actions — duplicate, rename, delete —
+  hold no value and are unchanged.
 - The iPad build no longer offers itself to iPhones. Its Xcode target had been
   universal since the project was created, so a phone could install a
   twenty-four-column canvas drawn for a tablet, and App Store Connect asked for

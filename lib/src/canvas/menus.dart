@@ -35,7 +35,10 @@ RelativeRect menuPositionAt(BuildContext context, Offset globalPosition) {
 /// nothing and are set in [OaaColors.textPrimary]. `false` is the stronger
 /// claim that this row is an option in a menu that *has* a current value and is
 /// not it, which is the only thing that earns [OaaColors.textMuted]. Collapsing
-/// the two greys out every action menu in the application.
+/// the two greys out every action menu in the application — and, since the
+/// check column [OaaMenuRow] reserves is reserved for `false` as well as for
+/// `true`, indents every one of them past a mark none of their rows can ever
+/// carry.
 ///
 /// [color] is what is left of the old parameter: a row whose ink means
 /// something other than selection. Two do — the destructive Delete in the
@@ -67,7 +70,7 @@ PopupMenuItem<T> oaaMenuItem<T>(
     padding: EdgeInsets.zero,
     child: OaaMenuRow(
       colors: colors,
-      selected: selected ?? false,
+      selected: selected,
       child: Text(
         label,
         style: OaaType.body.copyWith(

@@ -791,14 +791,15 @@ const Map<SkinColor, String> _roleNames = {
 /// you know what it is called.
 const Map<SkinColor, String> _purpose = {
   SkinColor.background:
-      'The canvas behind everything, and the row a menu already holds. Keep it '
-      'the darkest of the three surfaces.',
+      'The canvas behind everything. Keep it the darkest of the three '
+      'surfaces.',
   SkinColor.panel: 'A module or panel surface.',
   SkinColor.panelRaised:
       'A surface on top of a panel: menus, selected rows, a chosen segment.',
   SkinColor.hairline: 'The only border colour.',
   SkinColor.hairlineStrong:
-      'A border that has to be seen: selection, hover, the active module.',
+      'A border that has to be seen: selection, hover, the active module. A '
+      'wash of it is also the row a menu already holds.',
   SkinColor.textPrimary: 'Readings, and anything the eye should land on first.',
   SkinColor.textMuted:
       'Labels, units, and the em dash that means a quantity was not measured.',

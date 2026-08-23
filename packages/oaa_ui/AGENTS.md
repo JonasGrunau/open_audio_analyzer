@@ -16,7 +16,7 @@ exactly once.
 | `src/grid_geometry.dart` | Grid cells to pixels. The one place the 24×16 canvas becomes a rectangle. |
 | `src/point_buckets.dart` | Marks sorted by the colour they are drawn in, so a display of tens of thousands of them is a few dozen `drawRawPoints` calls. Behind the stereo cloud; the spectrogram drew through it too until real material's run counts outgrew it. |
 | `src/panel.dart` | `PanelScaffold` and the controls panels are assembled from, plus `showOaaPanel` and `showOaaConfirm`. |
-| `src/menu_row.dart` | `OaaMenuRow` — one row of a popup menu, and the fill that marks the value the menu holds. Every menu in the application is built through it: the panel control, the status bar's two pickers and a module's dozen settings. The one widget here handed its palette rather than reading it, for the reason in its header. |
+| `src/menu_row.dart` | `OaaMenuRow` — one row of a popup menu, and the band and the check that mark the value the menu holds. Every menu in the application is built through it: the panel control, the status bar's two pickers and a module's dozen settings. `selected` is tri-state: `null` is a menu of actions, which gets neither mark nor the column reserved for one. The one widget here handed its palette rather than reading it, for the reason in its header. |
 | `src/qr.dart` | `QrCode` — just enough QR to carry one address, byte mode at error level M — and `OaaQrCode`, which paints it. The one widget here that does not take its colours from the skin: a code is read by thresholding a camera image, and dark-on-light is a property of the format rather than a choice. Held against ZXing by `test/qr_test.dart`. |
 | `src/glyph.dart` | `OaaMark` and `OaaGlyph` — the closed set of marks the interface draws, as paths. There is no icon font, and a mark that is a codepoint is a mark that can go missing. |
 | `src/skin_palette.dart` | The one adapter between a `Skin` (data, in `oaa_core`) and a `OaaColors`, plus `skinArgb` — the one place a `Color` is quantised back to the eight-bit hex the format stores. |
@@ -35,16 +35,29 @@ exactly once.
 - **No shadows.** Depth is background steps and hairlines. Shadows imply
   floating cards; measurement gear is machined panels sitting flush. This
   includes Material's own — see the Panels section.
-- **Selection is a fill, and in a menu the fill goes *down*.** A list row and a
-  segment take `panelRaised`, a step up from the panel they sit on. A menu is
-  already drawn on `panelRaised`, so its current value takes `background`
-  instead — the row is recessed and the options you can still choose sit on the
-  raised surface. Marking it by making it the lightest row in the menu, which is
-  what every menu here did before the fill, emphasises the one choice pressing
-  cannot change and leaves the live options reading as the disabled ones.
-  `test/menu_row_test.dart` asserts the direction as an inequality, in both
-  skins, because nothing about a screenshot says which way round it is meant to
-  be.
+- **Selection is a fill, and in a menu it is a band and a check.** A list row
+  and a segment take `panelRaised`, a step up from the panel they sit on. A menu
+  is already drawn on `panelRaised`, so there is no step left in the surfaces
+  and its current value takes the role the rest of a panel already means by
+  selection — `hairlineStrong`, a quarter of the way from the menu's own
+  surface, as a wash rather than as the 2 px border it is elsewhere. It went to
+  `background` for a while, which is the deepest surface in the skin and two
+  steps below the menu: recessed as intended, and in Precision Instrument it
+  read as a hole punched in the menu rather than as a row of it. `hairline` was
+  the next try and is 1.09:1 against `panelRaised` dark against 1.31:1 light —
+  one value, two strengths, and the dark skin got the weak one. Marking the row
+  by making it the lightest in the menu, which is what every menu here did
+  before any fill, emphasises the one choice pressing cannot change and leaves
+  the live options reading as the disabled ones — so the ink stays
+  `textPrimary` against `textMuted` and the band and the check are what carry
+  it. **The band spans the menu edge to
+  edge**; it is safe against the rounded corners because Material pads the item
+  list by 8 px top and bottom, twice `OaaRadius.sm`, and nothing here overrides
+  that. A call site that sets `menuPadding: EdgeInsets.zero` must also pass
+  `clipBehavior: Clip.antiAlias`. `test/menu_row_test.dart` asserts all three
+  signals, the reserved column and the band's contrast floor against the menu's
+  surface, in both skins, because nothing about a screenshot says which of them
+  is meant to be there.
 - **Every number uses `OaaType`'s tabular figures.** A readout whose digits
   change width jitters while you watch it.
 - **A `BoxDecoration` may not combine `borderRadius` with a non-uniform
@@ -236,10 +249,11 @@ lands as the one floating card in an interface of panels sitting flush.
 **A mark is geometry, not a glyph.** `▾` and `✓` are in neither Inter nor most
 of the fallback stack, and the first build of `PanelMenu` put a tofu box where
 the caret should be, on both menus, on every platform. Draw it — `src/glyph.dart`
-holds the set, `_Caret` is the one that predates it.
+holds the set, `_Caret` is the one that predates it, and `OaaMark.check` is the
+second of the two the sentence above names.
 
-**The set of marks is closed, and it is eight.** `OaaMark.broadcast`,
-`display`, `chevron`, `qr`, `scan`, `warning`, `undo` and `redo`. `display` has
+**The set of marks is closed, and it is nine.** `OaaMark.broadcast`,
+`display`, `chevron`, `check`, `qr`, `scan`, `warning`, `undo` and `redo`. `display` has
 had no call site since the remote display's chooser panel became two controls in
 the status bar; it is kept rather than deleted because it is half of a pair
 — "this machine sends" against "this machine shows" — and the set is a

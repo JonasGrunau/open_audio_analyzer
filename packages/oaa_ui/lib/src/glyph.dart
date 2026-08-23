@@ -18,7 +18,7 @@ import 'tokens.dart';
 /// **The set is closed, and it is short on purpose.** A vocabulary that gains a
 /// mark per panel is one nobody learns: the reader has to stop and decode each
 /// one, which is slower than the word it replaced and looks busier than the
-/// plain row it replaced. These eight earn their place by saying something the
+/// plain row it replaced. These nine earn their place by saying something the
 /// text beside them does not —
 ///
 /// - [broadcast] is a machine putting measurements on the network. It marks the
@@ -28,6 +28,12 @@ import 'tokens.dart';
 /// - [chevron] says a row opens something rather than selecting in place. A
 ///   `PanelListRow` is normally a choice among peers; a chevron is how the two
 ///   that push a panel say so before they are pressed.
+/// - [check] marks the option a menu already holds. It is the one mark in this
+///   set that is not saying what a row *does*, and the one whose absence is
+///   also a statement: the rows without it, in a menu that has one, are the
+///   options still open. See `OaaMenuRow`, which reserves its column in every
+///   row of such a menu so that the labels do not step sideways as the value
+///   moves.
 /// - [qr] and [scan] are the two ends of pairing by camera: a code being shown
 ///   and a code being read. They are not each other's reflection the way the
 ///   pair below is, because they are not a pair a reader chooses between —
@@ -54,6 +60,9 @@ enum OaaMark {
 
   /// This row opens something.
   chevron,
+
+  /// This row is the value the menu already holds.
+  check,
 
   /// A pairing code to be shown: modules on a grid, three of them where a QR
   /// code's finders are.
@@ -233,6 +242,21 @@ class _MarkPainter extends CustomPainter {
             ..moveTo(0.36 * s, 0.20 * s)
             ..lineTo(0.66 * s, 0.50 * s)
             ..lineTo(0.36 * s, 0.80 * s),
+          stroke,
+        );
+
+      // Two strokes, and the long one is steeper than the short one is — a
+      // check whose arms meet at a right angle reads as a tick drawn by a
+      // machine, which is what the first attempt looked like beside text.
+      // The elbow sits below the middle of the box so the mark is optically
+      // centred against a line of type rather than geometrically centred in
+      // its own square.
+      case OaaMark.check:
+        canvas.drawPath(
+          Path()
+            ..moveTo(0.16 * s, 0.53 * s)
+            ..lineTo(0.39 * s, 0.76 * s)
+            ..lineTo(0.84 * s, 0.24 * s),
           stroke,
         );
 

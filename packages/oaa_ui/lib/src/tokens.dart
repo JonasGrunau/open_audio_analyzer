@@ -139,15 +139,13 @@ class OaaColors {
     this.isLight = false,
   });
 
-  /// The canvas behind everything, and the well a menu's current value sits in.
+  /// The canvas behind everything.
   ///
-  /// **It has to be the deepest of the three surfaces.** A menu is drawn on
-  /// [panelRaised] and marks the row it already holds by recessing it to this
-  /// colour, so a skin that names a background lighter than its own raised
-  /// panel marks that row by *raising* it — which is the direction the whole
-  /// interface avoids, and nothing in the widget suite would notice. See
-  /// `OaaMenuRow`; `test/menu_row_test.dart` holds the inequality for the
-  /// shipped skins.
+  /// It carried a second job until the menus were reworked — the well a menu's
+  /// current value sat in — and lost it for being too good at the first one.
+  /// A menu is drawn on [panelRaised], two steps above this, so a row recessed
+  /// all the way here read as a hole punched in the menu rather than as a row
+  /// of it. The band is a wash of [hairlineStrong] now; see `OaaMenuRow`.
   final Color background;
 
   /// A module or panel surface.
@@ -156,9 +154,9 @@ class OaaColors {
   /// A surface that sits on top of a panel — a menu, a selected row, a chosen
   /// segment.
   ///
-  /// A *menu's* selected row is the exception and goes the other way, to
-  /// [background]: the menu is already drawn on this, so there is no step up
-  /// left to take.
+  /// A *menu's* selected row is the exception: the menu is already drawn on
+  /// this, so there is no step up left in the surfaces and it takes a wash of
+  /// [hairlineStrong] over this instead.
   final Color panelRaised;
 
   /// The only border colour.
@@ -176,6 +174,11 @@ class OaaColors {
   /// Selection takes it at [OaaStroke.emphasis]; keyboard focus is a hairline
   /// in [textPrimary], so the two are told apart by weight and brightness
   /// rather than by hue.
+  ///
+  /// A menu's current row takes the same role as an *area* rather than as an
+  /// edge — a quarter of the way from [panelRaised] to this — because a row is
+  /// not a border and because the menu is already drawn on the highest surface
+  /// the palette names. See `OaaMenuRow`.
   final Color hairlineStrong;
 
   /// Readings, and anything the eye should land on first.

@@ -1,15 +1,28 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// The direction of a menu's selected row.
+// How a menu says which row it already holds.
 //
-// Every menu in the application marked its current value by making it the
+// Every menu in the application once marked its current value by making it the
 // *lightest* row in the menu, which put the emphasis on the one choice pressing
 // it cannot change and left the options you can still take reading as the
-// disabled ones. The row is recessed now — see `OaaMenuRow`. There is nothing in
-// the widget suite that would notice it flipping back, and nothing about a
-// screenshot says which way round it is meant to be, so the direction is
-// asserted here as an inequality rather than as a colour: the selected row is
-// **darker than the surface the menu is drawn on**, in every skin.
+// disabled ones. The fix was a fill, and the fill was [OaaColors.background] —
+// the deepest surface in the skin, under a menu drawn two steps above it, which
+// read as a hole punched in the menu rather than as a row of it.
+//
+// What ships now is three signals and none of them is a hue: a band spanning
+// the menu edge to edge, a check in the column every row of that menu reserves,
+// and the label in [OaaColors.textPrimary]. Nothing about a screenshot says
+// which of those is meant to be there, and the widget suite would not notice
+// any of them going, so all three are asserted here — along with the thing that
+// is easiest to lose by accident: an action menu, which has no current value,
+// must get none of it.
+//
+// The band itself is asserted twice over: that it is the one `OaaMenuRow`
+// computes, and — the part that is a claim about the *design* rather than about
+// the code — that what that computes can actually be seen against the surface
+// the menu is drawn on. Both fills this row has carried failed that: 1.13:1 for
+// `background`, and 1.09:1 for `hairline` in the dark skin against 1.31:1 for
+// the same value in the light one.
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -17,20 +30,24 @@ import 'package:oaa/src/canvas/menus.dart';
 import 'package:oaa_core/oaa_core.dart';
 import 'package:oaa_ui/oaa_ui.dart';
 
+Finder _rowOf(String label) =>
+    find.ancestor(of: find.text(label), matching: find.byType(OaaMenuRow));
+
 /// The fill of the row holding [label], or `null` when it has none.
-///
-/// The row's own decoration is the outermost one inside it; a panel menu's
-/// selection mark is a second, nested one, so this takes the first.
 Color? _fillOf(WidgetTester tester, String label) {
-  final row = find.ancestor(
-    of: find.text(label),
-    matching: find.byType(OaaMenuRow),
-  );
   final box = tester.widget<DecoratedBox>(
-    find.descendant(of: row, matching: find.byType(DecoratedBox)).first,
+    find
+        .descendant(of: _rowOf(label), matching: find.byType(DecoratedBox))
+        .first,
   );
   return (box.decoration as BoxDecoration).color;
 }
+
+/// Whether the row holding [label] carries the check.
+bool _checked(WidgetTester tester, String label) => find
+    .descendant(of: _rowOf(label), matching: find.byType(OaaGlyph))
+    .evaluate()
+    .isNotEmpty;
 
 Future<void> _pump(
   WidgetTester tester,
@@ -47,23 +64,30 @@ Future<void> _pump(
   ),
 );
 
+/// WCAG's ratio, which is a poor model of how a near-black band reads against a
+/// near-black surface but is the only number both skins can be held to.
+double _contrast(Color a, Color b) {
+  final (hi, lo) = a.computeLuminance() > b.computeLuminance()
+      ? (a.computeLuminance(), b.computeLuminance())
+      : (b.computeLuminance(), a.computeLuminance());
+  return (hi + 0.05) / (lo + 0.05);
+}
+
 void main() {
   for (final skin in BuiltInSkins.all) {
     final colors = oaaColorsFromSkin(skin);
 
-    test('${skin.id} recesses rather than raises', () {
-      // What makes the fill legible at all, and the half of the rule no widget
-      // test can see: a skin whose background is not a step *down* from its
-      // raised panel would mark the current value by making it lighter again,
-      // with every widget below still passing.
+    test('${skin.id} draws a band that can be seen on the menu', () {
+      // The floor is under the mix `OaaMenuRow` uses, which lands at about
+      // 1.22:1 in both shipped skins, and over both fills that came before it.
       expect(
-        colors.background.computeLuminance(),
-        lessThan(colors.panelRaised.computeLuminance()),
-        reason: 'the fill a selected menu row takes must be the deeper surface',
+        _contrast(OaaMenuRow.bandOn(colors), colors.panelRaised),
+        greaterThan(1.15),
+        reason: 'a band nobody can see is a menu with no current value',
       );
     });
 
-    testWidgets('a module setting menu recesses its current value in '
+    testWidgets('a module setting menu bands and checks its current value in '
         '${skin.id}', (tester) async {
       await _pump(
         tester,
@@ -92,7 +116,11 @@ void main() {
       await tester.tap(find.text('open'));
       await tester.pumpAndSettle();
 
-      expect(_fillOf(tester, SpectrumTilt.db3.label), colors.background);
+      expect(
+        _fillOf(tester, SpectrumTilt.db3.label),
+        OaaMenuRow.bandOn(colors),
+      );
+      expect(_checked(tester, SpectrumTilt.db3.label), isTrue);
       for (final tilt in SpectrumTilt.values.where(
         (tilt) => tilt != SpectrumTilt.db3,
       )) {
@@ -101,15 +129,41 @@ void main() {
           isNull,
           reason: '${tilt.label} is not the current value',
         );
+        expect(
+          _checked(tester, tilt.label),
+          isFalse,
+          reason: '${tilt.label} is not the current value',
+        );
       }
+
+      // The band spans the menu rather than sitting inside it as a chip: the
+      // filled row is exactly as wide as the row above it, which is as wide as
+      // the menu Material's own content box.
+      final filled = tester.getSize(_rowOf(SpectrumTilt.db3.label));
+      final unfilled = tester.getSize(_rowOf(SpectrumTilt.values.first.label));
+      expect(filled.width, unfilled.width);
+      expect(
+        filled.width,
+        tester.getSize(find.byType(ListBody)).width,
+        reason: 'the band reaches both sides of the menu',
+      );
+
+      // And every row of a menu that holds a value is indented past the check,
+      // whether it carries one or not, so the labels do not step sideways when
+      // the value moves.
+      expect(
+        tester.getTopLeft(find.text(SpectrumTilt.db3.label)).dx,
+        tester.getTopLeft(find.text(SpectrumTilt.values.last.label)).dx,
+      );
     });
 
-    testWidgets('a menu of actions fills nothing and mutes nothing in '
-        '${skin.id}', (tester) async {
+    testWidgets('a menu of actions fills nothing, checks nothing and indents '
+        'nothing in ${skin.id}', (tester) async {
       // `selected: null` is not `selected: false`. Every row in an action menu
       // is something you can do, so none of them is an option that lost —
       // collapsing the two greyed out and un-filled every action menu in the
-      // application at once.
+      // application at once, and now would indent them past a check column
+      // none of their rows can ever carry.
       await _pump(
         tester,
         colors,
@@ -134,6 +188,7 @@ void main() {
 
       expect(_fillOf(tester, 'Duplicate'), isNull);
       expect(_fillOf(tester, 'Delete'), isNull);
+      expect(_checked(tester, 'Duplicate'), isFalse);
       expect(
         tester.widget<Text>(find.text('Duplicate')).style?.color,
         colors.textPrimary,
@@ -142,9 +197,15 @@ void main() {
         tester.widget<Text>(find.text('Delete')).style?.color,
         colors.over,
       );
+      expect(
+        tester.getTopLeft(find.text('Duplicate')).dx -
+            tester.getTopLeft(_rowOf('Duplicate')).dx,
+        Space.md,
+        reason: 'an action menu indents by the padding and nothing else',
+      );
     });
 
-    testWidgets('a panel menu recesses its current value in ${skin.id}', (
+    testWidgets('a panel menu bands and checks its current value in ${skin.id}', (
       tester,
     ) async {
       await _pump(
@@ -170,6 +231,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(_fillOf(tester, 'Podcast'), isNull);
+      expect(_checked(tester, 'Podcast'), isFalse);
       expect(
         find
             .byWidgetPredicate(
@@ -177,7 +239,7 @@ void main() {
                   widget is DecoratedBox &&
                   widget.decoration is BoxDecoration &&
                   (widget.decoration as BoxDecoration).color ==
-                      colors.background,
+                      OaaMenuRow.bandOn(colors),
             )
             .evaluate(),
         hasLength(1),

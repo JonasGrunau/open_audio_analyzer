@@ -898,46 +898,20 @@ class PanelMenu<T> extends StatelessWidget {
             // The row owns its padding, because the fill that marks the
             // current value has to span it. See [OaaMenuRow].
             padding: EdgeInsets.zero,
+            // The mark and the column it sits in are [OaaMenuRow]'s, and
+            // were this widget's own until three other menus in the
+            // application wanted the same thing. What is left here is which
+            // option the menu holds.
             child: OaaMenuRow(
               colors: colors,
               selected: option.value == selected,
-              child: Row(
-                children: [
-                  // The mark is the redundant half of the signal now that the
-                  // row itself is recessed, and it is kept for the skin whose
-                  // background step is too shallow to carry it alone. Not a
-                  // colour: the palette reserves the signal hue for "in spec"
-                  // and selection inside a panel is `hairlineStrong` — neither
-                  // of which a line of text can wear. Geometry rather than a
-                  // glyph for the reason in [_Caret].
-                  SizedBox(
-                    width: Space.md,
-                    child: option.value == selected
-                        ? Align(
-                            alignment: Alignment.centerLeft,
-                            child: Container(
-                              width: Space.xs,
-                              height: Space.smd,
-                              decoration: BoxDecoration(
-                                color: colors.textPrimary,
-                                borderRadius: OaaRadius.allXs,
-                              ),
-                            ),
-                          )
-                        : null,
-                  ),
-                  Flexible(
-                    child: Text(
-                      option.label,
-                      overflow: TextOverflow.ellipsis,
-                      style: OaaType.body.copyWith(
-                        color: option.value == selected
-                            ? colors.textPrimary
-                            : colors.textMuted,
-                      ),
-                    ),
-                  ),
-                ],
+              child: Text(
+                option.label,
+                style: OaaType.body.copyWith(
+                  color: option.value == selected
+                      ? colors.textPrimary
+                      : colors.textMuted,
+                ),
               ),
             ),
           ),
