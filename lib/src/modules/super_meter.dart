@@ -304,59 +304,22 @@ class _SuperMeterPainter extends MeterPainter {
          ..color = colors.textMuted
          ..style = PaintingStyle.stroke
          ..strokeWidth = OaaStroke.heavy),
-       // The tick's own backdrop, and the reason the three ticks read as one
-       // mark instead of three.
+       // The tick's backdrop, drawn first and at the tick's own width — so the
+       // tick covers it exactly and none of it reaches the screen.
        //
-       // One colour on three rings is one colour and does not look like it: the
-       // backdrop at the target is the track on a ring that has not reached it,
-       // that ring's fill on one that has, and [OaaColors.over] past the line —
-       // measured at L* 24, 39 and 51 on the default skin in a single ordinary
-       // frame, so the *same* grey stood +36, +21 and +9 above what surrounded
-       // it. That is a real difference in contrast, not an illusion, and no
-       // choice of colour fixes it: whatever shade reads well on the near-white
-       // integrated arc is invisible on the track beside it. The accent was
-       // tried here and has a worse version of the problem — an in-spec
-       // integrated arc *is* the accent, so the mark vanished into it at 0/255
-       // separation exactly when the target mattered most.
-       //
-       // **So the mark brings its own surround.** A slot is laid down first and
-       // the tick drawn inside it, which makes the local contrast identical on
-       // every ring, at every reading and under every skin — no per-ring shade
-       // to tune, and nothing that moves when the audio does. A tick whose
-       // colour depended on the arc behind it would be a mark that changes as
-       // the programme changes, which is not a mark you can measure against. It
-       // also separates the under-target colour from the over-target one
-       // cleanly, where a bare tick straddles the boundary and reads as an edge
-       // between them.
-       //
-       // **[OaaColors.meterTrack], so the mark reads as cut back to the empty
-       // scale.** Each darker shade tried before it read as a border drawn
-       // *around* the tick rather than as room the tick sits in: `background` at
-       // L* 3 was a hard black slot, `hairline` at 13 a heavy one, and halfway
-       // between hairline and the track, at 19, still a visible outline. The
-       // track is the lightest shade that is still a recess — one step further
-       // and `hairlineStrong` at L* 41 is *lighter* than the track, which is a
-       // highlight, not a shadow.
-       //
-       // It also says something true. A ring that has not reached the target
-       // shows no notch at all, because there the slot and the track are the
-       // same colour and there is nothing to cut; a ring that has runs up to the
-       // mark, breaks back to bare scale for its width, and carries on. Opaque
-       // is not negotiable either way: a translucent slot takes a tint from
-       // whatever ring it falls on, which is the exact non-uniformity the slot
-       // exists to remove, and an opaque one holds the tick's surround identical
-       // on all three rings whatever they are drawing.
+       // That width is the decision, not an oversight. Standing the slot out
+       // either side of the tick cuts a visible notch across every arc at the
+       // target, and that change has been made and reverted three times.
+       // **Do not make it again without asking.** What it was for: one grey
+       // tick sits on three different backdrops — the empty track, the ring's
+       // own fill, and [OaaColors.over] past the line, measured at L* 24, 39
+       // and 51 on the default skin in a single ordinary frame — so the same
+       // mark reads at three contrasts. That is a real effect, and it was
+       // judged not worth cutting the arcs to fix.
        _targetSlot = (Paint()
          ..color = colors.meterTrack
          ..style = PaintingStyle.stroke
-         // Wider than the tick by [_targetCase] either side, which is what
-         // makes it a slot the tick sits *in* rather than a line hidden under
-         // it. It was [OaaStroke.heavy] — the tick's own width — from the
-         // change that raised the tick to that weight, so everything above was
-         // true of the code and false of the screen: the slot was covered
-         // exactly, and the tick was read against whatever the ring was
-         // drawing after all.
-         ..strokeWidth = OaaStroke.heavy + 2 * _targetCase),
+         ..strokeWidth = OaaStroke.heavy),
        super(repaint: repaint);
 
   final MeterSource engine;
@@ -380,10 +343,6 @@ class _SuperMeterPainter extends MeterPainter {
 
   /// The width of one ring, as a fraction of the outer radius.
   static const double _ringWidth = 0.115;
-
-  /// How far the target tick's slot stands out either side of it. See
-  /// [_targetSlot] for what the slot is for.
-  static const double _targetCase = 1.5;
 
   /// Where a ring's name sits, as a fraction of the ring's width, measured
   /// **along the arc** from its open end.

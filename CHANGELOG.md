@@ -20,6 +20,12 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   written for a person rather than for that field.
 
 ### ⚡ Changed
+- The Super Meter's target tick is a plain mark again rather than one cut into
+  the arcs. 0.10.0 widened the slot beneath it to stand 1.5 px out either side,
+  which put a notch through all three rings at the target; the slot is back to
+  the tick's own width, so the rings run unbroken and only the tick crosses
+  them. 0.10.0's note describing the wider slot stands as written and is
+  superseded by this one.
 - Every menu in the application marks the value it holds with a check and a
   band across the whole row. The band used to be the darkest colour in the skin,
   which in Precision Instrument put a near-black hole in a menu that is itself
@@ -36,7 +42,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   document already said it was.
 
 ### 🚧 Internal
-- Pressing "Open the live analyzer" on the front page now animates rather than
+- Pressing "Load the live analyzer" on the front page now animates rather than
   swapping its label: the play mark travels to the middle of the picture, the
   label goes the other way and disappears behind it, and the square around the
   mark rounds into a ring that spins for as long as the two megabytes take —
