@@ -111,7 +111,22 @@ final _tab = TabSpec(
       id: 'scope',
       kind: ModuleKind.oscilloscope,
       rect: GridRect(column: 0, row: 13, columns: 13, rows: 3),
-      options: {'timeBase': '20ms'},
+      // Five seconds rather than twenty milliseconds, overlaid rather than in
+      // lanes. A triggered 20 ms window is the right default in the
+      // application, where the picture is live and a person is looking for a
+      // waveform's shape; on a page it is a still of one cycle and reads as an
+      // ornament. Five seconds rolls, so the still shows the programme's
+      // envelope over a phrase — which is the same forty-five seconds every
+      // other module on this canvas is reading. Overlay puts both channels
+      // around one centre line, which buys the trace the whole three rows
+      // instead of half of them.
+      // The zoom is 1.2 rather than 1: at full scale this track's envelope used
+      // about four fifths of the lane and left a band of empty panel above and
+      // below it. A fifth more fills the lane without the peaks reaching the
+      // edge — which is the line to hold, because what runs past a lane is cut
+      // off by it, and a trace clipped flat at the top reads as a mix that
+      // clipped rather than as a picture that was zoomed.
+      options: {'timeBase': '5s', 'stereo': 'overlay', 'zoom': 1.2},
     ),
     const ModuleSpec(
       id: 'alert',

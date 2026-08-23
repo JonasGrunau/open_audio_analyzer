@@ -9,6 +9,41 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### ✨ Added
+- A privacy policy, at
+  [open-audio-analyzer.com/privacy](https://open-audio-analyzer.com/privacy).
+  It states what the microphone, the camera, the local network and the disk are
+  used for, that nothing is collected or transmitted, and — the part worth
+  reading — that the remote display link has neither encryption nor
+  authentication, so publishing on a network you do not trust means anybody on
+  it can read your meters. App Store Connect requires the URL; the page is
+  written for a person rather than for that field.
+
+### ⚡ Changed
+- The iPad build no longer offers itself to iPhones. Its Xcode target had been
+  universal since the project was created, so a phone could install a
+  twenty-four-column canvas drawn for a tablet, and App Store Connect asked for
+  a set of iPhone screenshots of it. It is iPad-only now, which is what every
+  document already said it was.
+
+### 🚧 Internal
+- The front page's demo canvas draws its oscilloscope over five seconds,
+  overlaid on one centre line and zoomed to fill the lane. A triggered
+  twenty-millisecond window is the right default in the application, where the
+  picture moves; frozen into a still it read as one cycle of a sine and said
+  nothing about the programme.
+- The front page says less. The hero no longer recites the standards, the module
+  catalogue no longer explains that its pictures are photographs, and the
+  dynamics section states what Open Audio Analyzer reports rather than framing
+  it as a substitute for a figure another product computes.
+- `packaging/ios/screenshots.sh` renders the App Store screenshots, and
+  `packaging/ios/app-store.md` holds the listing text beside them. The pictures
+  are of the application metering real music rather than a test tone: a
+  simulator app binds the host's own loopback, so the fake DAW in
+  `plugin/host/` plays a track through the real plugin into the port the
+  application already listens on, and every reading in them was measured by the
+  engine.
+
 ## [0.10.1] — 2026-08-23
 
 ### ⚡ Changed

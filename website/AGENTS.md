@@ -41,6 +41,7 @@ and in issue threads nobody can edit.
 | `src/pages/docs.astro` | `/docs`: `docs/site/index.md` rendered, with the manual's contents underneath it. A landing page that is only a list of links makes the reader choose before telling them what they are choosing between. |
 | `src/pages/docs/[slug].astro` | Every documentation page but that one. `build.format: 'file'` and no trailing slash, so it writes `dist/docs/install.html` and the address is `/docs/install`. |
 | `src/pages/404.astro` | Three links and no search. |
+| `src/pages/privacy.astro` | `/privacy`: the privacy policy, rendered from `docs/site/privacy.md`. Outside the manual's manifest on purpose, and at the short address because App Store Connect holds this URL — see the file header. |
 | `src/scripts/facade.js` | The still in front of the live analyzer, and the swap to the real thing when a reader asks for it — prefetched on hover, an iframe rather than Flutter mounted into this document. Its header says why both. |
 | `src/scripts/toc.js` | Marking the section you are in, in the list on the right. An `IntersectionObserver`, not a scroll listener: on a document as long as the metrics reference, running on every frame is the whole cost of the feature. |
 | `src/styles/global.css` | The tokens: the application's palette and spacing scale, the three typefaces, and the two rules carried over from `oaa_ui` — every spatial value from the scale, every number monospaced with tabular figures. |

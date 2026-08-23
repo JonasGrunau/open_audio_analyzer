@@ -57,7 +57,8 @@ approximating.
 [Metrics](https://open-audio-analyzer.com/docs/metrics) ·
 [Wire protocol](https://open-audio-analyzer.com/docs/wire) ·
 [Changelog](https://open-audio-analyzer.com/docs/changelog) ·
-[Building](https://open-audio-analyzer.com/docs/building)
+[Building](https://open-audio-analyzer.com/docs/building) ·
+[Privacy](https://open-audio-analyzer.com/privacy)
 
 **📄 This README** —
 [✅ Status](#-status) ·

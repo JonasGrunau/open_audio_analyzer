@@ -9,10 +9,14 @@
  *
  * The pattern is a list rather than `docs/**\/*.md` on purpose: `docs/` also
  * holds `PLAN.md` and `AGENTS.md`, which are records of intent and instructions
- * to a machine, and neither is documentation. The list here matches the one in
- * `src/lib/docs.mjs`, which is the manifest the pages are built from; a source
- * that exists here and not there is simply not published, and one that exists
- * there and not on disk fails the build.
+ * to a machine, and neither is documentation. The list here is a superset of
+ * the one in `src/lib/docs.mjs`, which is the manual's manifest and its
+ * navigation order: a source that exists there and not on disk fails the
+ * build, and one that exists here and not there is published only if some page
+ * asks for it by name. Exactly one does — `src/pages/privacy.astro` renders
+ * `docs/site/privacy.md` at `/privacy`, because a privacy policy is not a
+ * chapter of the manual and its URL is typed into App Store Connect. Anything
+ * else loaded here and unclaimed is simply not published.
  */
 
 import { defineCollection } from 'astro:content';

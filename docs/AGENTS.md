@@ -5,7 +5,7 @@
 | `PLAN.md` | The phased plan, as approved. **A historical record**, written in the future tense before anything existed. Do not silently diverge from it: a divergence goes in its table of divergences, at the top. `README.md`'s Roadmap is the live status. |
 | `METRICS.md` | The definition of every published quantity, with its standard. |
 | `WIRE.md` | The remote-display and plugin protocol. **Normative** — three implementations, none written against another. |
-| `site/` | The pages of the documentation site that have no other home: the landing page, install, analysing files, building — and `keyboard.md`, which is **generated**. `METRICS.md`, `WIRE.md` and `CHANGELOG.md` are published from where they already live rather than copied in. See `tool/AGENTS.md`. |
+| `site/` | The pages of the documentation site that have no other home: the landing page, install, analysing files, building — and `keyboard.md`, which is **generated**. `privacy.md` is here too and is the one page not published under `/docs`: it is the privacy policy, it is served at `/privacy` because App Store Connect holds that URL, and it is rendered by `website/src/pages/privacy.astro` rather than by the manual's manifest. `METRICS.md`, `WIRE.md` and `CHANGELOG.md` are published from where they already live rather than copied in. See `tool/AGENTS.md`. |
 
 `METRICS.md` is not optional documentation. Open Audio Analyzer does not
 implement Decibel's proprietary `TrueDyn`, and instead publishes `DR-S` / `DR-I`

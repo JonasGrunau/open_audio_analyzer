@@ -44,9 +44,12 @@ if (!external && !existsSync(join(DIST, 'index.html'))) {
   process.exit(1);
 }
 
-/// Every page the site publishes. Derived from the same manifest the pages are
-/// built from, so a new document is checked without this list being edited.
-const paths = ['/', '/404', ...PAGES.map((page) => href(page.slug))];
+/// Every page the site publishes. The documentation is derived from the same
+/// manifest the pages are built from, so a new document is checked without this
+/// list being edited. `/privacy` is named because it is the one published page
+/// outside that manifest — see src/pages/privacy.astro — and it is the page
+/// most worth checking here, being almost entirely tables.
+const paths = ['/', '/404', '/privacy', ...PAGES.map((page) => href(page.slug))];
 
 const server = external ? null : await serve(DIST, PORT);
 const chrome = await browser({ port: 9402, window: '1200,1000' });

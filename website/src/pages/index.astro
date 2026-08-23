@@ -163,9 +163,7 @@ const PLATFORMS = [
     <div class="hero-lede">
       <p class="prose hero-deck">
         A free and open-source loudness and spectrum analyzer. Fourteen meter modules on a canvas
-        you arrange — on the desktop, inside your DAW, and on a tablet beside the desk — measuring
-        against <strong>ITU-R BS.1770-4</strong> and <strong>EBU R 128</strong>, held to the
-        reference cases on every push.
+        you arrange — on the desktop, inside your DAW, and on a tablet beside the desk.
       </p>
 
       <div class="cta">
@@ -237,12 +235,6 @@ const PLATFORMS = [
       module that also owned its border and title treatment is a module that would drift from the
       other thirteen. Independent tickers drift too — and two meters showing the same quantity that
       disagree inside one frame is a correctness bug, not a cosmetic one.
-    </p>
-
-    <p class="prose mod-intro mod-intro-2">
-      Every picture below is a photograph of the real module, reading the same forty-five seconds the
-      canvas above is. Nothing is drawn twice for the website and no reading is staged — the track
-      masters loud, so the meters that judge it against a streaming target say so.
     </p>
 
     <ul class="cat">
@@ -350,21 +342,18 @@ const PLATFORMS = [
     <div class="section-head">
       <div>
         <p class="label">Dynamics</p>
-        <h2 class="section-title">What it reports<br />instead of TrueDyn</h2>
+        <h2 class="section-title">What it reports<br />for dynamics</h2>
       </div>
     </div>
 
     <div class="hon-grid">
       <div class="stack-24">
         <p class="prose">
-          Decibel reports a dynamics figure called <em>TrueDyn</em>. It is proprietary and
-          undocumented, so any claim to match it would be a guess presented as a measurement.
-          <strong>Open Audio Analyzer does not implement it.</strong>
-        </p>
-        <p class="prose">
-          Instead it reports <code>DR-S</code> and <code>DR-I</code>, defined as
+          Open Audio Analyzer reports <code>DR-S</code> and <code>DR-I</code>, defined as
           <code>TruePeak − LUFS-S</code> and <code>TruePeakMax − LUFS-I</code>, published in the
           metrics document and reproducible from the definition by anybody who wants to check.
+        </p>
+        <p class="prose">
           <code>PSR</code> and <code>PLR</code> are the same two quantities under the names in wider
           use, and are offered as well — four names for two numbers, each computed once so the pair
           cannot drift, and printed once in a report rather than twice under different headings.
@@ -867,12 +856,7 @@ const PLATFORMS = [
   /* ---------- catalogue ---------- */
 
   .mod-intro {
-    margin-bottom: var(--s24);
-  }
-
-  .mod-intro-2 {
     margin-bottom: var(--s48);
-    color: var(--faint);
   }
 
   /* ---------- measurement ---------- */

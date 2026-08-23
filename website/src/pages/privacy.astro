@@ -1,0 +1,103 @@
+---
+/* /privacy — the privacy policy, and the App Store's mandatory policy URL.
+ *
+ * Rendered from `docs/site/privacy.md`, which is loaded by the same content
+ * collection as the manual: the page makes claims about what the application
+ * does with a microphone, a camera and a socket, and a claim like that has to
+ * live beside the code that has to keep it true. The collection's glob is
+ * `docs/site/*.md`, so the document is picked up with no entry anywhere — but
+ * it is deliberately **not** in the manifest in `src/lib/docs.mjs`. That
+ * manifest is the manual's table of contents and its navigation order, and a
+ * privacy policy is neither a chapter of the manual nor something to read
+ * between Keyboard and Metrics.
+ *
+ * At `/privacy` rather than `/docs/privacy` for the same reason, plus one
+ * practical one: this URL is typed into App Store Connect, quoted in store
+ * listings and pasted into review correspondence, so it wants to be the short
+ * conventional address that survives the manual being reorganised.
+ *
+ * One column, not three. The manual's rails are for a reader with a question
+ * who needs to get to a section; this is a document read from the top, once.
+ */
+import { getEntry, render } from 'astro:content';
+
+import Base from '../layouts/Base.astro';
+import '../styles/docs.css';
+import { sourceUrl } from '../lib/docs.mjs';
+
+const SOURCE = 'docs/site/privacy.md';
+
+/* The manual's pages fail the build through `documentFor`, which explains what
+   went wrong. This page is outside that manifest, so it needs its own — an
+   `undefined` here would otherwise reach `render` as a less legible crash. */
+const entry = await getEntry('docs', SOURCE);
+if (!entry) {
+  throw new Error(
+    `The privacy policy is rendered from ${SOURCE} and no such file was ` +
+      `loaded. Either it was renamed — in which case fix SOURCE in ` +
+      `src/pages/privacy.astro — or its path fell outside the patterns in ` +
+      `src/content.config.ts.`,
+  );
+}
+
+const { Content } = await render(entry);
+
+const description =
+  'Open Audio Analyzer collects nothing: no account, no analytics, no ' +
+  'telemetry, no third-party services. What the microphone, the camera and ' +
+  'the local network are used for, and what is stored on your device.';
+---
+
+<Base
+  title="Privacy — Open Audio Analyzer"
+  description={description}
+  path="/privacy"
+  slimFooter
+>
+  <div class="shell legal">
+    <article class="legal-main">
+      <div class="doc-head">
+        <p class="label">Legal</p>
+        <a class="doc-src" href={sourceUrl(SOURCE)} rel="noopener">{SOURCE} ↗</a>
+      </div>
+
+      <h1 class="doc-title">Privacy and data handling</h1>
+      <p class="doc-blurb">
+        What Open Audio Analyzer does with a microphone, a camera, a local network and your
+        disk — which in every case is as little as the feature allows, and in most cases
+        nothing at all.
+      </p>
+
+      <div class="md">
+        <Content />
+      </div>
+    </article>
+  </div>
+</Base>
+
+<style>
+  /* The manual's measure without the manual's rails. `.md p` is already capped
+     at 68ch; this holds the tables and the headings to the same column so a
+     three-column table does not run twice the width of the prose above it.
+
+     Centred, and that is the whole reason `margin-inline` is here: `.shell` is
+     1440 px, so a 46 rem block inside it with the default margin sits against
+     the left edge with 600-odd pixels of nothing beside it. Every other page
+     fills the shell — a documentation page holds its left with a 15 rem nav
+     rail — so this was the one page on the site that looked lopsided rather
+     than narrow. */
+  .legal {
+    padding-block: var(--s48) var(--s96);
+  }
+
+  .legal-main {
+    max-width: 46rem;
+    margin-inline: auto;
+  }
+
+  @media (max-width: 900px) {
+    .legal {
+      padding-block: var(--s32) var(--s64);
+    }
+  }
+</style>
