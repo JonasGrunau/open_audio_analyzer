@@ -334,7 +334,14 @@ class _AnalyzerDemoState extends State<AnalyzerDemo>
             );
           },
         ),
-        if (_audioReady && !(_playhead?.isPlaying ?? false))
+        // Not while capturing. The audio is still decoded — the oscilloscope
+        // and the phase scope are drawing from it — but a still that
+        // photographs this control is a picture of a button, and the still is
+        // the whole of what a phone is shown: the front page draws no control
+        // of its own there either, so the only play mark left on the screen
+        // would have been one inside a photograph. See the media query in
+        // `website/src/pages/index.astro`.
+        if (!_capturing && _audioReady && !(_playhead?.isPlaying ?? false))
           Positioned(
             right: Space.md,
             bottom: Space.md,

@@ -115,8 +115,7 @@ rerouting anything, so your audio keeps coming out of the speakers while it is
 being metered.
 
 This is a Core Audio process tap rather than a driver, which is why there is no
-installer, no password prompt and no reboot. Decibel ships a signed monitoring
-driver to do the same job; the tap did not exist when it was written.
+installer, no password prompt and no reboot.
 
 Three things worth knowing:
 

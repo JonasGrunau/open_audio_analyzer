@@ -7,12 +7,9 @@ scope, histogram
 offline file analysis and a companion display that mirrors a tab to a tablet
 over Wi-Fi.
 
-It is free software, and it is a free reimplementation of the ideas in
-[Decibel](https://process.audio/products/decibel) by process.audio, whose
-modular canvas is the best interaction model anybody has found for this problem.
-The measurement work, the architecture and the visual language are our own, and
-where Open Audio Analyzer cannot honestly match Decibel it says so rather than
-approximating.
+It is free software. The measurement work, the architecture and the visual
+language are its own, and where Open Audio Analyzer cannot honestly measure a
+quantity it says so — a dash rather than an approximation.
 
 [Install it](install.html) · [What every number means](metrics.html) ·
 [Source on GitHub](https://github.com/JonasGrunau/open_audio_analyzer)

@@ -271,14 +271,6 @@ a {
   text-overflow: ellipsis;
 }
 
-.module-bar .val {
-  font-family: var(--readout);
-  font-variant-numeric: tabular-nums;
-  font-size: 0.625rem;
-  color: var(--faint);
-  white-space: nowrap;
-}
-
 .module-body {
   flex: 1;
   min-height: 0;

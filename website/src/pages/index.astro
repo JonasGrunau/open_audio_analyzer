@@ -37,7 +37,7 @@ const MODULES = [
     'A Super Meter: three concentric arcs around a −14.1 LUFS readout.'],
   ['digital-meter', 'Digital Meter', 'Sample peak and RMS, per channel, up to 7.1.',
     'A Digital Meter: left and right bars with peak-hold lines held near the top of the scale.'],
-  ['vu-meter', 'VU Meter', 'A needle, on the movement the engine models.',
+  ['vu-meter', 'VU Meter', 'A needle, with the ballistics of the real thing.',
     'A VU Meter reading −7.0 VU: a needle under a banded scale that turns red above 0 VU, with the peak mark left standing near the top of it.'],
   ['alert-meter', 'Alert Meter', 'One measurement, watched, with the worst it has been latched.',
     'An Alert Meter in red, showing true peak at −0.2 dBTP with −0.2 latched as the worst so far.'],
@@ -61,64 +61,61 @@ const MODULES = [
 
 const METRICS = [
   [
-    'K-weighting',
-    'ITU-R BS.1770-4 stage-1 shelf plus stage-2 RLB, with the coefficients computed from the analog prototype <strong>at the actual sample rate</strong> — not from a hardcoded 48 kHz table.',
+    'Loudness',
+    'LUFS, weighted the way <strong>ITU-R BS.1770-4</strong> says — the curve that makes a meter agree with your ears about what is loud instead of counting energy: low end counts for less, presence for more. Worked out for whatever sample rate your material is at, not for 48 kHz and hoped.',
   ],
-  ['Gating', 'EBU R128: 400 ms blocks at 75% overlap, absolute gate −70 LUFS, relative gate −10 LU.'],
-  ['Momentary / Short-term', '400 ms and 3 s windows.'],
+  [
+    'Integrated',
+    'The whole programme as one number, gated to <strong>EBU R 128</strong>: passages far below the rest are left out of it, so the silence between phrases and the fade at the top do not drag the number down below what the track sounds like.',
+  ],
+  ['Momentary / Short-term', '400 milliseconds and 3 seconds. One is what a transient does to your loudness; the other is what a section does.'],
   [
     'LRA',
-    'Gated at −20 LU relative, 10th to 95th percentile, through a 0.01 LU-bin histogram that stores exact energy sums — O(1) per update, constant memory.',
+    'Loudness range: how far the loud parts of the programme sit above the quiet ones, measured across the gated short-term readings from the 10th to the 95th percentile. It is the number a broadcaster asks for and the one that says whether a master has been flattened.',
   ],
   [
     'True peak',
-    'BS.1770-4 Annex 2: 4× oversampling through the specified 48-tap polyphase FIR, at every sample rate.',
+    'The peak <em>between</em> samples as well as on them, found by oversampling four times as <strong>BS.1770-4</strong> requires. It is the number a delivery ceiling means, and it sits above the sample peak your DAW shows — by as much as a dB and a half on heavily limited material.',
   ],
   [
     'Spectrum',
-    'A 4096-point Hann window at a 1024-sample hop, zero-padded to a 16384-point transform and mapped onto 512 log-spaced bands with <strong>peak-per-bin</strong>, so narrow peaks survive. A full-scale sine reads 0.0 dBFS on a bin centre and within 0.3 dB off it.',
+    '512 bands, spaced the way you hear rather than the way an FFT arrives. Each band shows the <strong>loudest</strong> content inside it rather than the average, so a narrow resonance stands at its real height instead of being smoothed into the noise beside it.',
   ],
-  ['Correlation', 'Running Pearson over a sliding window.'],
+  ['Correlation', 'How alike the two channels are: +1 is mono, 0 is uncorrelated, −1 is one channel inverted against the other.'],
   [
     'Crest',
-    'Sample peak minus RMS over the same block — the block’s own values, not the held peak and the smoothed RMS the meters draw, whose difference drifts on its own. Exactly 3.0103 dB for a sine, 0 for DC.',
+    'Peak minus RMS: how much room the transients have above the body of the sound. A sine is 3.01 dB, a snare is a lot more, and a master that has been squeezed trends towards nothing.',
   ],
   [
     'Clip',
-    'Longest run of consecutive samples at or above 0.999 since the reset, per channel. Latched, so a clip that lasted three samples is still visible when you look back.',
+    'The longest run of samples sitting at full scale since you last reset, per channel — and it is latched, so a clip three samples long is still there when you come back to look for it.',
   ],
-];
-
-const TIERS = [
-  ['Capture', 'audio callback, realtime-safe', 'Copy input into a lock-free ring. No malloc, no locks, no syscalls.'],
-  ['Analysis', 'dedicated thread, high priority', 'Run the DSP graph. Publish results into a seqlock-protected snapshot.'],
-  ['Display', 'the UI thread', 'One FFI call per frame, then paint. The widget tree is never involved.'],
 ];
 
 const GAPS = [
   [
-    'No module offers the Elapsed or Timecode LUFS modes yet.',
-    'The protocol frame and the engine’s half are both built; what is left is the part you would see — a mode menu and a region editor. <strong>Continuous is what every module measures today</strong>, and it is the mode a producer with no playhead can honour anyway.',
+    'Loudness is measured continuously, and that is the only mode.',
+    'There is no Elapsed mode that runs from where you pressed play, and no Timecode mode that measures a region you mark out. <strong>Continuous is what every module shows today</strong> — and it is the mode you can honour without a playhead at all, which is what a delivery target asks for anyway.',
+  ],
+  [
+    'The plugin draws nothing, and there is no Pro Tools version.',
+    'It measures your DAW’s audio and sends it across; the app is what draws it, so the app has to be running beside your session. It ships as <strong>VST3 and Audio Unit</strong>, which between them reach every other DAW people master in — AAX needs Avid’s SDK and a registered developer account, and neither is something a free project can promise you.',
+  ],
+  [
+    'Metering your computer’s own output takes all of it.',
+    'There is no per-application selection on any platform — you get everything going to your speakers, so mute what you are not measuring. On macOS the first attempt asks permission, and <strong>a refusal is silent</strong>: the meters read digital black rather than saying no. If they sit at the floor with something obviously playing, look in Privacy &amp; Security.',
   ],
   [
     'Offline analysis does not read Ogg Vorbis, Opus, AAC or ALAC.',
-    'WAV, AIFF, RF64, Wave64, FLAC and MP3 cover what a master is delivered <em>as</em>, which is what a delivery check is for. No measurement is silently wrong in the meantime: an unsupported file is refused rather than half-read.',
+    'WAV, AIFF, RF64, Wave64, FLAC and MP3 cover what a master is delivered <em>as</em>, which is what a delivery check is for. The rest is what a master is distributed as after somebody else transcodes it. Nothing is quietly half-measured in the meantime: a file it cannot read is refused.',
   ],
   [
     'A file is measured whole, from the start.',
-    'There is no region selection and no seeking during analysis, because an integrated loudness taken over a file that was seeked through is a measurement of a programme nobody played.',
+    'There is no region selection and no seeking while a file is analysed, because an integrated loudness taken over a file somebody skipped through is a measurement of a programme nobody played.',
   ],
   [
-    'The remote display has no authentication and no encryption.',
-    'Anyone who can reach the port can read the measurements and the layout — not the audio, which never goes on the wire. That is why publishing is off until you switch it on, and why the link is one-directional. Do not switch it on at a venue whose Wi-Fi you do not control.',
-  ],
-  [
-    'Neither tablet’s discovery can be proved by a test.',
-    'An Android emulator sits behind NAT that does not carry the LAN’s multicast, an iOS simulator is exempt from the restriction the device enforces, and a test host is refused the local network for reasons that have nothing to do with the code. Both paths are checked by hand on hardware, and typing an address is supported everywhere and always will be.',
-  ],
-  [
-    'None of the five installers is signed in this repository.',
-    'Signing needs certificates that are not ours to commit, so a release built from a fork is unsigned and every packaging script says which of its three states it was in — because “signed” and “a user can double-click it” are not the same thing.',
+    'The tablet link has no password.',
+    'Anyone who can reach the port can read your meters and your layout — not your audio, which never goes on the wire, and nothing on the tablet can change anything on the desktop. Publishing is off at every launch on purpose and is switched on from the status bar, where you can see that it is on. <strong>Do not switch it on at a venue whose Wi-Fi you do not control.</strong>',
   ],
 ];
 
@@ -128,7 +125,7 @@ const PLATFORMS = [
   ['Linux', 'install.sh, no root', '.tar.gz', 'VST3'],
   ['Linux', 'One file, no root, GTK from the host', '.AppImage', '—'],
   ['Linux', 'Sandboxed, carries its own runtime', '.flatpak', '—'],
-  ['Any', 'The analyser. No Flutter runtime.', 'oaa CLI', '—'],
+  ['Any', 'The file analyser, for a terminal', 'oaa CLI', '—'],
 ];
 ---
 
@@ -205,7 +202,15 @@ const PLATFORMS = [
             <button class="facade-go" type="button" data-facade-go>
               <span class="facade-go-mark" aria-hidden="true" data-facade-mark>
                 <span class="facade-go-ring" />
-                <span class="facade-go-tri">▶</span>
+                {/* Drawn, not typed. U+25B6 BLACK RIGHT-POINTING TRIANGLE is on
+                    the emoji tables with a *text* default presentation, which a
+                    desktop honours and a phone does not: iOS and Android both
+                    resolve it out of the colour emoji font, so the hairline
+                    square came out holding a rounded, oversized emoji play
+                    button. A path has no font behind it to be substituted. */}
+                <svg class="facade-go-tri" viewBox="0 0 10 12" aria-hidden="true">
+                  <path d="M0 0 L10 6 L0 12 Z" />
+                </svg>
               </span>
               <span class="facade-go-text" data-facade-text>
                 <span data-facade-label>Load the live analyzer</span>
@@ -225,7 +230,15 @@ const PLATFORMS = [
          3.0 track, and that licence asks for credit wherever the audio is
          published — which a page that plays it is. The wording and the link are
          copied from test_audio/ATTRIBUTION.md, written by the tool that fetched
-         it, so there is one place this is stated from. -->
+         it, so there is one place this is stated from.
+
+         It is not drawn on a phone, where the control that loads the analyzer is
+         not drawn either: with nothing to press, the audio is never fetched and
+         never played, and what is left on the page is a photograph of meter
+         readings. Those are measurements of the track, not the track. The two go
+         together and must keep going together — a phone that can start the
+         analyzer is a phone that has to carry this line. See the media query in
+         the stylesheet. -->
     <p class="hero-credit">
       Measured from <em>Apathy And Resignation Are The Sources Of Our Misfortune</em> by
       <a class="link-quiet" href="https://citizensoftheempire.bandcamp.com/" rel="noopener">Citizens
@@ -244,11 +257,12 @@ const PLATFORMS = [
     </div>
 
     <p class="prose mod-intro">
-      Every module is one <code>ModuleFrame</code> plus a painter, reads the same
-      <code>MeterSource</code>, and repaints from the same clock. That is the whole reuse strategy: a
-      module that also owned its border and title treatment is a module that would drift from the
-      other thirteen. Independent tickers drift too — and two meters showing the same quantity that
-      disagree inside one frame is a correctness bug, not a cosmetic one.
+      Fourteen of them, and you choose which ones are on screen. Drag a meter onto the canvas, size
+      it, put it where you want it: loudness and a delivery verdict when you are finishing a master,
+      a spectrum and a phase scope while you mix, a VU and a waveform while you track. They are all
+      reading the same audio at the same instant, so two meters showing the same thing never
+      disagree with each other — and the arrangement you settle on is saved as a preset, for the
+      desktop and for the tablet beside it.
     </p>
 
     <ul class="cat">
@@ -278,7 +292,7 @@ const PLATFORMS = [
     <div class="section-head">
       <div>
         <p class="label">Measurement</p>
-        <h2 class="section-title">Every quantity, and how<br />it is defined</h2>
+        <h2 class="section-title">Every number, and what<br />it actually means</h2>
       </div>
     </div>
 
@@ -287,8 +301,8 @@ const PLATFORMS = [
       <table class="spec">
         <thead>
           <tr>
-            <th scope="col">Quantity</th>
-            <th scope="col">Definition</th>
+            <th scope="col">Reading</th>
+            <th scope="col">What it is</th>
           </tr>
         </thead>
         <tbody>
@@ -306,21 +320,20 @@ const PLATFORMS = [
 
       <aside class="gate module">
         <div class="module-bar">
-          <span class="name">Correctness gate</span>
-          <span class="val">every push</span>
+          <span class="name">Checked against the reference cases</span>
         </div>
         <div class="gate-body">
           <ul class="gate-list">
             <li>
-              <span class="gate-k">EBU Tech 3341</span>
+              <span class="gate-k">EBU Tech 3341 — loudness</span>
               <span class="gate-v sig">PASS</span>
             </li>
             <li>
-              <span class="gate-k">EBU Tech 3342</span>
+              <span class="gate-k">EBU Tech 3342 — loudness range</span>
               <span class="gate-v sig">PASS</span>
             </li>
             <li>
-              <span class="gate-k">Sine at 0 dBFS, bin centre</span>
+              <span class="gate-k">A full-scale tone reads</span>
               <span class="gate-v sig">0.0 dBFS</span>
             </li>
             <li>
@@ -328,23 +341,16 @@ const PLATFORMS = [
               <span class="gate-v sig">AGREE</span>
             </li>
             <li>
-              <span class="gate-k">1 call / 512 / 377-frame blocks</span>
-              <span class="gate-v sig">± 0.001 LU</span>
-            </li>
-            <li>
-              <span class="gate-k">Decoded vs. direct</span>
-              <span class="gate-v sig">BIT-EQUAL</span>
+              <span class="gate-k">The same track, live and from a file</span>
+              <span class="gate-v sig">IDENTICAL</span>
             </li>
           </ul>
-          <p class="gate-os">
-            <span class="num">linux</span> · <span class="num">macos</span> ·
-            <span class="num">windows</span>
-          </p>
           <p class="gate-note">
-            The signals are <strong>generated, not downloaded</strong> — every case is a sine at a
-            stated level, so the suite needs no fixtures, no network and no decoder, and each
-            expected value is derived from the standard in a comment rather than copied from
-            somebody’s output.
+            These run on all three desktop platforms before any change is accepted, and the full
+            official EBU and ITU vector sets are run by hand on top of them. <strong>A loudness
+            meter nobody has held against the reference cases is a number generator</strong> — the
+            EBU publishes them for exactly this, and a delivery decision is made from what comes
+            out.
           </p>
         </div>
       </aside>
@@ -356,86 +362,29 @@ const PLATFORMS = [
     <div class="section-head">
       <div>
         <p class="label">Dynamics</p>
-        <h2 class="section-title">What it reports<br />for dynamics</h2>
+        <h2 class="section-title">Dynamic range, and<br />which one it means</h2>
       </div>
     </div>
 
-    <div class="hon-grid">
+    <div class="dyn">
+      <p class="prose">
+        There is no standard that says what “dynamic range” is, so this says exactly which
+        subtraction it means. <code>DR-S</code> is the true peak against the short-term loudness:
+        how much room the loudest moment has over how loud that passage is. <code>DR-I</code> is the
+        same question about the whole track — the highest true peak against the integrated loudness.
+        Watch either one fall as you push a limiter and you are watching the squeeze happen.
+      </p>
       <div class="stack-24">
         <p class="prose">
-          Open Audio Analyzer reports <code>DR-S</code> and <code>DR-I</code>, defined as
-          <code>TruePeak − LUFS-S</code> and <code>TruePeakMax − LUFS-I</code>, published in the
-          metrics document and reproducible from the definition by anybody who wants to check.
-        </p>
-        <p class="prose">
-          <code>PSR</code> and <code>PLR</code> are the same two quantities under the names in wider
-          use, and are offered as well — four names for two numbers, each computed once so the pair
-          cannot drift, and printed once in a report rather than twice under different headings.
+          <code>PSR</code> and <code>PLR</code> are those same two numbers under the names you will
+          have met elsewhere, and both are shown — <strong>four names for two numbers</strong>, each
+          worked out once so they cannot end up disagreeing, and printed once in a report rather
+          than twice under different headings.
         </p>
         <p>
           <a class="link" href={`${DOCS}/metrics`}>Read the metrics document</a>
         </p>
       </div>
-
-      <figure class="dash module">
-        <div class="module-bar">
-          <span class="name">A quantity nobody measured</span>
-        </div>
-        <div class="dash-body">
-          <div class="dash-row"><span class="dash-fmt">report</span><span class="num dash-val">—</span></div>
-          <div class="dash-row"><span class="dash-fmt">json</span><span class="num dash-val">null</span></div>
-          <div class="dash-row"><span class="dash-fmt">csv</span><span class="num dash-val dash-empty">(empty)</span></div>
-          <div class="dash-row dash-never">
-            <span class="dash-fmt">never</span><span class="num dash-val over-c">0</span>
-          </div>
-        </div>
-        <figcaption class="dash-cap">
-          Zero is a legitimate reading for correlation, balance and several dB quantities. It cannot
-          double as “no data”.
-        </figcaption>
-      </figure>
-    </div>
-  </section>
-
-  <!-- ===================== architecture ===================== -->
-  <section class="section shell">
-    <div class="section-head">
-      <div>
-        <p class="label">Architecture</p>
-        <h2 class="section-title">Three tiers, and the<br />boundary between each</h2>
-      </div>
-    </div>
-
-    <blockquote class="rule">
-      Measurements never cross an isolate boundary, never allocate per frame, and never rebuild a
-      widget.
-    </blockquote>
-
-    <div class="tiers">
-      {
-        TIERS.map(([name, thread, job]) => (
-          <div class="tier">
-            <p class="label tier-name">{name}</p>
-            <p class="num tier-thread">{thread}</p>
-            <p class="tier-job">{job}</p>
-          </div>
-        ))
-      }
-    </div>
-
-    <div class="arch-notes">
-      <p class="prose">
-        Once per frame the clock makes a single leaf FFI call — an atomic load, a memcpy, and a
-        second atomic load, with no VM state transition. Then every painter reads views that were
-        <strong>built once at startup</strong> over native memory that never moves. A frame costs one
-        FFI call plus N paint calls, and allocates nothing.
-      </p>
-      <p class="prose">
-        The snapshot is a seqlock precisely because it is wait-free for the analysis thread:
-        <strong>the reader retries, never the writer.</strong> A mutex would let a descheduled UI
-        thread stall the thread that must never stall — and when that thread falls behind, the ring
-        overruns and signal is lost for good.
-      </p>
     </div>
   </section>
 
@@ -454,9 +403,9 @@ const PLATFORMS = [
         <p class="prose reach-p">
           A <strong>VST3</strong> and an <strong>Audio Unit</strong> that draw nothing. Insert one on
           a track, a bus or the master, and the desktop app meters what your DAW is playing —
-          through the same engine, on the same canvas, with the same painters as a live input. The
-          plugin measures and streams; the app displays. That split is not a compromise around a UI
-          toolkit, it is what stops there being two implementations of every meter drifting apart.
+          through the same engine and on the same canvas as a live input. The plugin measures and
+          sends it across; the app draws it. So what you read while mixing is not a second set of
+          meters built to look like the first — it is the first, watching your session.
         </p>
       </article>
 
@@ -466,20 +415,20 @@ const PLATFORMS = [
           Flip <strong>PUBLISH</strong> in the desktop’s status bar and a tablet mirrors the canvas
           over Wi-Fi. It finds the host by itself, or reads a pairing code off the desktop’s screen
           with its camera, or takes an address typed by hand — <strong>three routes, because the
-          first one is what a venue’s Wi-Fi blocks.</strong> A preset stores grid cells rather than
-          fractions of a window, so the same layout opens on a 32-inch monitor and an 11-inch
-          tablet with nobody writing responsive code.
+          first one is what a venue’s Wi-Fi blocks.</strong> A layout is stored as cells on a grid
+          rather than as fractions of a window, so the arrangement you built on a 32-inch monitor
+          opens on an 11-inch tablet still looking arranged on purpose.
         </p>
       </article>
 
       <article class="stack-16">
         <h3>On the command line</h3>
         <p class="prose reach-p">
-          <code>oaa</code> decodes a file and pushes the blocks through the <em>same</em> analysis a
-          capture device drives — there is no second DSP path, and a test asserts that an offline
-          reading and a live reading of the same audio are identical rather than merely close.
-          Nothing resamples or remixes: a converter in front of a measurement changes the
-          measurement.
+          <code>oaa</code> measures a file without opening anything — one track, or every file in an
+          album folder in one go — and prints a report you can read, or a CSV you can open in a
+          spreadsheet. It runs the <em>same</em> analysis the app runs on live audio, down to the
+          last decimal, and nothing is resampled or remixed on the way in: a converter in front of a
+          meter changes what the meter says.
         </p>
       </article>
     </div>
@@ -487,17 +436,12 @@ const PLATFORMS = [
     <div class="term module">
       <div class="module-bar">
         <span class="name">oaa — the command-line analyser</span>
-        <span class="val">0 pass · 2 missed target · 1 unreadable</span>
       </div>
-      <pre class="term-body"><code><span class="c">$</span> oaa master.wav                              <span class="cm"># human-readable report</span>
-<span class="c">$</span> oaa --target streaming-14 master.wav        <span class="cm"># …and a delivery verdict</span>
-<span class="c">$</span> oaa --format json --timeline master.wav     <span class="cm"># every measurement, for scripts</span>
-<span class="c">$</span> oaa --format csv -o loudness.csv master.wav  <span class="cm"># the loudness timeline</span>
-<span class="c">$</span> oaa --list-targets                          <span class="cm"># what you can measure against</span>
-
-<span class="cm"># fail a release build on a master that is 2 LU too loud,</span>
-<span class="cm"># instead of shipping it</span>
-<span class="c">$</span> oaa --target streaming-14 master.wav || exit 1</code></pre>
+      <pre class="term-body"><code><span class="c">$</span> oaa master.wav                              <span class="cm"># the whole report, readable</span>
+<span class="c">$</span> oaa --target streaming-14 master.wav        <span class="cm"># …and does it pass?</span>
+<span class="c">$</span> oaa --target streaming-14 album/*.wav       <span class="cm"># the whole album, one pass each</span>
+<span class="c">$</span> oaa --format csv -o loudness.csv master.wav  <span class="cm"># loudness over time, for a spreadsheet</span>
+<span class="c">$</span> oaa --list-targets                          <span class="cm"># what you can measure against</span></code></pre>
     </div>
   </section>
 
@@ -513,25 +457,29 @@ const PLATFORMS = [
     <div class="cfg">
       <div class="stack-24">
         <p class="prose">
-          Settings, presets, delivery targets and skins are plain JSON in a documented directory —
-          open them, edit them, copy them between machines, keep them in version control. A skin
-          names as many of thirteen semantic colour <em>roles</em> as it likes and inherits the rest,
-          so changing one colour is a three-line file. The roles are semantic rather than literal —
-          <code>over</code> is “the colour that means over a limit”, used for nothing else — which is
-          what lets a skin apply to a module written after it.
+          Everything you set up is yours to keep. Save an arrangement of meters as a preset and it
+          opens that way next time — the same modules in the same places, on a 32-inch monitor or on
+          the tablet beside it. Presets, delivery targets and colour schemes are small text files in
+          a folder you can open, so you can carry your setup to the studio machine, put it somewhere
+          the whole room reads it from, or send it to somebody who works the way you do.
         </p>
         <p class="prose">
-          There is an editor for them too. Every role gets a colour picker, the canvas repaints as
-          you drag — and so does any tablet mirroring the session — and each role shows its
-          contrast ratio against the surface it has to be read on, so a palette that puts a meter
-          track 1.1:1 against its own panel says so before you ship it. The two skins that come
-          with Open Audio Analyzer are fixed; copying one takes a press.
+          A <strong>delivery target</strong> is simply the numbers you have to hit: a loudness, how
+          far either side of it you are allowed to land, a true-peak ceiling, and a limit on how much
+          the loudness may move across the track. The streaming and broadcast ones come with the app.
+          If your label, your client or your own ears say something else, write your own — and if you
+          give it the same name as one that ships, <strong>yours replaces it everywhere</strong>: in
+          presets that already ask for it, and in the pass or fail the command-line analyser reports.
+          Delete your file and the original is back.
         </p>
         <p class="prose">
-          A delivery target whose <code>id</code> matches one that ships <strong>replaces it
-          everywhere</strong>, including in presets that already name it. So if you disagree with our
-          reading of a published spec, your number wins, and it reaches the CLI’s exit code and not
-          only the window. Delete the file and the original comes back.
+          Colour works the same way. Thirteen things on screen have a colour of their own — the
+          meter track, the readout, the colour that means <em>over the limit</em> — and a scheme
+          names as many of them as it likes and takes the rest as they were, so changing one colour
+          is a three-line file. There is a picker for each of them: the canvas repaints while you
+          drag, any tablet mirroring the session repaints with it, and each colour tells you how well
+          it reads against the panel behind it — so you find out that your meter track is nearly
+          invisible before you are on a dark stage looking for it.
         </p>
       </div>
 
@@ -562,8 +510,9 @@ const PLATFORMS = [
     </div>
 
     <p class="prose gaps-intro">
-      The list in the README is honest rather than short, and it is kept there rather than here so
-      it stays next to the code. Six of the twelve are below.
+      Six things you are likely to meet, said plainly rather than left for you to find. There are
+      twelve in all — the other six are in the README, and most of them only mean something to
+      somebody working on the code.
     </p>
 
     <ul class="gaps">
@@ -589,7 +538,7 @@ const PLATFORMS = [
     <div class="section-head">
       <div>
         <p class="label">Installing</p>
-        <h2 class="section-title">Artefacts per platform</h2>
+        <h2 class="section-title">What to download,<br />per platform</h2>
       </div>
     </div>
 
@@ -599,7 +548,7 @@ const PLATFORMS = [
         <thead>
           <tr>
             <th scope="col">Platform</th>
-            <th scope="col">Artefact</th>
+            <th scope="col">Download</th>
             <th scope="col">Plugin</th>
             <th scope="col">Note</th>
           </tr>
@@ -803,11 +752,13 @@ const PLATFORMS = [
   }
 
   .facade-go-tri {
-    color: var(--signal);
-    font-size: 0.875rem;
-    line-height: 1;
-    /* The triangle's own sidebearing makes it look off-centre in a box. */
-    padding-left: 0.15em;
+    width: 0.625rem;
+    height: 0.75rem;
+    fill: var(--signal);
+    /* A right-pointing triangle carries its weight left of the box that holds
+       it, so a centred box leaves it looking adrift. A margin and not a
+       transform: the transform belongs to the animation below. */
+    margin-left: 2px;
     /* Gone before the square is a circle. A play mark inside a spinner is a
        control offering to start something that has started. */
     transition:
@@ -958,6 +909,28 @@ const PLATFORMS = [
     }
   }
 
+  /* ---- on a phone the still is a photograph and nothing more ----
+
+     Eight dense meters scaled to a 390 px screen are not legible; the
+     application behind the control is two megabytes of compiled Flutter over
+     whatever connection a phone happens to have; and an iframe that takes touch
+     inside a document you are scrolling fights the scroll for every gesture. So
+     there is nothing to press here, and the credit under the picture goes with
+     the control — it is required of a page that *publishes* the programme, which
+     is what pressing that control makes this one. See the note in the markup.
+
+     Both orientations, which is what the second query is for: a phone on its
+     side is 844 px wide and 390 px tall, so width alone would hand it the
+     control its portrait screen was refused. The coarse pointer is what keeps a
+     merely short desktop window out. A tablet is above both and still gets the
+     real thing — it is a platform this application ships on. */
+  @media (max-width: 720px), (max-height: 480px) and (pointer: coarse) {
+    .facade-go,
+    .hero-credit {
+      display: none;
+    }
+  }
+
   /* Three across, not four. A meter is a dense picture and fourteen of them at
      a quarter of the page each is a contact sheet — at a third, the scale
      labels and the readouts inside them are legible without opening anything.
@@ -1094,120 +1067,13 @@ const PLATFORMS = [
     color: var(--muted);
   }
 
-  /* ---------- honesty ---------- */
+  /* ---------- dynamics ---------- */
 
-  .hon-grid {
-    display: grid;
-    grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
-    gap: var(--s48);
-    align-items: start;
-  }
-
-  .dash {
-    margin: 0;
-  }
-
-  .dash-body {
-    padding: var(--s8) var(--s16);
-  }
-
-  .dash-row {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: var(--s24);
-    padding: var(--s12) 0;
-    border-bottom: 1px solid var(--hair);
-  }
-
-  .dash-fmt {
-    font-family: var(--readout);
-    font-size: 0.6875rem;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: var(--faint);
-  }
-
-  .dash-val {
-    font-size: 1.5rem;
-    color: var(--text);
-  }
-
-  .dash-empty {
-    font-size: 0.8125rem;
-    color: var(--faint);
-  }
-
-  .dash-never {
-    border-bottom: 0;
-  }
-
-  .dash-never .dash-fmt {
-    color: var(--over);
-  }
-
-  .dash-never .dash-val {
-    text-decoration: line-through;
-    text-decoration-thickness: 1px;
-  }
-
-  .dash-cap {
-    padding: var(--s16);
-    border-top: 1px solid var(--hair);
-    font-family: var(--prose);
-    font-size: 0.875rem;
-    line-height: 1.55;
-    color: var(--faint);
-  }
-
-  /* ---------- architecture ---------- */
-
-  .rule {
-    margin: 0 0 var(--s48);
-    padding-left: var(--s24);
-    border-left: 2px solid var(--signal);
-    font-family: var(--display);
-    font-size: clamp(1.125rem, 1.9vw, 1.5rem);
-    font-weight: 500;
-    font-variation-settings: 'wdth' 98;
-    letter-spacing: -0.015em;
-    line-height: 1.35;
-    color: var(--text);
-    max-width: 48ch;
-  }
-
-  .tiers {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: var(--s16);
-    padding-bottom: var(--s48);
-  }
-
-  .tier {
-    border-top: 1px solid var(--hair-strong);
-    padding-top: var(--s16);
-  }
-
-  .tier-name {
-    color: var(--text);
-  }
-
-  .tier-thread {
-    font-size: 0.6875rem;
-    color: var(--signal);
-    margin-top: var(--s8);
-    letter-spacing: 0.02em;
-  }
-
-  .tier-job {
-    margin-top: var(--s12);
-    font-family: var(--prose);
-    font-size: 0.9375rem;
-    line-height: 1.55;
-    color: var(--muted);
-  }
-
-  .arch-notes {
+  /* Two columns of prose, and nothing else in the section. It held a readout
+     panel on the right until the panel was cut; one column capped at the
+     measure left half the section empty, which on a page where every other
+     section fills its width reads as a picture that failed to arrive. */
+  .dyn {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: var(--s48);
@@ -1341,9 +1207,8 @@ const PLATFORMS = [
     }
 
     .split,
-    .hon-grid,
     .cfg,
-    .arch-notes {
+    .dyn {
       grid-template-columns: minmax(0, 1fr);
       gap: var(--s32);
     }
@@ -1354,19 +1219,10 @@ const PLATFORMS = [
       grid-template-columns: minmax(0, 1fr);
       gap: var(--s32);
     }
-    .tiers {
-      grid-template-columns: minmax(0, 1fr);
-    }
     .gaps {
       grid-template-columns: minmax(0, 1fr);
       gap: var(--s32);
     }
-
-    /* Twelve columns: thirds and quarters both still exact. */
-    .b-sgram {
-      grid-column: span 6;
-    }
-    .b-dig,
   }
 
   @media (max-width: 720px) {

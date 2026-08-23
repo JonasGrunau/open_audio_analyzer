@@ -64,3 +64,10 @@ Without it the programme runs, and loops. With it the frames are stepped by a
 counter rather than by a clock, so the same picture comes out on a fast machine
 and a slow one, and `globalThis.oaaRenderReady` goes up when it is done — which
 is what `website/scripts/render-analyzer.mjs` waits for.
+
+It also takes the **play-the-audio button off the canvas**, and that is the one
+difference between the two modes that is not about time. The audio is still
+decoded — the oscilloscope and the phase scope draw from it — but a photograph of
+a control is not a control, and the still is the whole of what the front page
+shows a phone: no facade button there either, so the only play mark left on a
+phone's screen would have been one inside a picture.

@@ -11,6 +11,13 @@
  * renderer wants without imposing them on the whole site.
  */
 
+/* On a phone the control is `display: none` — the stylesheet's decision, and the
+ * comment on that media query says why. Nothing here tests for it: a hidden
+ * element cannot be hovered, focused, touched or clicked, so every listener
+ * below is simply never reached, and a phone turned on its side wide enough to
+ * be given the control back gets one that already works. A guard here would be
+ * a second breakpoint to keep in step with the first, and a dead button after a
+ * rotation. */
 const facade = document.querySelector('[data-facade]');
 const go = facade?.querySelector('[data-facade-go]');
 

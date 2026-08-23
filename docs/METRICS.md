@@ -43,7 +43,8 @@ section of the programme that sat at one level.
 
 Note that the *Histogram* module is a different picture of the same
 measurement: short-term loudness against time rather than against how often.
-The names are Decibel's and only one of them is a histogram.
+Only one of the two names is literally a histogram; both are the names these
+displays are known by, so both are kept.
 
 The Histogram **draws an average of its two bands** rather than each 100 ms
 column as measured, and says which in its own menu: `Smoothing` is Off (no
@@ -103,10 +104,11 @@ accurate — only more work, and not enough of it to notice.
 
 ## Dynamics
 
-Decibel reports a figure called *TrueDyn*. It is proprietary and undocumented,
-so any claim to reproduce it would be a guess presented as a measurement. Open
-Audio Analyzer does not implement it and does not approximate it. These are
-defined here instead, and anyone can check them.
+Analysers in this class often report one proprietary "dynamics" figure, defined
+nowhere anybody outside can read it. Any claim to reproduce such a number would
+be a guess presented as a measurement, so Open Audio Analyzer implements none of
+them and approximates none of them. These are defined here instead, and anyone
+can check them.
 
 | Metric | Unit | Definition | Availability |
 |---|---|---|---|

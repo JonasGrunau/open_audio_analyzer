@@ -181,10 +181,11 @@
   font-size: 0.75rem;
 }
 
-/* Set by scripts/toc.js, which watches the headings rather than the scroll
-   position — a heading is "current" from the moment it passes the top of the
-   window until the next one does. */
-.doc-toc-a[data-current] {
+/* Set by scripts/toc.js: a heading is current from the moment it passes under
+   the sticky bar until the next one does. `aria-current` rather than a data
+   attribute of our own, because that is what the attribute means — and one
+   attribute doing both jobs cannot drift from the other half of itself. */
+.doc-toc-a[aria-current] {
   color: var(--signal);
 }
 
@@ -298,6 +299,12 @@
   position: absolute;
   left: -1.25ch;
   top: 0;
+  /* An absolutely positioned box hangs off its parent's *padding* edge, and an
+     h2 here carries a rule and s24 of padding above its text — so `top: 0`
+     alone put the mark in that gap, a line above the words it belongs to.
+     Inheriting the padding pushes the glyph down onto the heading's first line
+     and keeps doing it if that padding ever changes. */
+  padding-top: inherit;
   width: 1.25ch;
   font-family: var(--readout);
   font-weight: 400;
@@ -384,14 +391,30 @@
   color: var(--text);
 }
 
+/* The first column of one of these tables is a name — a metric, a wire field, a
+   file — and an auto-laid-out table sizes a column from how narrow its contents
+   will admit they can get. A name that admits it can wrap at its own space gets
+   a column one word wide, and the definition beside it, which is a sentence
+   with many spaces, takes everything that is left: `Spectrum peak` was set over
+   two lines with a third of the row empty next to it. A name does not wrap. The
+   sentences take the room that frees, which is what they are for. */
+.md td:first-child > code {
+  white-space: nowrap;
+}
+
 .md th:last-child,
 .md td:last-child {
   padding-right: 0;
 }
 
-/* Code. A listing, in the face the application draws every number in. */
+/* Code. A listing, in the face the application draws every number in.
+
+   The space above it is set here rather than left to the flow rule, because
+   `.md pre` outranks `.md > * + *`: zeroing the browser's own block margins
+   also took away the space every other block in the document gets, and a
+   listing stood flush against the sentence introducing it. */
 .md pre {
-  margin: 0;
+  margin: var(--s24) 0 0;
   padding: var(--s16);
   border: 1px solid var(--hair);
   overflow-x: auto;
@@ -409,10 +432,21 @@
 /* Inline code is a chip in running text. The site's rule is `nowrap`, which is
    right for an identifier and wrong for `/Library/Audio/Plug-Ins/VST3` on a
    phone — a manual is full of paths, and one that pushes the page sideways is
-   worse than one that breaks a path over two lines. */
+   worse than one that breaks a path over two lines.
+
+   `break-word` and not `anywhere`, which is the same rule with one extra
+   consequence: `anywhere` also lets the break points it introduces shrink the
+   element's min-content width, down to a single character. Every metric table
+   on the Metrics page is auto-laid-out from exactly that measurement, so the
+   Metric column — nothing but chips — was handed a character and a half and
+   spent it hyphen-lessly breaking `Correlation` and `Spectrum` in half, while
+   the Definition column, which is prose and wraps at spaces, took the room.
+   `break-word` still breaks a path that would otherwise overflow; it just does
+   not offer to be one character wide when something asks how narrow it can
+   be. */
 .md :not(pre) > code {
   white-space: pre-wrap;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 
 /* A quotation here is always an aside — a caveat, a note on a standard. */
@@ -439,9 +473,12 @@
   border-bottom-color: var(--signal);
 }
 
-/* The anchor beside a heading is not prose and takes none of this. */
+/* The anchor beside a heading is not prose and takes none of this — including
+   the inherited colour, which outranked the accent the mark declares for itself
+   and printed a `#` in the heading's own white. */
 .md a.h-anchor {
   border-bottom: 0;
+  color: var(--signal);
 }
 
 .md img {

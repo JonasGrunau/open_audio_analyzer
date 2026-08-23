@@ -37,13 +37,13 @@ and in issue threads nobody can edit.
 | `src/lib/app.mjs` | `REPO`, `RELEASES` and `VERSION`. The version is **read from the application's `pubspec.yaml` at build time**: typed here, it was three literals and it was a release behind within the hour after a tag. |
 | `src/layouts/Base.astro` | The shell every page is built from: head, JSON-LD, header, footer. The one place the canonical host is written. |
 | `src/layouts/Docs.astro` | One documentation page: the contents, the document, its sections. What is not ordinary about it is the readout above the title, which names the file in the repository the page was rendered from and links to it — the reader who has just found the mistake can see where the fix goes. |
-| `src/pages/index.astro` | The front page. The analyzer, the module catalogue, the architecture, the platform table and the honest gaps. Also `PLATFORMS` — see the rules below. |
+| `src/pages/index.astro` | The front page. The analyzer, the module catalogue, the measurement table, the platform table and the honest gaps. Also `METRICS`, `GAPS` and `PLATFORMS` — see the rules below. **Every word of it is addressed to somebody who makes records**, which is the rule the whole page is now held to: the three-tier architecture section is gone, the measurement table says what each reading means rather than how it is computed, and `GAPS` carries the six a musician will actually meet rather than the six that are most complete. |
 | `src/pages/docs.astro` | `/docs`: `docs/site/index.md` rendered, with the manual's contents underneath it. A landing page that is only a list of links makes the reader choose before telling them what they are choosing between. |
 | `src/pages/docs/[slug].astro` | Every documentation page but that one. `build.format: 'file'` and no trailing slash, so it writes `dist/docs/install.html` and the address is `/docs/install`. |
 | `src/pages/404.astro` | Three links and no search. |
 | `src/pages/privacy.astro` | `/privacy`: the privacy policy, rendered from `docs/site/privacy.md`. Outside the manual's manifest on purpose, and at the short address because App Store Connect holds this URL — see the file header. |
-| `src/scripts/facade.js` | The still in front of the live analyzer, and the swap to the real thing when a reader asks for it — prefetched on hover, an iframe rather than Flutter mounted into this document. Its header says why both. It also measures the two travel distances the press animates over, and writes them onto the elements as `--dx` / `--dy` for the keyframes in `index.astro` to read; the header says why they are measured off `offsetLeft` and not off a bounding box. |
-| `src/scripts/toc.js` | Marking the section you are in, in the list on the right. An `IntersectionObserver`, not a scroll listener: on a document as long as the metrics reference, running on every frame is the whole cost of the feature. |
+| `src/scripts/facade.js` | The still in front of the live analyzer, and the swap to the real thing when a reader asks for it — prefetched on hover, an iframe rather than Flutter mounted into this document. Its header says why both. It also measures the two travel distances the press animates over, and writes them onto the elements as `--dx` / `--dy` for the keyframes in `index.astro` to read; the header says why they are measured off `offsetLeft` and not off a bounding box. **On a phone none of it runs**, because the control is `display: none` there and a hidden element is never hovered, focused or pressed — the stylesheet is the only place that breakpoint is written, and the file's header says why there is no second copy of it here. |
+| `src/scripts/toc.js` | Marking the section you are in, in the list on the right. A `scroll` listener coalesced into one frame, and **not** an `IntersectionObserver` — the rule the list wants is "the last heading to have passed under the bar", and writing that as a band gives the observer a root rectangle of negative height, and nothing ever intersects one of those — so the callback fires once and never again. Its header has the whole account. |
 | `src/styles/global.css` | The tokens: the application's palette and spacing scale, the three typefaces, and the two rules carried over from `oaa_ui` — every spatial value from the scale, every number monospaced with tabular figures. |
 | `src/styles/docs.css` | The manual, set as a manual: body text at full contrast rather than muted, a measure, and the three-column shape. Global rather than scoped because Astro scopes a component's CSS by stamping the elements it compiled, and it did not compile these — they are Markdown rendered at build time. |
 | `src/data/analyzer-still.json` | The still's pixel size, written beside the picture by `npm run analyzer`, so the facade is sized from the image that exists rather than from a number typed twice. |
@@ -128,3 +128,16 @@ either renderer produces anything.
   depth here is background steps and hairlines only. The second is enforced the
   way `oaa_ui` enforces it, because a site that drifts from its subject one raw
   number at a time stops looking like the same object.
+
+- **The front page is written for a musician, not for a contributor.** It is the
+  page somebody arrives on, and it spent most of its life explaining the
+  architecture to them: three tiers and their thread affinities, `ModuleFrame`
+  plus a painter, a seqlock, filter topologies and window lengths, what a
+  continuous-integration run asserts and in which units. All of that is true and
+  all of it belongs in `README.md`, `docs/METRICS.md` and the `AGENTS.md` files,
+  where the reader has asked for it. Here the test is whether a mastering
+  engineer would care: **what a number means, what the app will and will not do,
+  what to download**. Standards keep their names — `BS.1770-4` and `R 128` are
+  what a delivery spec cites, so they are credentials rather than jargon — and
+  the honest gaps stay honest, but they are the gaps somebody will *meet*. The
+  full list is one link away and is not the front page's job.

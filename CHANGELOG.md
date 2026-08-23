@@ -58,6 +58,64 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   catalogue no longer explains that its pictures are photographs, and the
   dynamics section states what Open Audio Analyzer reports rather than framing
   it as a substitute for a figure another product computes.
+- The website no longer names the commercial analyser it set out from. The
+  footer, the manual's opening page, the macOS system-audio section of the
+  install page and the Dynamics section of the metrics reference each explained
+  Open Audio Analyzer by comparison; each now states what it does on its own
+  terms, and the one claim that mattered — that no proprietary single-figure
+  dynamics number is reproduced or approximated — is made without naming a
+  product. The footer says what the canvas is *for* while it is at it: a preset
+  per way of working, one for tracking, one for mixing, one for the last hour
+  before a master goes out. Released sections of this changelog still name the
+  product and are left as written.
+- On a phone the front page's canvas is a photograph and nothing else. The
+  control that loads the live analyzer is not drawn there, and neither is the
+  line under the picture: eight dense meters scaled to a 390 px screen are not
+  legible, the compiled application behind that control is two megabytes over
+  whatever connection a phone has, and an iframe that takes touch inside a
+  document you are scrolling fights the scroll for every gesture. The two go
+  together — the credit is required of a page that publishes the programme, and
+  with nothing to press the audio is never fetched. A tablet is above the
+  breakpoint and still gets the real thing.
+- The analyzer still is re-rendered without the demo's own play-the-audio
+  button in the corner of it. `?seconds=` — the query string that freezes the
+  demo for a screenshot — now takes that button off the canvas as well; the
+  audio is still decoded, because the oscilloscope and the phase scope draw from
+  it. It matters because of the line above: with no facade control on a phone,
+  the button inside the photograph was the only play mark left on that screen,
+  and it was a picture of one.
+- The play mark on that control is a drawn path rather than a typed character.
+  `▶` is on the emoji tables with a text default presentation, which a desktop
+  honours and a phone does not: iOS and Android both resolved it out of the
+  colour emoji font, so the hairline square came out holding an oversized emoji
+  play button.
+- The front page is written for somebody making a record rather than for
+  somebody reading the source. The architecture section is gone, and so is the
+  readout of a quantity nobody measured; the measurement table says what each
+  reading means and which published standard it follows instead of how the
+  filters and windows are built; the modules, the configuration and the dynamics
+  sections are in a musician's terms; the correctness panel says that the meters
+  are held against the EBU's own reference cases rather than listing what a
+  continuous-integration run asserts and in what units; and **Known gaps carries
+  the six a musician will actually meet** — no Pro Tools plugin, metering the
+  system's output takes all of it, the plugin needs the app running beside it —
+  in place of two that only meant something to a contributor, one of which had
+  also been wrong since releases started being signed. All of it is still stated
+  in full in `README.md` and `docs/METRICS.md`, which is where a reader has asked
+  for it.
+- The documentation pages mark the section you are reading again. The list on
+  the right was driven by an `IntersectionObserver` watching a band of negative
+  height — nothing intersects one of those, so the callback ran once as the page
+  loaded and never again, and every page marked its first heading and held that
+  mark to the end. It reads the scroll position directly now, once per frame.
+- Four things about how the documentation is set. A code listing has space above
+  it again: the rule removing the browser's own block margins outranked the one
+  that spaces every other block, so a listing stood flush against the sentence
+  introducing it. The `#` beside a heading sits in front of the words rather
+  than a line above them, and is drawn in the accent it declares rather than in
+  the heading's own white. And the first column of a metric table fits its
+  names — it had been sized from a width that let `Correlation` break in half
+  while the sentence beside it took the room.
 - `packaging/ios/screenshots.sh` renders the App Store screenshots, and
   `packaging/ios/app-store.md` holds the listing text beside them. The pictures
   are of the application metering real music rather than a test tone: a
