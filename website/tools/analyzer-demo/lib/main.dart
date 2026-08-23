@@ -2,7 +2,7 @@
 
 /// A canvas of the application's real meter modules, running live in a browser.
 ///
-/// What the website embeds behind "Open the live analyzer". Every module here is
+/// What the website embeds behind "Load the live analyzer". Every module here is
 /// the real one from `package:oaa` — the same `ModuleHost`, the same
 /// `ModuleFrame`, the same painters, laid out on the same `GridGeometry` and
 /// repainting from one `MeterClock`, exactly as the desktop canvas and the

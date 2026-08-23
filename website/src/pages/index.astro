@@ -208,7 +208,7 @@ const PLATFORMS = [
                 <span class="facade-go-tri">▶</span>
               </span>
               <span class="facade-go-text" data-facade-text>
-                <span data-facade-label>Open the live analyzer</span>
+                <span data-facade-label>Load the live analyzer</span>
                 <span class="facade-go-sub">Real meters, running in your browser</span>
               </span>
             </button>
@@ -788,13 +788,18 @@ const PLATFORMS = [
     inset: 0;
     border: 1px solid var(--signal);
     border-radius: 0;
-    /* The fill arrives with the spinner and is what the label disappears
-       behind: a hairline outline hides nothing. */
+    /* The fill is the surface the label goes behind: a hairline outline hides
+       nothing, and the last few pixels of a letter are under the disc before
+       the cut reaches them. */
     background: transparent;
+    /* All three land together at 200 ms, which is where the spin picks up. The
+       radius is not on an ease-out: a curve that is ninety per cent round in a
+       fifth of the time makes a shape that is visibly a circle long before it
+       is allowed to turn, which is the wait this animation exists to deny. */
     transition:
-      border-radius 520ms cubic-bezier(0.22, 1, 0.36, 1),
-      background-color 320ms linear,
-      border-color 260ms linear 300ms;
+      border-radius 200ms cubic-bezier(0.4, 0, 0.2, 1),
+      background-color 200ms linear,
+      border-color 140ms linear 60ms;
   }
 
   .facade-go-tri {
@@ -803,9 +808,11 @@ const PLATFORMS = [
     line-height: 1;
     /* The triangle's own sidebearing makes it look off-centre in a box. */
     padding-left: 0.15em;
+    /* Gone before the square is a circle. A play mark inside a spinner is a
+       control offering to start something that has started. */
     transition:
-      opacity 200ms linear 240ms,
-      transform 300ms cubic-bezier(0.4, 0, 1, 1) 240ms;
+      opacity 120ms linear,
+      transform 200ms cubic-bezier(0.4, 0, 1, 1);
   }
 
   .facade-go-text {
@@ -825,12 +832,14 @@ const PLATFORMS = [
 
   /* ---- pressed: the two halves converge and the mark becomes a spinner ----
 
-     Both halves aim at the middle of the control, along whichever axis they sit
-     on — which is what makes the same three rules work in the column layout
-     below, where the label is under the mark rather than beside it. The
-     distances are pixels measured at the press and written onto the elements as
-     `--dx` / `--dy`; see `src/scripts/facade.js` for why they are measured from
-     `offsetLeft` rather than from a bounding box. */
+     The mark aims at the middle of the control; the label aims at the mark, and
+     goes behind it. Along whichever axis the two sit on — which is what makes
+     the same three rules carry the column layout below, where the label is under
+     the mark rather than beside it. The distances are pixels measured at the
+     press and written onto the elements as `--dx` / `--dy`, and the cut that
+     hides the label as `--c*` / `--s*`; see `src/scripts/facade.js` for what
+     each one is and why they are measured from `offsetLeft` rather than from a
+     bounding box. */
   .facade-go.is-loading .facade-go-mark {
     animation: facade-converge 640ms both;
   }
@@ -846,14 +855,21 @@ const PLATFORMS = [
 
   .facade-go.is-loading .facade-go-ring {
     border-radius: 50%;
-    background: color-mix(in srgb, var(--ink) 72%, transparent);
+    /* Near enough to solid. The cut that hides the label sits on the circle's
+       outline where the outline crosses the label's corner, so the middle rows
+       of a letter spend nine pixels *under* the disc before they reach it — at
+       72 % they went through it as a ghost, which is exactly the overlay this
+       stopped being. */
+    background: color-mix(in srgb, var(--ink) 94%, transparent);
     /* Two sides of four is half a circle: the arc that reads as motion, over a
        track faint enough to still read as the box it came from. */
     border-color: var(--signal) var(--signal) color-mix(in srgb, var(--signal) 14%, transparent)
       color-mix(in srgb, var(--signal) 14%, transparent);
-    /* Delayed past the travel: a ring rotating while it is still on its way
-       across the picture reads as a wobble rather than as a wait. */
-    animation: facade-spin 900ms linear 600ms infinite;
+    /* Delayed by exactly as long as the shape takes, and not a frame longer. A
+       spinner that has finished becoming a spinner and is waiting to reach the
+       middle of the picture before it turns is a stall in the one place the
+       animation is there to say the opposite; it turns on its way across. */
+    animation: facade-spin 900ms linear 200ms infinite;
   }
 
   /* Loaded. The whole control goes, spinner and scrim together, over the same
@@ -883,31 +899,41 @@ const PLATFORMS = [
     }
   }
 
+  /* The label does not fade and does not shrink. It slides into the disc and is
+     cut off at the disc's edge, which is what "behind" means: the same three
+     stops as the converge above, so that the cut — an inset that eats the label
+     from the side it is travelling towards — stays on an edge that is itself
+     moving. `--c*` is where that cut starts inside the label, negative for as
+     long as the disc has not reached it, which is what the `max()` is for; `--s*`
+     is how far it sweeps, and by the last stop it has swept the whole label. */
   @keyframes facade-swallow {
     0% {
-      transform: translate(0, 0) scale(1);
-      opacity: 1;
+      transform: translate(0, 0);
+      clip-path: inset(max(0px, var(--ct, 0px)) 0 0 max(0px, var(--cl, 0px)));
       animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
     }
     20% {
-      transform: translate(calc(var(--dx, 0px) * -0.07), calc(var(--dy, 0px) * -0.07)) scale(1);
-      opacity: 1;
+      transform: translate(calc(var(--dx, 0px) * -0.07), calc(var(--dy, 0px) * -0.07));
+      clip-path: inset(
+        max(0px, calc(var(--ct, 0px) + var(--st, 0px) * -0.07))
+          max(0px, calc(var(--sr, 0px) * -0.07)) 0
+          max(0px, calc(var(--cl, 0px) + var(--sl, 0px) * -0.07))
+      );
       animation-timing-function: cubic-bezier(0.4, 0, 0.12, 1);
     }
-    /* The label is five times the width of the disc it is heading for, so the
-       disc alone can never cover it: it shrinks into the space the disc
-       occupies and fades on the way. Held at full strength until it is properly
-       moving, or it reads as a label that vanished rather than one that went
-       somewhere. */
-    32% {
+    /* Two frames of opacity at the very end, where the label is already inside
+       the disc and cannot be seen. It is not part of the effect — it is what
+       keeps a browser that could not compute the cut from leaving the label
+       lying across the picture for the whole of the wait. */
+    98% {
       opacity: 1;
-      animation-timing-function: linear;
-    }
-    82% {
-      opacity: 0;
     }
     100% {
-      transform: translate(var(--dx, 0px), var(--dy, 0px)) scale(0.58);
+      transform: translate(var(--dx, 0px), var(--dy, 0px));
+      clip-path: inset(
+        max(0px, calc(var(--ct, 0px) + var(--st, 0px))) max(0px, var(--sr, 0px)) 0
+          max(0px, calc(var(--cl, 0px) + var(--sl, 0px)))
+      );
       opacity: 0;
     }
   }
