@@ -196,13 +196,27 @@ const PLATFORMS = [
       />
       {
         hasDemo && (
-          <button class="facade-go" type="button" data-facade-go>
-            <span class="facade-go-mark" aria-hidden="true">▶</span>
-            <span class="facade-go-text">
-              Open the live analyzer
-              <span class="facade-go-sub">Real meters, running in your browser</span>
-            </span>
-          </button>
+          <>
+            {/* Three elements where one glyph would do, because each carries a
+                transform of its own once the control is pressed: the mark
+                travels to the middle of the picture, the ring inside it turns
+                into a spinner and rotates, and the triangle fades out from
+                under both. One element can only carry one transform. */}
+            <button class="facade-go" type="button" data-facade-go>
+              <span class="facade-go-mark" aria-hidden="true" data-facade-mark>
+                <span class="facade-go-ring" />
+                <span class="facade-go-tri">▶</span>
+              </span>
+              <span class="facade-go-text" data-facade-text>
+                <span data-facade-label>Open the live analyzer</span>
+                <span class="facade-go-sub">Real meters, running in your browser</span>
+              </span>
+            </button>
+            {/* The spinner says nothing to a screen reader, and the label it
+                replaces is on its way off the picture. This is what announces
+                the wait, and the end of it. */}
+            <p class="visually-hidden" role="status" data-facade-status />
+          </>
         )
       }
     </figure>
@@ -739,25 +753,59 @@ const PLATFORMS = [
     font-family: var(--display);
     font-size: 0.9375rem;
     cursor: pointer;
-    transition: background 120ms linear;
+    transition:
+      background 120ms linear,
+      opacity 320ms ease;
   }
 
-  .facade-go:hover,
-  .facade-go:focus-visible {
+  /* `:hover` still matches a disabled button, and the control disables itself
+     the moment it is pressed — so the resting brightening has to be gated, or
+     the panel changes tone under a pointer that is only resting on a spinner. */
+  .facade-go:not(:disabled):hover,
+  .facade-go:not(:disabled):focus-visible {
     background: color-mix(in srgb, var(--ink) 22%, transparent);
   }
 
+  .facade-go:disabled {
+    cursor: default;
+  }
+
+  /* The mark holds the position and travels; the ring holds the shape and
+     spins; the triangle is what goes. Stacked above the label so that the
+     label passes behind it rather than through it. */
   .facade-go-mark {
+    position: relative;
+    z-index: 1;
     display: grid;
     place-items: center;
     width: 2.75rem;
     height: 2.75rem;
     flex: none;
+  }
+
+  .facade-go-ring {
+    position: absolute;
+    inset: 0;
     border: 1px solid var(--signal);
+    border-radius: 0;
+    /* The fill arrives with the spinner and is what the label disappears
+       behind: a hairline outline hides nothing. */
+    background: transparent;
+    transition:
+      border-radius 520ms cubic-bezier(0.22, 1, 0.36, 1),
+      background-color 320ms linear,
+      border-color 260ms linear 300ms;
+  }
+
+  .facade-go-tri {
     color: var(--signal);
     font-size: 0.875rem;
+    line-height: 1;
     /* The triangle's own sidebearing makes it look off-centre in a box. */
     padding-left: 0.15em;
+    transition:
+      opacity 200ms linear 240ms,
+      transform 300ms cubic-bezier(0.4, 0, 1, 1) 240ms;
   }
 
   .facade-go-text {
@@ -773,6 +821,101 @@ const PLATFORMS = [
     font-size: 0.75rem;
     color: var(--muted);
     letter-spacing: 0;
+  }
+
+  /* ---- pressed: the two halves converge and the mark becomes a spinner ----
+
+     Both halves aim at the middle of the control, along whichever axis they sit
+     on — which is what makes the same three rules work in the column layout
+     below, where the label is under the mark rather than beside it. The
+     distances are pixels measured at the press and written onto the elements as
+     `--dx` / `--dy`; see `src/scripts/facade.js` for why they are measured from
+     `offsetLeft` rather than from a bounding box. */
+  .facade-go.is-loading .facade-go-mark {
+    animation: facade-converge 640ms both;
+  }
+
+  .facade-go.is-loading .facade-go-text {
+    animation: facade-swallow 640ms both;
+  }
+
+  .facade-go.is-loading .facade-go-tri {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+
+  .facade-go.is-loading .facade-go-ring {
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--ink) 72%, transparent);
+    /* Two sides of four is half a circle: the arc that reads as motion, over a
+       track faint enough to still read as the box it came from. */
+    border-color: var(--signal) var(--signal) color-mix(in srgb, var(--signal) 14%, transparent)
+      color-mix(in srgb, var(--signal) 14%, transparent);
+    /* Delayed past the travel: a ring rotating while it is still on its way
+       across the picture reads as a wobble rather than as a wait. */
+    animation: facade-spin 900ms linear 600ms infinite;
+  }
+
+  /* Loaded. The whole control goes, spinner and scrim together, over the same
+     320 ms the frame underneath takes to arrive. */
+  .facade-go.is-done {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  @keyframes facade-converge {
+    0% {
+      transform: translate(0, 0);
+      animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+    }
+    /* A short pull the other way first. It costs four per cent of the distance
+       and is the difference between a thing that slides and a thing that goes. */
+    20% {
+      transform: translate(calc(var(--dx, 0px) * -0.07), calc(var(--dy, 0px) * -0.07));
+      /* Not an ease-out. A curve that only decelerates puts nine tenths of the
+         distance into the first third of the time and then coasts, which reads
+         as a snap followed by nothing; this one takes the weight up and sets it
+         down. */
+      animation-timing-function: cubic-bezier(0.4, 0, 0.12, 1);
+    }
+    100% {
+      transform: translate(var(--dx, 0px), var(--dy, 0px));
+    }
+  }
+
+  @keyframes facade-swallow {
+    0% {
+      transform: translate(0, 0) scale(1);
+      opacity: 1;
+      animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+    }
+    20% {
+      transform: translate(calc(var(--dx, 0px) * -0.07), calc(var(--dy, 0px) * -0.07)) scale(1);
+      opacity: 1;
+      animation-timing-function: cubic-bezier(0.4, 0, 0.12, 1);
+    }
+    /* The label is five times the width of the disc it is heading for, so the
+       disc alone can never cover it: it shrinks into the space the disc
+       occupies and fades on the way. Held at full strength until it is properly
+       moving, or it reads as a label that vanished rather than one that went
+       somewhere. */
+    32% {
+      opacity: 1;
+      animation-timing-function: linear;
+    }
+    82% {
+      opacity: 0;
+    }
+    100% {
+      transform: translate(var(--dx, 0px), var(--dy, 0px)) scale(0.58);
+      opacity: 0;
+    }
+  }
+
+  @keyframes facade-spin {
+    to {
+      transform: rotate(1turn);
+    }
   }
 
   @media (max-width: 560px) {

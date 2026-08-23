@@ -27,6 +27,13 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   document already said it was.
 
 ### 🚧 Internal
+- Pressing "Open the live analyzer" on the front page now animates rather than
+  swapping its label: the play mark travels to the middle of the picture, the
+  label goes the other way and disappears behind it, and the square around the
+  mark rounds into a ring that spins for as long as the two megabytes take —
+  then the whole control fades out with the frame it was covering. A reader who
+  has asked the system for less motion gets the label change instead, and either
+  way a live region announces the wait and the end of it.
 - The front page's demo canvas draws its oscilloscope over five seconds,
   overlaid on one centre line and zoomed to fill the lane. A triggered
   twenty-millisecond window is the right default in the application, where the

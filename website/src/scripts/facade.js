@@ -15,6 +15,12 @@ const facade = document.querySelector('[data-facade]');
 const go = facade?.querySelector('[data-facade-go]');
 
 if (facade && go) {
+  const mark = go.querySelector('[data-facade-mark]');
+  const text = go.querySelector('[data-facade-text]');
+  const label = go.querySelector('[data-facade-label]');
+  const status = facade.querySelector('[data-facade-status]');
+  const still = window.matchMedia('(prefers-reduced-motion: reduce)');
+
   /* Warm it on intent, not on sight.
    *
    * Prefetching when the section merely scrolls into view would spend two
@@ -37,6 +43,31 @@ if (facade && go) {
   go.addEventListener('pointerenter', warm, { once: true });
   go.addEventListener('focus', warm, { once: true });
   go.addEventListener('touchstart', warm, { once: true, passive: true });
+
+  /* How far this half of the control is from the middle of it.
+   *
+   * The two keyframe sets in index.astro read the answer off the element as
+   * `--dx` / `--dy`: the mark travels to the middle of the picture and the
+   * label travels the other way, into the disc the mark has become.
+   *
+   * Measured from `offsetLeft` and not from `getBoundingClientRect`, because a
+   * bounding box is the box *after* the transform. Once the animation is
+   * running and holding its final frame, a rect would report the element where
+   * it has arrived, so re-measuring it on a resize would aim the next travel
+   * from there and send it off the picture. `offsetLeft` is layout, which the
+   * transform does not touch. The button is the offset parent — it is the only
+   * positioned ancestor — and it has no border, so its client box and its
+   * children's offsets are in the same coordinates.
+   */
+  const aim = (el) => {
+    if (!el) return;
+    el.style.setProperty('--dx', `${go.clientWidth / 2 - (el.offsetLeft + el.offsetWidth / 2)}px`);
+    el.style.setProperty('--dy', `${go.clientHeight / 2 - (el.offsetTop + el.offsetHeight / 2)}px`);
+  };
+  const reaim = () => {
+    aim(mark);
+    aim(text);
+  };
 
   go.addEventListener('click', () => {
     const frame = document.createElement('iframe');
@@ -77,7 +108,27 @@ if (facade && go) {
     frame.style.transition = 'opacity 320ms ease';
 
     go.disabled = true;
-    go.querySelector('.facade-go-text').textContent = 'Loading the analyzer…';
+    go.setAttribute('aria-busy', 'true');
+    if (status) status.textContent = 'Loading the analyzer…';
+
+    /* Somebody who has asked the system for less motion is asking for this in
+     * particular: a label sliding across a photograph and a ring rotating for
+     * as long as two megabytes take. They get the old control instead, saying
+     * in words what the spinner would have said. The site's stylesheet flattens
+     * every animation to nothing anyway — this is what keeps that from leaving
+     * a control that says "Open the live analyzer" while it opens one. */
+    if (still.matches) {
+      if (label) label.textContent = 'Loading the analyzer…';
+    } else {
+      reaim();
+      go.classList.add('is-loading');
+      /* A rotated tablet mid-load is a plausible three seconds. The travel is
+       * measured in pixels, so it has to be re-measured when the picture
+       * changes width; the animation holds its last frame and picks up the new
+       * distance on the spot. */
+      window.addEventListener('resize', reaim, { passive: true });
+    }
+
     facade.append(frame);
 
     /* Reveal on the first *painted* frame, not on `load`.
@@ -88,11 +139,31 @@ if (facade && go) {
      * underneath flashed white on the way. The demo sets `oaaFirstFrame` from a
      * post-frame callback; it is same-origin, so we can simply ask it.
      */
+    const pressed = Date.now();
+    /* Long enough for the converge to land and the spinner to turn once. A
+     * warm cache can paint the first frame before the label has finished
+     * leaving, and cutting the animation off halfway looks like a fault rather
+     * than like speed. */
+    const settled = still.matches ? 0 : 1000;
+
+    let revealed = false;
     const reveal = () => {
+      if (revealed) return;
+      const early = pressed + settled - Date.now();
+      if (early > 0) {
+        setTimeout(reveal, early);
+        return;
+      }
+      revealed = true;
+      window.removeEventListener('resize', reaim);
       frame.style.opacity = '1';
       /* The button goes only once the frame is up: it covers the canvas while
        * that happens, and removing it earlier would let a press through to
-       * something not ready for it. */
+       * something not ready for it. The spinner fades with it, in the same
+       * 320 ms the frame takes to arrive. */
+      go.classList.add('is-done');
+      go.removeAttribute('aria-busy');
+      if (status) status.textContent = 'The analyzer is running.';
       setTimeout(() => go.remove(), 320);
     };
 
