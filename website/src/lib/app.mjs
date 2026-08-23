@@ -21,7 +21,7 @@ const root = resolve(process.cwd(), '..');
 
 function versionFromPubspec() {
   const pubspec = readFileSync(join(root, 'pubspec.yaml'), 'utf8');
-  // `version: 0.10.0+11` — the build number is Flutter's and means nothing to
+  // `version: 0.10.1+12` — the build number is Flutter's and means nothing to
   // somebody downloading a file.
   const found = /^version:\s*([0-9]+\.[0-9]+\.[0-9]+)/m.exec(pubspec);
   if (!found) {

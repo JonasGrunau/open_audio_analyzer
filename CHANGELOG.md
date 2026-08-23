@@ -9,6 +9,8 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.10.1] — 2026-08-23
+
 ### ⚡ Changed
 - The name under the application's icon is **Audio Analyzer** on iPadOS and
   Android, where it was `OAA`. A home screen gives a label about eleven
@@ -2633,7 +2635,8 @@ meters do not exist yet. See the [roadmap](README.md#roadmap).
 - Licensing is split: MIT for `engine/`, `oaa_engine` and `oaa_core`;
   GPL-3.0-or-later for the application, UI, CLI and plugin.
 
-[unreleased]: https://github.com/JonasGrunau/open_audio_analyzer/compare/v0.10.0...HEAD
+[unreleased]: https://github.com/JonasGrunau/open_audio_analyzer/compare/v0.10.1...HEAD
+[0.10.1]: https://github.com/JonasGrunau/open_audio_analyzer/compare/v0.10.0...v0.10.1
 [0.10.0]: https://github.com/JonasGrunau/open_audio_analyzer/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/JonasGrunau/open_audio_analyzer/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/JonasGrunau/open_audio_analyzer/compare/v0.7.0...v0.8.0

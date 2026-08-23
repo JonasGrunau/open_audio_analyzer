@@ -108,7 +108,7 @@ if(NOT CMAKE_OSX_DEPLOYMENT_TARGET)
 endif()
 
 project(oaa_plugin
-  VERSION 0.10.0
+  VERSION 0.10.1
   DESCRIPTION "Open Audio Analyzer — headless metering plugin"
   LANGUAGES C CXX
 )

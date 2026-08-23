@@ -75,6 +75,16 @@
   <content_rating type="oars-1.1"/>
 
   <releases>
+    <release version="0.10.1" date="2026-08-23">
+      <description>
+        <p>
+          The name under the application's icon is Audio Analyzer on iPadOS and
+          Android, where it was OAA. Nothing is renamed on the desktop, and the
+          documentation site now states the readings the engine actually took
+          from a real track rather than readings a mock invented.
+        </p>
+      </description>
+    </release>
     <release version="0.10.0" date="2026-08-22">
       <description>
         <p>
