@@ -8,7 +8,7 @@
 // module rather than copied twice.
 //
 //   - **Wait for the picture, not for a stopwatch.** The pages set
-//     `globalThis.oaaRenderReady` once the mock programme has frozen and the
+//     `globalThis.oaaRenderReady` once the programme has run out and the
 //     final frame is painted. `--virtual-time-budget` looks like the answer and
 //     is not: it does not drive Flutter's ticker, so 8, 16 and 24 second budgets
 //     all produced the same 56 frames and a spectrogram with no history in it.
@@ -142,15 +142,38 @@ export async function browser({ port = 9333, window = '1600,1000' } = {}) {
 
   return {
     /// Load `url` in a fresh target, wait for `oaaRenderReady`, and return a PNG
-    /// of `clip` at `scale` device pixels per logical pixel.
+    /// of `clip` at `dpr` device pixels per CSS pixel.
+    ///
+    /// `dpr` is the *page's* device pixel ratio, set before the page loads —
+    /// not a scale applied to the screenshot afterwards, which is a different
+    /// thing and was the bug that made every thumbnail soft. Flutter sizes its
+    /// canvas backing store from `window.devicePixelRatio`: at 1 it rasterises
+    /// a 390x256 module into 390x256 pixels, and asking `captureScreenshot` for
+    /// `scale: 2` then resamples that raster up to 780x512. Every hairline and
+    /// every six-pixel scale label goes through an upscale, which is why
+    /// raising the scale to 3 and to 4 made the files larger and the pictures
+    /// no sharper. Telling the page it is on a 2x display instead makes
+    /// CanvasKit lay out at 390x256 and rasterise at 780x512, and the type is
+    /// drawn at that size rather than blown up to it.
+    ///
     /// `clip` omitted (or `clipViewport`) captures exactly the layout viewport,
     /// which is not the window size: headless Chrome reports a viewport some
     /// tens of pixels shorter, and clipping the window size instead pads the
     /// difference with white.
-    async shoot({ url, clip, clipViewport = false, scale = 3, timeoutMs = 120_000 }) {
-      const { targetId } = await cdp.send('Target.createTarget', { url });
+    async shoot({ url, clip, clipViewport = false, dpr = 2, timeoutMs = 120_000 }) {
+      // Opened blank so the metrics override lands before anything is laid out.
+      // A page that has already booted Flutter at ratio 1 does not re-rasterise
+      // when the ratio changes under it — it scales what it has.
+      const { targetId } = await cdp.send('Target.createTarget', { url: 'about:blank' });
       const { sessionId } = await cdp.send('Target.attachToTarget', { targetId, flatten: true });
       try {
+        await cdp.send(
+          'Emulation.setDeviceMetricsOverride',
+          // 0x0 keeps the window's own size and overrides only the ratio.
+          { width: 0, height: 0, deviceScaleFactor: dpr, mobile: false },
+          sessionId,
+        );
+        await cdp.send('Page.navigate', { url }, sessionId);
         const deadline = Date.now() + timeoutMs;
         for (;;) {
           const { result } = await cdp.send(
@@ -177,12 +200,73 @@ export async function browser({ port = 9333, window = '1600,1000' } = {}) {
           const [width, height] = JSON.parse(result.value);
           rect = { x: 0, y: 0, width, height };
         }
+        // `scale: 1` — the pixels are already there. The clip is in CSS pixels
+        // and the image comes back at `dpr` device pixels per one.
         const { data } = await cdp.send(
           'Page.captureScreenshot',
-          { format: 'png', clip: { ...rect, scale }, captureBeyondViewport: true },
+          { format: 'png', clip: { ...rect, scale: 1 }, captureBeyondViewport: true },
           sessionId,
         );
         return Buffer.from(data, 'base64');
+      } finally {
+        await cdp.send('Target.closeTarget', { targetId });
+      }
+    },
+
+    /// Load a page at a chosen width and ask it a question about its own
+    /// layout. Used by the overflow check — a page that scrolls sideways on a
+    /// phone looks fine in every screenshot and wrong on every phone.
+    async probe({ url, width, height, dpr = 2, timeoutMs = 30_000 }) {
+      const { targetId } = await cdp.send('Target.createTarget', { url: 'about:blank' });
+      const { sessionId } = await cdp.send('Target.attachToTarget', { targetId, flatten: true });
+      try {
+        await cdp.send(
+          'Emulation.setDeviceMetricsOverride',
+          { width, height, deviceScaleFactor: dpr, mobile: true },
+          sessionId,
+        );
+        await cdp.send('Page.navigate', { url }, sessionId);
+
+        const deadline = Date.now() + timeoutMs;
+        for (;;) {
+          const { result } = await cdp.send(
+            'Runtime.evaluate',
+            { expression: "document.readyState === 'complete'", returnByValue: true },
+            sessionId,
+          );
+          if (result.value === true) break;
+          if (Date.now() > deadline) throw new Error(`${url} never finished loading`);
+          await sleep(100);
+        }
+
+        // The widest element is named as well as measured: "it overflows by
+        // 40 px" sends somebody hunting, "the table in the install page does"
+        // does not.
+        const expression = `(() => {
+          const root = document.documentElement;
+          let widest = '', widestRight = 0;
+          for (const el of document.body.querySelectorAll('*')) {
+            const right = el.getBoundingClientRect().right;
+            if (right > widestRight) {
+              widestRight = right;
+              widest = el.tagName.toLowerCase() +
+                (el.className && typeof el.className === 'string'
+                  ? '.' + el.className.trim().split(/\\s+/).join('.')
+                  : '');
+            }
+          }
+          return JSON.stringify({
+            scrollWidth: root.scrollWidth,
+            innerWidth: window.innerWidth,
+            widest,
+          });
+        })()`;
+        const { result } = await cdp.send(
+          'Runtime.evaluate',
+          { expression, returnByValue: true },
+          sessionId,
+        );
+        return JSON.parse(result.value);
       } finally {
         await cdp.send('Target.closeTarget', { targetId });
       }

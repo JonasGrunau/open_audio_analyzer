@@ -9,3 +9,9 @@ src/data/bridge.json
 # `npm run analyzer` and by `npm run deploy`. The still in front of it
 # (public/analyzer-still.webp) *is* committed, because every build needs it.
 public/analyzer/
+
+# The recording, and the audio it was taken from. Written by `npm run record`
+# from a track that is not in this repository either — see scripts/record.mjs
+# and tool/fetch_test_audio.dart. About 10 MB of derived files.
+tools/analyzer-demo/web/programme.*
+tools/module-renderer/web/programme.*

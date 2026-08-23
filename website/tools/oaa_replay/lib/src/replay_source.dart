@@ -1,0 +1,279 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+/// A [MeterSource] that replays what the engine measured.
+library;
+
+import 'dart:typed_data';
+
+import 'package:oaa_core/oaa_core.dart';
+
+import 'format.dart';
+import 'recording.dart';
+
+/// The fourth implementation of [MeterSource].
+///
+/// The first is the engine, by FFI. The second decodes a socket for a tablet
+/// that has no engine in it. The third invented a programme, for a browser that
+/// could have neither. This one is the third one's replacement: the readings
+/// are the engine's own, taken from a real track by `oaa_record`, and replayed
+/// against the clock of whatever is playing that track.
+///
+/// The modules cannot tell any of the four apart, which is the entire argument
+/// for the interface — and it is worth noticing that this is the implementation
+/// that argument was *for*. Nothing in `lib/src/modules/` changed to make a
+/// website show real measurements of real music.
+///
+/// ---------------------------------------------------------------------------
+/// Where the time comes from
+///
+/// [positionSeconds] is a callback rather than a clock this owns, because the
+/// two callers want different things and neither wants a stopwatch. The live
+/// demo passes the playhead of the audio element, so the meters and the music
+/// are the same instant by construction rather than by two timers agreeing. The
+/// renderers pass a frame counter, because a screenshot has to come out the
+/// same every time it is taken.
+///
+/// ---------------------------------------------------------------------------
+/// The scope is not in the recording
+///
+/// It is the last 1024 stereo frames — the audio, unprocessed — and storing it
+/// would have doubled the file to send a browser a second copy of what it is
+/// already playing. [attachPcm] hands over the decoded track instead and the
+/// window is read straight out of it. That is not an approximation of what the
+/// engine's scope holds; it is the same samples by definition.
+class ReplaySource implements MeterSource {
+  ReplaySource(
+    this.recording, {
+    required this.positionSeconds,
+    this.loop = true,
+  }) : _spectrum = Float32List(MeterShape.spectrumBands),
+       _spectrumPeak = Float32List(MeterShape.spectrumBands),
+       _spectrumPan = Float32List(MeterShape.spectrumBands),
+       _histogram = Float32List(MeterShape.histogramBins),
+       _scope = Float32List(MeterShape.scopePoints * 2),
+       peak = Float32List(MeterShape.maxChannels),
+       rms = Float32List(MeterShape.maxChannels),
+       vu = Float32List(MeterShape.maxChannels),
+       clip = Uint32List(MeterShape.maxChannels) {
+    // Nothing is measured until the first refresh, and "nothing measured" is
+    // NaN rather than zero — the one rule this project will not bend.
+    peak.fillRange(0, peak.length, double.nan);
+    rms.fillRange(0, rms.length, double.nan);
+    vu.fillRange(0, vu.length, double.nan);
+    _spectrum.fillRange(0, _spectrum.length, double.nan);
+    _spectrumPeak.fillRange(0, _spectrumPeak.length, double.nan);
+    _spectrumPan.fillRange(0, _spectrumPan.length, double.nan);
+  }
+
+  final Recording recording;
+
+  /// Where in the programme to read, in seconds. Called once per [refresh].
+  final double Function() positionSeconds;
+
+  /// Whether a position past the end wraps to the start. The demo loops; a
+  /// screenshot does not, and freezes on the last frame instead.
+  final bool loop;
+
+  final Float32List _spectrum;
+  final Float32List _spectrumPeak;
+  final Float32List _spectrumPan;
+  final Float32List _histogram;
+  final Float32List _scope;
+
+  @override
+  final Float32List peak;
+  @override
+  final Float32List rms;
+  @override
+  final Float32List vu;
+  @override
+  final Uint32List clip;
+
+  int _frame = -1;
+  int _generation = 0;
+  double _elapsed = 0.0;
+
+  // The decoded track, if a caller has one. See attachPcm.
+  Float32List? _pcm;
+  int _pcmChannels = 2;
+  int _pcmRate = 48000;
+  int _scopeFrames = 0;
+
+  /// Hand over the decoded audio, so the oscilloscope and the phase scope have
+  /// a waveform to draw.
+  ///
+  /// [interleaved] is the whole excerpt, and [startSeconds] says where in it
+  /// the recording's first frame falls — the two are usually cut from the same
+  /// place and do not have to be.
+  void attachPcm(
+    Float32List interleaved, {
+    required int sampleRate,
+    required int channels,
+  }) {
+    _pcm = interleaved;
+    _pcmRate = sampleRate;
+    _pcmChannels = channels;
+  }
+
+  @override
+  bool refresh() {
+    var position = positionSeconds();
+    final length = recording.seconds;
+    if (loop && length > 0) {
+      position = position % length;
+    }
+
+    final frame = recording.frameAt(position);
+    _elapsed = position;
+
+    // The audio window moves continuously even when the measurement frame has
+    // not changed, so the scope is refilled on every call while the numbers are
+    // gathered only when there is a new frame to gather.
+    final movedPcm = _fillScope(position);
+
+    if (frame == _frame) return movedPcm;
+    _frame = frame;
+    _generation++;
+    _gather(frame);
+    return true;
+  }
+
+  void _gather(int frame) {
+    recording.readSpectrum(_spectrum, frame);
+    recording.readSpectrumPeak(_spectrumPeak, frame);
+    recording.readSpectrumPan(_spectrumPan, frame);
+    recording.readHistogram(_histogram, frame);
+
+    final channels = recording.header.channels;
+    for (var c = 0; c < peak.length; c++) {
+      if (c < channels) {
+        peak[c] = recording.channel(channelPeakPlane, c, frame);
+        rms[c] = recording.channel(channelRmsPlane, c, frame);
+        vu[c] = recording.channel(channelVuPlane, c, frame);
+        clip[c] = recording.clipAt(c, frame);
+      } else {
+        // Past the file's channel count is not silence, it is nothing.
+        peak[c] = double.nan;
+        rms[c] = double.nan;
+        vu[c] = double.nan;
+        clip[c] = 0;
+      }
+    }
+  }
+
+  /// Copy the [MeterShape.scopePoints] stereo frames ending at [position].
+  bool _fillScope(double position) {
+    final pcm = _pcm;
+    if (pcm == null) {
+      _scopeFrames = 0;
+      return false;
+    }
+
+    const want = MeterShape.scopePoints;
+    final totalFrames = pcm.length ~/ _pcmChannels;
+    final end = (position * _pcmRate).round().clamp(0, totalFrames);
+    final start = end - want;
+
+    for (var i = 0; i < want; i++) {
+      final frame = start + i;
+      final left = frame < 0 ? 0.0 : pcm[frame * _pcmChannels];
+      final right = frame < 0
+          ? 0.0
+          : pcm[frame * _pcmChannels + (_pcmChannels > 1 ? 1 : 0)];
+      _scope[i * 2] = left;
+      _scope[i * 2 + 1] = right;
+    }
+    _scopeFrames = want;
+    return true;
+  }
+
+  // --- What the signal is ---------------------------------------------------
+
+  @override
+  int get generation => _generation;
+
+  @override
+  int get sampleRate => recording.header.sampleRate;
+
+  @override
+  int get channels => recording.header.channels;
+
+  @override
+  double get elapsedSeconds => _elapsed;
+
+  @override
+  bool get isRunning => true;
+
+  /// No DAW behind a recording, and no pretending otherwise: a tempo of 0.0
+  /// looks exactly like a real one, so the oscilloscope's tempo sync is told
+  /// there is nothing to sync to.
+  @override
+  Transport get transport => Transport.none;
+
+  // --- Whether the numbers can be trusted -----------------------------------
+
+  @override
+  int get droppedFrames => 0;
+
+  @override
+  bool get hasOverrun => false;
+
+  @override
+  bool get hasLoudness => true;
+
+  @override
+  bool get hasSpectrum => recording.header.has(RecordingParts.spectrum);
+
+  // --- The readings ---------------------------------------------------------
+
+  double _at(Scalar which) =>
+      _frame < 0 ? double.nan : recording.scalar(which, _frame);
+
+  @override
+  double get lufsMomentary => _at(Scalar.lufsMomentary);
+  @override
+  double get lufsShort => _at(Scalar.lufsShort);
+  @override
+  double get lufsIntegrated => _at(Scalar.lufsIntegrated);
+  @override
+  double get loudnessRange => _at(Scalar.loudnessRange);
+  @override
+  double get loudnessRangeLow => _at(Scalar.loudnessRangeLow);
+  @override
+  double get loudnessRangeHigh => _at(Scalar.loudnessRangeHigh);
+  @override
+  double get loudnessRangeGate => _at(Scalar.loudnessRangeGate);
+  @override
+  double get truePeak => _at(Scalar.truePeak);
+  @override
+  double get truePeakMax => _at(Scalar.truePeakMax);
+  @override
+  double get samplePeakMax => _at(Scalar.samplePeakMax);
+  @override
+  double get dynamicRangeShort => _at(Scalar.dynamicRangeShort);
+  @override
+  double get dynamicRangeIntegrated => _at(Scalar.dynamicRangeIntegrated);
+  @override
+  double get crestFactor => _at(Scalar.crestFactor);
+  @override
+  double get peakToLoudnessRatio => _at(Scalar.peakToLoudnessRatio);
+  @override
+  double get peakToShortTermRatio => _at(Scalar.peakToShortTermRatio);
+  @override
+  double get correlation => _at(Scalar.correlation);
+  @override
+  double get balance => _at(Scalar.balance);
+
+  @override
+  Float32List get spectrum => _spectrum;
+  @override
+  Float32List get spectrumPeak => _spectrumPeak;
+  @override
+  Float32List get spectrumPan => _spectrumPan;
+  @override
+  Float32List get scope => _scope;
+  @override
+  int get scopeFrames => _scopeFrames;
+  @override
+  Float32List get histogram => _histogram;
+}

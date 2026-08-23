@@ -1,0 +1,8 @@
+# This package is outside the root workspace and outside the repository's
+# analyze gate — see the note in the root `analysis_options.yaml`. So it carries
+# the strictness the rest of the repository is held to, rather than inheriting
+# it.
+analyzer:
+  language:
+    strict-casts: true
+    strict-raw-types: true

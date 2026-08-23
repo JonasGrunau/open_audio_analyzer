@@ -9,13 +9,50 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### ⚡ Changed
+- The name under the application's icon is **Audio Analyzer** on iPadOS and
+  Android, where it was `OAA`. A home screen gives a label about eleven
+  characters before it starts dropping the spaces out of one, so the full name
+  has never fit there and the initials went in instead — which read as an
+  acronym nobody outside this repository knows. Nothing else is renamed: the
+  bundle identifier, the window title, the installers and the desktop builds
+  are untouched, so no permission grant moves with it.
+
 ### 🐛 Fixed
 - The documentation site's sitemap names the eight documentation pages as well
   as the front page. It had named the front page alone since before the manual
   was part of the site, so nothing but the home page was being offered to a
   search engine that asked.
+- The version on the site's download button is read from `pubspec.yaml` at
+  build time. `src/lib/app.mjs` was written to do exactly that and then had no
+  importer at all — both pages still carried the number as text, so the button
+  was correct only for as long as nobody tagged anything.
 
 ### 🚧 Internal
+- The site's demos replay what the engine measured instead of playing a mock.
+  `website/tools/oaa_record/` is a Dart CLI that links the real engine by FFI,
+  pushes forty-five seconds of a real track through it and writes down the
+  readings; `website/tools/oaa_replay/` holds that format and `ReplaySource`,
+  a fourth `MeterSource` beside native memory, the socket a tablet reads and
+  the mock this replaces. Both Flutter targets play the same recording, so the
+  fourteen stills and the live canvas can no longer disagree about what the
+  material did — and no reading on the site is invented any more. The track is
+  CC BY 3.0 and is not in this repository: `npm run record` refuses to run
+  without the attribution file `tool/fetch_test_audio.dart` writes, because the
+  licence asks for the credit wherever the audio is published, and the front
+  page carries it under the canvas.
+- `npm run check` in `website/` opens every page at 360, 390 and 768 px with
+  the viewport actually overridden and fails if the document scrolls sideways,
+  naming the widest element rather than the overflow. It is the one responsive
+  defect that is invisible in a screenshot and obvious on a phone, and a
+  browser window cannot be dragged narrow enough to show it. Not part of
+  `npm run build`, because it needs Chrome.
+- The front page's hero is one column and a measure wide rather than two, and
+  the section rail in the manual tracks at 0.08em so that the longest heading
+  fits on one line in the 215 px it has.
+- Claude Code's `.claude/` is ignored. Its `settings.json` named a hook by an
+  absolute path inside one developer's home directory, which would have failed
+  silently on any other machine.
 - The website's tab icon survives a run of the icon generator.
   `packaging/icon/make_icons.dart` wrote the app icon's tile over
   `website/public/favicon.svg`, which is a different drawing on purpose — the

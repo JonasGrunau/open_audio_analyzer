@@ -50,7 +50,7 @@ if (facade && go) {
      * own assets still resolve from the right place. */
     frame.src = '/analyzer/index.html';
     /* Named, because a frame with no accessible name is announced as "frame". */
-    frame.title = 'Open Audio Analyzer, running against a mock measurement source';
+    frame.title = 'Open Audio Analyzer, replaying the engine measuring a real track';
     frame.loading = 'eager';
     /* Enough to run, and nothing else: no top navigation, no downloads, no
      * form submission. Same-origin so it can load its own assets. */

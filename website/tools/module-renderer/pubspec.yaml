@@ -17,10 +17,11 @@ dependencies:
     path: ../../../packages/oaa_core
   oaa_ui:
     path: ../../../packages/oaa_ui
-  # The mock programme, shared with analyzer-demo so the stills and the live
-  # canvas cannot disagree about what the material did.
-  oaa_mock:
-    path: ../oaa_mock
+  # The recording, shared with analyzer-demo so the stills and the live canvas
+  # cannot disagree about what the material did — they are the same forty-five
+  # seconds of the same track, measured once by the real engine.
+  oaa_replay:
+    path: ../oaa_replay
 
 dev_dependencies:
   flutter_test:

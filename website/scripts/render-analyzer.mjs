@@ -3,10 +3,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 // `tools/analyzer-demo` is a Flutter web target that depends on `package:oaa` and
-// runs a canvas of the real meter modules against a mock MeterSource. The front
-// page does not load it on arrival — it shows the still this script takes and
-// loads the real thing when a reader asks for it. See the note on the facade in
-// src/pages/index.astro.
+// runs a canvas of the real meter modules against a recording of the real engine
+// measuring a real track — see scripts/record.mjs. The front page does not load
+// it on arrival: it shows the still this script takes, and fetches the analyzer
+// when a reader asks for it. See the note on the facade in src/pages/index.astro.
 //
 //     npm run analyzer                 # build the demo, then shoot the still
 //     npm run analyzer -- --no-build
@@ -54,7 +54,10 @@ const PORT = 4403;
 /// cells whatever the window, but how much room each module gets is not.
 const W = 1280;
 const H = 800;
-const SCALE = 2;
+/// Device pixels per CSS pixel, set on the page rather than applied to the
+/// screenshot afterwards — see the note on DPR in scripts/render-modules.mjs
+/// and `shoot` in scripts/lib/headless.mjs.
+const DPR = 2;
 
 /// Programme to play before freezing.
 ///
@@ -68,6 +71,26 @@ const argv = process.argv.slice(2);
 const flag = (name) => argv.includes(name);
 
 // --- Build ------------------------------------------------------------------
+
+/* The recording, and the audio it was measured from.
+ *
+ * They live in the demo's `web/` directory so that `flutter build web` copies
+ * them into the build, and they are git-ignored because they are derived from a
+ * track this repository does not carry. Checked here rather than left to fail in
+ * a browser: without them the demo compiles, deploys, loads, and shows one line
+ * of text where the canvas should be — which is a broken site that built
+ * successfully, and nobody would look at the build log for it. */
+const NEEDED = ['programme.oaaz', 'programme.m4a'];
+const missing = NEEDED.filter((name) => !existsSync(join(DEMO, 'web', name)));
+if (missing.length > 0) {
+  console.error(
+    `The demo has no programme to replay (missing ${missing.join(', ')}).\n\n` +
+      `  Record it first:\n\n      npm run record\n\n` +
+      `  That needs the CC BY track, which is not in this repository:\n\n` +
+      `      cd .. && dart run tool/fetch_test_audio.dart\n`,
+  );
+  process.exit(1);
+}
 
 if (!flag('--no-build') && !flag('--still-only')) {
   syncFonts(REPO, DEMO);
@@ -117,7 +140,7 @@ try {
       url: `http://127.0.0.1:${PORT}/analyzer/index.html?seconds=${SECONDS}`,
       // The viewport, not the window: see the note on clipViewport.
       clipViewport: true,
-      scale: SCALE,
+      dpr: DPR,
     }),
   );
   execFileSync('cwebp', ['-quiet', '-q', '88', '-sharp_yuv', '-m', '6', png, '-o', STILL]);

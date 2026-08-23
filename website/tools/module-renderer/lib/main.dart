@@ -19,13 +19,15 @@
 /// walks the list.
 library;
 
+import 'dart:async';
 import 'dart:js_interop';
+import 'dart:typed_data';
 
 import 'package:flutter/widgets.dart';
 import 'package:oaa/src/canvas/module_host.dart';
 import 'package:oaa/src/clock/meter_clock.dart';
 import 'package:oaa_core/oaa_core.dart';
-import 'package:oaa_mock/oaa_mock.dart';
+import 'package:oaa_replay/oaa_replay.dart';
 import 'package:oaa_ui/oaa_ui.dart';
 
 /// Set on `globalThis` once the programme has frozen and a frame has been
@@ -40,12 +42,90 @@ external set _renderReady(bool value);
 
 void main() => runApp(const RendererApp());
 
+@JS('fetch')
+external JSPromise<_Response> _fetch(String url);
+
+extension type _Response._(JSObject _) implements JSObject {
+  external bool get ok;
+  external int get status;
+  external JSPromise<JSArrayBuffer> arrayBuffer();
+}
+
+/// The recording, off the local server this page is served from. No gzip and no
+/// streaming: it is a file on the same disk.
+Future<Uint8List> _fetchBytes(String url) async {
+  final response = await _fetch(url).toDart;
+  if (!response.ok) throw StateError('$url returned ${response.status}');
+  final buffer = await response.arrayBuffer().toDart;
+  return buffer.toDart.asUint8List();
+}
+
+@JS('AudioContext')
+extension type _AudioContext._(JSObject _) implements JSObject {
+  external factory _AudioContext();
+  external JSPromise<_AudioBuffer> decodeAudioData(JSArrayBuffer data);
+}
+
+extension type _AudioBuffer._(JSObject _) implements JSObject {
+  external int get numberOfChannels;
+  external int get sampleRate;
+  external int get length;
+  external JSFloat32Array getChannelData(int channel);
+}
+
+/// The decoded excerpt, interleaved, which is the shape a scope reads.
+class _Audio {
+  const _Audio({
+    required this.samples,
+    required this.sampleRate,
+    required this.channels,
+  });
+
+  final Float32List samples;
+  final int sampleRate;
+  final int channels;
+}
+
+/// Decode the excerpt, or return null.
+///
+/// Null rather than throwing: twelve of the fourteen modules do not draw a
+/// waveform, and failing every photograph because two of them would be empty is
+/// the wrong trade. The two that need it come out visibly blank, which is a
+/// failure somebody sees.
+Future<_Audio?> _decodeAudio(String url) async {
+  try {
+    final bytes = await _fetchBytes(url);
+    final context = _AudioContext();
+    // A copy: decodeAudioData detaches the buffer it is handed.
+    final data = Uint8List.fromList(bytes);
+    final buffer = await context.decodeAudioData(data.buffer.toJS).toDart;
+
+    final channels = buffer.numberOfChannels;
+    final frames = buffer.length;
+    final samples = Float32List(frames * channels);
+    for (var channel = 0; channel < channels; channel++) {
+      final plane = buffer.getChannelData(channel).toDart;
+      for (var frame = 0; frame < frames; frame++) {
+        samples[frame * channels + channel] = plane[frame];
+      }
+    }
+    return _Audio(
+      samples: samples,
+      sampleRate: buffer.sampleRate,
+      channels: channels,
+    );
+  } on Object {
+    return null;
+  }
+}
+
 /// The delivery target the stills are shot against.
 ///
-/// Streaming rather than broadcast because the numbers the mock reports are a
-/// little hot for it, which is the point: a validator that always passes and an
-/// alert meter that is never red teach a reader nothing about what these
-/// modules are for.
+/// Streaming rather than broadcast because the recorded track is a loud modern
+/// master — about -8 LUFS against this target's -14 — so it misses on loudness
+/// and on true peak. That is the point, and it is not staged: a validator that
+/// always passes and an alert meter that is never red teach a reader nothing
+/// about what these modules are for.
 const _calibration = Calibration(
   id: 'streaming',
   name: 'Streaming',
@@ -64,18 +144,87 @@ class RendererApp extends StatefulWidget {
 
 class _RendererAppState extends State<RendererApp>
     with SingleTickerProviderStateMixin {
-  late final MockSource _source = MockSource(
-    // Long enough that the integrated reading has settled and there are enough
-    // short-term blocks for a range; the modules with a time axis ask for more.
-    captureAt:
-        double.tryParse(Uri.base.queryParameters['seconds'] ?? '') ?? 14.0,
-    // The spectrogram scrolls by one *device* pixel per published measurement,
-    // so filling it is a matter of frames rather than of seconds — it asks for
-    // a shorter step and gets many more of them for the same programme.
-    dt: double.tryParse(Uri.base.queryParameters['dt'] ?? '') ?? 0.094,
-    onFrozen: _announceReady,
-  );
-  late final MeterClock _clock = MeterClock(engine: _source, vsync: this);
+  /// The recording, written beside this page by `npm run record`.
+  ///
+  /// The full one, not the site's: the stereo cloud draws per-band stereo
+  /// position, which the file the website ships leaves out because none of the
+  /// eight modules on that canvas reads it.
+  static const _recordingUrl = 'programme.oaa';
+
+  /// The audio the recording was taken from.
+  ///
+  /// The oscilloscope and the phase scope draw the last 1024 stereo frames,
+  /// which is the waveform itself and is deliberately not in the recording —
+  /// see the note on the scope in `oaa_replay`. Decoding needs no interaction
+  /// and no playback: this page never makes a sound, it just needs the samples.
+  static const _audioUrl = 'programme.wav';
+
+  ReplaySource? _source;
+  MeterClock? _clock;
+  Recording? _recording;
+  String? _failure;
+
+  /// How much programme to play before the shutter opens.
+  ///
+  /// Long enough that the integrated reading has settled and there are enough
+  /// short-term blocks for a range; the modules with a time axis ask for more.
+  static final double _captureAt =
+      double.tryParse(Uri.base.queryParameters['seconds'] ?? '') ?? 14.0;
+
+  /// Stepped by frame rather than by clock, so the same picture comes out every
+  /// time regardless of how fast the machine rendering it is.
+  int _frame = 0;
+  bool _frozen = false;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_load());
+  }
+
+  Future<void> _load() async {
+    try {
+      final bytes = await _fetchBytes(_recordingUrl);
+      if (!mounted) return;
+      final recording = Recording.parse(bytes);
+      final source = ReplaySource(
+        recording,
+        positionSeconds: () => _frame / recording.header.fps,
+        // A still stops at the end rather than wrapping round to the start.
+        loop: false,
+      );
+
+      final audio = await _decodeAudio(_audioUrl);
+      if (audio != null) {
+        source.attachPcm(
+          audio.samples,
+          sampleRate: audio.sampleRate,
+          channels: audio.channels,
+        );
+      }
+      setState(() {
+        _recording = recording;
+        _source = source;
+        _clock = MeterClock(engine: source, vsync: this)..addListener(_onTick);
+      });
+    } on Object catch (error) {
+      if (!mounted) return;
+      setState(() => _failure = '$error');
+    }
+  }
+
+  void _onTick() {
+    final recording = _recording;
+    if (recording == null || _frozen) return;
+
+    final fps = recording.header.fps;
+    if (_frame / fps >= _captureAt || _frame >= recording.frames - 1) {
+      _frozen = true;
+      _announceReady();
+      return;
+    }
+    _frame++;
+  }
 
   /// The frozen reading is set during the tick, *before* the frame that shows
   /// it has been painted. Two frames' grace, then the shutter may open.
@@ -87,7 +236,7 @@ class _RendererAppState extends State<RendererApp>
 
   @override
   void dispose() {
-    _clock.dispose();
+    _clock?.dispose();
     super.dispose();
   }
 
@@ -120,7 +269,6 @@ class _RendererAppState extends State<RendererApp>
             'fw',
             'fh',
             'seconds',
-            'dt',
           }.contains(entry.key))
             entry.key: entry.value,
       },
@@ -165,21 +313,47 @@ class _RendererAppState extends State<RendererApp>
               child: SizedBox(
                 width: width,
                 height: height,
-                child: ModuleHost(
-                  spec: _spec(),
-                  engine: _source,
-                  clock: _clock,
-                  calibration: _calibration,
-                  selected: false,
-                  // Null, as on the remote display: a menu button that cannot
-                  // be pressed in a photograph should not be drawn in one.
-                  onMenu: null,
-                ),
+                child: _module(colors),
               ),
             ),
           ),
         ),
       ),
+    );
+  }
+
+  Widget _module(OaaColors colors) {
+    final source = _source;
+    final clock = _clock;
+    final failure = _failure;
+
+    // A renderer that draws an empty frame when the recording is missing takes
+    // fourteen photographs of nothing and reports success. Saying so on the
+    // picture means the failure is visible in the file it produced.
+    if (failure != null) {
+      return Center(
+        child: Text(
+          'no recording: $failure\nrun `npm run record`',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: colors.over,
+            fontFamily: 'Google Sans Code',
+            fontSize: 10,
+          ),
+        ),
+      );
+    }
+    if (source == null || clock == null) return const SizedBox.shrink();
+
+    return ModuleHost(
+      spec: _spec(),
+      engine: source,
+      clock: clock,
+      calibration: _calibration,
+      selected: false,
+      // Null, as on the remote display: a menu button that cannot be pressed in
+      // a photograph should not be drawn in one.
+      onMenu: null,
     );
   }
 }

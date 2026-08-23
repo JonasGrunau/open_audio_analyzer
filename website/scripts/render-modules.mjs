@@ -11,7 +11,8 @@
 //
 // So these are photographs of the real widgets. `tools/module-renderer` is a
 // Flutter web target that depends on `package:oaa` and renders one module per
-// page load against a mock MeterSource; this drives Chrome over the list.
+// page load, reading a recording of the engine measuring a real track; this
+// drives Chrome over the list.
 //
 //     npm run modules
 //     npm run modules -- --no-build
@@ -27,7 +28,7 @@
 //     not: it does not drive Flutter's ticker, so 8, 16 and 24 second budgets
 //     all produced the same 56 frames and a spectrogram with no history in it.
 //   - **It can clip exactly.** `Page.captureScreenshot` takes a rectangle and a
-//     scale, so the module is captured at 2x with no cropping step and no
+//     ratio, so the module is captured at 2x with no cropping step and no
 //     dependence on Chrome's 500 px minimum window width.
 //
 // Needs Flutter, Google Chrome and cwebp (brew install webp) on the machine
@@ -56,20 +57,22 @@ const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const FRAME_W = 390;
 const FRAME_H = 256;
 
-/// Device pixels per logical pixel.
+/// Device pixels per CSS pixel — the ratio the *page* is told it is on.
 ///
-/// **Two, and the frame sized to match where it lands.** More is not sharper
-/// here, which took a while to see: at 4x these came out 1,440 px wide and the
-/// browser resampled them down to the ~390 px the catalogue gives them, which
-/// is a 3.5x downscale that averages three and a half source pixels into every
-/// destination one. Hairlines and six-pixel labels do not survive that — the
-/// pictures got *softer* the more resolution they were given.
+/// Two, because the catalogue gives each module about FRAME_W CSS pixels and a
+/// retina display draws that at two device pixels each: the picture lands 1:1
+/// and nothing resamples it.
 ///
-/// A module drawn at FRAME_W logical pixels and captured at two device pixels
-/// each lands 1:1 on a retina display at the size the grid actually gives it,
-/// and the browser resamples nothing. Change the column count or the padding
-/// and FRAME_W has to move with it.
-const SCALE = 2;
+/// This is a page ratio and not a screenshot scale, and the difference is the
+/// whole reason these were soft for so long. `Page.captureScreenshot` takes a
+/// `scale`, which resamples the raster *after* it is drawn — so with the page
+/// at ratio 1, Flutter rasterised a 390x256 module into 390x256 pixels and the
+/// screenshot blew that up. Every scale label went through an upscale, and
+/// raising the scale to 3 and then 4 made the files bigger and changed nothing
+/// else. `Emulation.setDeviceMetricsOverride` is what CanvasKit reads when it
+/// sizes its backing store, so setting it before the page loads is what makes
+/// the type actually be drawn at this size. See scripts/lib/headless.mjs.
+const DPR = 2;
 
 /// Give up on a module rather than hanging the whole run.
 const READY_TIMEOUT_MS = 90_000;
@@ -98,7 +101,7 @@ const MODULES = [
   { id: 'histogram', file: 'histogram', seconds: 32 },
   { id: 'distribution', file: 'loudness-distribution', seconds: 32 },
   { id: 'spectrum', file: 'spectrum-analyzer' },
-  { id: 'spectrogram', file: 'spectrogram', seconds: 24, dt: 0.03 },
+  { id: 'spectrogram', file: 'spectrogram', seconds: 44 },
   // 1,024 stereo pairs is 21 ms at 48 kHz, so the default one-second base would
   // draw that sliver stretched across the whole width. 20 ms is the base this
   // much audio actually fills.
@@ -158,7 +161,6 @@ function urlFor(module) {
     (module.w ? `&w=${module.w}` : '') +
     (module.h ? `&h=${module.h}` : '') +
     (module.seconds ? `&seconds=${module.seconds}` : '') +
-    (module.dt ? `&dt=${module.dt}` : '') +
     (module.options ? `&${module.options}` : '')
   );
 }
@@ -169,7 +171,7 @@ const shoot = (module) =>
   chrome.shoot({
     url: urlFor(module),
     clip: { x: 0, y: 0, width: FRAME_W, height: FRAME_H },
-    scale: SCALE,
+    dpr: DPR,
   });
 
 // --- Shoot ------------------------------------------------------------------
@@ -222,7 +224,7 @@ server.close();
 
 console.log(
   `\n${wanted.length} module${wanted.length === 1 ? '' : 's'} → ${OUT}\n` +
-    `${total.toFixed(1)} kB total, ${FRAME_W * SCALE}x${FRAME_H * SCALE} each, ` +
+    `${total.toFixed(1)} kB total, ${FRAME_W * DPR}x${FRAME_H * DPR} each, ` +
     `in ${((Date.now() - started) / 1000).toFixed(0)}s`,
 );
 if (failed) {

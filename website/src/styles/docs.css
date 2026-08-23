@@ -61,10 +61,20 @@
   padding-right: var(--s24);
 }
 
+/* The silkscreen tracking the rest of the site uses is 0.155em, and at that
+   width the longest section name — "USING OPEN AUDIO ANALYZER" — takes two
+   lines in this rail. It needs 219 px of the 215 it has, so this is 0.08em:
+   enough to fit it with a pixel to spare, and four thousandths of an em from
+   the value everywhere else.
+
+   Tightened rather than shortened in the manifest, because that same string is
+   the page's own eyebrow, where it has the room and should look like every
+   other label on the site. */
 .doc-nav-sec {
   margin-top: var(--s32);
   padding-bottom: var(--s8);
   border-bottom: 1px solid var(--hair);
+  letter-spacing: 0.08em;
 }
 
 .doc-nav-sec:first-child {

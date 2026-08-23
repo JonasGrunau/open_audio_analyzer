@@ -1,0 +1,20 @@
+name: oaa_record
+description: >-
+  Records the real engine measuring a real track, so the website's demos can
+  replay it instead of playing a synthetic programme.
+publish_to: 'none'
+version: 0.1.0
+
+environment:
+  sdk: ^3.12.2
+
+dependencies:
+  # The engine itself, by FFI. This is the only thing in `website/` that links
+  # it: everything the browser runs reads the *recording* this makes, which is
+  # why the demo needs no engine and no WebAssembly.
+  oaa_engine:
+    path: ../../../packages/oaa_engine
+  oaa_core:
+    path: ../../../packages/oaa_core
+  oaa_replay:
+    path: ../oaa_replay

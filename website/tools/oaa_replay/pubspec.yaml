@@ -1,0 +1,17 @@
+name: oaa_replay
+description: >-
+  The recording format, and the MeterSource that replays one. Pure Dart, so it
+  compiles for the web.
+publish_to: 'none'
+version: 0.1.0
+
+environment:
+  sdk: ^3.12.2
+
+dependencies:
+  # Nothing but the interface it implements. Not oaa_engine, and not Flutter:
+  # this is the half of the recording that runs in a browser, and it is a
+  # MeterSource for the same reason the socket-backed one is — a thing modules
+  # read numbers out of.
+  oaa_core:
+    path: ../../../packages/oaa_core

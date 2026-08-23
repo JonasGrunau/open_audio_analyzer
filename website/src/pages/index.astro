@@ -2,6 +2,9 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import Base from '../layouts/Base.astro';
+/* Read from the application's own pubspec, so the version on the download
+   button cannot be a release behind. See src/lib/app.mjs. */
+import { REPO, RELEASES, VERSION } from '../lib/app.mjs';
 /* Written by `npm run analyzer` beside the still it describes, so the facade is
    sized from the picture that exists rather than from a number typed here. */
 import still from '../data/analyzer-still.json';
@@ -15,7 +18,6 @@ import still from '../data/analyzer-still.json';
    during the build points at the compiled module and not at this file. */
 const hasDemo = existsSync(join(process.cwd(), 'public/analyzer/index.html'));
 
-const REPO = 'https://github.com/JonasGrunau/open_audio_analyzer';
 const DOCS = '/docs';
 
 /* The catalogue. Every one of these is one ModuleFrame plus a painter in the
@@ -172,17 +174,18 @@ const PLATFORMS = [
         <a class="btn" href={DOCS}>Documentation</a>
       </div>
 
-      <!-- What the plate said, in the space of a line. Anything a reader has to
-           act on — which installer carries the plugin, what each one will not
-           do — is in the download section, which has room to say it. -->
-      <p class="hero-meta">
-        <span class="num">macOS · Windows · Linux · iPadOS · Android</span>
-        <span class="hero-sep" aria-hidden="true">/</span>
-        <span class="num">VST3 · Audio Unit · CLI</span>
-        <span class="hero-sep" aria-hidden="true">/</span>
-        <span class="num">Free, <a class="link-quiet" href={`${REPO}#licence`} rel="noopener">GPL-3.0</a></span>
-      </p>
     </div>
+
+    <!-- What the plate said, in the space of a line. Anything a reader has to
+         act on — which installer carries the plugin, what each one will not
+         do — is in the download section, which has room to say it. -->
+    <p class="hero-meta">
+      <span class="num">macOS · Windows · Linux · iPadOS · Android</span>
+      <span class="hero-sep" aria-hidden="true">/</span>
+      <span class="num">VST3 · Audio Unit · CLI</span>
+      <span class="hero-sep" aria-hidden="true">/</span>
+      <span class="num">Free, GPL-3.0</span>
+    </p>
 
     <figure class="facade" data-facade>
       <img
@@ -206,13 +209,18 @@ const PLATFORMS = [
       }
     </figure>
 
-    <p class="prose facade-cap">
-      {
-        hasDemo
-          ? 'That is a photograph of the real canvas. Press it and the same eight modules load into this page and run — the same painters on the same grid, compiled from the same sources as the desktop build. What is not real is where the numbers come from: dart:ffi has no web implementation, so a mock MeterSource plays a programme into it in place of the engine. The readings are invented; the meters are not.'
-          : 'That is a photograph of the real canvas. The live version is built by npm run analyzer, which needs a Flutter toolchain; this build did not have one, so the still is all there is here.'
-      }
+    <!-- Required, not decorative. The programme behind those meters is a CC BY
+         3.0 track, and that licence asks for credit wherever the audio is
+         published — which a page that plays it is. The wording and the link are
+         copied from test_audio/ATTRIBUTION.md, written by the tool that fetched
+         it, so there is one place this is stated from. -->
+    <p class="hero-credit">
+      Measured from <em>Apathy And Resignation Are The Sources Of Our Misfortune</em> by
+      <a class="link-quiet" href="https://citizensoftheempire.bandcamp.com/" rel="noopener">Citizens
+      Of The Empire</a>, <a class="link-quiet" href="https://creativecommons.org/licenses/by/3.0" rel="noopener">CC
+      BY 3.0</a>. The readings are the engine's own, recorded from that track — not a simulation.
     </p>
+
   </section>
 
   <section class="section shell" id="modules">
@@ -221,7 +229,6 @@ const PLATFORMS = [
         <p class="label">Modules</p>
         <h2 class="section-title">Fourteen meter modules</h2>
       </div>
-      <p class="readout">ModuleFrame + painter</p>
     </div>
 
     <p class="prose mod-intro">
@@ -230,6 +237,12 @@ const PLATFORMS = [
       module that also owned its border and title treatment is a module that would drift from the
       other thirteen. Independent tickers drift too — and two meters showing the same quantity that
       disagree inside one frame is a correctness bug, not a cosmetic one.
+    </p>
+
+    <p class="prose mod-intro mod-intro-2">
+      Every picture below is a photograph of the real module, reading the same forty-five seconds the
+      canvas above is. Nothing is drawn twice for the website and no reading is staged — the track
+      masters loud, so the meters that judge it against a streaming target say so.
     </p>
 
     <ul class="cat">
@@ -261,7 +274,6 @@ const PLATFORMS = [
         <p class="label">Measurement</p>
         <h2 class="section-title">Every quantity, and how<br />it is defined</h2>
       </div>
-      <p class="readout">ITU-R BS.1770-4 · EBU R128 · EBU Tech 3342</p>
     </div>
 
     <div class="split">
@@ -340,7 +352,6 @@ const PLATFORMS = [
         <p class="label">Dynamics</p>
         <h2 class="section-title">What it reports<br />instead of TrueDyn</h2>
       </div>
-      <p class="readout">DR-S · DR-I · PSR · PLR</p>
     </div>
 
     <div class="hon-grid">
@@ -390,7 +401,6 @@ const PLATFORMS = [
         <p class="label">Architecture</p>
         <h2 class="section-title">Three tiers, and the<br />boundary between each</h2>
       </div>
-      <p class="readout">C11 engine · seqlock snapshot · one clock</p>
     </div>
 
     <blockquote class="rule">
@@ -433,7 +443,6 @@ const PLATFORMS = [
         <p class="label">Plugin, tablet and CLI</p>
         <h2 class="section-title">The same engine,<br />in three more places</h2>
       </div>
-      <p class="readout">VST3 · Audio Unit · Wi-Fi · stdout</p>
     </div>
 
     <div class="reach">
@@ -496,7 +505,6 @@ const PLATFORMS = [
         <p class="label">Configuration</p>
         <h2 class="section-title">Settings, presets, targets<br />and skins</h2>
       </div>
-      <p class="readout">plain JSON · 13 colour roles · 6 built-in targets</p>
     </div>
 
     <div class="cfg">
@@ -548,7 +556,6 @@ const PLATFORMS = [
         <p class="label">Known gaps</p>
         <h2 class="section-title">What is not built</h2>
       </div>
-      <p class="readout">six of the twelve in the README</p>
     </div>
 
     <p class="prose gaps-intro">
@@ -581,7 +588,6 @@ const PLATFORMS = [
         <p class="label">Installing</p>
         <h2 class="section-title">Artefacts per platform</h2>
       </div>
-      <p class="readout">0.10.0 · GPL-3.0-or-later</p>
     </div>
 
     <div class="dl">
@@ -618,7 +624,7 @@ const PLATFORMS = [
       </p>
 
       <div class="cta">
-        <a class="btn btn-primary" href="https://github.com/JonasGrunau/open_audio_analyzer/releases/latest" rel="noopener">Download 0.10.0</a>
+        <a class="btn btn-primary" href={RELEASES} rel="noopener">Download {VERSION}</a>
         <a class="btn" href={`${REPO}/releases`} rel="noopener">Release notes</a>
       </div>
     </div>
@@ -633,7 +639,7 @@ const PLATFORMS = [
   /* ---------- hero ---------- */
 
   .hero {
-    padding-block: var(--s64) var(--s48);
+    padding-block: var(--s48) var(--s96);
   }
 
   .eyebrow {
@@ -645,63 +651,61 @@ const PLATFORMS = [
     margin-top: var(--s24);
   }
 
-  .hero-say {
-    margin-top: var(--s48);
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    gap: var(--s48);
-    align-items: start;
+  /* One column, and narrow. The deck is the only prose on this screen, and a
+     sentence set the width of a 1440 px page is a sentence nobody finishes —
+     the measure is what makes it read as a statement rather than a paragraph. */
+  .hero-lede {
+    margin-top: var(--s32);
+    max-width: 62ch;
   }
 
-  .aside {
-    border-left: 1px solid var(--hair-strong);
-    padding-left: var(--s24);
-  }
-
-  .plate {
-    margin: 0;
-    display: grid;
-    gap: var(--s12);
-  }
-
-  .plate div {
-    display: grid;
-    grid-template-columns: 8.5rem minmax(0, 1fr);
-    gap: var(--s12);
-    align-items: baseline;
-    padding-top: var(--s12);
-    border-top: 1px solid var(--hair);
-  }
-
-  .plate dt {
-    color: var(--faint);
-  }
-
-  .plate dd {
-    margin: 0;
-    font-size: 0.8125rem;
-    color: var(--muted);
+  .hero-deck {
+    font-size: clamp(1.1875rem, 1.5vw, 1.4375rem);
+    line-height: 1.5;
+    color: var(--text);
+    max-width: none;
   }
 
   .cta {
     display: flex;
     flex-wrap: wrap;
     gap: var(--s12);
-    grid-column: 1 / -1;
+    margin-top: var(--s32);
   }
 
-  /* ---------- catalogue ---------- */
-
-  .mod-intro {
-    margin-bottom: var(--s48);
+  /* Where the five-row plate went: platforms, what it loads into, what it
+     costs — as one readout line, in the meter face and at the size a module
+     draws its own readout, because that is what it is. */
+  .hero-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--s12);
+    margin-top: var(--s32);
+    font-size: 0.75rem;
+    color: var(--faint);
+    letter-spacing: 0.01em;
   }
 
-  /* ---------- the live analyzer, behind a facade ---------- */
+  .hero-sep {
+    color: var(--hair-strong);
+  }
 
-  .analyzer-say {
-    max-width: 68ch;
+  /* Under the canvas, quiet, and never removed: see the note in the markup. */
+  .hero-credit {
     margin-top: var(--s16);
+    max-width: 78ch;
+    font-family: var(--prose);
+    font-size: 0.875rem;
+    line-height: 1.55;
+    color: var(--faint);
   }
+
+  .hero-credit em {
+    font-style: italic;
+  }
+
+  /* ---------- the live analyzer in the hero, behind a facade ---------- */
 
   /* A photograph of the real canvas, with the real thing one press away.
      The aspect ratio is the still's own, declared so that nothing moves when
@@ -740,10 +744,10 @@ const PLATFORMS = [
     justify-content: center;
     gap: var(--s12);
     width: 100%;
-    background: color-mix(in srgb, var(--ink) 55%, transparent);
+    background: color-mix(in srgb, var(--ink) 38%, transparent);
     border: 0;
     color: var(--text);
-    font-family: var(--ui);
+    font-family: var(--display);
     font-size: 0.9375rem;
     cursor: pointer;
     transition: background 120ms linear;
@@ -751,7 +755,7 @@ const PLATFORMS = [
 
   .facade-go:hover,
   .facade-go:focus-visible {
-    background: color-mix(in srgb, var(--ink) 40%, transparent);
+    background: color-mix(in srgb, var(--ink) 22%, transparent);
   }
 
   .facade-go-mark {
@@ -780,13 +784,6 @@ const PLATFORMS = [
     font-size: 0.75rem;
     color: var(--muted);
     letter-spacing: 0;
-  }
-
-  .analyzer-foot {
-    max-width: 68ch;
-    margin-top: var(--s16);
-    color: var(--faint);
-    font-size: 0.8125rem;
   }
 
   @media (max-width: 560px) {
@@ -865,6 +862,17 @@ const PLATFORMS = [
     line-height: 1.5;
     color: var(--faint);
     margin: var(--s4) 0 0;
+  }
+
+  /* ---------- catalogue ---------- */
+
+  .mod-intro {
+    margin-bottom: var(--s24);
+  }
+
+  .mod-intro-2 {
+    margin-bottom: var(--s48);
+    color: var(--faint);
   }
 
   /* ---------- measurement ---------- */
@@ -1176,17 +1184,7 @@ const PLATFORMS = [
 
   @media (max-width: 1080px) {
     .hero {
-      padding-block: var(--s64) var(--s32);
-    }
-    .hero-say {
-      grid-template-columns: minmax(0, 1fr);
-      gap: var(--s24);
-    }
-    .aside {
-      border-left: 0;
-      border-top: 1px solid var(--hair-strong);
-      padding-left: 0;
-      padding-top: var(--s24);
+      padding-block: var(--s48) var(--s64);
     }
 
     .split,

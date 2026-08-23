@@ -111,3 +111,12 @@ packaging/linux/flatpak/staging/
 # `.graphifyignore` is the input and *is* tracked: it defines the corpus, and a
 # graph built from a different corpus is a different graph.
 graphify-out/
+
+# Claude Code's per-checkout state. `settings.json` here names a hook by its
+# absolute path inside one developer's home directory, and `RESUME.md` is a
+# pointer into one session's transcript and its checkpoint ref — neither means
+# anything on another machine, and the first would silently fail to run there.
+# Several sessions share this working tree, so this directory is rewritten by
+# whichever one wrote last; project-wide settings belong in a tracked file that
+# says so, not in a scratch directory a tool owns.
+.claude/

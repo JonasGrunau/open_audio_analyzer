@@ -16,8 +16,10 @@ dependencies:
     path: ../../../packages/oaa_core
   oaa_ui:
     path: ../../../packages/oaa_ui
-  oaa_mock:
-    path: ../oaa_mock
+  # The recording, and the MeterSource that replays it. Not oaa_engine: there
+  # is no engine in a browser, which is the whole reason a recording exists.
+  oaa_replay:
+    path: ../oaa_replay
 
 dev_dependencies:
   flutter_test:

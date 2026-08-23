@@ -47,10 +47,12 @@ and in issue threads nobody can edit.
 | `src/styles/docs.css` | The manual, set as a manual: body text at full contrast rather than muted, a measure, and the three-column shape. Global rather than scoped because Astro scopes a component's CSS by stamping the elements it compiled, and it did not compile these — they are Markdown rendered at build time. |
 | `src/data/analyzer-still.json` | The still's pixel size, written beside the picture by `npm run analyzer`, so the facade is sized from the image that exists rather than from a number typed twice. |
 | `scripts/measure.mjs` | The gated loudness path in JavaScript — K-weighting, R128 gating, LRA, oversampled true peak, an FFT — which fed the meter bridge the front page used to draw. **Nothing calls it.** Left in place because it works and is self-contained, not because it is used; see the rules. |
+| `scripts/record.mjs` | Runs the engine over a real track and writes the recording the demos replay. **The one script here with a prerequisite outside the repository**: the track is CC BY 3.0 and 35 MB, fetched by `dart run tool/fetch_test_audio.dart` from the repository root. It refuses to run without the attribution file that tool writes, because the licence requires the credit wherever the audio is published. The excerpt was chosen by measuring — the header lists the four candidates and their loudness ranges. |
 | `scripts/render-modules.mjs` | Photographs the fourteen modules out of `tools/module-renderer` and writes `public/modules/*.webp`. Two device pixels per logical one and the frame sized to where it lands — more resolution came out softer, and the README says why. |
 | `scripts/render-analyzer.mjs` | Builds `tools/analyzer-demo` into `public/analyzer/` and photographs it into `public/analyzer-still.webp`. |
 | `scripts/lib/headless.mjs` | Serving a directory to a headless Chrome and photographing what it draws, shared by both renderers. Waits for `globalThis.oaaRenderReady` — the picture — rather than for a stopwatch, because `--virtual-time-budget` does not drive Flutter's ticker. |
 | `scripts/lib/fonts.mjs` | Puts the application's typefaces where a tool's own pubspec can name them. `OaaType` asks for the bare family names, which only an application-level declaration provides, and a relative path in that declaration builds fine and 404s at runtime. |
+| `scripts/check-layout.mjs` | `npm run check`: opens every page at 360, 390 and 768 px with the viewport actually overridden, and fails if one scrolls sideways. The bug it catches is invisible in a screenshot and obvious on a phone, and a browser window cannot be dragged narrow enough to see it. Needs Chrome, so it is not part of `npm run build`. |
 | `scripts/clean-content-cache.mjs` | Drops Astro's rendered-content store before a build. The store is keyed by each document's digest, so editing a plugin in `src/lib/markdown.mjs` changes no digest, the build reports success and the site is silently a build behind. Every plugin here was written into that trap at least once. |
 | `scripts/og.html` | The Open Graph card as a page, so it uses the site's own tokens. Rendered by `npm run og` into `public/og.png`. |
 | `public/modules/*.webp` | The fourteen thumbnails. Committed output — see the rules. |
@@ -59,13 +61,18 @@ and in issue threads nobody can edit.
 | `public/oaa.svg`, `public/icon-180.png` | The app icon. **Written by `packaging/icon/make_icons.dart`**, not copied here by hand — `oaa.svg` is `assets/brand/oaa-icon.svg` byte for byte, and is what `scripts/og.html` references rather than holding its own copy of the mark. |
 | `public/favicon.svg` | The tab icon, and **the one icon in this repository that is drawn by hand**: the wave cropped out of the tile and stroked in the signal colour, because a tab shows it at 16 px where the tile is most of what you see and the wave inside it is four grey pixels. `Base.astro` uses it for the header mark as well, so a reader fetches one file. `make_icons.dart` wrote the tile over it until 0.10.0; there is a note where that line was. |
 | `public/robots.txt`, `public/sitemap.xml` | Written by hand. Nine URLs do not need a generator — but they do need adding to, and did not get it: the sitemap named the front page alone for as long as the documentation had been part of this site. |
-| `tools/module-renderer/` | A Flutter web target that depends on `package:oaa` and renders one real module per page load against the mock in `tools/oaa_mock`. Its own `README.md` documents the query string. |
+| `tools/module-renderer/` | A Flutter web target that depends on `package:oaa` and renders one real module per page load, reading the recording in `tools/oaa_replay`. Its own `README.md` documents the query string. |
 | `tools/analyzer-demo/` | The same idea, one canvas further: eight real modules, one `MeterClock`, the same `ModuleHost` and the same painters the application runs. Compiled into `public/analyzer/` and loaded only when a reader presses the still. |
-| `tools/oaa_mock/` | The mock `MeterSource` both of them play, as a package. Two copies of it would be two mocks that eventually disagree about what the programme did, and then the still and the live demo would show different readings for the same material. |
+| `tools/oaa_record/` | A **Dart CLI that links the real engine by FFI**, pushes a real track through it, and writes down what it measured. The only thing in `website/` that touches `oaa_engine`, and it never runs in a browser. |
+| `tools/oaa_replay/` | The recording format, and `ReplaySource` — the **fourth `MeterSource`**, beside the native one, the socket the tablet reads and the mock this replaced. Pure Dart, so it compiles for the web. Shared by both targets, so the stills and the live canvas cannot disagree about what the material did: they are the same forty-five seconds, measured once. |
 
 Generated and git-ignored, all of it by `website/.gitignore`: `node_modules/`,
-`dist/`, `.astro/`, `.wrangler/`, `src/data/bridge.json` and `public/analyzer/`
-— the last being about 5 MB of compiled Flutter that `npm run deploy` builds.
+`dist/`, `.astro/`, `.wrangler/`, `src/data/bridge.json`, `public/analyzer/` —
+about 7 MB of compiled Flutter that `npm run deploy` builds — and
+`tools/*/web/programme.*`, which is the recording and the audio it was taken
+from. Those last are derived from a track this repository does not carry, so
+they cannot be committed and a fresh clone has to run `npm run record` before
+either renderer produces anything.
 
 ## Rules
 
@@ -105,15 +112,15 @@ Generated and git-ignored, all of it by `website/.gitignore`: `node_modules/`,
   goes stale unseen.
 
 - **`tools/` is outside the root workspace, and outside the repository's analyze
-  gate.** Each of the three packages resolves its own dependencies, and nothing
-  in `ci.yml` builds this directory — so on a runner, `package:oaa_mock` names a
-  package that has never been resolved there. They are excluded in the root
+  gate.** Each of the four packages resolves its own dependencies, and nothing
+  in `ci.yml` builds this directory — so on a runner, `package:oaa_replay` names
+  a package that has never been resolved there. They are excluded in the root
   `analysis_options.yaml` for that reason and analysed by the
   `analysis_options.yaml` each of them carries. It is worth knowing *why* they
   passed the root gate for as long as they did: each target held its own copy of
-  the mock and imported it relatively, and a relative import needs no package
-  resolution. Sharing the mock is what turned a gate that never looked into one
-  that failed.
+  the source it drove and imported it relatively, and a relative import needs no
+  package resolution. Sharing it is what turned a gate that never looked into
+  one that failed.
 
 - **No shadows and no gradients, and every spatial value from the scale.** The
   first follows from the application's own "machined panels sitting flush", and

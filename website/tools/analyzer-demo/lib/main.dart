@@ -8,25 +8,36 @@
 /// repainting from one `MeterClock`, exactly as the desktop canvas and the
 /// tablet remote display do.
 ///
-/// The only thing that is not real is where the numbers come from. There is no
-/// engine: `dart:ffi` has no web implementation, and this build never reaches
-/// `OaaEngine` — `MockSource` sits in its place, a third `MeterSource` beside
-/// the native one and the socket-backed one the tablet reads. Nothing on this
-/// canvas knows the difference, which is the point of that interface.
+/// The numbers are the engine's too, and they are measurements of real music —
+/// they are just not being taken here. `dart:ffi` has no web implementation, so
+/// this build never reaches `OaaEngine`; instead `oaa_record` ran the engine
+/// over a CC BY track on a machine that has one, wrote down what it measured,
+/// and `ReplaySource` plays that back. It is the fourth `MeterSource`, beside
+/// the native one, the socket the tablet reads and the mock that used to stand
+/// here. Nothing on this canvas knows the difference, which is the point of
+/// that interface — and this is the implementation the interface was for.
+///
+/// The audio is the same excerpt, so the meters and the music are one instant
+/// rather than two clocks agreeing. It starts silent: a browser will not play
+/// sound until somebody has interacted with *this* document, and the press that
+/// opened it happened in the page above. See `programme.dart`.
 ///
 ///     ?seconds=32      freeze after this much programme, for a screenshot
 ///
-/// Without it the programme runs indefinitely.
+/// Without it the programme runs, and loops.
 library;
 
+import 'dart:async';
 import 'dart:js_interop';
 
 import 'package:flutter/widgets.dart';
 import 'package:oaa/src/canvas/module_host.dart';
 import 'package:oaa/src/clock/meter_clock.dart';
 import 'package:oaa_core/oaa_core.dart';
-import 'package:oaa_mock/oaa_mock.dart';
+import 'package:oaa_replay/oaa_replay.dart';
 import 'package:oaa_ui/oaa_ui.dart';
+
+import 'programme.dart';
 
 /// Set once the programme has frozen and the final frame is painted. Only
 /// meaningful when `?seconds=` was given — see `scripts/render-analyzer.mjs`.
@@ -119,34 +130,128 @@ class AnalyzerDemo extends StatefulWidget {
 
 class _AnalyzerDemoState extends State<AnalyzerDemo>
     with SingleTickerProviderStateMixin {
-  late final MockSource _source = MockSource(
-    // Runs indefinitely unless a screenshot asked for a stopping point.
-    captureAt:
-        double.tryParse(Uri.base.queryParameters['seconds'] ?? '') ??
-        double.infinity,
-    // A second of programme per second of watching, unless this is a
-    // screenshot — a still has to come out the same every time, so it steps by
-    // frame instead. See MockSource.realtime.
-    realtime: !Uri.base.queryParameters.containsKey('seconds'),
-    onFrozen: _announceReady,
+  /// Where the recording and the excerpt are served from. Relative, so the
+  /// build's `--base-href` puts them under /analyzer/ on the site and beside
+  /// the page on a local server.
+  static const _recordingUrl = 'programme.oaaz';
+  static const _audioUrl = 'programme.m4a';
+
+  /// A screenshot asks for a fixed amount of programme and then stops, so that
+  /// the same picture comes out every time. Without it this runs and loops.
+  static final double? _captureAt = double.tryParse(
+    Uri.base.queryParameters['seconds'] ?? '',
   );
-  late final MeterClock _clock = MeterClock(engine: _source, vsync: this);
+
+  ReplaySource? _source;
+  MeterClock? _clock;
+  Playhead? _playhead;
+
+  /// The frame counter a screenshot advances by, in place of a clock. A still
+  /// driven by wall time is a still that depends on how fast the machine
+  /// rendering it happened to be.
+  int _frame = 0;
+  bool _frozen = false;
+
+  bool _audioReady = false;
+  bool _audioStarting = false;
+  String? _failure;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _firstFrame = true);
+    unawaited(_load());
   }
 
-  void _announceReady() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _renderReady = true);
-    });
+  Future<void> _load() async {
+    try {
+      final programme = await loadProgramme(
+        recordingUrl: _recordingUrl,
+        audioUrl: _audioUrl,
+      );
+      if (!mounted) return;
+
+      final recording = Recording.parse(programme.recordingBytes);
+      final playhead = Playhead(lengthSeconds: recording.seconds);
+      final source = ReplaySource(
+        recording,
+        positionSeconds: () =>
+            _capturing ? _frame / recording.header.fps : playhead.seconds,
+        // A screenshot stops at the end rather than wrapping to the start.
+        loop: !_capturing,
+      );
+
+      setState(() {
+        _playhead = playhead;
+        _source = source;
+        _clock = MeterClock(engine: source, vsync: this)..addListener(_onTick);
+      });
+
+      // The waveform, before anybody asks for sound. The oscilloscope and the
+      // phase scope draw the last 1024 stereo frames — the audio itself — so
+      // decoding it now means they are drawing from the first frame rather than
+      // sitting empty until somebody presses a button. Decoding is allowed
+      // without interaction; only playing is not.
+      final audio = programme.audio;
+      if (audio != null) {
+        final buffer = await playhead.prepare(audio);
+        if (!mounted) return;
+        if (buffer != null) {
+          source.attachPcm(
+            interleave(buffer),
+            sampleRate: buffer.sampleRate,
+            channels: buffer.numberOfChannels,
+          );
+          setState(() => _audioReady = true);
+        }
+      }
+    } on Object catch (error) {
+      if (!mounted) return;
+      setState(() => _failure = '$error');
+    }
+  }
+
+  bool get _capturing => _captureAt != null;
+
+  /// Advance the screenshot's frame counter, and announce when it is done.
+  void _onTick() {
+    final captureAt = _captureAt;
+    final source = _source;
+    if (captureAt == null || source == null || _frozen) return;
+
+    final fps = source.recording.header.fps;
+    if (_frame / fps >= captureAt || _frame >= source.recording.frames - 1) {
+      _frozen = true;
+      // Two frames: one to paint the final state, one to be sure it is on the
+      // screen before anything photographs it.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        WidgetsBinding.instance.addPostFrameCallback(
+          (_) => _renderReady = true,
+        );
+      });
+      return;
+    }
+    _frame++;
+  }
+
+  Future<void> _startAudio() async {
+    final playhead = _playhead;
+    if (playhead == null || !_audioReady) return;
+
+    setState(() => _audioStarting = true);
+    try {
+      await playhead.play();
+    } on Object {
+      // A refused AudioContext is not worth an error on the canvas: the meters
+      // are the point and they are already running.
+    } finally {
+      if (mounted) setState(() => _audioStarting = false);
+    }
   }
 
   @override
   void dispose() {
-    _clock.dispose();
+    _clock?.dispose();
     super.dispose();
   }
 
@@ -161,35 +266,137 @@ class _AnalyzerDemoState extends State<AnalyzerDemo>
         child: Container(
           color: colors.background,
           padding: const EdgeInsets.all(Space.sm),
-          // The same composition the tablet's canvas uses: one GridGeometry
-          // sized to whatever the window is, every module positioned by the
-          // rect it declares, and each keyed by id so that resizing the window
-          // preserves the State its painter has laid its paragraphs out in.
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final geometry = GridGeometry(size: constraints.biggest);
+          child: _body(colors),
+        ),
+      ),
+    );
+  }
 
-              return Stack(
-                children: [
-                  for (final module in _tab.modules)
-                    Positioned.fromRect(
-                      rect: geometry.rectFor(module.rect),
-                      key: ValueKey<String>(module.id),
-                      child: ModuleHost(
-                        spec: module,
-                        engine: _source,
-                        clock: _clock,
-                        calibration: _calibration,
-                        selected: false,
-                        // Nothing on this canvas can be changed, so no module
-                        // draws a menu button — a control that swallows the tap
-                        // is worse than no control.
-                        onMenu: null,
-                      ),
+  Widget _body(OaaColors colors) {
+    final source = _source;
+    final clock = _clock;
+    final failure = _failure;
+
+    if (failure != null) {
+      return _Notice(
+        text: 'The recording could not be loaded.\n$failure',
+        colors: colors,
+      );
+    }
+    if (source == null || clock == null) {
+      return _Notice(text: 'Loading the programme…', colors: colors);
+    }
+
+    return Stack(
+      children: [
+        // The same composition the tablet's canvas uses: one GridGeometry sized
+        // to whatever the window is, every module positioned by the rect it
+        // declares, and each keyed by id so that resizing preserves the State
+        // its painter has laid its paragraphs out in.
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final geometry = GridGeometry(size: constraints.biggest);
+
+            return Stack(
+              children: [
+                for (final module in _tab.modules)
+                  Positioned.fromRect(
+                    rect: geometry.rectFor(module.rect),
+                    key: ValueKey<String>(module.id),
+                    child: ModuleHost(
+                      spec: module,
+                      engine: source,
+                      clock: clock,
+                      calibration: _calibration,
+                      selected: false,
+                      // Nothing on this canvas can be changed, so no module
+                      // draws a menu button — a control that swallows the tap
+                      // is worse than no control.
+                      onMenu: null,
                     ),
-                ],
-              );
-            },
+                  ),
+              ],
+            );
+          },
+        ),
+        if (_audioReady && !(_playhead?.isPlaying ?? false))
+          Positioned(
+            right: Space.md,
+            bottom: Space.md,
+            child: _SoundButton(
+              busy: _audioStarting,
+              colors: colors,
+              onPressed: _audioStarting ? null : _startAudio,
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// A line of text on the canvas ground, for the two seconds before the
+/// recording arrives and for the case where it does not.
+class _Notice extends StatelessWidget {
+  const _Notice({required this.text, required this.colors});
+
+  final String text;
+  final OaaColors colors;
+
+  @override
+  Widget build(BuildContext context) => Center(
+    child: Text(
+      text,
+      textAlign: TextAlign.center,
+      style: TextStyle(
+        color: colors.textMuted,
+        fontFamily: 'Google Sans Code',
+        fontSize: 12,
+      ),
+    ),
+  );
+}
+
+/// Offers the sound, and goes once it is playing.
+///
+/// Deliberately small and in a corner: the canvas is the thing being shown, and
+/// a control over the middle of it would be a second front door on a page whose
+/// first one the reader has already opened.
+class _SoundButton extends StatelessWidget {
+  const _SoundButton({
+    required this.busy,
+    required this.colors,
+    required this.onPressed,
+  });
+
+  final bool busy;
+  final OaaColors colors;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: 'Play the audio this was measured from',
+      child: GestureDetector(
+        onTap: onPressed,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: colors.panelRaised,
+            border: Border.all(color: colors.accent),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: Space.sm,
+              vertical: Space.xs,
+            ),
+            child: Text(
+              busy ? 'starting…' : '♪  play the audio',
+              style: TextStyle(
+                color: colors.accent,
+                fontFamily: 'Google Sans Code',
+                fontSize: 11,
+              ),
+            ),
           ),
         ),
       ),

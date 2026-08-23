@@ -17,7 +17,7 @@
          rather than a camera that shows nothing. -->
     <uses-permission android:name="android.permission.CAMERA"/>
     <application
-        android:label="OAA"
+        android:label="Audio Analyzer"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

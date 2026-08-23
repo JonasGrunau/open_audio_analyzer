@@ -83,7 +83,7 @@ is still not built, and `docs/PLAN.md` for what was planned.
 | `tool/` | Repository scripts. Nothing here ships. | GPL-3.0-or-later |
 | `packaging/` | pkg, Windows installer, Linux tarball, AppImage, flatpak, and the app icon they all need. The first three carry the VST3 (and on macOS the AU) and so are built from the plugin job's artefacts, not from the app alone. | GPL-3.0-or-later |
 | `assets/` | The fonts the application bundles, and the logo the repository publishes. `brand/oaa-logo.svg` is the one drawing everything else is generated from. | GPL-3.0-or-later; fonts SIL OFL 1.1 |
-| `website/` | `open-audio-analyzer.com` — a static Astro site that is also where the documentation is published, rendered from this repository's own Markdown in place. Two Flutter web targets and the mock they share give it its pictures: one photographs a module at a time, the other is a live canvas of eight. Deployed by hand; no job in `ci.yml` touches it. | GPL-3.0-or-later |
+| `website/` | `open-audio-analyzer.com` — a static Astro site that is also where the documentation is published, rendered from this repository's own Markdown in place. Two Flutter web targets give it its pictures — one photographs a module at a time, the other is a live canvas of eight — and both replay one recording rather than a mock: a Dart CLI measures a real track through the engine, and the `ReplaySource` they share plays it back, so a still and the live demo cannot disagree about what the material did. Deployed by hand; no job in `ci.yml` touches it. | GPL-3.0-or-later |
 
 **`plugin/` is the one AGPL directory**, because JUCE 7 and 8 are
 AGPLv3-or-commercial (only JUCE 6 offered GPLv3, which `docs/PLAN.md` still
@@ -716,3 +716,44 @@ remote display has no native library at all.
   `dr_flac`, `dr_mp3` (file decoding). All vendored under
   `engine/third_party/`, all permissive, all single-header.
 - **Build:** `native_toolchain_c`, `hooks`, `code_assets`, `ffigen`.
+
+## graphify
+
+A knowledge graph of this repository lives in `graphify-out/`, built by
+[graphify](https://github.com/safishamsi/graphify) from the corpus
+`.graphifyignore` defines. It is generated, gitignored and rebuilt by a
+post-commit hook; `.graphifyignore` is the input and is tracked, because a
+graph built from a different corpus is a different graph.
+
+**What it covers.** The 300-odd files this project actually wrote — `lib/`,
+`packages/`, `engine/`, `cli/`, `plugin/`, `test/`, `tool/`, the platform
+runners, `packaging/`, `website/`, and every Markdown file including this one.
+**What it does not:** `plugin/third_party/` and `engine/third_party/`. Vendored
+JUCE alone is 3,787 files and would be seven eighths of the graph, none of it
+ours. Icons are excluded too — they are generated from `assets/brand/oaa-logo.svg`
+by `packaging/icon/make_icons.dart` and carry no structure the script does not
+already have.
+
+**Use it before grepping.** These return a scoped subgraph, which is smaller and
+better connected than a text search over the same tree:
+
+- `graphify query "<question>"` — the general entry point.
+- `graphify path "<A>" "<B>"` — how two concepts reach each other.
+- `graphify explain "<concept>"` — one node and everything touching it.
+- `graphify-out/wiki/index.md` — one article per community, for navigating
+  rather than asking.
+- `graphify-out/GRAPH_REPORT.md` — the audit: god nodes, cohesion scores, and
+  every edge tagged EXTRACTED, INFERRED or AMBIGUOUS. Read it for a broad
+  architecture review, or when the three commands above do not surface enough.
+
+**An edge is not evidence.** INFERRED and AMBIGUOUS edges are the model's
+guesses and are labelled as such; confirm one against the file it cites before
+acting on it. The graph is a map of where to look, not a source of truth about
+what the code does — that is what the code is for.
+
+**Keeping it current.** The post-commit hook re-runs the AST pass on whatever
+the commit touched, which costs nothing and needs no API. That half is
+structural only: prose, rationale and cross-document concepts come from the
+semantic pass, which runs when somebody invokes `/graphify` and not otherwise.
+So after a change that is mostly Markdown, the graph's *shape* is current and
+its *reading* of the new prose is not.

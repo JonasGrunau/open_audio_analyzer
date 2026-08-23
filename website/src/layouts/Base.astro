@@ -1,5 +1,8 @@
 ---
 import '../styles/global.css';
+/* One source for the version and the repository, read from the application's
+   own pubspec — see src/lib/app.mjs. */
+import { REPO, RELEASES, VERSION } from '../lib/app.mjs';
 
 interface Props {
   title: string;
@@ -14,13 +17,11 @@ interface Props {
 const { title, description, path = '/', slimFooter = false } = Astro.props;
 const site = 'https://open-audio-analyzer.com';
 const canonical = site + (path === '/' ? '' : path);
-const REPO = 'https://github.com/JonasGrunau/open_audio_analyzer';
 /* The documentation is part of this site: the repository's own Markdown,
    rendered at /docs. It was a separate GitHub Pages deployment with its own
    generator and its own visual language, which meant two sites to keep and a
    header link that took the reader off the one they were on. */
 const DOCS = '/docs';
-const VERSION = '0.10.0';
 
 const nav = [
   { href: '/#modules', label: 'Modules' },
@@ -29,11 +30,6 @@ const nav = [
   { href: '/#gaps', label: 'Known gaps' },
 ];
 
-/* Straight to the releases. There was a /download page repeating the release
-   assets and the install steps; both are already kept up to date in the
-   repository and in docs/site/install.md, and a third copy is a third thing to
-   forget when a filename changes. */
-const RELEASES = 'https://github.com/JonasGrunau/open_audio_analyzer/releases/latest';
 ---
 
 <!doctype html>
