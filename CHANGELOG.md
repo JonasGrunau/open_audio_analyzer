@@ -25,8 +25,13 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The live analyzer's recording and the 45 seconds of audio it was measured from
   are committed — 1.2 MB, and already published on the site. They were written
   by `npm run record` on a developer's machine and git-ignored, which a runner
-  that deploys the site cannot do: recording needs the 33 MB source track and
-  `afconvert`, which is macOS. The CC BY credit is committed beside them.
+  that deploys the site cannot do: recording needs the 35 MB source track, and
+  no job here fetches somebody else's music to publish a page. The CC BY credit
+  is committed beside them.
+- `npm run record` encodes through ffmpeg where `afconvert` is not there, so the
+  whole recording path runs on Linux rather than on a Mac only. afconvert is
+  still preferred where it exists — Apple's AAC is the better encoder at
+  128 kbit/s, and the committed excerpt was made with it.
 
 ## [0.11.0] — 2026-08-24
 

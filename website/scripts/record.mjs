@@ -47,8 +47,14 @@
 //
 // The measurements come from the FLAC and are already made by the time this
 // encodes anything; the m4a is only what a reader hears. 35 MB of lossless to
-// listen to a 45-second loop in a browser would be a strange thing to send, and
-// `afconvert` is on every Mac, so there is no dependency to install.
+// listen to a 45-second loop in a browser would be a strange thing to send.
+//
+// Two encoders, in preference order: `afconvert`, which ships with macOS and
+// whose AAC is the better of the two at this bitrate, then `ffmpeg`. The
+// fallback exists because the first version had only afconvert, and one macOS
+// binary in the middle of this script put the entire recording path out of
+// reach of anybody working on Linux — including this repository's own CI, which
+// is why the demo's two files are committed.
 
 import { execFileSync } from 'node:child_process';
 import { createReadStream, createWriteStream, existsSync, mkdirSync, rmSync, statSync } from 'node:fs';
@@ -63,7 +69,9 @@ const ATTRIBUTION = join(REPO, 'test_audio/ATTRIBUTION.md');
 const RECORDER = join(ROOT, 'tools/oaa_record');
 
 /// Both are a Flutter target's `web/` directory, which is copied verbatim into
-/// its build. Both are git-ignored: this is 2 MB of derived audio.
+/// its build. The demo's two files are committed, because CI deploys the site
+/// and cannot make them; the renderer's ten-odd MB are git-ignored and never
+/// leave this machine.
 const DEMO_OUT = join(ROOT, 'tools/analyzer-demo/web');
 const RENDERER_OUT = join(ROOT, 'tools/module-renderer/web');
 
@@ -192,21 +200,57 @@ rmSync(webRecording);
 
 // --- Encode -----------------------------------------------------------------
 
-// afconvert reads a file, so the excerpt written for the renderer is also what
-// the encoder is pointed at. One decode, one set of samples, two outputs.
+// The encoder reads a file, so the excerpt written for the renderer is also
+// what it is pointed at. One decode, one set of samples, two outputs.
 const m4a = join(DEMO_OUT, 'programme.m4a');
-try {
-  execFileSync(
-    'afconvert',
-    ['-f', 'm4af', '-d', 'aac', '-b', String(BITRATE), '-q', '127', '-s', '3', wav, m4a],
-    { stdio: ['ignore', 'pipe', 'pipe'] },
-  );
-} catch (error) {
+const encoder = encodeAac(wav, m4a);
+
+/// AAC in an MP4 container, through whichever encoder the machine has.
+///
+/// Preference, not equivalence: Apple's AAC is the better encoder at 128 kbit/s
+/// and the committed excerpt was made with it, so `afconvert` is tried first
+/// wherever it exists. ffmpeg is what makes this script runnable anywhere else.
+///
+/// A missing binary is `ENOENT` and means "try the next one"; anything else is
+/// an encoder that ran and failed, which is a real error and is reported as
+/// one — swallowing it would leave a truncated m4a behind and say nothing.
+function encodeAac(from, to) {
+  const encoders = [
+    {
+      bin: 'afconvert',
+      args: ['-f', 'm4af', '-d', 'aac', '-b', String(BITRATE), '-q', '127', '-s', '3', from, to],
+    },
+    {
+      // `-movflags +faststart` moves the index to the front of the file, which
+      // is what lets a browser start playing before the whole of it has
+      // arrived. afconvert writes m4af that way already.
+      bin: 'ffmpeg',
+      args: ['-hide_banner', '-loglevel', 'error', '-y', '-i', from,
+        '-c:a', 'aac', '-b:a', String(BITRATE), '-movflags', '+faststart', to],
+    },
+  ];
+
+  const absent = [];
+  for (const { bin, args } of encoders) {
+    try {
+      execFileSync(bin, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+      return bin;
+    } catch (error) {
+      if (error.code === 'ENOENT') {
+        absent.push(bin);
+        continue;
+      }
+      console.error(`${bin} failed to encode ${from}.`);
+      console.error(error.stderr?.toString() ?? '');
+      process.exit(1);
+    }
+  }
+
   console.error(
-    'afconvert failed. It ships with macOS; on another platform, encode\n' +
-      `${wav} to AAC in an MP4 container by hand and save it as ${m4a}.`,
+    `No AAC encoder: looked for ${absent.join(' and ')}. afconvert ships with\n` +
+      `macOS; everywhere else, install ffmpeg — or encode ${from} to AAC in an\n` +
+      `MP4 container by hand and save it as ${to}.`,
   );
-  console.error(error.stderr?.toString() ?? '');
   process.exit(1);
 }
 
@@ -217,6 +261,6 @@ const kb = (path) => `${(statSync(path).size / 1024).toFixed(0)} kB`;
 console.log('');
 const show = (path) => path.replace(`${ROOT}/`, '');
 console.log(`  ${show(packed)}`.padEnd(46) + `${(gzipped / 1024).toFixed(0).padStart(5)} kB   fetched on play`);
-console.log(`  ${show(m4a)}`.padEnd(46) + `${kb(m4a).padStart(8)}   fetched on play`);
+console.log(`  ${show(m4a)}`.padEnd(46) + `${kb(m4a).padStart(8)}   fetched on play, ${encoder}`);
 console.log(`  ${show(fullRecording)}`.padEnd(46) + `${kb(fullRecording).padStart(8)}   local, for the thumbnails`);
 console.log(`  ${show(wav)}`.padEnd(46) + `${kb(wav).padStart(8)}   local, for the scope`);

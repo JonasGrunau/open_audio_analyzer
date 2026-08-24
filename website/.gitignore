@@ -16,8 +16,8 @@ public/analyzer/
 # thumbnails it produces are what is committed.
 #
 # The *demo's* two files are committed rather than ignored, because CI deploys
-# the site and cannot make them: `npm run record` needs the 33 MB source track
-# and `afconvert`, which is macOS. They are 1.2 MB, they are already published
-# at open-audio-analyzer.com/analyzer/, and CC BY 3.0 asks for credit rather
-# than for silence — see tools/analyzer-demo/web/ATTRIBUTION.md.
+# the site and cannot make them: `npm run record` needs the 35 MB source track,
+# which no job here may fetch — see tool/AGENTS.md. They are 1.2 MB, they are
+# already published at open-audio-analyzer.com/analyzer/, and CC BY 3.0 asks for
+# credit rather than for silence — see tools/analyzer-demo/web/ATTRIBUTION.md.
 tools/module-renderer/web/programme.*

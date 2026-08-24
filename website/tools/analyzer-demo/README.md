@@ -32,10 +32,10 @@ tuned to make that come out well.
 
 Both are written by `npm run record`, and both live in `web/` because that is
 what `flutter build web` copies into the build. They are **committed**, which
-the album they are cut from is not: the site is deployed by CI now, and a Linux
-runner can neither fetch the 33 MB source track nor run the `afconvert` that
-encodes the excerpt. `web/ATTRIBUTION.md` is the CC BY credit, and it travels
-into the build beside them.
+the album they are cut from is not: the site is deployed by CI now, and no job
+here may fetch 35 MB of music from somebody else's CDN to put a page on the
+internet. `web/ATTRIBUTION.md` is the CC BY credit, and it travels into the
+build beside them.
 
 ## The audio
 

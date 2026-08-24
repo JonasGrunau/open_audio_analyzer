@@ -20,5 +20,5 @@ under the canvas, this file travels with the audio into every build, and
 source it came from. There is no non-commercial and no share-alike clause.
 
 The excerpt is committed — unlike the album it is cut from, and unlike the
-renderer's copy — because the site is deployed by CI now, and a runner can
-neither fetch the 33 MB source nor run the `afconvert` that encodes this.
+renderer's copy — because the site is deployed by CI now, and no job in this
+repository fetches 35 MB of somebody else's music to publish a page.
