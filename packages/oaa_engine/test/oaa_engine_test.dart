@@ -512,37 +512,52 @@ void main() {
       expect(engine.sampleRate, tap.sampleRate);
     });
 
-    test('delivering nothing is not the same as having stopped', () async {
-      final tap = systemOutput();
-      if (tap == null) return;
+    test(
+      'delivering nothing is not the same as having stopped',
+      () async {
+        // **Five minutes on the timeout below, because opening the tap is what
+        // takes the time.** On a machine that has never granted
+        // `kTCCServiceAudioCapture` — a CI runner, where nobody can answer the
+        // check either — creating the process tap blocks for about three
+        // minutes before it returns. The sibling above pays the same three
+        // minutes and does not trip the default 30 seconds, because it is
+        // synchronous: a blocking FFI call holds the isolate, so the timer that
+        // would fire never runs until the test has already finished. This one
+        // awaits, the loop turns, and the timeout fires 30 seconds into an open
+        // that has not returned yet.
+        final tap = systemOutput();
+        if (tap == null) return;
 
-      final engine = OaaEngine.start(
-        source: OaaSource.device,
-        deviceId: kOaaSystemOutputDeviceId,
-      );
-      addTearDown(engine.dispose);
+        final engine = OaaEngine.start(
+          source: OaaSource.device,
+          deviceId: kOaaSystemOutputDeviceId,
+        );
+        addTearDown(engine.dispose);
 
-      // Long enough for several of the engine's own polls, which run every
-      // 250 ms.
-      await Future<void>.delayed(const Duration(milliseconds: 800));
-      engine.refresh();
+        // Long enough for several of the engine's own polls, which run every
+        // 250 ms.
+        await Future<void>.delayed(const Duration(milliseconds: 800));
+        engine.refresh();
 
-      // An output device with nothing playing through it has an idle clock, and
-      // the IO proc does not fire at all: on a Mac with no audio playing this
-      // engine has received precisely zero frames and `elapsedSeconds` is still
-      // zero. **That is the state a watchdog built on "no audio for a while"
-      // would call a fault**, and it is the reason `oaa_device_running` asks the
-      // source about itself instead of timing its output. Rebuilding a healthy
-      // Core Audio aggregate four times a second on a quiet machine — and
-      // charging every rebuild to `dropped_frames` as lost audio — would be a
-      // considerably worse bug than the freeze the flag exists to report.
-      //
-      // Deliberately not asserting that no frames arrived: if somebody is
-      // playing music while the suite runs, they will have. Neither of these
-      // depends on which.
-      expect(engine.isSourceStopped, isFalse);
-      expect(engine.droppedFrames, 0);
-    });
+        // An output device with nothing playing through it has an idle clock,
+        // and the IO proc does not fire at all: on a Mac with no audio playing
+        // this engine has received precisely zero frames and `elapsedSeconds`
+        // is still zero. **That is the state a watchdog built on "no audio for
+        // a while" would call a fault**, and it is the reason
+        // `oaa_device_running` asks the source about itself instead of timing
+        // its output. Rebuilding a healthy Core Audio aggregate four times a
+        // second on a quiet machine — and charging every rebuild to
+        // `dropped_frames` as lost audio — would be a considerably worse bug
+        // than the freeze the flag exists to report.
+        //
+        // Deliberately not asserting that no frames arrived: if somebody is
+        // playing music while the suite runs, they will have. Neither of these
+        // depends on which.
+        expect(engine.isSourceStopped, isFalse);
+        expect(engine.droppedFrames, 0);
+      },
+      timeout: const Timeout(Duration(minutes: 5)),
+    );
   });
 }
 
