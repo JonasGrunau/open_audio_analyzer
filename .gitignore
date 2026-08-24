@@ -120,3 +120,8 @@ graphify-out/
 # whichever one wrote last; project-wide settings belong in a tracked file that
 # says so, not in a scratch directory a tool owns.
 .claude/
+
+# The same, for Codex. `hooks.json` names an interpreter by its absolute path in
+# one developer's home directory, so it is a file that only works on the machine
+# that wrote it.
+.codex/
