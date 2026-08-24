@@ -1299,9 +1299,9 @@ String _gradientDefs() {
 /// README, an avatar. `oaa-mark.svg` is white on nothing and disappears on a
 /// pale page; this one brings its own ground and reads anywhere.
 ///
-/// It names itself with a `<title>`, which is what an `<img>` wants. The
-/// documentation site inlines it into a header that is already labelled and
-/// takes the title back off — see `_brandMark` in `tool/docs.dart`.
+/// It names itself with a `<title>`, which is what an `<img>` wants. A page
+/// that inlines it into a header which is already labelled takes the title back
+/// off — `website/src/layouts/Base.astro` is the one that does.
 String _iconSvg() =>
     '<?xml version="1.0" encoding="UTF-8"?>\n'
     '$_brandHeader\n'

@@ -11,6 +11,7 @@
 //     npm run analyzer                 # build the demo, then shoot the still
 //     npm run analyzer -- --no-build
 //     npm run analyzer -- --still-only
+//     npm run analyzer -- --no-still   # build the demo and stop
 //
 // Two outputs, treated differently on purpose:
 //
@@ -136,6 +137,18 @@ if (!flag('--no-build') && !flag('--still-only')) {
 
   const bytes = execFileSync('du', ['-sk', PUBLIC]).toString().split('\t')[0];
   console.log(`  public/analyzer/  ${(Number(bytes) / 1024).toFixed(1)} MB (git-ignored)`);
+}
+
+/* The deploy's half of this script.
+ *
+ * The still is committed, and it is shot through a headless Chrome at a path
+ * this repository writes down for one machine — so the CI job that builds the
+ * site for a deploy wants the build and nothing after it. A runner that tried
+ * to take the photograph would either fail for want of a browser or produce a
+ * picture nobody can commit from there. See the website job in
+ * `.github/workflows/ci.yml`. */
+if (flag('--no-still')) {
+  process.exit(0);
 }
 
 if (!existsSync(BUILT)) {

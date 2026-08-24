@@ -7,8 +7,8 @@ in:
 
 | Event | Jobs |
 |---|---|
-| pull request | `checks`, `engine`, `docs` |
-| push to `main` | the same, plus `pages` |
+| pull request | `checks`, `engine`, `website` |
+| push to `main` | the same, and `website` deploys as well as builds |
 | `workflow_dispatch` | the same, plus `plugin`, every installer and `ipa` |
 
 Three of the installer jobs — `macos-pkg`, `windows-installer` and
@@ -245,15 +245,15 @@ The jobs are split by what they need, and that split is deliberate:
   download to a name pattern, so a future artefact nobody thought about is
   attached by mistake rather than omitted by mistake — of the two, only the
   second is silent.
-- **The documentation site is the second exclusion, and it is the first one
-  the policy above caught.** `download-artifact` with no `name` takes every
-  artefact in the run, not the ones `publish` lists in `needs`, so the `docs`
-  job's artefact arrives even though `docs` is not a dependency;
-  `upload-pages-artifact` always calls its payload `artifact.tar`. Every
-  release from v0.3.0 to v0.6.0 therefore carried an unlabelled tarball of the
-  website in among the installers, and whether it carried one at all was a
-  race that the docs job — being the fastest job in the workflow — won five
-  times. `artifacts/github-pages/*` is now excluded beside the IPA.
+- **That policy has fired once, and it is why it is written this way.**
+  `download-artifact` with no `name` takes every artefact in the run, not the
+  ones `publish` lists in `needs`, so the old documentation-site job's artefact
+  arrived even though it was not a dependency — and `upload-pages-artifact`
+  always calls its payload `artifact.tar`. Every release from v0.3.0 to v0.6.0
+  therefore carried an unlabelled tarball of a website in among the installers,
+  and whether it carried one at all was a race that the docs job, being the
+  fastest in the workflow, won five times. That job is gone with GitHub Pages;
+  the exclusion policy it taught is not.
 - **`testflight` is gated on an output of `ipa`, not just on the tag.** An App
   Store IPA has no unsigned form, so with no credentials `make_ipa.sh` produces
   nothing at all — which is the correct outcome and not a failure. But a job

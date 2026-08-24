@@ -6,8 +6,8 @@
  *
  * A manifest entry with no file behind it throws, which fails the build. That
  * is the failure this indirection exists to catch: somebody renames a document
- * and the site quietly loses a page. It is what `tool/docs.dart` exited
- * non-zero for, kept because it is the one that actually happens.
+ * and the site quietly loses a page. It is what the old GitHub Pages generator
+ * exited non-zero for, kept because it is the one that actually happens.
  */
 
 import { getCollection } from 'astro:content';
@@ -49,8 +49,8 @@ export async function everyDocument() {
 /* Every anchor these documents point at, checked against the headings that
  * exist.
  *
- * `tool/docs.dart` failed the build when a page it was asked to publish had no
- * file, which is the coarse version of this. The fine version is worth having:
+ * The old Pages generator failed the build when a page it was asked to publish
+ * had no file, which is the coarse version of this. The fine version is worth having:
  * `analysing-files.md` linked to `install.html#where-oaa-keeps-your-configuration`
  * for as long as that page has existed, and the heading is called "Where Open
  * Audio Analyzer keeps your configuration". Nothing said so, because a fragment

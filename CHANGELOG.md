@@ -9,6 +9,25 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### 🚧 Internal
+- The website is built by CI on every event and deployed to Cloudflare on a push
+  to `main`. It was deployed by hand, which is as durable as somebody
+  remembering: the site reads the application's version out of `pubspec.yaml` at
+  build time, so from a tag until the next deploy it advertised the previous
+  release. Building it on a pull request is also the check that every document
+  the manual publishes is still where the manifest says it is — a renamed page
+  now fails a pull request rather than disappearing from the site.
+- The GitHub Pages job is gone, and `tool/docs.dart` with it. What it published
+  was a redirect per page to the website that replaced it; those redirects are
+  already deployed and Pages serves whatever it was last given, so the old
+  `jonasgrunau.github.io` addresses go on arriving at the documentation without
+  anything continuing to publish them.
+- The live analyzer's recording and the 45 seconds of audio it was measured from
+  are committed — 1.2 MB, and already published on the site. They were written
+  by `npm run record` on a developer's machine and git-ignored, which a runner
+  that deploys the site cannot do: recording needs the 33 MB source track and
+  `afconvert`, which is macOS. The CC BY credit is committed beside them.
+
 ## [0.11.0] — 2026-08-24
 
 ### 📐 Measurement

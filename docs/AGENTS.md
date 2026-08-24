@@ -31,5 +31,5 @@ The three files fail in different directions, so they are kept differently:
   `UPDATE_DOCS=1 flutter test test/shortcuts_test.dart`.
 - **`PLAN.md` is deliberately not published to the site.** A plan written in the
   future tense before anything existed reads as a promise when a stranger finds
-  it. The page list in `tool/docs.dart` is written out rather than globbed for
-  exactly this reason.
+  it. The page list in `website/src/lib/docs.mjs` is written out rather than
+  globbed for exactly this reason.

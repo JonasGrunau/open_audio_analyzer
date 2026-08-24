@@ -64,7 +64,6 @@ is still not built, and `docs/PLAN.md` for what was planned.
 | `lib/src/app/shortcuts.dart` | Every keyboard shortcut, as one table. The bindings, the `?` sheet, `docs/site/keyboard.md` **and the macOS File menu's key equivalents** are all derived from it; `test/shortcuts_test.dart` fails when the page has drifted. |
 | `lib/src/app/preset_file.dart` | **The preset as a document.** Which file the canvas came from, whether it still matches that file, and the six File menu commands — one implementation, reached from the keyboard, from the macOS menu bar and from the status bar's own menu. The file dialogs sit behind a seam a test replaces. |
 | `lib/src/app/launch_options.dart` | `--config-dir` and `--open-panel`. Both exist to make something else testable — see the file. |
-| `tool/docs.dart` | **The old documentation URLs, kept alive.** It rendered the documentation site until 0.10.0; the documentation is part of `website/` now, so what this writes is one redirect per page — `jonasgrunau.github.io/open_audio_analyzer/install.html` is in released READMEs and issue threads nobody can edit. Still no dependencies, so the job needs a Dart SDK and nothing else. The manifest moved to `website/src/lib/docs.mjs`. |
 | `packaging/icon/make_icons.dart` | The app mark, **read** from `assets/brand/oaa-logo.svg` and rendered into every container the six platforms want — a rounded tile for the desktops, two layers on a 108dp canvas for Android, and a layered `AppIcon.icon` for macOS and iOS that the system lights itself. It carries a path rasteriser because the mark is a stroked cubic path. It also writes the rest of `assets/brand/`, `packaging/icon/oaa.svg` and `website/public/`'s icons — every one except `website/public/favicon.svg`, which is a browser tab's 16 px and is drawn by hand. It wrote the tile over that file until 0.10.0, and there is a note where the line was. |
 | `.tool-versions` | Pins Flutter `3.44.5-stable`. CI pins the same; keep them in step. |
 
@@ -84,7 +83,7 @@ is still not built, and `docs/PLAN.md` for what was planned.
 | `tool/` | Repository scripts. Nothing here ships. | GPL-3.0-or-later |
 | `packaging/` | pkg, Windows installer, Linux tarball, AppImage, flatpak, and the app icon they all need. The first three carry the VST3 (and on macOS the AU) and so are built from the plugin job's artefacts, not from the app alone. | GPL-3.0-or-later |
 | `assets/` | The fonts the application bundles, and the logo the repository publishes. `brand/oaa-logo.svg` is the one drawing everything else is generated from. Three files here are also compiled into the plugin — two faces and the mark — so renaming one breaks that build; see `assets/AGENTS.md`. | GPL-3.0-or-later; fonts SIL OFL 1.1 |
-| `website/` | `open-audio-analyzer.com` — a static Astro site that is also where the documentation is published, rendered from this repository's own Markdown in place. Two Flutter web targets give it its pictures — one photographs a module at a time, the other is a live canvas of eight — and both replay one recording rather than a mock: a Dart CLI measures a real track through the engine, and the `ReplaySource` they share plays it back, so a still and the live demo cannot disagree about what the material did. Deployed by hand; no job in `ci.yml` touches it. | GPL-3.0-or-later; fonts SIL OFL 1.1 |
+| `website/` | `open-audio-analyzer.com` — a static Astro site that is also where the documentation is published, rendered from this repository's own Markdown in place. Two Flutter web targets give it its pictures — one photographs a module at a time, the other is a live canvas of eight — and both replay one recording rather than a mock: a Dart CLI measures a real track through the engine, and the `ReplaySource` they share plays it back, so a still and the live demo cannot disagree about what the material did. Built by the `website` job in `ci.yml` on every event and deployed by it on a push to `main`; it was deployed by hand until 0.11.0. | GPL-3.0-or-later; fonts SIL OFL 1.1 |
 
 **`plugin/` is the one AGPL directory**, because JUCE 7 and 8 are
 AGPLv3-or-commercial (only JUCE 6 offered GPLv3, which `docs/PLAN.md` still
@@ -488,7 +487,7 @@ claim something about it:
 | **When** the plugin sets a transport flag, without any byte moving | `docs/WIRE.md`'s prose for that bit, `CHANGELOG.md` 🐛, and a case in `packages/oaa_wire/test/plugin_e2e_test.dart`. The row above covers the wire's *layout*; this is the other half. A consumer depends on when a producer sets a bit as much as on where the bit lives, and none of that is visible in a byte table — the discontinuity bit was being set every block while the transport sat parked, and delivered on almost none of the blocks where it mattered, with the layout perfectly correct throughout |
 | The iOS build, its signing, or the TestFlight upload | `packaging/AGENTS.md`, `docs/site/building.md`'s credential table, `.github/AGENTS.md`, and `docs/site/install.md`'s iPadOS section. The IPA is **not** a release asset — if you make it one, `README.md`'s note and the publish step's exclusion both become wrong |
 | A switch on the fake DAW | `plugin/host/AGENTS.md`, and `README.md` if it is one of the gestures a person cannot perform on cue. `--help` in `FakeDawOptions.h` is the exhaustive list and the only one that has to be; the other two name the interesting ones and are prose |
-| A page the documentation site publishes, or its filename | **Two lists that have to agree**: the manifest in `website/src/lib/docs.mjs` and the pattern in `website/src/content.config.ts`. Both are written out rather than globbed — a glob publishes `PLAN.md` to strangers the day somebody moves it — so a renamed document fails the website build instead of silently vanishing from it. Then the redirect table in `tool/docs.dart`, which is what keeps the old GitHub Pages address for that page working |
+| A page the documentation site publishes, or its filename | **Two lists that have to agree**: the manifest in `website/src/lib/docs.mjs` and the pattern in `website/src/content.config.ts`. Both are written out rather than globbed — a glob publishes `PLAN.md` to strangers the day somebody moves it — so a renamed document fails the website build instead of silently vanishing from it. The `website` job in `ci.yml` is what runs that build on every event |
 | The mark, the logo or the app icon | Nothing by hand — redraw `assets/brand/oaa-logo.svg` and run `dart run packaging/icon/make_icons.dart`, which writes every icon, every vector twin and the README's image. Then `assets/AGENTS.md` if a file appeared or went, `CHANGELOG.md` ⚡, and `npm run og` in `website/` because the card carries the mark. **`packaging/icon/oaa.svg`, `website/public/`'s icons and everything in `assets/brand/` except `oaa-logo.svg` itself are generated: editing one by hand is a change the next run silently reverts.** The one exception is `website/public/favicon.svg`, which a browser tab shows at 16 px where the tile does not read — it is drawn by hand, the generator no longer writes it, and it is the file that taught this rule its exception by being reverted. |
 | A version, a stated requirement, an artefact filename, or how a module looks | Not the version: `website/src/lib/app.mjs` reads it out of `pubspec.yaml` at build time, because three typed literals were a release behind within the hour after a tag. The rest is typed and nothing regenerates it — `PLATFORMS` in `website/src/pages/index.astro` carries the minimum macOS and what each installer holds, and the macOS floor moved to 14.2 in the same change that added `website/` while the page still said 11 Big Sur. `npm run modules -- --only <id>` for the photograph. See `website/AGENTS.md` |
 | A phase reaching done | `README.md` Roadmap, `CLAUDE.md`'s status line, `docs/PLAN.md` |
@@ -606,7 +605,9 @@ dart test packages/oaa_wire           # again, now that a built fake DAW makes
 flutter test test/plugin_to_display_e2e_test.dart
                                       # and the hop after it: DAW → plugin →
                                       # app → display
-dart run tool/docs.dart               # the documentation site still builds
+cd website && npm ci && npm run build  # the website still builds, which is
+                                      # what proves every document it publishes
+                                      # is still where the manifest says
 ```
 
 **One suite is deliberately not a gate.**
@@ -660,9 +661,10 @@ Two of these fail in a way that looks like something else:
   generated from the shortcut table in `lib/src/app/shortcuts.dart`. Change a
   binding and regenerate in the same commit:
   `UPDATE_DOCS=1 flutter test test/shortcuts_test.dart`.
-- **`dart run tool/docs.dart` exits non-zero when a page it publishes has been
-  moved or renamed.** That is the failure that actually happens; the site loses
-  a page and nothing else complains.
+- **`npm run build` in `website/` exits non-zero when a page it publishes has
+  been moved or renamed.** That is the failure that actually happens; the site
+  loses a page and nothing else complains. The manifest is
+  `website/src/lib/docs.mjs`.
 
 ### Common Patterns
 
@@ -723,44 +725,3 @@ remote display has no native library at all.
   thing in that directory that is not GPL. See `website/AGENTS.md` for why the
   `math` and `symbols` subsets are load-bearing.
 - **Build:** `native_toolchain_c`, `hooks`, `code_assets`, `ffigen`.
-
-## graphify
-
-A knowledge graph of this repository lives in `graphify-out/`, built by
-[graphify](https://github.com/safishamsi/graphify) from the corpus
-`.graphifyignore` defines. It is generated, gitignored and rebuilt by a
-post-commit hook; `.graphifyignore` is the input and is tracked, because a
-graph built from a different corpus is a different graph.
-
-**What it covers.** The 300-odd files this project actually wrote — `lib/`,
-`packages/`, `engine/`, `cli/`, `plugin/`, `test/`, `tool/`, the platform
-runners, `packaging/`, `website/`, and every Markdown file including this one.
-**What it does not:** `plugin/third_party/` and `engine/third_party/`. Vendored
-JUCE alone is 3,787 files and would be seven eighths of the graph, none of it
-ours. Icons are excluded too — they are generated from `assets/brand/oaa-logo.svg`
-by `packaging/icon/make_icons.dart` and carry no structure the script does not
-already have.
-
-**Use it before grepping.** These return a scoped subgraph, which is smaller and
-better connected than a text search over the same tree:
-
-- `graphify query "<question>"` — the general entry point.
-- `graphify path "<A>" "<B>"` — how two concepts reach each other.
-- `graphify explain "<concept>"` — one node and everything touching it.
-- `graphify-out/wiki/index.md` — one article per community, for navigating
-  rather than asking.
-- `graphify-out/GRAPH_REPORT.md` — the audit: god nodes, cohesion scores, and
-  every edge tagged EXTRACTED, INFERRED or AMBIGUOUS. Read it for a broad
-  architecture review, or when the three commands above do not surface enough.
-
-**An edge is not evidence.** INFERRED and AMBIGUOUS edges are the model's
-guesses and are labelled as such; confirm one against the file it cites before
-acting on it. The graph is a map of where to look, not a source of truth about
-what the code does — that is what the code is for.
-
-**Keeping it current.** The post-commit hook re-runs the AST pass on whatever
-the commit touched, which costs nothing and needs no API. That half is
-structural only: prose, rationale and cross-document concepts come from the
-semantic pass, which runs when somebody invokes `/graphify` and not otherwise.
-So after a change that is mostly Markdown, the graph's *shape* is current and
-its *reading* of the new prose is not.

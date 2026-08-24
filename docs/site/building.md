@@ -244,15 +244,22 @@ its own, the favicon the site serves — is written from it. Redraw that one fil
 and run this; nothing is brought across by hand. The outputs are committed, so
 a release runner never runs this.
 
-## The documentation site
+## The website, and these pages
 
 ```sh
-dart run tool/docs.dart --out build/docs
+cd website
+npm ci
+npm run build            # the site, into website/dist
+npm run deploy           # the same, plus the live analyzer, to Cloudflare
 ```
 
-These pages, from the Markdown in the repository. No second toolchain: the
-documents it publishes are normative and held by tests, and a site that can
-break on a machine where the code is fine is a site that will.
+These pages are part of the site: `/docs` renders the Markdown in the
+repository where it is written, rather than a copy of it. A document that the
+manifest names and the disk does not fails this build, which is what keeps a
+renamed page from quietly disappearing.
+
+CI builds the site on every event and deploys it on a push to `main`, so
+`npm run deploy` by hand is for a change you want live before it lands.
 
 `keyboard.md` is generated rather than written — it comes from the same table
 the application binds, and `test/shortcuts_test.dart` fails if the checked-in

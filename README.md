@@ -775,7 +775,7 @@ dart test packages/oaa_wire           # again: with a built fake DAW the
 flutter test test/plugin_to_display_e2e_test.dart
                                       # and on to a display: DAW → plugin →
                                       # app → tablet
-dart run tool/docs.dart               # the documentation site still builds
+cd website && npm ci && npm run build  # the website still builds
 ```
 
 `dart test packages/oaa_wire` appears twice on purpose. Its end-to-end cases

@@ -10,8 +10,14 @@ src/data/bridge.json
 # (public/analyzer-still.webp) *is* committed, because every build needs it.
 public/analyzer/
 
-# The recording, and the audio it was taken from. Written by `npm run record`
-# from a track that is not in this repository either — see scripts/record.mjs
-# and tool/fetch_test_audio.dart. About 10 MB of derived files.
-tools/analyzer-demo/web/programme.*
+# The renderer's recording: the full take, with the per-band stereo position
+# nothing on the demo's canvas draws, and the excerpt as a WAV. Ten-odd MB,
+# written by `npm run record`, and it never leaves this machine — the module
+# thumbnails it produces are what is committed.
+#
+# The *demo's* two files are committed rather than ignored, because CI deploys
+# the site and cannot make them: `npm run record` needs the 33 MB source track
+# and `afconvert`, which is macOS. They are 1.2 MB, they are already published
+# at open-audio-analyzer.com/analyzer/, and CC BY 3.0 asks for credit rather
+# than for silence — see tools/analyzer-demo/web/ATTRIBUTION.md.
 tools/module-renderer/web/programme.*

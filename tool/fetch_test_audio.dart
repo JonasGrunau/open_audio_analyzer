@@ -67,9 +67,8 @@
 // ---------------------------------------------------------------------------
 // No dependencies
 //
-// `dart:io` and nothing else, for the same reason `tool/docs.dart` has none:
-// this has to work from a bare Dart SDK, before `pub get`, on a machine with no
-// Flutter. That is also why the download is verified by exact byte count and
+// `dart:io` and nothing else: this has to work from a bare Dart SDK, before
+// `pub get`, on a machine with no Flutter. That is also why the download is verified by exact byte count and
 // magic number rather than by a hash — the SDK ships no SHA-1, and adding
 // `package:crypto` to reach one would cost more than it buys. The expected
 // digest is printed so it can be checked by hand; a truncated or resumed-wrong

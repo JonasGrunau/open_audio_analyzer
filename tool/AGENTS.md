@@ -4,7 +4,6 @@ Repository scripts. Nothing here ships. GPL-3.0-or-later.
 
 | File | Purpose |
 |------|---------|
-| `docs.dart` | Builds the documentation site from the Markdown in this repository, and the mark from `assets/brand/oaa-icon.svg`. `dart run tool/docs.dart --out build/docs`. |
 | `bench_spectrogram.dart` | The measurements behind the figures in `lib/src/modules/spectrogram.dart`: the run-length strategy against a rect per run, and the run counts on realistic band jitter that retired it in favour of the pixel path. `flutter test tool/bench_spectrogram.dart`. |
 | `bench_material.dart` | The measurement the three benchmarks drive, and the one place that knows the wire. It encodes through `SnapshotWire.encode` and decodes through `WireSnapshot` rather than writing offsets by hand, because a harness that reimplements the layout drifts from it — this one did, at protocol version 4, and went on reporting plausible timings for a window that drew nothing. Not a benchmark itself. |
 | `bench_wire.dart` | What a remote display pays to decode a 15,056-byte snapshot: the bulk path against the accessor-per-element loop it replaced, and the encode cost on the desktop end. `flutter test tool/bench_wire.dart`. |
@@ -44,18 +43,6 @@ Repository scripts. Nothing here ships. GPL-3.0-or-later.
   the script writes `ATTRIBUTION.md` beside them, for the tracks it actually
   produced rather than the ones it was asked for.
 
-- **`docs.dart` has no dependencies, and keeping it that way is still the
-  point.** It was the argument for writing a site generator here rather than
-  configuring one: the documents it published — `docs/METRICS.md`,
-  `docs/WIRE.md` — are normative and held by tests, so a site that can break on
-  a machine where the code is fine is a site that will. The rendering moved to
-  `website/`, which is a Node project and does have dependencies; what is left
-  here is the redirect table, and it imports `dart:io` and nothing else. That is
-  why the job in `ci.yml` is still a Dart SDK and a few seconds with no Flutter
-  anywhere in it. The constraint belongs to `docs.dart` rather than to this
-  directory — the benchmarks need `dart:ui`, and therefore an engine — and it
-  survives as long as that job runs `docs.dart` and nothing else.
-
 - **A benchmark reports how many pixels it inked, and that is not decoration.**
   `bench_modules.dart` fails a module that inked fewer than 500 and
   `bench_gpu.dart` prints `DREW NOTHING` beside it. Both exist because the
@@ -76,40 +63,3 @@ Repository scripts. Nothing here ships. GPL-3.0-or-later.
   "205 µs" was quoted here for a phase after its benchmark was gone, and turned
   out to be a recording cost being read as a frame cost. Do not add it to
   `ci.yml`, and do not describe it anywhere as something CI checks.
-
-- **The mark is read from `assets/brand/oaa-icon.svg`, never held here.** It
-  was held here, as two hand-copied constants of the icon's geometry, and it
-  went stale the first time the mark was redrawn: every icon the project ships
-  followed, and the site kept publishing the previous identity in its sidebar
-  and in the browser tab of every page. Nothing caught it — the site has no
-  test, and the geometry was numbers inside a string literal 200 lines from
-  where it was used. A missing file now fails the run. The same applies to
-  anything else the site shows about itself: read it from the file that owns
-  it, because a copy in a generator is a copy no reviewer will diff.
-
-- **It is the icon with its tile, not the bare mark, and the favicon is a file
-  rather than a data URI.** Both changed in 0.10.0 and both for the same
-  redraw. The mark used to be teal bars on nothing, which read on a pale tab
-  strip and a dark one; it is a white wave now, and on white it is not there —
-  so the site inlines `oaa-icon.svg`, which brings its own ground. That file is
-  three kilobytes, and percent-encoded into a data URI on twenty pages it was a
-  hundred kilobytes of the same icon, so it is written once beside `style.css`
-  and linked. The header still inlines it, because that copy is sized by the
-  stylesheet and an `<img>` cannot be.
-
-- **The page list is written out, not globbed.** A site whose contents are
-  whatever happens to be in `docs/` publishes `PLAN.md` to users the day
-  somebody moves it — and a plan is not documentation, it is a record of what
-  was intended, which reads as a promise when a stranger finds it.
-
-- **The Markdown subset is only as wide as the sources need.** Adding a
-  construct without a document that uses it is how a renderer acquires a
-  footnote parser nobody asked for. Anything unrecognised passes through as
-  text rather than being dropped: a page that renders wrong gets fixed, one that
-  renders *short* is not noticed.
-
-- **`docs/site/keyboard.md` is generated somewhere else.** It comes from the
-  shortcut table in `lib/src/app/shortcuts.dart`, and `test/shortcuts_test.dart`
-  rewrites it under `UPDATE_DOCS=1` and fails without it when the checked-in
-  copy has drifted. This script only publishes it. Editing that page by hand is
-  a change the test will reject.

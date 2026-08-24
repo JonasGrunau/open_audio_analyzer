@@ -29,8 +29,8 @@
 #
 # What runs when:
 #
-#   pull request        checks, engine, docs redirects
-#   push to main        the same, plus the Pages deployment
+#   pull request        checks, engine, the website build
+#   push to main        the same, plus the website deploy
 #   workflow_dispatch   the same, plus the plugin, every installer and the ipa
 #   tag v*              the same, plus publish and then testflight
 #
@@ -440,75 +440,106 @@ jobs:
           if-no-files-found: error
 
   # -------------------------------------------------------------------------
-  # The old documentation URLs
+  # The website
   #
-  # The documentation is part of the website now — open-audio-analyzer.com/docs
-  # renders the same Markdown from this repository, so `docs/METRICS.md` and
-  # `docs/WIRE.md` are still the normative documents the tests hold. What this
-  # job publishes is a redirect per page, because
-  # `jonasgrunau.github.io/open_audio_analyzer/install.html` is in released
-  # READMEs and in issue threads that cannot be edited now.
+  # open-audio-analyzer.com is a static Astro site in `website/`, served by a
+  # Cloudflare Worker configured in `wrangler.jsonc`. Until 0.11.0 it was
+  # deployed by hand and nothing here touched it, which is exactly as reliable
+  # as somebody remembering: the site reads the application's version out of
+  # `pubspec.yaml` at build time, so it went stale at every tag until the next
+  # `npm run deploy`. The GitHub Pages job that used to stand here published a
+  # redirect per page for the documentation site this one replaced; those
+  # redirects are already deployed and Pages goes on serving them, so nothing
+  # has to keep publishing them.
   #
-  # It stays here rather than being deleted with the renderer: a Pages site that
-  # is not redeployed keeps serving whatever it last had, which would be the old
-  # documentation, silently going stale beside the real one. Publishing the
-  # redirects replaces those pages with something that cannot rot.
+  # **Every event builds it, and that is the check.** The manual's page list in
+  # `website/src/lib/docs.mjs` is written out rather than globbed — a glob
+  # publishes `PLAN.md` to strangers the day somebody moves it — so a renamed
+  # document fails this build instead of quietly vanishing from the site.
+  # `astro build` needs Node and nothing else.
   #
-  # There is no Flutter here. `tool/docs.dart` imports nothing but `dart:io`,
-  # so this job is a Dart SDK and a few seconds.
+  # A push to main also builds the live analyzer and deploys. That half is a
+  # Flutter web build of `website/tools/analyzer-demo`, which is the expensive
+  # part and the reason the toolchain is set up for that event only. A site
+  # built without it is complete rather than broken: the front page offers the
+  # analyzer when `public/analyzer/` is there and simply does not when it is
+  # not.
+  #
+  # A tag does not redeploy. It names a commit that was already on main and
+  # already deployed, and every download button points at `releases/latest`
+  # rather than at a versioned filename, so the site does not have to wait for
+  # the release to exist.
   # -------------------------------------------------------------------------
 
-  docs:
-    name: Docs redirects
+  website:
+    name: Website
+    needs: checks
     runs-on: ubuntu-latest
+    # Keyed by ref rather than global: a second push to main should win and the
+    # first should be cancelled rather than racing it to the same bucket, and
+    # one pull request's build has no business cancelling another's.
+    concurrency:
+      group: website-${{ github.ref }}
+      cancel-in-progress: true
     steps:
       - uses: actions/checkout@v4
-      - uses: dart-lang/setup-dart@v1
+      - uses: actions/setup-node@v4
         with:
-          sdk: stable
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: website/package-lock.json
 
-      - name: Generate
-        run: dart run tool/docs.dart --out build/docs
+      - name: Install
+        working-directory: website
+        run: npm ci
 
-      # That every old address still resolves, and that each one names where it
-      # went. A redirect that writes an empty file is a redirect nobody notices
-      # is broken until a link in a release goes nowhere.
-      - name: Check every old address still redirects
+      - uses: subosito/flutter-action@v2
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      # `--no-still` because the still in front of the analyzer is committed and
+      # is shot from a browser this runner does not have. The build itself is
+      # what a deploy needs.
+      - name: Build the live analyzer
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        working-directory: website
+        run: npm run analyzer -- --no-still
+
+      - name: Build
+        working-directory: website
+        run: npm run build
+
+      # That the site has the pages it claims to have. `astro build` fails on a
+      # document the manifest names and the disk does not, which is the failure
+      # that actually happens; this catches the other direction — a build that
+      # succeeded and produced nothing, which has no error message at all.
+      - name: Check the build has a site in it
+        working-directory: website
         run: |
-          for page in index install keyboard analysing-files metrics wire changelog building; do
-            test -s "build/docs/$page.html"
-            grep -q 'open-audio-analyzer.com/docs' "build/docs/$page.html"
+          for page in index 404 privacy docs/install docs/keyboard docs/metrics; do
+            test -s "dist/$page.html"
           done
-          test -s build/docs/style.css
+          test -s dist/sitemap.xml
 
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: build/docs
-
-  pages:
-    name: Publish docs redirects
-    needs: docs
-    # Separate from the build so that a fork's pull request, which has no Pages
-    # permission, builds the site and does not try to deploy it. A tag is not a
-    # branch, so tagging does not redeploy either.
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    runs-on: ubuntu-latest
-    permissions:
-      pages: write
-      id-token: write
-    # On the job rather than the workflow: a second push while the first is
-    # deploying should win, and the first should be cancelled rather than
-    # racing it to the same bucket. At workflow level this would cancel the
-    # tests as well, which is the opposite of what anybody wants.
-    concurrency:
-      group: pages
-      cancel-in-progress: true
-    environment:
-      name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
-    steps:
-      - id: deploy
-        uses: actions/deploy-pages@v4
+      # Unset in a fork, and a fork should not fail for it — the same policy the
+      # unsigned installers follow. `wrangler` reads the token out of the
+      # environment; the account id comes with it because a token that can see
+      # more than one account cannot guess which one this is.
+      - name: Deploy
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        working-directory: website
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo 'No CLOUDFLARE_API_TOKEN: built the site and did not deploy it.'
+            exit 0
+          fi
+          npx wrangler deploy
 
   # -------------------------------------------------------------------------
   # Installers. A tag, or a manual run.
@@ -984,28 +1015,19 @@ jobs:
       # step died on `no matches found for artifacts/oaa-linux-appimage/Open`,
       # with all seven builds green and nothing else left to do.
       #
-      # Two artefacts are excluded, for the same reason in both cases: a file
-      # on a release page is a file somebody will download, and neither of
-      # these is one they could use.
-      #
-      # `testflight-ipa` is an App Store IPA. It provisions no devices, so
-      # nobody who downloaded it could install it — it exists to be uploaded,
+      # One artefact is excluded: a file on a release page is a file somebody
+      # will download, and `testflight-ipa` is not one they could use. It is an
+      # App Store IPA, it provisions no devices, and it exists to be uploaded,
       # which the job after this does.
       #
-      # `github-pages` is the documentation site, and it is here because
-      # `download-artifact` with no `name` takes every artefact in the run
-      # rather than the ones this job's `needs` lists — `docs` is not among
-      # them and its artefact arrives anyway. `upload-pages-artifact` always
-      # names its payload `artifact.tar`, so v0.3.0 through v0.6.0 each
-      # published an unlabelled tarball of the website in among the
-      # installers, and whether it appeared at all was a race the docs job
-      # happened to win five times running.
-      #
-      # Both exclusions are by path rather than the download being narrowed to
-      # a pattern, deliberately: a future artefact whose name nobody thought
-      # about is then attached rather than silently left off the release.
-      # `artifact.tar` is what that policy looks like when it fires, and
-      # attaching one file too many is the failure it was chosen for.
+      # It is excluded by path rather than the download being narrowed to a
+      # pattern, deliberately: `download-artifact` with no `name` takes every
+      # artefact in the run rather than the ones this job's `needs` lists, so a
+      # future artefact nobody thought about is attached rather than silently
+      # left off the release. That policy has fired once — the documentation
+      # site's `artifact.tar` rode along on v0.3.0 through v0.6.0, because
+      # `upload-pages-artifact` always names its payload that — and attaching
+      # one file too many is the failure it was chosen for.
       - name: Release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -1015,8 +1037,7 @@ jobs:
             assets+=("$file")
             echo "attaching $file"
           done < <(find artifacts -type f \
-            -not -path 'artifacts/testflight-ipa/*' \
-            -not -path 'artifacts/github-pages/*' -print0 | sort -z)
+            -not -path 'artifacts/testflight-ipa/*' -print0 | sort -z)
           [ "${#assets[@]}" -gt 0 ] || { echo 'no artefacts to attach' >&2; exit 1; }
           gh release create "${GITHUB_REF_NAME}" \
             --title "Open Audio Analyzer ${GITHUB_REF_NAME}" \

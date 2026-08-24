@@ -27,11 +27,15 @@ engine — which fails the −14 LUFS streaming target it is shown against, on
 loudness and on true peak, because the track masters at about −8. Nothing was
 tuned to make that come out well.
 
-    web/programme.oaa.gz    what the engine measured
+    web/programme.oaaz      what the engine measured
     web/programme.m4a       the same seconds, to listen to
 
-Both are written by `npm run record` and git-ignored, and both live in `web/`
-because that is what `flutter build web` copies into the build.
+Both are written by `npm run record`, and both live in `web/` because that is
+what `flutter build web` copies into the build. They are **committed**, which
+the album they are cut from is not: the site is deployed by CI now, and a Linux
+runner can neither fetch the 33 MB source track nor run the `afconvert` that
+encodes the excerpt. `web/ATTRIBUTION.md` is the CC BY credit, and it travels
+into the build beside them.
 
 ## The audio
 

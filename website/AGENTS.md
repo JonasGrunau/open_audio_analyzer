@@ -1,8 +1,10 @@
 # `website/` — open-audio-analyzer.com
 
 GPL-3.0-or-later, like the application it describes. Nothing here ships in a
-release: it is a static site, and no job in `ci.yml` builds it or deploys it.
-`npm run deploy` from this directory is the whole release process.
+release: it is a static site, deployed to Cloudflare rather than attached to a
+tag. The `website` job in `ci.yml` builds it on every event and deploys it on a
+push to `main`; `npm run deploy` from this directory does the same thing by
+hand, for a change you want live before it lands.
 
 ## Why this exists
 
@@ -17,9 +19,11 @@ repository's own Markdown — `docs/site/*.md`, `docs/METRICS.md`, `docs/WIRE.md
 and `CHANGELOG.md` — read from where those files are written rather than copied
 in, so a change to a document is a change to the site with no step between.
 `tool/docs.dart` used to generate a separate GitHub Pages site from the same
-Markdown; what it publishes now is a redirect per page, because
-`jonasgrunau.github.io/open_audio_analyzer/install.html` is in released READMEs
-and in issue threads nobody can edit.
+Markdown. It was replaced by this one, and in 0.11.0 it went: what it did last
+was publish a redirect per page, and those redirects are deployed — GitHub Pages
+serves what it was last given, so `jonasgrunau.github.io/…/install.html`, which
+is in released READMEs and in issue threads nobody can edit, goes on arriving
+here without anything continuing to publish it.
 
 ## Files
 
@@ -31,7 +35,7 @@ and in issue threads nobody can edit.
 | `package.json` | The eleven scripts, and the one dependency that is not Astro or Wrangler: `lighthouse`, which `npm run audit` drives. `prebuild` runs before every build and is not optional — see `scripts/clean-content-cache.mjs`. `deploy` builds the live analyzer first, which `build` alone does not, so working on the site needs no Flutter toolchain. |
 | `tsconfig.json` | Astro's strict preset, and nothing else. |
 | `src/content.config.ts` | The documentation collection: the four sources above, loaded from the repository root by path rather than slug, so an entry can be matched to the file it came from. A list and not a glob, because `docs/` also holds `PLAN.md` and `AGENTS.md` and neither is documentation. |
-| `src/lib/docs.mjs` | Every page the manual publishes, in navigation order — the manifest `tool/docs.dart` used to carry. A document that is not in it is not published; one that is in it and not on disk fails the build. |
+| `src/lib/docs.mjs` | Every page the manual publishes, in navigation order — the manifest the old Pages generator used to carry. A document that is not in it is not published; one that is in it and not on disk fails the build. |
 | `src/lib/docs-content.mjs` | Getting a manifest entry's Markdown out of the collection, matched by the path it has in the repository. The indirection exists to fail the build when somebody renames a document, which is the failure that actually happens. |
 | `src/lib/markdown.mjs` | The two things the repository's own Markdown needs before it is a website: links written for flat `.html` files (`install.html#in-a-daw`), and links sideways into the repository (`docs/METRICS.md`, `README.md#roadmap`). Rewritten at render time rather than by editing eight documents that are also read on GitHub. |
 | `src/lib/app.mjs` | `SITE`, `urlFor`, `REPO`, `RELEASES` and `VERSION`. The version is **read from the application's `pubspec.yaml` at build time**: typed here, it was three literals and it was a release behind within the hour after a tag. `SITE` is the canonical host, which was written twice — here and as `site` in `astro.config.mjs`, which now imports it — and `urlFor` is the one rule about trailing slashes, so a `<link rel="canonical">` and a sitemap `<loc>` cannot name the same page differently. They did: the front page was `…com` in one and `…com/` in the other. |
@@ -52,7 +56,7 @@ and in issue threads nobody can edit.
 | `scripts/measure.mjs` | The gated loudness path in JavaScript — K-weighting, R128 gating, LRA, oversampled true peak, an FFT — which fed the meter bridge the front page used to draw. **Nothing calls it.** Left in place because it works and is self-contained, not because it is used; see the rules. |
 | `scripts/record.mjs` | Runs the engine over a real track and writes the recording the demos replay. **The one script here with a prerequisite outside the repository**: the track is CC BY 3.0 and 35 MB, fetched by `dart run tool/fetch_test_audio.dart` from the repository root. It refuses to run without the attribution file that tool writes, because the licence requires the credit wherever the audio is published. The excerpt was chosen by measuring — the header lists the four candidates and their loudness ranges. |
 | `scripts/render-modules.mjs` | Photographs the fourteen modules out of `tools/module-renderer` and writes `public/modules/*.webp`. Two device pixels per logical one and the frame sized to where it lands — more resolution came out softer, and the README says why. |
-| `scripts/render-analyzer.mjs` | Builds `tools/analyzer-demo` into `public/analyzer/` and photographs it into `public/analyzer-still.webp`, at five widths. The header lists them and what each is for: the picture is the front page's Largest Contentful Paint and it is asked for at anything from 370 to 1376 CSS px. |
+| `scripts/render-analyzer.mjs` | Builds `tools/analyzer-demo` into `public/analyzer/` and photographs it into `public/analyzer-still.webp`, at five widths. `--no-still` stops after the build, which is what the CI deploy runs: the still is committed and the browser it is shot through is one machine's. The header lists them and what each is for: the picture is the front page's Largest Contentful Paint and it is asked for at anything from 370 to 1376 CSS px. |
 | `scripts/lib/headless.mjs` | Serving a directory to a headless Chrome and photographing what it draws, shared by both renderers and by `npm run audit`. Waits for `globalThis.oaaRenderReady` — the picture — rather than for a stopwatch, because `--virtual-time-budget` does not drive Flutter's ticker. Its `serve()` **parses `public/_headers` and gzips text**, so an audit measures the cache policy and the transfer sizes the deploy actually produces rather than a bare local server's absence of both — compression is worth 3.4x here, because every stylesheet is inlined and the HTML is the payload. |
 | `scripts/lib/fonts.mjs` | Puts the application's typefaces where a tool's own pubspec can name them. `OaaType` asks for the bare family names, which only an application-level declaration provides, and a relative path in that declaration builds fine and 404s at runtime. |
 | `scripts/fetch-fonts.mjs` | `npm run fonts`: the typefaces, fetched from Google Fonts once and written into `public/fonts/` with `src/styles/fonts.css` to name them. Its header says why `math` and `symbols` are not optional and why `latin-ext` is kept although nothing needs it yet. |
@@ -70,7 +74,7 @@ and in issue threads nobody can edit.
 | `public/_headers` | The cache policy and three security headers, applied by Cloudflare to everything in `dist/`. Without it the platform default is `max-age=0, must-revalidate` on every asset — an ETag round trip for a typeface that will never change again. Only `/fonts/*` is `immutable`, and the file says why the photographs are not. |
 | `public/fonts/` | The five typeface files the site is set in, and `OFL.txt`, which has to travel with them. **Generated** by `npm run fonts`; committed, like the photographs, because a build must not need the network. |
 | `tools/module-renderer/` | A Flutter web target that depends on `package:oaa` and renders one real module per page load, reading the recording in `tools/oaa_replay`. Its own `README.md` documents the query string. |
-| `tools/analyzer-demo/` | The same idea, one canvas further: eight real modules, one `MeterClock`, the same `ModuleHost` and the same painters the application runs. Compiled into `public/analyzer/` and loaded only when a reader presses the still. |
+| `tools/analyzer-demo/` | The same idea, one canvas further: eight real modules, one `MeterClock`, the same `ModuleHost` and the same painters the application runs. Compiled into `public/analyzer/` and loaded only when a reader presses the still. **Its `web/programme.oaaz` and `web/programme.m4a` are committed**, unlike the renderer's — 1.2 MB, and the deploy runs on a Linux runner that can fetch neither the 33 MB source track nor the `afconvert` that cuts it. `web/ATTRIBUTION.md` is the CC BY credit and travels into the build with them. |
 | `tools/oaa_record/` | A **Dart CLI that links the real engine by FFI**, pushes a real track through it, and writes down what it measured. The only thing in `website/` that touches `oaa_engine`, and it never runs in a browser. |
 | `tools/oaa_replay/` | The recording format, and `ReplaySource` — the **fourth `MeterSource`**, beside the native one, the socket the tablet reads and the mock this replaced. Pure Dart, so it compiles for the web. Shared by both targets, so the stills and the live canvas cannot disagree about what the material did: they are the same forty-five seconds, measured once. |
 
@@ -101,8 +105,9 @@ either renderer produces anything.
   manifest in `src/lib/docs.mjs` and the pattern in `src/content.config.ts` are
   the two lists that decide what is published, and they must agree: a source in
   one and not the other is a page that silently does not exist. A document that
-  moves fails the build here, which is what `tool/docs.dart` exiting non-zero
-  used to be for.
+  moves fails the build here, which is what the old Pages generator exiting
+  non-zero used to be for — and the `website` job runs this build on every
+  event, so it fails a pull request rather than a deploy.
 
 - **The thumbnails, `og.png` and the analyzer still are committed rather than
   built.** Rendering them needs Flutter, Chrome and `cwebp` on the machine, and

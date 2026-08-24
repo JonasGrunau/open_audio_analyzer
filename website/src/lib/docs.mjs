@@ -1,7 +1,7 @@
 /* What the documentation site is: every page, in navigation order.
  *
- * This list is the manifest `tool/docs.dart` used to carry, moved here because
- * the pages are rendered here now. It is a list and not a directory scan for
+ * This list is the manifest the old GitHub Pages generator carried, moved here
+ * because the pages are rendered here now. It is a list and not a directory scan for
  * the reason it always was: a site whose contents are whatever happens to be in
  * `docs/` publishes `PLAN.md` to strangers the day somebody moves it, and a
  * plan reads as a promise.
