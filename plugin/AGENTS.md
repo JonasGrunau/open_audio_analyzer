@@ -47,8 +47,9 @@ by people who are not writing free software.
 | `src/OaaTransportBox.h` | Seqlock handing one transport reading from the audio thread to the streaming thread, and the edge accumulator beside it — the only place a one-block flag may live. |
 | `src/OaaStreamer.h/.cpp` | Owns the engine. Drains the FIFO, measures, serialises, sends, reconnects. |
 | `src/OaaPluginProcessor.h/.cpp` | The `AudioProcessor`. Real-time path and playhead capture. |
-| `src/OaaPluginEditor.h/.cpp` | A status panel. Not a meter, and must not become one. |
+| `src/OaaPluginEditor.h/.cpp` | A status panel. Not a meter, and must not become one. `StatusPanel` draws the window and owns the three controls; `OaaPluginEditor` is the fourteen lines that feed it a `Streamer::Status`. |
 | `test/wire_fixture.cpp` | Writes `test/golden/wire_v3.bin`, the golden the Dart codec is held against. `wire_v2.bin` beside it is frozen and is not regenerated. |
+| `test/editor_snapshot.cpp` | Renders `StatusPanel` in each of its five states to PNGs, with no DAW and no window; `--hold=<ms>` additionally loads the **built VST3 bundle** through JUCE's VST3 host and puts its editor on screen. The only ways to look at this window. Not a ctest — there is no golden, because a font rasteriser differs between platforms. |
 | `test/transport_box_test.cpp` | That an edge is delivered exactly once, and that only a host which says something is reported as saying it. No DAW, no socket, no thread, no JUCE. |
 | `test/transport_capture_test.cpp` | That a host which says nothing has nothing invented for it. Hosts the `AudioProcessor` directly, because no plugin format can express either half of it. Needs JUCE. |
 | `host/` | The fake DAW: a host that plays a file through this plugin and gives it a transport. Its own `AGENTS.md`. Nothing there ships. |
@@ -87,6 +88,67 @@ by people who are not writing free software.
   than refusing them — see the note on `allowMalformed` in
   `packages/oaa_wire/lib/src/hello.dart`. A decoder hardened to reject the frame
   would have hidden this for as long as nobody read the bytes.
+
+- **The editor is drawn in the application's palette and the application's
+  type, and both are compiled in.** `packages/oaa_ui/lib/src/tokens.dart` is
+  transcribed at the top of `OaaPluginEditor.cpp` — Dart and C++ with no import
+  between them, so a transcription is the cheapest honest answer, and it moves
+  when the tokens move. `assets/fonts/Inter-Medium.ttf` and
+  `GoogleSansCode-Medium.ttf` are linked in through `juce_add_binary_data`
+  rather than asked of the platform, for exactly the reason `OaaType` gives:
+  `Font::getDefaultMonospacedFontName()` is Menlo here, Consolas there and
+  DejaVu Sans Mono on the third, so a layout tuned on one machine is subtly
+  wrong on the other two. `assets/brand/oaa-mark.svg` comes in the same way, and
+  it is the *generated* mark rather than a transcribed path — see
+  `assets/AGENTS.md`.
+
+  The chain's middle node is the app icon, drawn as line art: the mark inside a
+  tile in the shape Apple masks an icon with, both in one ink, the tile stroked
+  at `OaaStroke.emphasis` because the wave's own line measures 1.88 pt at the
+  size this draws it. What the node does *not* take is the icon's ground — that
+  ramp passes exactly through `OaaColors.accent`, which in this window means
+  "something is travelling down this run of cable" and may not also mean "this
+  is the product". That shape is two numbers —
+  `_Tile.corner` and `_Tile.squircle` in `packaging/icon/make_icons.dart`, which
+  were *measured* off this machine rather than looked up, because macOS 26 draws
+  a rounder tile than the 22.37%-on-a-curve-of-4 everybody quotes. They are
+  transcribed rather than imported, for the same reason the palette is, and
+  `_Tile`'s own comment names this file as the second consumer. **A
+  re-measurement after an OS release has to be carried across by hand.**
+
+  **What keeps this from becoming a meter is not a colour budget.** An earlier
+  comment here said a fifth colour would be the warning sign; the window had
+  eight at the time and the count was never the thing protecting it. The rule is
+  that **the window draws no quantity as a length, an angle or a position over
+  time.** A topology, a state and four readings as text are not a meter. A bar
+  is. A history is.
+
+- **Look at the window before calling a change to it finished, and there are
+  two ways to.** `build/oaa_editor_snapshot <dir>` writes five PNGs — waiting,
+  connected, reconnecting, no-playhead, dropping — in about a second, needing no
+  DAW, no window server surface and no screen-recording permission. It is the
+  plugin's version of the rule in the root `CLAUDE.md` that cost five real
+  defects to learn, and the reason `StatusPanel` takes a `Status` by value and
+  owns no engine: the states worth looking at are the ones you cannot arrange
+  for.
+
+  Adding `--hold=<ms>` does the other thing: it loads the **built VST3 bundle**
+  through JUCE's own VST3 host and leaves the editor the shipped factory built
+  on screen for that long, to be captured with `screencapture -l <window-id>` or
+  simply looked at. That is the only check anywhere that the bundle loads at
+  all — `CMakeLists.txt` labours over signing and architecture precisely because
+  a bundle a DAW refuses and a bundle that is not installed are the same event
+  to the user. It found a defect the moment it first ran, and one no test could
+  have: `PluginHostType::getHostDescription()` returns the literal `"Unknown"`
+  rather than null for any host not in JUCE's table, so the header read
+  `VST3 · Unknown` and the chain's left node was captioned `UNKNOWN`.
+
+  **Neither route opens an audio device, and that is load-bearing on macOS.**
+  The fake DAW's windowed path starts with `AudioDeviceManager`, and on a
+  machine whose `coreaudiod` has wedged that call never returns — no window ever
+  appears, and the app looks like it failed to launch. `sample <pid>` shows it
+  parked in `HALC_ProxySystem` on a `mach_msg`. This tool has no device in it,
+  so it works regardless.
 
 - **`docs/WIRE.md` is the protocol's specification; this is one implementation.**
   The Dart implementation in `packages/oaa_wire/` is another, written against

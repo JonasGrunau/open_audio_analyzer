@@ -131,7 +131,7 @@ const PLATFORMS = [
 
 <Base
   title="Open Audio Analyzer — free and open-source loudness and spectrum analyzer"
-  description="A free and open-source loudness and spectrum analyzer for macOS, Windows, Linux, iPadOS and Android. Fourteen meter modules on an arrangeable canvas, ITU-R BS.1770-4 and EBU R128 measurement verified against the EBU Tech 3341 and 3342 reference cases in CI, offline file analysis, a VST3/AU plugin and a command-line analyser."
+  description="A free and open-source loudness and spectrum analyzer. Fourteen meters on a canvas you arrange, measuring LUFS and true peak to EBU R128 — desktop, DAW, tablet."
   path="/"
 >
   <!-- ===================== hero ===================== -->
@@ -183,8 +183,20 @@ const PLATFORMS = [
     </p>
 
     <figure class="facade" data-facade>
+      {/* The one picture on the page that is fetched before anything is
+          scrolled, so the one whose size decides Largest Contentful Paint.
+
+          `sizes` is not a guess — it is `.shell` written out. That box is
+          `min(100vw, 1440px)` wide less a gutter of 32 px, or 24 below 900 px,
+          or 16 below 560, and those three breakpoints are in global.css. Get it
+          wrong in the optimistic direction and every phone downloads the
+          desktop file while the browser reports no problem at all; the widths
+          themselves are listed in scripts/render-analyzer.mjs, which writes
+          them. */}
       <img
         src="/analyzer-still.webp"
+        srcset={still.sources.map((source) => `${source.file} ${source.width}w`).join(', ')}
+        sizes="(min-width: 1440px) 1376px, (min-width: 901px) calc(100vw - 64px), (min-width: 561px) calc(100vw - 48px), calc(100vw - 32px)"
         alt="Eight meter modules on one canvas: loudness bars, three concentric arcs, a spectrum analyser, a minute of loudness against time, a delivery verdict reading NOT READY, per-channel peak bars, a waveform and a latched true-peak alert."
         width={still.width}
         height={still.height}
@@ -655,6 +667,22 @@ const PLATFORMS = [
 
   .hero-credit em {
     font-style: italic;
+  }
+
+  /* The two links in the credit are the only ones on the site that sit *inside*
+     a run of prose, and `.link-quiet` distinguishes itself from the text around
+     it by colour alone — `--muted` against `--faint`, which is 1.2:1 between
+     them. Colour at that distance is not a difference a reader with low vision
+     or a monochrome display can see, so the link needs a second cue: the same
+     hairline underline `.link` carries. Everywhere else `.link-quiet` is a whole
+     paragraph or a whole cell, where there is no surrounding text to be
+     confused with, and it stays bare. */
+  .hero-credit .link-quiet {
+    border-bottom-color: var(--faint);
+  }
+
+  .hero-credit .link-quiet:hover {
+    border-bottom-color: var(--signal);
   }
 
   /* ---------- the live analyzer in the hero, behind a facade ---------- */

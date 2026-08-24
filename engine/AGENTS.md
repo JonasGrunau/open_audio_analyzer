@@ -55,3 +55,43 @@ reach a single list.
 - **No measurement is invented.** A quantity this build does not compute is
   `NaN` with a `OAA_FLAG_*_UNAVAILABLE` flag set — never a zero that looks like
   a reading.
+
+- **A source that has stopped producing is a state, not a silence.** The
+  analysis thread paces itself against a monotonic clock, so an empty ring
+  changes nothing about how often it publishes: every meter holds its last
+  reading, `generation` keeps incrementing, and a consumer has no way to tell a
+  device that is delivering digital silence from a device that has gone. It
+  stood that way for eight phases and presented as an application that freezes
+  and can only be revived by choosing a different source. `oaa_device_running`
+  is asked four times a second, `OAA_FLAG_SOURCE_STOPPED` carries the answer,
+  and `oaa_device_revive` puts back what can be put back at the same format.
+
+  **Ask the source about itself; never time its output.** "No frames for a
+  second" is a perfectly healthy state for real devices — a macOS output device
+  with nothing playing through it has an idle clock and its tap receives
+  *nothing at all*, which is measured and pinned by a test in
+  `packages/oaa_engine/test/oaa_engine_test.dart`. A watchdog built on a timeout
+  would rebuild a healthy Core Audio aggregate four times a second on a quiet
+  machine and charge every rebuild to `dropped_frames` as lost audio, which is a
+  worse bug than the one being fixed.
+
+  **A format that moved is also a source that has stopped.** It is not enough
+  for the producer to be delivering; it has to be delivering what the engine was
+  built for. A Bluetooth output device changes its own sample rate without ever
+  ceasing to be the default output, and the tap went on delivering 24 kHz audio
+  into a graph whose filters, oversampler and spectrum axis were all built for
+  48 kHz — every number wrong by an octave, meters moving convincingly, elapsed
+  time running at half speed. Nothing downstream can adopt a new rate, so
+  reporting it stopped and letting the consumer open a new engine is the only
+  honest answer.
+
+  **Reproducing one takes a script, not a unit test.** The suite cannot
+  reconfigure the machine's audio. What works is a small Swift program over
+  `AudioObjectSetPropertyData` — `kAudioHardwarePropertyDefaultOutputDevice` to
+  move the default output, `kAudioDevicePropertyNominalSampleRate` to move a
+  rate — with something playing a silent file so the output device's clock stays
+  alive, and a test that prints `elapsedSeconds` and the flag twice a second.
+  **Do not set a rate on a device this engine currently taps**: doing so wedged
+  the whole HAL for every process on the machine, and only `sudo killall
+  coreaudiod` cleared it. Move the *default output* between devices at different
+  rates instead, which reproduces the same failure and unwinds cleanly.

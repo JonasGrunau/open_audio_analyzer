@@ -151,8 +151,15 @@ export const codeTheme = {
   settings: [
     { settings: { background: '#171a1e', foreground: '#e6e8eb' } },
     {
+      // These hexes are the CSS tokens written out, because a TextMate theme
+      // cannot read a custom property. That means they go stale silently, and
+      // this one did: it kept `--faint`'s old #565e67 after the token moved,
+      // which is 2.65:1 on this theme's own background and the last thing
+      // standing between the documentation and a clean contrast pass. A code
+      // comment is the smallest text on the page and the one most often the
+      // part you actually needed to read.
       scope: ['comment', 'punctuation.definition.comment'],
-      settings: { foreground: '#565e67' }, // --faint
+      settings: { foreground: '#7c848d' }, // --faint
     },
     {
       scope: ['string', 'string.quoted', 'constant.numeric', 'constant.language'],

@@ -98,5 +98,13 @@ Dart bindings for the engine, plus the build hook that compiles it.
 - **`isLeaf` is a promise.** The function must never block and never call back
   into the runtime. `oaa_snapshot_acquire` satisfies both by construction. If
   that changes, this becomes a way to hang the UI thread with no diagnostic.
+- **`isSourceStopped` is on `OaaEngine` and deliberately not on `MeterSource`.**
+  The two things that can act on a capture source that has stopped — reopening
+  it, or naming the device that went away — belong to the machine holding the
+  device. A remote display has no device, no source menu and nothing it could
+  offer, so widening the interface would hand every consumer a fact only one of
+  them can use. What a display sees is what it should see: the desktop reopening
+  the source, and em dashes if that fails.
+
 - **The typed lists are windows onto native memory, not copies.** Writing to one
   corrupts the engine's snapshot. They are valid only until `dispose()`.

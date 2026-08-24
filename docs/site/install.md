@@ -341,11 +341,17 @@ is the second reason the pkg exists.
 Analyzer**. Live rescans on launch; a plugin copied in while it is open needs a
 restart.
 
-Insert it on a track, a bus or the master. Its own window is a status panel —
-connected or not, sample rate, channel count, and whether the host is giving it
-a playhead — and nothing else; the meters are in the app. Several inserts can be
-connected at once and the most recently added is the one on screen, because
-adding it is the act of choosing it.
+Insert it on a track, a bus or the master. Its own window is a status panel and
+nothing else — the meters are in the app, and the panel says so. What it shows
+is a diagram of the three places the path can break: the host's audio, the
+host's playhead, and the socket to the app. Each run is lit when something is
+travelling down it and dark when nothing is, and the socket's dashes move while
+frames are being sent, so a link that has quietly stopped does not look like one
+that is working. Under it, the sample rate and channel count the host is giving
+it, how long it has been measuring, the integrated loudness, and one line naming
+whatever is wrong. Several inserts can be connected at once and the most
+recently added is the one on screen, because adding it is the act of choosing
+it.
 
 The host's transport comes across with the audio, so the app's status bar reads
 back the DAW's position, tempo and time signature, and relays them to an

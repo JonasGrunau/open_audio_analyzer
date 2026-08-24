@@ -14,10 +14,8 @@
 import 'dart:io';
 
 import 'package:oaa/src/app/bar_controls.dart';
-import 'package:oaa/src/canvas/workspace.dart';
 import 'package:oaa/src/data/providers.dart';
 import 'package:oaa/src/panels/calibration_editor.dart';
-import 'package:oaa/src/panels/preset_browser.dart';
 import 'package:oaa/src/panels/settings_panel.dart';
 import 'package:oaa/src/remote/host_picker.dart';
 import 'package:oaa/src/remote/mdns/host_discovery.dart';
@@ -197,22 +195,6 @@ class _Opener extends StatelessWidget {
     ),
   );
 }
-
-PresetSpec _preset(String name) => PresetSpec(
-  name: name,
-  tabs: const [
-    TabSpec(
-      name: 'Tab',
-      modules: [
-        ModuleSpec(
-          id: 'm1',
-          kind: ModuleKind.numberBox,
-          rect: GridRect(column: 0, row: 0, columns: 4, rows: 2),
-        ),
-      ],
-    ),
-  ],
-);
 
 /// A delivery target the user wrote, for the cases about removing one.
 const _houseTarget = Calibration(
@@ -471,74 +453,6 @@ void main() {
         SettingsPanel(remote: _remoteService()),
       );
       expect(find.textContaining('Nothing is being saved'), findsOneWidget);
-    });
-  });
-
-  group('the preset browser', () {
-    testWidgets('opening a preset replaces the layout', (tester) async {
-      final container = await _container(
-        tester,
-        StartupConfig(
-          presets: [(fileName: 'mastering.json', preset: _preset('Mastering'))],
-        ),
-      );
-      await _open(tester, container, const PresetBrowser());
-
-      // Scoped to the row: the name field carries the same string once a row
-      // has been chosen, and `find.text` matches an `EditableText` too.
-      await _tap(tester, find.widgetWithText(PanelListRow, 'Mastering'));
-      await _tap(tester, find.text('OPEN'));
-      await tester.pumpAndSettle();
-
-      expect(container.read(workspaceProvider).preset.name, 'Mastering');
-    });
-
-    testWidgets('a preset carrying a target applies it, and one without '
-        'leaves it alone', (tester) async {
-      // The two save toggles exist to choose between exactly these.
-      final container = await _container(
-        tester,
-        StartupConfig(
-          presets: [
-            (
-              fileName: 'broadcast.json',
-              preset: PresetSpec(
-                name: 'Broadcast',
-                tabs: _preset('x').tabs,
-                calibrationId: 'ebu-r128',
-              ),
-            ),
-          ],
-        ),
-      );
-      await _open(tester, container, const PresetBrowser());
-
-      expect(container.read(calibrationProvider).id, 'streaming-14');
-      await _tap(tester, find.text('Broadcast'));
-      await _tap(tester, find.text('OPEN'));
-      await tester.pumpAndSettle();
-
-      expect(container.read(calibrationProvider).id, 'ebu-r128');
-    });
-
-    testWidgets('there is nothing to open until something is chosen', (
-      tester,
-    ) async {
-      final container = await _container(
-        tester,
-        StartupConfig(
-          presets: [(fileName: 'mastering.json', preset: _preset('Mastering'))],
-        ),
-      );
-      await _open(tester, container, const PresetBrowser());
-
-      await _tap(tester, find.text('OPEN'));
-      await tester.pumpAndSettle();
-
-      // Still open, nothing loaded: a disabled button that silently did
-      // something would be worse than one that does nothing.
-      expect(find.text('PRESETS'), findsOneWidget);
-      expect(container.read(workspaceProvider).preset.name, isNot('Mastering'));
     });
   });
 

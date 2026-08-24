@@ -157,10 +157,83 @@ void main() {
     test('an absent calibration means "follow the preset"', () {
       // Null is not a missing value here, it is a mode. See PresetSpec's doc
       // comment: null follows the preset, a concrete id was pinned by the user
-      // and must survive browsing.
+      // and must survive opening another one.
       final preset = PresetSpec.fromJson({'name': 'X', 'tabs': const []});
       expect(preset.calibrationId, isNull);
       expect(preset.toJson().containsKey('calibration'), isFalse);
+    });
+
+    test('copyWith can clear a carried id as well as set one', () {
+      // The File menu's two rows move these between null and an id in both
+      // directions, and `copyWith(calibrationId: null)` cannot mean "clear" —
+      // it is indistinguishable from not passing it at all.
+      const preset = PresetSpec(
+        name: 'X',
+        tabs: [TabSpec(name: 'T', modules: [])],
+        calibrationId: 'ebu-r128',
+        skinId: 'daylight',
+      );
+
+      expect(preset.copyWith(name: 'Y').calibrationId, 'ebu-r128');
+      expect(
+        preset.copyWith(calibrationId: 'streaming-14').calibrationId,
+        'streaming-14',
+      );
+      expect(preset.copyWith(clearCalibrationId: true).calibrationId, isNull);
+      expect(preset.copyWith(clearCalibrationId: true).skinId, 'daylight');
+      expect(preset.copyWith(clearSkinId: true).skinId, isNull);
+    });
+
+    group('tryFromJson', () {
+      // What a file dialog hands back is any file at all, so this answers null
+      // where `fromJson` throws. See its doc comment.
+      test('accepts what fromJson accepts', () {
+        const preset = PresetSpec(
+          name: 'Mastering',
+          tabs: [TabSpec(name: 'T', modules: [])],
+        );
+        expect(PresetSpec.tryFromJson(preset.toJson())?.name, 'Mastering');
+      });
+
+      test('refuses a document with no name', () {
+        expect(
+          PresetSpec.tryFromJson({
+            'tabs': [
+              {'name': 'T', 'modules': const []},
+            ],
+          }),
+          isNull,
+        );
+      });
+
+      test('refuses a document with no tabs', () {
+        // `loadPreset` ignores an empty preset, so without this the interface
+        // would report a successful open and show the layout already on screen.
+        expect(PresetSpec.tryFromJson({'name': 'X', 'tabs': const []}), isNull);
+      });
+
+      test('refuses something that is not a preset at all', () {
+        // A skin, which is the file most likely to be picked by mistake: it
+        // lives in the directory next door and has the same extension.
+        expect(
+          PresetSpec.tryFromJson({
+            'id': 'daylight',
+            'name': 'Daylight',
+            'colors': const <String, Object?>{},
+          }),
+          isNull,
+        );
+      });
+
+      test('refuses a tab that is not shaped like one', () {
+        expect(
+          PresetSpec.tryFromJson({
+            'name': 'X',
+            'tabs': ['not a map'],
+          }),
+          isNull,
+        );
+      });
     });
   });
 

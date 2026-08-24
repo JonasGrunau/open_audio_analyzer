@@ -39,11 +39,38 @@ npm install
 npm run dev        # measures, then serves on :4321
 npm run build      # measures, then builds to dist/
 npm run preview    # serves dist/
+npm run check      # every page at 360, 390 and 768 px — does one scroll sideways?
+npm run audit      # Lighthouse over every page, mobile and desktop
 ```
 
 Neither needs a Flutter toolchain: the thumbnails and the still in front of the analyzer are
 committed, and the compiled analyzer is git-ignored and built by `npm run deploy`. The front page
 checks whether it is present and omits the button when it is not.
+
+The last two need Google Chrome and a built `dist/`, which is why neither is part of `npm run
+build`. They are the only gates this directory has — no job in `ci.yml` builds or measures it — so
+run them before deploying anything that changes how a page is laid out or what it loads.
+
+## The typefaces are served from here
+
+The site is set in Archivo, Source Serif 4 and Google Sans Code, and it serves all three itself:
+
+```sh
+npm run fonts      # fetch them from Google Fonts, write public/fonts/ and src/styles/fonts.css
+```
+
+They used to be a `<link>` to `fonts.googleapis.com` on every page, which is a render-blocking
+stylesheet on a second origin naming files on a third — nothing typographic painted until two
+cross-origin round trips had finished, and because `global.css` sets `font-synthesis: none` and
+varies Archivo's width axis, the fallback re-wrapped the text rather than merely re-weighting it.
+It also meant Google saw the IP address of everybody who opened a page, which
+`docs/site/privacy.md` had to disclose and no longer does.
+
+The files and `src/styles/fonts.css` are both **generated and both committed** — `npm run fonts`
+needs the network and a build must not. Two things not to undo: the `math` and `symbols` subsets of
+Google Sans Code are what draw `⌘ ⇧ ⌃ ⇥ ⌦ ⌫` on the keyboard page and the `→` in every document, so
+dropping them redraws those in a system font with no error anywhere; and the filenames carry the
+family version, which is what lets `public/_headers` cache them for a year as immutable.
 
 ## Deploying to Cloudflare
 

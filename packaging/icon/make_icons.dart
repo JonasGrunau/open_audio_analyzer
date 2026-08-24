@@ -258,6 +258,14 @@ abstract final class _Tile {
   /// has now changed the shape twice. Render an icon, threshold the alpha, fit.
   /// Safari is the one to avoid — it is a circle, not a tile, and it does not
   /// fit because it is not supposed to.
+  ///
+  /// **These two are read in a second place, and it is not Dart.** The plugin's
+  /// status window draws the icon's tile as the middle node of its signal
+  /// chain, from the same two numbers transcribed into
+  /// `plugin/src/OaaPluginEditor.cpp` — there is no import that crosses from
+  /// here to C++, so a re-measurement has to be carried over by hand. It is two
+  /// numbers rather than the path, which stays generated: the plugin compiles
+  /// `assets/brand/oaa-mark.svg` in rather than redrawing the wave.
   static const double corner = 1 / 3;
   static const double squircle = 2.7;
 

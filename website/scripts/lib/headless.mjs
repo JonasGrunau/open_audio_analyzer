@@ -19,6 +19,7 @@
 //     exits, so removing the directory straight after kill() throws ENOTEMPTY.
 
 import { createServer } from 'node:http';
+import { gzipSync } from 'node:zlib';
 import { spawn } from 'node:child_process';
 import { readFileSync, existsSync } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -37,29 +38,96 @@ export function requireChrome() {
 }
 
 const TYPES = {
-  '.html': 'text/html',
-  '.js': 'text/javascript',
-  '.mjs': 'text/javascript',
-  '.json': 'application/json',
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.mjs': 'text/javascript; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.xml': 'application/xml; charset=utf-8',
+  '.txt': 'text/plain; charset=utf-8',
   '.wasm': 'application/wasm',
   '.ttf': 'font/ttf',
   '.otf': 'font/otf',
+  // `font/woff2` and not `application/octet-stream`: a font served as a generic
+  // stream still renders, so the omission is invisible until something measures
+  // it — `npm run audit` reads the response headers.
+  '.woff2': 'font/woff2',
+  '.woff': 'font/woff',
   '.png': 'image/png',
   '.webp': 'image/webp',
   '.svg': 'image/svg+xml',
+  '.ico': 'image/x-icon',
+  '.m4a': 'audio/mp4',
 };
+
+/// The cache policy, read from the `_headers` the deploy actually uses.
+///
+/// Not a second copy of it. A local server that serves `dist/` with no
+/// `Cache-Control` reports every asset as uncacheable no matter what the deploy
+/// does, so an audit run against it measures the harness rather than the site —
+/// and a policy typed here as well would be one more pair of lists to keep in
+/// step. `_headers` is the source; this parses it.
+///
+/// Absent, it returns nothing, which is exactly what the site served before
+/// there was a `_headers` at all.
+function headerRules(root) {
+  const file = join(root, '_headers');
+  if (!existsSync(file)) return [];
+  const rules = [];
+  let current = null;
+  for (const raw of readFileSync(file, 'utf8').split('\n')) {
+    const line = raw.trim();
+    if (!line || line.startsWith('#')) continue;
+    if (line.startsWith('/')) {
+      // A path pattern opens a section. `*` is the only wildcard Cloudflare's
+      // syntax and this site's file use.
+      const rx = new RegExp('^' + line.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*') + '$');
+      current = { rx, headers: [] };
+      rules.push(current);
+      continue;
+    }
+    const at = line.indexOf(':');
+    if (at > 0 && current) current.headers.push([line.slice(0, at).trim(), line.slice(at + 1).trim()]);
+  }
+  return rules;
+}
 
 /// Serve `root` on `port`. `mount` strips a leading path, so a build made with
 /// `--base-href /analyzer/` can be served from the root of this server.
+/// Which types are worth compressing. Everything else this site serves —
+/// woff2, webp, png, wasm — is already a compressed container, and gzipping one
+/// costs CPU to make it very slightly larger.
+const COMPRESSIBLE = /^(text\/|application\/(json|xml|javascript))/;
+
 export async function serve(root, port, mount = '/') {
+  const rules = headerRules(root);
   const server = createServer((req, res) => {
     let path = decodeURIComponent(new URL(req.url, 'http://x').pathname);
     if (mount !== '/' && path.startsWith(mount)) path = path.slice(mount.length - 1);
     const file = join(root, path === '/' || path === '' ? 'index.html' : path);
     if (!file.startsWith(root)) return void res.writeHead(403).end();
     try {
-      const body = readFileSync(file);
-      res.writeHead(200, { 'content-type': TYPES[extname(file)] ?? 'application/octet-stream' });
+      let body = readFileSync(file);
+      const type = TYPES[extname(file)] ?? 'application/octet-stream';
+      const headers = { 'content-type': type };
+      // Later matches win, which is how Cloudflare resolves overlapping
+      // sections and lets a specific path follow a broad one.
+      for (const rule of rules) {
+        if (!rule.rx.test(path)) continue;
+        for (const [name, value] of rule.headers) headers[name] = value;
+      }
+      // Cloudflare compresses text at the edge, so a local server that does not
+      // is measuring a page nobody is served. It matters here more than on most
+      // sites: every stylesheet is inlined into the HTML, so the HTML *is* the
+      // payload — 739 kB across the eleven pages raw and 215 kB gzipped, and
+      // the changelog alone goes from 248 kB to 81 kB. gzip rather than brotli
+      // because node has it built in and the difference between them is a few
+      // per cent, against the 3.4x that compressing at all is worth.
+      if (COMPRESSIBLE.test(type) && /\bgzip\b/.test(req.headers['accept-encoding'] ?? '')) {
+        body = gzipSync(body);
+        headers['content-encoding'] = 'gzip';
+        headers.vary = 'Accept-Encoding';
+      }
+      res.writeHead(200, headers);
       res.end(body);
     } catch {
       res.writeHead(404).end();

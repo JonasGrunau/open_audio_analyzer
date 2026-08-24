@@ -5,12 +5,18 @@ The panels that sit over the canvas. GPL-3.0-or-later.
 | File | Purpose |
 |------|---------|
 | `settings_panel.dart` | Signal and capture device, refresh rate and delivery target, publishing, skins, session. The hub the others open from. Its Publish section is `PublishSection`, composed from `lib/src/remote/` because it reads a live socket. |
-| `preset_browser.dart` | Save the current arrangement; open or delete a saved one. |
 | `calibration_editor.dart` | The six numbers a delivery target is. |
 | `theme_editor.dart` | The thirteen colours a skin is. Previews by *being* the skin — every change goes into `skinDraftProvider`, which `skinProvider` answers with — and prints each role's contrast ratio against the surface it has to be read on. The two built-ins are fixed and it says so before anything is dragged. |
 | `report_panel.dart` | Offline analysis: drop a file, watch it run, cancel it, export the result. |
 | `report_card.dart` | The report as a **PNG** — a fixed layout drawn deliberately, not a screenshot of the panel, so two people exporting the same report get the same picture. It lives here rather than beside the other exports in `oaa_core` because rendering needs `dart:ui`. |
 | `shortcuts_sheet.dart` | The keyboard shortcuts, drawn from the table in `lib/src/app/shortcuts.dart`. Holds no list of its own. The one panel that is wider than 620 and laid out in two columns, because it is a reference table rather than a column of controls — see `packages/oaa_ui/AGENTS.md` § Panels, and `test/scaling_test.dart`, which fails if it ever needs to scroll again. |
+
+**Presets are not a panel.** They were until 0.11.0 — `preset_browser.dart` was
+a name field, a list of everything in `presets/`, and two save-time switches —
+and they are documents now: `File → Open…`, `Save` and `Save as…` over the
+platform's own dialogs, from `lib/src/app/preset_file.dart`. Nothing in this
+directory opens or saves one. What is left here is the sentence in Settings →
+Session that says where the folder is and what the commands are called.
 
 The primitives they are assembled from — `PanelScaffold`, `PanelSection`,
 `PanelRow`, `PanelListRow`, `PanelNote`, `PanelActions`, `PanelMenu`,
@@ -65,6 +71,14 @@ structure differs from the panels in this directory.
   modal and says in its own header why it is allowed to be. The test of which
   applies: can the sentence describing what will be lost fit on the button? One
   skin, one preset, the target the row is about — yes. A whole library — no.
+
+  **A question with three answers is `showOaaSavePrompt`, and there is one of
+  those too.** "This layout has changes that are not in a file" is answered by
+  Save, Don't Save or Cancel, and the third is not a refusal — deciding to
+  discard an edit is a decision, and folding it into Cancel would leave the only
+  way to throw work away being the button that keeps it. Cancel, the × and the
+  scrim all answer cancel; Save takes the affirmative slot because it is the
+  answer that loses nothing, and Don't Save takes the destructive one hard left.
 
 - **Say why something failed, where it failed.** A save that did not happen puts
   the store's own message in the panel — not a log line, and never nothing.

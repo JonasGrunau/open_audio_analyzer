@@ -2,8 +2,8 @@
 
 /// The chrome every Open Audio Analyzer panel is built from.
 ///
-/// Settings, the preset browser, the calibration editor and the Phase 5 report
-/// all want the same thing: a bordered surface over the canvas, a title, a way
+/// Settings, the calibration editor, the theme editor and the report panel all
+/// want the same thing: a bordered surface over the canvas, a title, a way
 /// out, sections of labelled rows, and controls that look like the rest of the
 /// instrument rather than like Material. Written once here, they cannot drift;
 /// written per panel, they will.
@@ -170,6 +170,75 @@ Future<bool> showOaaConfirm({
     // Dismissed by the scrim or by Escape, which the `Navigator` pops with no
     // value at all. Silence is no.
     false;
+
+/// What to do about work that is not in the file yet.
+///
+/// [showOaaConfirm]'s sibling, and the only other question in the application
+/// that is asked as a modal over a modal. The difference is that this one has
+/// three answers rather than two, and the third is not a refusal: "don't save"
+/// is a decision about the document, and rolling it into Cancel would mean the
+/// only way to discard an edit is to press the button that keeps it.
+///
+/// - **Cancel is last-but-two, Save is last.** The footer convention puts the
+///   affirmative in the final slot and this dialog's affirmative is Save — the
+///   answer that loses nothing. [ButtonEmphasis.primary] rather than
+///   destructive: unlike the confirmations [showOaaConfirm] exists for, the
+///   recommended answer here is the safe one.
+/// - **Discard is hard left, before the spacer**, which is the slot the footer
+///   convention reserves for the destructive alternative to what the panel is
+///   for. It is the one answer that throws work away.
+/// - **The × and the scrim answer [SaveAnswer.cancel]**, not discard. A
+///   dismissal is somebody saying "not now" to the question, and the safe
+///   reading of "not now" is that nothing happens at all.
+enum SaveAnswer { save, discard, cancel }
+
+/// Asks it. See [SaveAnswer].
+Future<SaveAnswer> showOaaSavePrompt({
+  required BuildContext context,
+  required String title,
+  required String message,
+}) async =>
+    await showOaaPanel<SaveAnswer>(
+      context: context,
+      builder: (context) {
+        final colors = OaaTheme.of(context);
+        void answer(SaveAnswer value) => Navigator.of(context).pop(value);
+
+        return PanelScaffold(
+          title: title,
+          width: 420,
+          onClose: () => answer(SaveAnswer.cancel),
+          footer: Row(
+            children: [
+              OaaButton(
+                label: "Don't Save",
+                emphasis: ButtonEmphasis.destructive,
+                onPressed: () => answer(SaveAnswer.discard),
+              ),
+              const Spacer(),
+              OaaButton(
+                label: 'Cancel',
+                onPressed: () => answer(SaveAnswer.cancel),
+              ),
+              const SizedBox(width: Space.sm),
+              OaaButton(
+                label: 'Save',
+                emphasis: ButtonEmphasis.primary,
+                onPressed: () => answer(SaveAnswer.save),
+              ),
+            ],
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: Space.sm),
+            child: Text(
+              message,
+              style: OaaType.body.copyWith(color: colors.textPrimary),
+            ),
+          ),
+        );
+      },
+    ) ??
+    SaveAnswer.cancel;
 
 /// A panel surface: title bar, scrolling body, optional footer.
 class PanelScaffold extends StatefulWidget {
@@ -608,7 +677,7 @@ class PanelActions extends StatelessWidget {
   );
 }
 
-/// A selectable row: the preset browser's list, the skin list.
+/// A selectable row: the skin list, the delivery targets.
 class PanelListRow extends StatelessWidget {
   const PanelListRow({
     required this.title,

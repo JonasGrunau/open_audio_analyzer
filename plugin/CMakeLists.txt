@@ -252,6 +252,39 @@ juce_add_plugin(OaaPlugin
   COPY_PLUGIN_AFTER_BUILD   FALSE
 )
 
+# ---------------------------------------------------------------------------
+# The two faces and the mark, compiled into the binary
+#
+# `OaaType` in packages/oaa_ui/lib/src/tokens.dart bundles Inter and Google Sans
+# Code with the application and says why: fall through to the platform's own
+# faces and the digit width, the tracking and the cap height all differ between
+# macOS, Windows and Linux, so a layout tuned on one is subtly wrong on the other
+# two. The plugin's editor was the counter-example — it asked for
+# `Font::getDefaultMonospacedFontName()`, which is Menlo here, Consolas there
+# and DejaVu Sans Mono on the third.
+#
+# Read out of `assets/` rather than copied into this directory. A second copy is
+# a copy that will be a version behind, and `assets/brand/oaa-mark.svg` is
+# *generated* by packaging/icon/make_icons.dart — a hand-transcribed path here
+# would be silently reverted by the next run of it, which is the trap
+# assets/AGENTS.md warns about.
+#
+# About 516 KB of font and 2 KB of vector, in a bundle whose binary is 8.4 MB.
+juce_add_binary_data(OaaPluginAssets
+  HEADER_NAME OaaAssets.h
+  NAMESPACE   OaaAssets
+  SOURCES
+    ${CMAKE_CURRENT_SOURCE_DIR}/../assets/fonts/Inter-Medium.ttf
+    ${CMAKE_CURRENT_SOURCE_DIR}/../assets/fonts/GoogleSansCode-Medium.ttf
+    ${CMAKE_CURRENT_SOURCE_DIR}/../assets/brand/oaa-mark.svg
+)
+
+# A plugin is a shared library and everything linked into one has to be
+# position-independent. juce_add_binary_data produces a static library, which
+# on Linux defaults to non-PIC and fails the link with a relocation error that
+# names the generated object rather than this line.
+set_target_properties(OaaPluginAssets PROPERTIES POSITION_INDEPENDENT_CODE TRUE)
+
 target_sources(OaaPlugin PRIVATE
   src/OaaPluginProcessor.cpp
   src/OaaPluginEditor.cpp
@@ -279,6 +312,7 @@ target_compile_definitions(OaaPlugin PUBLIC
 target_link_libraries(OaaPlugin
   PRIVATE
     oaa::oaa
+    OaaPluginAssets
     juce::juce_audio_utils   # pulls in audio_basics / devices / processors
     juce::juce_gui_basics
   PUBLIC
@@ -450,6 +484,47 @@ target_link_libraries(oaa_transport_capture_test PRIVATE
 )
 
 target_include_directories(oaa_transport_capture_test PRIVATE src)
+
+# ---------------------------------------------------------------------------
+# The editor snapshot tool
+#
+# Photographs `StatusPanel` in each of its five states and writes PNGs. It is
+# the plugin's answer to the trick the application uses in a widget test — a
+# `RepaintBoundary` and `boundary.toImage` — and it exists for the same reason:
+# two of Phase 8's layout defects were found by looking at a rendered tree and
+# by nothing else, and this window had no way to be looked at short of loading a
+# bundle into a DAW and then arranging for the link to break.
+#
+# Not a ctest. There is no golden to compare against — a font rasteriser differs
+# between platforms and between OS releases, so an image comparison here would
+# fail on somebody's machine for a reason that is not a defect. What it produces
+# is for a person to look at. See plugin/AGENTS.md.
+#
+# Links `OaaPlugin`, so it costs no extra framework compile and photographs the
+# same objects the shipping bundle contains.
+add_executable(oaa_editor_snapshot test/editor_snapshot.cpp)
+
+target_link_libraries(oaa_editor_snapshot PRIVATE
+  OaaPlugin
+  oaa::oaa
+  juce::juce_audio_utils
+  juce::juce_gui_basics
+)
+
+target_include_directories(oaa_editor_snapshot PRIVATE src)
+
+# So the tool can load the bundle it just built and photograph the editor the
+# shipped factory hands back — the only check anywhere that the VST3 loads at
+# all. Same flag, same vendored MIT SDK, as the fake DAW.
+# JUCE_MODAL_LOOPS_PERMITTED so the tool can pump the message loop for a fixed
+# interval while the loaded plugin's streaming thread looks for the app — the
+# editor's readings arrive on a juce::Timer, and a timer with no message loop
+# never fires. It is a console tool, so there is no user interaction for a modal
+# loop to trap. PRIVATE: nothing about the shipped plugin changes.
+target_compile_definitions(oaa_editor_snapshot PRIVATE
+  JUCE_PLUGINHOST_VST3=1
+  JUCE_MODAL_LOOPS_PERMITTED=1
+)
 
 endif()  # OAA_BUILD_PLUGIN
 

@@ -38,7 +38,7 @@ compile is a real cost, paid deliberately: `plugin/test/sources_match.sh` fails
 the build if the two source lists drift apart, so **a new file in `engine/src`
 goes in both.**
 
-### Linux dependencies
+## Linux dependencies
 
 ```sh
 sudo apt-get install clang cmake ninja-build pkg-config \
@@ -91,8 +91,10 @@ flutter run -d macos --dart-entrypoint-args --open-panel=settings
 `--config-dir` points settings, presets, targets and skins somewhere
 disposable, so an experiment cannot eat the configuration you actually use.
 `--open-panel` opens one panel once the first frame is up — `settings`,
-`presets`, `calibration`, `theme`, `report` or `shortcuts` — which is how a
-panel gets looked at without clicking through to it. It is a debug-build affordance and a
+`calibration`, `theme`, `report` or `shortcuts` — which is how a panel gets
+looked at without clicking through to it. There is no `presets`: presets are
+documents now, opened and saved through the platform's own dialogs from the File
+menu, and a native panel is not something a screenshot run can drive. It is a debug-build affordance and a
 release build says so rather than ignoring it.
 
 On a built macOS bundle, pass them with `open --args`:

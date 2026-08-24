@@ -13,6 +13,7 @@
 import Base from './Base.astro';
 import '../styles/docs.css';
 import { PAGES, SECTIONS, href, sourceUrl } from '../lib/docs.mjs';
+import { docSchema } from '../lib/schema.mjs';
 
 interface Props {
   /** The manifest entry for this page — see src/lib/docs.mjs. */
@@ -45,6 +46,7 @@ const next = PAGES[order + 1];
   description={description}
   path={href(page.slug)}
   slimFooter
+  schema={docSchema({ title: page.title, description, path: href(page.slug) })}
 >
   <div class="doc shell">
     <nav class="doc-nav doc-rail" aria-label="Documentation">

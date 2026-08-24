@@ -138,6 +138,30 @@ struct oaa_engine {
   struct oaa_device *device;
   oaa_ring ring;
   int ring_ready;
+
+  /* --- Watching the producer. OAA_SOURCE_DEVICE only ------------------- */
+  /* All four are owned by the analysing thread and read by nobody else.
+   *
+   * They exist because an empty ring says nothing about why it is empty. A
+   * device delivering digital silence and a device that has stopped delivering
+   * at all produce the identical picture upstairs — every meter holds its last
+   * value — so the only way to tell them apart is to ask the device, which is
+   * what `oaa_device_running` is for. See OAA_FLAG_SOURCE_STOPPED. */
+  double device_polled_seconds;  /* when the source was last asked */
+  double device_revived_seconds; /* when a revive was last attempted */
+  double device_stopped_seconds; /* when it was first seen stopped */
+  int device_stopped;            /* what the last poll said */
+
+  /* Frames the source was not there to produce, since the last reset.
+   *
+   * Kept apart from the ring's own drop count because the two are counted by
+   * different things — the ring counts exactly what it refused, this is derived
+   * from the clock — and because the device branch assigns the ring's count
+   * into the snapshot on every block, which would wipe anything accumulated
+   * into the same field. They are added on the way out: to a measurement,
+   * audio missing is audio missing. */
+  uint64_t stalled_frames;
+
   float *block;         /* interleaved scratch, block_frames * channels */
   double tone_phase;    /* radians, kept in [0, 2pi) to stay precise */
   double tone_time;     /* seconds of generated signal, for the modulators */

@@ -67,6 +67,16 @@ class WorkspaceController extends Notifier<Workspace> {
   final List<Workspace> _past = [];
   final List<Workspace> _future = [];
 
+  /// The layout the canvas opened with.
+  ///
+  /// Either yesterday's session or the built-in default, and neither has been
+  /// edited — which is what makes it the baseline `presetModifiedProvider`
+  /// compares against for a canvas that has never been saved to a file. Held
+  /// here rather than read out of the document, because the document provider
+  /// cannot know when it was first looked at: a modified mark that depended on
+  /// whether the status bar happened to be wide enough to draw it would be no
+  /// mark at all.
+
   /// Deep enough to cover a working session's worth of mistakes, bounded
   /// because this is a meter that stays open for days.
   static const int historyLimit = 64;
@@ -77,13 +87,16 @@ class WorkspaceController extends Notifier<Workspace> {
   /// the app from painting the default layout and then visibly replacing it.
   /// It also keeps the restore out of the undo history, which is correct:
   /// yesterday's session is the starting point, not an edit to be undone.
+  late PresetSpec opened;
+
   @override
   Workspace build() {
     final session = ref.watch(startupConfigProvider).session;
-    if (session != null) {
-      return Workspace(preset: session.preset, activeTab: session.activeTab);
-    }
-    return Workspace(preset: defaultPreset(), activeTab: 0);
+    final workspace = session != null
+        ? Workspace(preset: session.preset, activeTab: session.activeTab)
+        : Workspace(preset: defaultPreset(), activeTab: 0);
+    opened = workspace.preset;
+    return workspace;
   }
 
   bool get canUndo => _past.isNotEmpty;
@@ -120,18 +133,40 @@ class WorkspaceController extends Notifier<Workspace> {
     _commit(Workspace(preset: preset, activeTab: 0));
   }
 
-  /// Renames the open layout. What "Save preset" will call the file.
+  /// Renames the open layout.
+  ///
+  /// Set from the filename a Save As chose, rather than typed: the file is the
+  /// document, so the name inside it and the name of it are the same thing.
   void renamePreset(String name) {
     final trimmed = name.trim();
     if (trimmed.isEmpty || trimmed == state.preset.name) return;
+    _commit(state.copyWith(preset: state.preset.copyWith(name: trimmed)));
+  }
+
+  /// Whether the open layout carries a delivery target, and which.
+  ///
+  /// Null is not "no target" — it is *follow whatever is selected*, which is
+  /// what [PresetSpec] documents and what the File menu's checkmark reads. An
+  /// undoable edit like any other, because it is an edit to the document: it is
+  /// what the next save will write.
+  void setCarriedCalibration(String? id) {
+    if (state.preset.calibrationId == id) return;
     _commit(
       state.copyWith(
-        preset: PresetSpec(
-          name: trimmed,
-          tabs: state.preset.tabs,
-          calibrationId: state.preset.calibrationId,
-          skinId: state.preset.skinId,
+        preset: state.preset.copyWith(
+          calibrationId: id,
+          clearCalibrationId: id == null,
         ),
+      ),
+    );
+  }
+
+  /// The same for the skin. See [setCarriedCalibration].
+  void setCarriedSkin(String? id) {
+    if (state.preset.skinId == id) return;
+    _commit(
+      state.copyWith(
+        preset: state.preset.copyWith(skinId: id, clearSkinId: id == null),
       ),
     );
   }

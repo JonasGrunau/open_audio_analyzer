@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <!--
     If you are serving your web app in a path other than the root, change the
@@ -18,18 +18,34 @@
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="A new Flutter project.">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <!--
+    This document is served at /analyzer/index.html and the front page loads it
+    into an iframe. It is also, therefore, a real crawlable URL — and it shipped
+    for four releases as the Flutter scaffold wrote it: titled
+    `oaa_analyzer_demo`, described as "A new Flutter project.", with no `lang`
+    and no viewport. That is what a search engine had to work with, and it is a
+    worse description of this project than no page at all.
+
+    `noindex` rather than a `Disallow:` in robots.txt, which is the mistake that
+    looks like the fix: a disallowed URL is never fetched, so the refusal below
+    is never read, and the address can stay in the index on the strength of a
+    link to it. Crawling has to be allowed for a noindex to work.
+  -->
+  <meta name="robots" content="noindex, follow">
+  <meta name="description" content="The live Open Audio Analyzer canvas, replaying a real track measured by the engine. Loaded by open-audio-analyzer.com.">
 
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="oaa_analyzer_demo">
+  <meta name="apple-mobile-web-app-title" content="Open Audio Analyzer">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
 
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="favicon.png"/>
 
-  <title>oaa_analyzer_demo</title>
+  <title>Live analyzer — Open Audio Analyzer</title>
   <link rel="manifest" href="manifest.json">
 <style>
     /* The application's own background, on the document itself.

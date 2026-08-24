@@ -56,8 +56,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../canvas/canvas_notice.dart';
 import '../canvas/menus.dart';
 import '../canvas/workspace.dart';
-import '../panels/preset_browser.dart';
-import '../panels/report_panel.dart';
+import 'preset_file.dart';
 import '../panels/settings_panel.dart';
 import '../panels/shortcuts_sheet.dart';
 
@@ -75,6 +74,7 @@ enum ShortcutGroup {
   canvas('Canvas'),
   measurement('Measurement'),
   tabs('Tabs'),
+  file('File'),
   configuration('Configuration');
 
   const ShortcutGroup(this.title);
@@ -153,6 +153,7 @@ class OaaShortcut {
     required this.action,
     this.appleKeys,
     this.otherKeys,
+    this.command,
   });
 
   final ShortcutGroup group;
@@ -174,6 +175,15 @@ class OaaShortcut {
   /// different strings and neither is worth deriving from the other.
   final String? appleKeys;
   final String? otherKeys;
+
+  /// The File menu row this chord belongs to, for the rows that have one.
+  ///
+  /// **This is how the menu gets its chords, and it only goes this way.** A
+  /// native `NSMenuItem` key equivalent is a binding, so declaring one in Swift
+  /// would be a shortcut that works and is documented nowhere — the thing this
+  /// table exists to prevent. `lib/src/app/file_menu.dart` reads the chord off
+  /// this list instead, so ⌘S moves in one place or not at all.
+  final FileCommand? command;
 
   /// One entry per keycap the sheet should draw. An override collapses to a
   /// single cap: `arrow keys` is one thing you press, drawn as four keycaps it
@@ -288,12 +298,6 @@ const List<OaaShortcut> oaaShortcuts = [
     chords: [Chord(LogicalKeyboardKey.keyR, primary: true)],
     action: _reset,
   ),
-  OaaShortcut(
-    group: ShortcutGroup.measurement,
-    description: 'Analyse a file',
-    chords: [Chord(LogicalKeyboardKey.keyO, primary: true)],
-    action: _analyseFile,
-  ),
 
   // --- Tabs ----------------------------------------------------------------
   OaaShortcut(
@@ -329,18 +333,48 @@ const List<OaaShortcut> oaaShortcuts = [
     action: _newTab,
   ),
 
+  // --- File ----------------------------------------------------------------
+  //
+  // ⌘O is the preset, not the audio. The layout is this application's document
+  // — it is the thing that is opened, saved and sent to somebody — and the
+  // chord every desktop user tries first has to reach it. Analysing a file is
+  // an import, which is what ⌘I means everywhere else, and it moved here in
+  // 0.11.0 from ⌘O.
+  OaaShortcut(
+    group: ShortcutGroup.file,
+    description: 'Open a preset',
+    chords: [Chord(LogicalKeyboardKey.keyO, primary: true)],
+    action: _openPreset,
+    command: FileCommand.open,
+  ),
+  OaaShortcut(
+    group: ShortcutGroup.file,
+    description: 'Analyse a file',
+    chords: [Chord(LogicalKeyboardKey.keyI, primary: true)],
+    action: _analyseFile,
+    command: FileCommand.analyse,
+  ),
+  OaaShortcut(
+    group: ShortcutGroup.file,
+    description: 'Save the preset',
+    chords: [Chord(LogicalKeyboardKey.keyS, primary: true)],
+    action: _savePreset,
+    command: FileCommand.save,
+  ),
+  OaaShortcut(
+    group: ShortcutGroup.file,
+    description: 'Save the preset as a new file',
+    chords: [Chord(LogicalKeyboardKey.keyS, primary: true, shift: true)],
+    action: _savePresetAs,
+    command: FileCommand.saveAs,
+  ),
+
   // --- Configuration -------------------------------------------------------
   OaaShortcut(
     group: ShortcutGroup.configuration,
     description: 'Settings',
     chords: [Chord(LogicalKeyboardKey.comma, primary: true)],
     action: _settings,
-  ),
-  OaaShortcut(
-    group: ShortcutGroup.configuration,
-    description: 'Presets',
-    chords: [Chord(LogicalKeyboardKey.keyP, primary: true)],
-    action: _presets,
   ),
   OaaShortcut(
     group: ShortcutGroup.configuration,
@@ -484,14 +518,30 @@ void _newTab(ShortcutScope scope, int _) => scope.workspace.addTab();
 
 void _reset(ShortcutScope scope, int _) => scope.onReset();
 
+/// Every File menu command, through the one implementation of it.
+void _runFile(ShortcutScope scope, FileCommand command) =>
+    unawaited(runFileCommand(command, scope.context, scope.ref));
+
+void _openPreset(ShortcutScope scope, int _) =>
+    _runFile(scope, FileCommand.open);
+
 void _analyseFile(ShortcutScope scope, int _) =>
-    unawaited(showReportPanel(scope.context));
+    _runFile(scope, FileCommand.analyse);
+
+void _savePreset(ShortcutScope scope, int _) =>
+    _runFile(scope, FileCommand.save);
+
+void _savePresetAs(ShortcutScope scope, int _) =>
+    _runFile(scope, FileCommand.saveAs);
+
+/// The chord printed beside a File menu row, or null if it has none.
+Chord? fileCommandChord(FileCommand command) => oaaShortcuts
+    .where((shortcut) => shortcut.command == command)
+    .expand((shortcut) => shortcut.chords)
+    .firstOrNull;
 
 void _settings(ShortcutScope scope, int _) =>
     unawaited(showSettingsPanel(scope.context));
-
-void _presets(ShortcutScope scope, int _) =>
-    unawaited(showPresetBrowser(scope.context));
 
 void _help(ShortcutScope scope, int _) =>
     unawaited(showShortcutsSheet(scope.context));

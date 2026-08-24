@@ -24,10 +24,27 @@
   --hair: #1f2328;
   --hair-strong: #2a2f36;
 
-  /* Text, in three weights of presence. */
+  /* Text, in three weights of presence.
+     `--faint` is the one token on this page that is *not* the application's.
+     `OaaColors.textFaint` is #565e67, which is 2.97:1 on `--ink` — under the
+     4.5:1 WCAG AA asks of body text and under even the 3:1 it allows large
+     text, and it is used here at 0.6875rem for the footer, the eyebrow, every
+     table heading and the whole documentation contents list. In the
+     application it labels a meter the eye is already on; on a page somebody
+     arrives at cold, on a phone, it is text they cannot read. #7c848d is the
+     first value on the same blue-grey ramp that clears 4.5:1 against all three
+     grounds — 5.16 on `--ink`, 4.87 on `--panel`, 4.61 on `--raised` — and it
+     keeps three distinguishable steps (15.94 / 6.14 / 5.16). #7a828b was tried
+     first and is what a page background alone would need; the code blocks sit
+     on `--raised`, where it lands at 4.48 and axe still objects, so the value
+     is set by the lightest ground and not by the commonest one.
+     `--hair-strong` already differs from the
+     application's for its own reasons, so this is the second divergence and not
+     the first — but it is the one worth knowing about, because the application
+     has the same problem in its own interface and this does not fix that. */
   --text: #e6e8eb;
   --muted: #8a9199;
-  --faint: #565e67;
+  --faint: #7c848d;
 
   /* One signal hue, and two that mean something is wrong. */
   --signal: #35e0c4;

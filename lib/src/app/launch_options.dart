@@ -45,7 +45,6 @@ final launchOptionsProvider = Provider<LaunchOptions>(
 /// lower case.
 enum StartupPanel {
   settings('settings'),
-  presets('presets'),
   calibration('calibration'),
   theme('theme'),
   report('report'),

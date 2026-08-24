@@ -11,12 +11,12 @@
 | `oaa_truepeak.h/.c` | The BS.1770-4 Annex 2 4x polyphase oversampler. |
 | `oaa_spectrum.h/.c` | The Hann STFT behind the analyser, the spectrogram and the stereo cloud — a 4096-point window zero-padded into a 16384-point transform. One set of transforms serves all three. |
 | `oaa_ring.h/.c` | The SPSC ring between the audio callback and analysis. Drops are **counted and published**, never silently overwritten. |
-| `oaa_device.h/.c` | miniaudio, cut down to enumeration and capture. The only file that includes miniaudio.h. Also the dispatcher: one reserved device id opens a process tap instead. |
-| `oaa_tap.h` | The system-output tap's C interface, the only place the policy for a changing output device is written down, and the assertion that fails the build below a macOS 14.2 deployment target — see its header for why a lower one made the whole engine library unloadable. Declares its handle everywhere, its functions on macOS only. |
+| `oaa_device.h/.c` | miniaudio, cut down to enumeration and capture. The only file that includes miniaudio.h. Also the dispatcher: one reserved device id opens a process tap instead. Answers whether the producer is still running, and puts a stopped one back — asked about itself rather than timed, because a device delivering nothing is not necessarily a device that has stopped. |
+| `oaa_tap.h` | The system-output tap's C interface, the only place the policy for a changing output device is written down — including why a rebuild that fails must be retried rather than left as no producer at all, and the assertion that fails the build below a macOS 14.2 deployment target — see its header for why a lower one made the whole engine library unloadable. Declares its handle everywhere, its functions on macOS only. |
 | `oaa_tap_macos.m` | Core Audio process taps, macOS 14.2+ — which is the engine's deployment floor rather than a runtime check, because that class reference is strong. **The engine's only Objective-C**, and its only source not built on every platform — `CATapDescription` is an Objective-C class and the SDK hides the tapping API behind `#ifdef __OBJC__`. |
 | `oaa_decode.c` | dr_libs, as `oaa_file_open/read/seek/close`. The only file that does I/O, and the only one that includes dr_wav/dr_flac/dr_mp3. No analysis: the caller pushes what it reads. |
 | `oaa_analysis.c` | One pass over a block: the simple meters inline, the two standards-defined ones driven. |
-| `oaa_engine.c` | Lifecycle, the analysis thread, and the OS shims. |
+| `oaa_engine.c` | Lifecycle, the analysis thread, and the OS shims. Also the four-times-a-second watch on the capture source, which is the only thing that can tell an empty ring from a producer that has left. |
 
 ## Rules
 

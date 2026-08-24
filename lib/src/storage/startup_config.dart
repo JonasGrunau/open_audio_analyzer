@@ -5,14 +5,6 @@ import 'package:flutter/foundation.dart';
 
 import 'config_store.dart';
 
-/// A preset as it exists on disk.
-///
-/// The filename is the identity, not the name inside the document. Two presets
-/// may legitimately be called "Mastering" — one the user wrote and one they
-/// imported — and the alternative to tolerating that is refusing a save because
-/// of a name collision the user does not consider a collision.
-typedef StoredPreset = ({String fileName, PresetSpec preset});
-
 /// The canvas as it was left.
 @immutable
 class SessionSnapshot {
@@ -30,20 +22,18 @@ class SessionSnapshot {
   static SessionSnapshot? fromJson(Map<String, Object?> json) {
     final raw = json['preset'];
     if (raw is! Map) return null;
-    try {
-      final preset = PresetSpec.fromJson(raw.cast<String, Object?>());
-      if (preset.tabs.isEmpty) return null;
-      final tab = json['active_tab'];
-      return SessionSnapshot(
-        preset: preset,
-        activeTab: tab is int ? tab.clamp(0, preset.tabs.length - 1) : 0,
-      );
-    } on Object {
-      // A layout written by a build that has since changed shape. The canvas
-      // opening on its defaults is a far better outcome than the app failing
-      // to start, and the file is left alone so it can be inspected.
-      return null;
-    }
+    // A layout written by a build that has since changed shape answers null
+    // rather than throwing — see `PresetSpec.tryFromJson`. The canvas opening on
+    // its defaults is a far better outcome than the application failing to
+    // start, and the file is left alone so it can be inspected.
+    final preset = PresetSpec.tryFromJson(raw.cast<String, Object?>());
+    if (preset == null) return null;
+
+    final tab = json['active_tab'];
+    return SessionSnapshot(
+      preset: preset,
+      activeTab: tab is int ? tab.clamp(0, preset.tabs.length - 1) : 0,
+    );
   }
 }
 
@@ -61,7 +51,6 @@ class StartupConfig {
     this.settings = const AppSettings(),
     this.calibrations = const [],
     this.skins = const [],
-    this.presets = const [],
     this.session,
     this.notice,
   });
@@ -73,7 +62,6 @@ class StartupConfig {
   /// it in the menu.
   final List<Calibration> calibrations;
   final List<Skin> skins;
-  final List<StoredPreset> presets;
   final SessionSnapshot? session;
 
   /// Why something did not load, if anything did not.
@@ -120,20 +108,12 @@ Future<StartupConfig> loadStartupConfig(ConfigStore store) async {
     }
   }
 
-  final presets = <StoredPreset>[];
-  for (final document in await store.readDirectory(ConfigDir.presets)) {
-    try {
-      final preset = PresetSpec.fromJson(document.json);
-      if (preset.tabs.isEmpty) {
-        failures.add(document.fileName);
-        continue;
-      }
-      presets.add((fileName: document.fileName, preset: preset));
-    } on Object {
-      failures.add(document.fileName);
-    }
-  }
-
+  // **`presets/` is not read at launch.** It was, until presets became
+  // documents: there was a library panel listing everything in it, and the list
+  // had to exist before the panel opened. Now a preset is opened by name through
+  // a file dialog and may be anywhere on the machine, so scanning one directory
+  // at startup would be reading files nothing is going to ask for — and would
+  // still miss the one on somebody's Desktop.
   SessionSnapshot? session;
   if (settings.restoreSession) {
     final json = await store.readJson(ConfigFile.session);
@@ -144,7 +124,6 @@ Future<StartupConfig> loadStartupConfig(ConfigStore store) async {
     settings: settings,
     calibrations: calibrations,
     skins: skins,
-    presets: presets,
     session: session,
     notice: failures.isEmpty
         ? null

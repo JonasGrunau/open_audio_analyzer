@@ -9,6 +9,8 @@ The shell everything else is mounted in. GPL-3.0-or-later.
 | `shortcuts.dart` | **Every keyboard shortcut Open Audio Analyzer has, as one table**, plus the widget that installs it and the generator for `docs/site/keyboard.md`. |
 | `transport_readout.dart` | The DAW's playhead, painted: position, tempo and meter, and the rules about which of the three a host has actually earned the right to have drawn. Built by the status bar and by the tablet's link bar, which is why it lives here rather than in `lib/src/remote/`. |
 | `launch_options.dart` | `--config-dir` and `--open-panel`, parsed by hand. |
+| `preset_file.dart` | **The preset as a document**: which file the canvas came from, whether it differs from that file, and the four commands — Open, Save, Save as, and the two rows that decide what the preset carries. The file dialogs sit behind a seam a test replaces, because a native panel is a modal sheet owned by the platform and there is nothing in a test to tap. |
+| `file_menu.dart` | The File menu, drawn twice: `FileMenuButton` in the status bar off macOS, and `MacFileMenu` over a channel to `macos/Runner/OaaFileMenu.swift` on it. Also `RouteDepth`, which is how the second one knows to grey. |
 | `window_chrome.dart` | The window itself: the palette its buttons are drawn against, the room the status bar leaves them, and the drag and zoom a window with no title bar cannot get for free. macOS only. |
 
 ## Rules
@@ -33,8 +35,8 @@ The shell everything else is mounted in. GPL-3.0-or-later.
   narrow widths through the `LayoutBuilder` rather than squeezing them.
 
 - **Adding anything to the bar means re-checking every drop-out gate, and
-  re-checking them means measuring.** There are six — transport, format,
-  analyse, attach, pairing code, publish — plus help, and they are
+  re-checking them means measuring.** There are eight — preset, transport,
+  format, analyse, attach, pairing code, publish, file — plus help, and they are
   arithmetic on each other rather than independent numbers: one control becoming
   three moved every gate above it by 165 px, and putting the source in a chip
   moved every single one of them — 25 px for the five below the format readout
@@ -51,6 +53,15 @@ The shell everything else is mounted in. GPL-3.0-or-later.
   application every 20 px from 480 to 2560 and fails on the overflow; the gates
   are cliffs, so sampling round numbers is not enough. The order items leave in
   is stated in `_StatusBar` and is a design decision, not a fitting exercise.
+
+  **One term in that arithmetic is the platform.** FILE is only built where
+  there is no system menu bar to put the File menu in, so every gate above its
+  own carries `+ file` — 58 px on Windows and Linux, zero on macOS, which keeps
+  the numbers there exactly as they were measured. The sweep runs on a macOS
+  host, so it would have drawn that button at no width at all: `_pumpApp` takes
+  `inWindowMenu` and there is a band of the sweep that passes it, which is the
+  only reason the five widths where the button did not fit were found before
+  anybody on Windows saw them.
 
 - **An overflow is not the only thing an item can do to that row, and the other
   thing is silent.** The bar's left group is the `Expanded`, and its children
@@ -119,6 +130,26 @@ The shell everything else is mounted in. GPL-3.0-or-later.
   unconditionally above the bar. Anything that has to keep happening belongs
   there.
 
+- **The macOS File menu's chords come from `oaaShortcuts` too, over the
+  channel.** `OaaFileMenu.swift` sets no key equivalent of its own: an
+  `NSMenuItem` key equivalent *is* a binding, so one declared in Swift would be
+  a shortcut that works and is documented nowhere — the thing the rule below
+  exists to prevent. `fileCommandChord` reads it off the table and
+  `fileMenuPayload` sends it, so ⌘S moves in one place or not at all.
+
+  **`PlatformMenuBar` is the obvious tool and cannot do this job.** The
+  `flutter/menu` channel carries no checked state at all — two of the six rows
+  *are* a state, and Flutter's own sample toggles a row by rewriting its label —
+  and `setMenus` replaces the whole main menu, which would delete the stock Edit
+  menu that `MainMenu.xib` provides and that Flutter offers no platform-provided
+  Cut, Copy or Paste to rebuild.
+
+  **AppKit serves a key equivalent before the Flutter view sees the event**, so
+  unlike the Dart bindings the menu fires while a panel is open — where a
+  binding cannot, because a panel route sits above `OaaShortcuts`' `FocusScope`.
+  `RouteDepth` counts routes and the menu greys above one, which is what stops
+  ⌘O meaning different things on macOS and on Windows.
+
 - **A shortcut is one row in `oaaShortcuts` and nothing else.** The bindings,
   the sheet `?` opens, and the documentation page are all derived from that
   list, and `test/shortcuts_test.dart` fails when the checked-in Markdown has
@@ -152,6 +183,27 @@ The shell everything else is mounted in. GPL-3.0-or-later.
   any refactor are the session autosave and the `AppLifecycleListener` that
   flushes pending writes on exit — the last edit before quitting is the one edit
   a user is most likely to notice losing.
+
+- **The source is watched on a `Timer`, and it cannot be the meter clock.**
+  `_watchSource` asks the local engine twice a second whether its capture source
+  is still delivering, and reopens the engine when only a new one can follow the
+  device to a new sample rate. Two reasons it is not folded into `MeterClock`,
+  and both would have been bugs: a `Ticker` stops when the window is occluded,
+  which is exactly when a tablet is the screen in use and a stopped device would
+  go unrecovered for as long as the lid was shut; and the clock reads whatever is
+  *on the canvas*, which may be a plugin, while the thing that can stop is
+  always the local engine. It calls `refresh()` itself for the same reason —
+  while a plugin holds the canvas, the local engine's snapshot is never read by
+  anything else and goes stale by minutes.
+
+  The reopen is capped and the cap is not optional: a source that stops again
+  seconds after every reopen would otherwise discard a measurement every two
+  seconds for as long as the application stayed open. Three attempts, forgiven
+  after thirty seconds of the source behaving, and then a notice that says so
+  instead. **The notice names going away and coming back as the manual remedy,
+  not reselecting the source**, because choosing the source that is already
+  chosen changes no setting and the source listener never fires — the comments
+  in `oaa_tap.h` claimed otherwise for eight phases.
 
 - **`_WorkspaceState` is a `TickerProviderStateMixin`, and must stay one.**
   There is only ever one clock alive, so the single-ticker mixin looks correct

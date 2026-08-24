@@ -216,12 +216,11 @@ nothing anywhere should account for every request a browser makes:
   a short period. This project has no analytics product enabled on that account
   and reads no per-visitor data from it. Cloudflare's own handling is described
   in their [privacy policy](https://www.cloudflare.com/privacypolicy/).
-- **Fonts.** The page loads three typefaces from Google Fonts
-  (`fonts.googleapis.com` and `fonts.gstatic.com`), which means your browser
-  makes a request to Google and Google therefore sees your IP address. No
-  cookie is set by it and nothing identifies you to this project, but it is a
-  third-party request and it is disclosed here rather than left to be found in
-  a network inspector.
+- **Fonts.** None. The three typefaces the site is set in are served from
+  `open-audio-analyzer.com` itself, so reading a page here sends no request to
+  anybody else for them. They used to be loaded from Google Fonts, which meant
+  your browser contacted Google and Google saw your IP address; they were moved
+  onto this site in the same change that recorded this sentence.
 - **The live demo.** Pressing the button on the front page that starts the
   running analyzer loads a graphics renderer from `www.gstatic.com`, which is
   the same kind of request. It happens only when you press it; a reader who

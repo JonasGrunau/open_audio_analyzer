@@ -185,6 +185,35 @@ typedef enum {
  * questionable long after the drop itself has passed. */
 #define OAA_FLAG_OVERRUN (1u << 3)
 
+/* The capture source has stopped producing, and will not start again by
+ * itself.
+ *
+ * A producer that stops is otherwise completely invisible, which is the whole
+ * reason this bit exists. The analysis thread paces itself against a monotonic
+ * clock, not against the audio, so it goes on publishing at the same ~47 Hz
+ * with an empty ring: every meter holds its last value, `generation` keeps
+ * incrementing, and nothing anywhere says why. Pressing reset then clears the
+ * meters to their floors and they sit *there* instead, which reads as an engine
+ * that has died rather than as a source that has left — and the only way out
+ * was to select a different source, which happens to rebuild the engine.
+ *
+ * This is not a statement about the signal. A source producing digital silence
+ * is running, and meters at their floor are the correct reading for it; this
+ * bit says that no audio is arriving at all. The engine puts such a source back
+ * itself where it can (see `oaa_device_revive`) and leaves the bit set only for
+ * what it cannot fix from the inside: a device that was unplugged, or one whose
+ * sample rate or channel count changed underneath a DSP graph that was sized
+ * for the old one. Reopening the source is the consumer's move then, because
+ * adopting a new format means rebuilding everything derived from it.
+ *
+ * Live rather than sticky, unlike OAA_FLAG_OVERRUN: it describes the source's
+ * state right now, and the audio the stall cost is reported where every other
+ * kind of lost audio is, in `dropped_frames`.
+ *
+ * Set only for OAA_SOURCE_DEVICE. No other source has a producer that can
+ * leave. */
+#define OAA_FLAG_SOURCE_STOPPED (1u << 4)
+
 /* ------------------------------------------------------------------------ */
 /* The snapshot                                                              */
 /* ------------------------------------------------------------------------ */
@@ -222,14 +251,23 @@ typedef struct oaa_snapshot {
   uint32_t channels;
   uint32_t flags; /* OAA_FLAG_* */
 
-  /* Frames the capture callback had to discard because the analysis thread
-   * fell behind, since the last reset.
+  /* Frames of audio that never reached the measurement, since the last reset.
    *
    * This is not a diagnostic counter. Integrated loudness averages every block
-   * since the reset, so a dropped second does not make the reading slightly
-   * stale — it makes it an average of a different programme than the one that
-   * played. A non-zero value here means the integrated reading cannot be
-   * trusted, and the UI has to say so rather than quietly showing it. */
+   * since the reset, so a lost second does not make the reading slightly stale
+   * — it makes it an average of a different programme than the one that played.
+   * A non-zero value here means the integrated reading cannot be trusted, and
+   * the UI has to say so rather than quietly showing it.
+   *
+   * Two things land here, because to a measurement they are the same event.
+   * Frames the capture callback had to discard because the analysis thread fell
+   * behind are counted exactly, by the ring that refused them. Frames missed
+   * while the source was stopped (OAA_FLAG_SOURCE_STOPPED) are counted from the
+   * analysis clock instead, so they are approximate — to within the one block
+   * it takes to notice — because a producer that has gone away is not there to
+   * tell anyone what it did not produce. Approximate is the point: the number
+   * exists to prove audio was lost, and a gap reported as zero is a gap the
+   * user never hears about. */
   uint32_t dropped_frames;
 
   /* --- Loudness, ITU-R BS.1770-4 / EBU R128, in LUFS ------------------- */

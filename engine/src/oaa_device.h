@@ -69,6 +69,40 @@ int32_t oaa_device_open(oaa_device **out, const char *device_id,
  * exactly the channel count `oaa_device_open` reported. */
 int32_t oaa_device_start(oaa_device *device, oaa_ring *ring);
 
+/*
+ * Whether the producer is still running.
+ *
+ * Cheap enough to poll a few times a second, which is what the analysis thread
+ * does, because a device that stops delivering is otherwise indistinguishable
+ * from a device delivering digital silence — the ring is empty either way and
+ * every meter simply holds its last reading. See OAA_FLAG_SOURCE_STOPPED.
+ *
+ * It answers from what the backend says about itself, never from a timeout on
+ * the audio. That distinction is not pedantic: WASAPI loopback legitimately
+ * delivers nothing at all while no application is rendering, so "no frames for
+ * a second" is a normal state on Windows and treating it as a fault would have
+ * the engine restarting a perfectly healthy device every second on a quiet
+ * machine.
+ */
+int32_t oaa_device_running(oaa_device *device);
+
+/*
+ * Puts a stopped producer back, at the format the engine was built around, or
+ * reports that it cannot.
+ *
+ * Only ever called for a device `oaa_device_running` has already said is not
+ * running, and it never renegotiates: the DSP graph, every filter coefficient
+ * and the ring's stride were all sized from the format this device reported at
+ * open, so a revive that came back at a different rate would be measuring a
+ * different signal through meters built for the old one. When the format has
+ * moved, this fails and keeps failing — deliberately — and the fix belongs to
+ * the caller, who can throw the engine away and open a new one.
+ *
+ * Safe to call repeatedly; the engine rate-limits it because rebuilding a Core
+ * Audio aggregate device is not free.
+ */
+int32_t oaa_device_revive(oaa_device *device);
+
 /* Stops capture if running and releases everything. Safe on NULL. */
 void oaa_device_close(oaa_device *device);
 

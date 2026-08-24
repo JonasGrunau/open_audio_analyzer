@@ -7,15 +7,15 @@ publishes. GPL-3.0-or-later, except the two font families, which are SIL OFL
 | File | Purpose |
 |------|---------|
 | `fonts/Inter-Regular.ttf` | Body text in panels and dialogs. |
-| `fonts/Inter-Medium.ttf` | Units and captions. |
+| `fonts/Inter-Medium.ttf` | Units and captions. Also every word in the plugin's status panel — see the rule below. |
 | `fonts/Inter-SemiBold.ttf` | Module titles and section headers, and the logo's wordmark. |
 | `fonts/Inter-LICENSE.txt` | SIL OFL 1.1. Ships with any binary that bundles the family. |
 | `fonts/GoogleSansCode-Regular.ttf` | Scale ticks and secondary numbers. |
-| `fonts/GoogleSansCode-Medium.ttf` | The one big reading in a module. |
+| `fonts/GoogleSansCode-Medium.ttf` | The one big reading in a module, and every number in the plugin's status panel. |
 | `fonts/GoogleSansCode-LICENSE.txt` | SIL OFL 1.1. Ships with any binary that bundles the family. |
 | `brand/oaa-logo.svg` | **The drawing.** An Inkscape document: the wave, in white, over the teal ramp, on a 500-unit square. The only artwork in this repository that is edited by hand, and the file every icon and every twin below is generated from. |
 | `brand/oaa-logo-background.svg` | Generated. The ramp on its own, full bleed and square. |
-| `brand/oaa-mark.svg` | Generated. The wave on its own, white, on nothing. **For a dark surface only** — it is white, so on a pale page it is not there. |
+| `brand/oaa-mark.svg` | Generated. The wave on its own, white, on nothing. **For a dark surface only** — it is white, so on a pale page it is not there. The plugin compiles this file into its binary; see the rule below. |
 | `brand/oaa-icon.svg` | Generated. The app icon: the wave on the ramp in a squircle tile. The one to reach for when the background is not known. `make_icons.dart` writes it out again as `website/public/oaa.svg`, byte for byte, which is the copy the Open Graph card uses. |
 | `brand/oaa-icon.png` | Generated. The same icon at 512 px with transparent corners, for `README.md` and anywhere else that wants an image rather than a vector. |
 | `brand/oaa-mark-old.svg` | The four-bar mark, retired in 0.10.0. Kept because it is on every release before it. |
@@ -32,6 +32,18 @@ publishes. GPL-3.0-or-later, except the two font families, which are SIL OFL
   time and reaches the platforms through their own icon slots. `fonts/` is the
   opposite case and is declared — in the application's pubspec rather than in
   `oaa_ui`, for a reason written down beside the declaration.
+
+- **Three of these files are compiled into the plugin, and none of them may be
+  hand-copied into it.** `plugin/CMakeLists.txt` reads `fonts/Inter-Medium.ttf`,
+  `fonts/GoogleSansCode-Medium.ttf` and `brand/oaa-mark.svg` through
+  `juce_add_binary_data`, so the VST3, the AU and the Standalone carry the
+  application's own two faces and the application's own mark rather than
+  whatever the platform offers and a second drawing of the wave. Two
+  consequences: **renaming or deleting one of the three breaks the plugin
+  build**, which is the good failure — and the mark in particular is
+  *generated*, so transcribing its path into C++ would be a copy that the next
+  `make_icons.dart` run silently leaves behind. The rest of that argument is in
+  the header of `plugin/src/OaaPluginEditor.cpp`.
 
 - **`oaa-logo.svg` is the only file here anybody edits, and the direction of
   that used to be the other way round.** Until 0.10.0 the mark was four rounded

@@ -1347,6 +1347,22 @@ class PresetSpec {
     if (skinId != null) 'skin': skinId,
   };
 
+  PresetSpec copyWith({
+    String? name,
+    List<TabSpec>? tabs,
+    String? calibrationId,
+    String? skinId,
+    bool clearCalibrationId = false,
+    bool clearSkinId = false,
+  }) => PresetSpec(
+    name: name ?? this.name,
+    tabs: tabs ?? this.tabs,
+    calibrationId: clearCalibrationId
+        ? null
+        : calibrationId ?? this.calibrationId,
+    skinId: clearSkinId ? null : skinId ?? this.skinId,
+  );
+
   factory PresetSpec.fromJson(Map<String, Object?> json) => PresetSpec(
     name: json['name']! as String,
     tabs: [
@@ -1356,6 +1372,30 @@ class PresetSpec {
     calibrationId: json['calibration'] as String?,
     skinId: json['skin'] as String?,
   );
+
+  /// [fromJson] for a document nobody in this project wrote.
+  ///
+  /// [fromJson] throws — `json['name']!` on a file with no name, a cast on a
+  /// tab that is not a map — which is the right shape for a document this
+  /// application wrote itself and the wrong one for a file a user chose in an
+  /// open dialog. Anything can be in that file: a session snapshot, a skin, a
+  /// preset from a build that has since changed shape, or JSON that is not ours
+  /// at all. So this answers null instead, and the caller says so.
+  ///
+  /// **Empty tabs is not a preset**, and it is refused here rather than three
+  /// layers down. `WorkspaceController.loadPreset` already ignores one, so
+  /// without this the interface would report a successful open and then show the
+  /// layout that was already on screen.
+  static PresetSpec? tryFromJson(Map<String, Object?> json) {
+    try {
+      final name = json['name'];
+      if (name is! String || name.trim().isEmpty) return null;
+      final preset = PresetSpec.fromJson(json);
+      return preset.tabs.isEmpty ? null : preset;
+    } on Object {
+      return null;
+    }
+  }
 }
 
 /// The canvas is this many columns wide at every window size.

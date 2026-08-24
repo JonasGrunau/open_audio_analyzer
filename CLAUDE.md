@@ -49,11 +49,11 @@ is still not built, and `docs/PLAN.md` for what was planned.
 | `packages/oaa_core/lib/src/layout.dart` | `ModuleSpec` / `TabSpec` / `PresetSpec` — the serialised layout model. |
 | `packages/oaa_core/lib/src/meter_source.dart` | `MeterSource` — everything a module is allowed to read. `OaaEngine` implements it; so does the remote display's decoder. |
 | `docs/WIRE.md` | The wire protocol, normative. Three implementations, none written against another. |
-| `ios/Runner/OaaBonjour.swift` | One of the application's **four** platform channels, and every one of them exists because a platform will not answer a question through the environment. iOS refuses an app the multicast socket every other platform browses with, so a tablet searches through the system's Bonjour responder instead; `lib/src/remote/mdns/host_discovery.dart` is where the two meet. The others: `lib/src/app/window_chrome.dart` over `oaa/window_chrome`, which removes the macOS title bar, and Android's two — `OaaMulticastLock.kt`, without which its multicast socket receives nothing, and `OaaFilesDir.kt`, without which it has nowhere to save. Both Android halves are registered in `android/app/src/main/kotlin/com/openaudioanalyzer/oaa/MainActivity.kt`. |
+| `ios/Runner/OaaBonjour.swift` | One of the application's **five** platform channels, and every one of them exists because a platform will not answer a question Flutter can. iOS refuses an app the multicast socket every other platform browses with, so a tablet searches through the system's Bonjour responder instead; `lib/src/remote/mdns/host_discovery.dart` is where the two meet. The others: `lib/src/app/window_chrome.dart` over `oaa/window_chrome`, which removes the macOS title bar; `macos/Runner/OaaFileMenu.swift` over `oaa/file_menu`, which is the File menu, because `PlatformMenuBar` can carry no checkmark and would replace the stock Edit menu — see `lib/src/app/file_menu.dart`, which sends it labels, ticks and the chords off the shortcut table; and Android's two — `OaaMulticastLock.kt`, without which its multicast socket receives nothing, and `OaaFilesDir.kt`, without which it has nowhere to save. Both Android halves are registered in `android/app/src/main/kotlin/com/openaudioanalyzer/oaa/MainActivity.kt`. |
 | `packages/oaa_core/lib/src/grid.dart` | Every rule about where a module may go, as pure functions. No pixels. |
 | `lib/src/canvas/grid_canvas.dart` | The canvas: drag, resize, selection, the preview overlay. |
 | `lib/src/canvas/workspace.dart` | The one path every layout edit takes, and the undo history. |
-| `lib/src/storage/config_store.dart` | Every read and write of the user's configuration. Atomic, never throws, and the only code in the app that touches the filesystem. |
+| `lib/src/storage/config_store.dart` | Every read and write of the user's configuration. Atomic, never throws, and the only code in the app that touches the filesystem. **`root` is not a boundary** — `readJsonAt` and `writeJsonAt` take a path the user chose in a dialog, and they are here so that a preset saved to a Desktop is still written atomically. |
 | `lib/src/data/providers.dart` | Settings, and the libraries of targets, skins and presets. One direction only: state is written to disk, never read back from it. |
 | `packages/oaa_ui/lib/src/panel.dart` | The chrome every panel is built from, and `showOaaPanel`. |
 | `packages/oaa_core/lib/src/skin.dart` | The thirteen colour roles a skin names, as data. `oaa_ui` owns the one adapter to `OaaColors`. |
@@ -61,7 +61,8 @@ is still not built, and `docs/PLAN.md` for what was planned.
 | `packages/oaa_engine/lib/src/offline.dart` | The decode-push-read loop. Both the app and the CLI drive files through this one function. |
 | `packages/oaa_core/lib/src/report.dart` | `AnalysisReport` and the delivery verdict. Holds no engine handle, so it round-trips through JSON. |
 | `cli/bin/oaa.dart` | The `oaa` analyser. Its exit code is the product — see `cli/AGENTS.md`. |
-| `lib/src/app/shortcuts.dart` | Every keyboard shortcut, as one table. The bindings, the `?` sheet and `docs/site/keyboard.md` are all derived from it; `test/shortcuts_test.dart` fails when the page has drifted. |
+| `lib/src/app/shortcuts.dart` | Every keyboard shortcut, as one table. The bindings, the `?` sheet, `docs/site/keyboard.md` **and the macOS File menu's key equivalents** are all derived from it; `test/shortcuts_test.dart` fails when the page has drifted. |
+| `lib/src/app/preset_file.dart` | **The preset as a document.** Which file the canvas came from, whether it still matches that file, and the six File menu commands — one implementation, reached from the keyboard, from the macOS menu bar and from the status bar's own menu. The file dialogs sit behind a seam a test replaces. |
 | `lib/src/app/launch_options.dart` | `--config-dir` and `--open-panel`. Both exist to make something else testable — see the file. |
 | `tool/docs.dart` | **The old documentation URLs, kept alive.** It rendered the documentation site until 0.10.0; the documentation is part of `website/` now, so what this writes is one redirect per page — `jonasgrunau.github.io/open_audio_analyzer/install.html` is in released READMEs and issue threads nobody can edit. Still no dependencies, so the job needs a Dart SDK and nothing else. The manifest moved to `website/src/lib/docs.mjs`. |
 | `packaging/icon/make_icons.dart` | The app mark, **read** from `assets/brand/oaa-logo.svg` and rendered into every container the six platforms want — a rounded tile for the desktops, two layers on a 108dp canvas for Android, and a layered `AppIcon.icon` for macOS and iOS that the system lights itself. It carries a path rasteriser because the mark is a stroked cubic path. It also writes the rest of `assets/brand/`, `packaging/icon/oaa.svg` and `website/public/`'s icons — every one except `website/public/favicon.svg`, which is a browser tab's 16 px and is drawn by hand. It wrote the tile over that file until 0.10.0, and there is a note where the line was. |
@@ -82,8 +83,8 @@ is still not built, and `docs/PLAN.md` for what was planned.
 | `docs/` | `PLAN.md`, `METRICS.md`, `WIRE.md`, and `site/`. Everything but `PLAN.md` and `AGENTS.md` is published, unaltered and in place, at `open-audio-analyzer.com/docs`. | |
 | `tool/` | Repository scripts. Nothing here ships. | GPL-3.0-or-later |
 | `packaging/` | pkg, Windows installer, Linux tarball, AppImage, flatpak, and the app icon they all need. The first three carry the VST3 (and on macOS the AU) and so are built from the plugin job's artefacts, not from the app alone. | GPL-3.0-or-later |
-| `assets/` | The fonts the application bundles, and the logo the repository publishes. `brand/oaa-logo.svg` is the one drawing everything else is generated from. | GPL-3.0-or-later; fonts SIL OFL 1.1 |
-| `website/` | `open-audio-analyzer.com` — a static Astro site that is also where the documentation is published, rendered from this repository's own Markdown in place. Two Flutter web targets give it its pictures — one photographs a module at a time, the other is a live canvas of eight — and both replay one recording rather than a mock: a Dart CLI measures a real track through the engine, and the `ReplaySource` they share plays it back, so a still and the live demo cannot disagree about what the material did. Deployed by hand; no job in `ci.yml` touches it. | GPL-3.0-or-later |
+| `assets/` | The fonts the application bundles, and the logo the repository publishes. `brand/oaa-logo.svg` is the one drawing everything else is generated from. Three files here are also compiled into the plugin — two faces and the mark — so renaming one breaks that build; see `assets/AGENTS.md`. | GPL-3.0-or-later; fonts SIL OFL 1.1 |
+| `website/` | `open-audio-analyzer.com` — a static Astro site that is also where the documentation is published, rendered from this repository's own Markdown in place. Two Flutter web targets give it its pictures — one photographs a module at a time, the other is a live canvas of eight — and both replay one recording rather than a mock: a Dart CLI measures a real track through the engine, and the `ReplaySource` they share plays it back, so a still and the live demo cannot disagree about what the material did. Deployed by hand; no job in `ci.yml` touches it. | GPL-3.0-or-later; fonts SIL OFL 1.1 |
 
 **`plugin/` is the one AGPL directory**, because JUCE 7 and 8 are
 AGPLv3-or-commercial (only JUCE 6 offered GPLv3, which `docs/PLAN.md` still
@@ -715,6 +716,12 @@ remote display has no native library at all.
 - **Engine:** `miniaudio` (capture), `pffft` (FFT) and `dr_libs` — `dr_wav`,
   `dr_flac`, `dr_mp3` (file decoding). All vendored under
   `engine/third_party/`, all permissive, all single-header.
+- **Website:** `astro` and `wrangler`, plus `lighthouse` for `npm run audit` —
+  all three dev-only, and none of them ships in a release. The three typefaces
+  the site is set in are **served from the site** rather than from Google Fonts,
+  committed under `website/public/fonts/` with their `OFL.txt`; they are the one
+  thing in that directory that is not GPL. See `website/AGENTS.md` for why the
+  `math` and `symbols` subsets are load-bearing.
 - **Build:** `native_toolchain_c`, `hooks`, `code_assets`, `ffigen`.
 
 ## graphify

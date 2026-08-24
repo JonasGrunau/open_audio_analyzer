@@ -1,12 +1,12 @@
 {
-    "name": "oaa_analyzer_demo",
-    "short_name": "oaa_analyzer_demo",
+    "name": "Open Audio Analyzer — live analyzer",
+    "short_name": "Open Audio Analyzer",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
-    "orientation": "portrait-primary",
+    "background_color": "#0b0c0e",
+    "theme_color": "#0b0c0e",
+    "description": "The live Open Audio Analyzer canvas, replaying a real track measured by the engine.",
+    "orientation": "any",
     "prefer_related_applications": false,
     "icons": [
         {

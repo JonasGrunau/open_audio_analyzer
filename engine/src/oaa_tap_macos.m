@@ -403,6 +403,85 @@ static int32_t build_chain(oaa_tap *self, AudioObjectID device,
   return status;
 }
 
+/*
+ * Whether the chain is running *and* still carrying the format the engine was
+ * built around. Called with the lock held.
+ *
+ * The second half is not paranoia, it is a defect this caught. A Bluetooth
+ * output device changes its own sample rate without ever ceasing to be the
+ * default output — AirPods offer 48 kHz and 24 kHz and drop to 24 the moment
+ * anything opens their microphone — so the default-output listener never fires,
+ * the aggregate device goes on running, and the IO proc goes on delivering. At
+ * half the frame rate. The engine, whose K-weighting filters, true-peak
+ * oversampler, spectrum axis and elapsed clock were all built for 48 kHz, has
+ * no way to notice: it simply measures 24 kHz audio through 48 kHz coefficients
+ * and publishes the results, with the meters moving and every number wrong by
+ * an octave. Measured, not imagined — `elapsed_seconds` advanced at half real
+ * time for as long as the mode lasted.
+ *
+ * So a format that has moved is reported as a source that has stopped, which is
+ * what it is: there is no longer anything here this engine can measure. The
+ * revive that follows tears the chain down and refuses to rebuild it until the
+ * format comes back, and the application reopens at the new rate — the only
+ * thing that can, because every coefficient downstream is derived from it.
+ *
+ * Two HAL property queries on the analysing thread, four times a second. They
+ * are cheap and they can block for a few milliseconds while Core Audio
+ * reconfigures, which costs a late publish and no audio at all: the ring holds
+ * half a second. A listener would avoid even that, and was not worth it — this
+ * compares the format the device actually has, rather than trusting a
+ * notification to have fired.
+ */
+static int chain_healthy_locked(oaa_tap *self) {
+  if (!self->running) {
+    return 0;
+  }
+
+  AudioStreamBasicDescription asbd;
+  memset(&asbd, 0, sizeof(asbd));
+  if (!stream_format(self->bound_device, &asbd)) {
+    /* The device stopped answering: unplugged, or turned off. */
+    return 0;
+  }
+
+  return (uint32_t)asbd.mSampleRate == self->sample_rate &&
+         asbd.mChannelsPerFrame == self->channels;
+}
+
+/*
+ * Tears the chain down and builds a fresh one against `device`, at the format
+ * the engine was configured with, and starts it. Called with the lock held.
+ *
+ * The format is read off the tap's own fields rather than passed in, because
+ * they are the engine's: `build_chain` only ever writes them on success and a
+ * refused rebuild leaves them naming the format the DSP graph upstairs is still
+ * sized for. Passing zeros here — "adopt whatever this device produces" — is
+ * the one thing that must not happen on a rebuild, and having exactly one
+ * function that can perform one is how that stays true.
+ *
+ * Returns OAA_OK only when the IO proc is running by the time it returns.
+ */
+static int32_t rebuild_locked(oaa_tap *self, AudioObjectID device) {
+  const uint32_t rate = self->sample_rate;
+  const uint32_t channels = self->channels;
+
+  teardown_chain(self);
+
+  const int32_t status = build_chain(self, device, rate, channels);
+  if (status != OAA_OK) {
+    return status;
+  }
+  if (AudioDeviceStart(self->aggregate, self->proc) != noErr) {
+    /* A built chain that will not start is worse than none: it is a tap the
+     * next rebuild would have to tear down anyway, and an aggregate device left
+     * on the machine if the process died first. */
+    teardown_chain(self);
+    return OAA_ERR_THREAD;
+  }
+  self->running = 1;
+  return OAA_OK;
+}
+
 /* ------------------------------------------------------------------------ */
 /* Probe                                                                     */
 /* ------------------------------------------------------------------------ */
@@ -534,16 +613,11 @@ int32_t oaa_tap_start(oaa_tap *tap, oaa_ring *ring) {
         if (!tap->closing) {
           const AudioObjectID next = default_output_device();
           if (next != tap->bound_device) {
-            const uint32_t rate = tap->sample_rate;
-            const uint32_t channel_count = tap->channels;
-            oaa_ring *attached = tap->ring;
-            teardown_chain(tap);
-            if (build_chain(tap, next, rate, channel_count) == OAA_OK) {
-              tap->ring = attached;
-              if (AudioDeviceStart(tap->aggregate, tap->proc) == noErr) {
-                tap->running = 1;
-              }
-            }
+            /* Failure here leaves `running` at zero and no chain at all, which
+             * is exactly the state oaa_tap_revive exists to get out of. It used
+             * to be a state nothing ever left: no producer, no retry, and no
+             * way for the engine above to find out. See oaa_tap.h. */
+            rebuild_locked(tap, next);
           }
         }
         pthread_mutex_unlock(&tap->lock);
@@ -553,6 +627,56 @@ int32_t oaa_tap_start(oaa_tap *tap, oaa_ring *ring) {
                                       &kDefaultOutputAddress, tap->queue,
                                       tap->listener);
   return OAA_OK;
+}
+
+int32_t oaa_tap_running(oaa_tap *tap) {
+  if (tap == NULL) {
+    return 0;
+  }
+  if (pthread_mutex_trylock(&tap->lock) != 0) {
+    /* The listener is rebuilding. Reporting "running" is not optimism, it is
+     * the correct answer to the question the caller is really asking — is
+     * anything wrong that I should act on — and blocking the analysis thread
+     * behind a Core Audio aggregate build would stop it publishing for as long
+     * as that takes. */
+    return 1;
+  }
+  /* Before start(): not a fault. The engine polls from the moment its thread
+   * begins, and a tap that has not been handed its ring is one the caller has
+   * not finished opening. */
+  const int32_t running =
+      (tap->ring == NULL || chain_healthy_locked(tap)) ? 1 : 0;
+  pthread_mutex_unlock(&tap->lock);
+  return running;
+}
+
+int32_t oaa_tap_revive(oaa_tap *tap) {
+  if (tap == NULL) {
+    return OAA_ERR_INVALID_ARGUMENT;
+  }
+
+  /* Blocking, unlike the poll above: there is nothing to lose by waiting when
+   * the producer is already gone, and a revive that skipped because a rebuild
+   * held the lock would have to be retried anyway. */
+  pthread_mutex_lock(&tap->lock);
+
+  int32_t status;
+  if (tap->closing) {
+    status = OAA_ERR_WRONG_STATE;
+  } else if (tap->ring == NULL) {
+    /* Not started yet; oaa_tap_start is what starts it, not this. */
+    status = OAA_ERR_WRONG_STATE;
+  } else if (chain_healthy_locked(tap)) {
+    status = OAA_OK;
+  } else {
+    /* Against the default output *now*, not against `bound_device`. The device
+     * this tap was built for may be the very thing that went away, and the one
+     * the user is listening to is by definition the current default. */
+    status = rebuild_locked(tap, default_output_device());
+  }
+
+  pthread_mutex_unlock(&tap->lock);
+  return status;
 }
 
 void oaa_tap_close(oaa_tap *tap) {

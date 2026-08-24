@@ -362,14 +362,23 @@ final class oaa_snapshot extends ffi.Struct {
   @ffi.Uint32()
   external int flags;
 
-  /// Frames the capture callback had to discard because the analysis thread
-  /// fell behind, since the last reset.
+  /// Frames of audio that never reached the measurement, since the last reset.
   ///
   /// This is not a diagnostic counter. Integrated loudness averages every block
-  /// since the reset, so a dropped second does not make the reading slightly
-  /// stale — it makes it an average of a different programme than the one that
-  /// played. A non-zero value here means the integrated reading cannot be
-  /// trusted, and the UI has to say so rather than quietly showing it.
+  /// since the reset, so a lost second does not make the reading slightly stale
+  /// — it makes it an average of a different programme than the one that played.
+  /// A non-zero value here means the integrated reading cannot be trusted, and
+  /// the UI has to say so rather than quietly showing it.
+  ///
+  /// Two things land here, because to a measurement they are the same event.
+  /// Frames the capture callback had to discard because the analysis thread fell
+  /// behind are counted exactly, by the ring that refused them. Frames missed
+  /// while the source was stopped (OAA_FLAG_SOURCE_STOPPED) are counted from the
+  /// analysis clock instead, so they are approximate — to within the one block
+  /// it takes to notice — because a producer that has gone away is not there to
+  /// tell anyone what it did not produce. Approximate is the point: the number
+  /// exists to prove audio was lost, and a gap reported as zero is a gap the
+  /// user never hears about.
   @ffi.Uint32()
   external int dropped_frames;
 
@@ -687,6 +696,8 @@ const int OAA_FLAG_LOUDNESS_UNAVAILABLE = 2;
 const int OAA_FLAG_SPECTRUM_UNAVAILABLE = 4;
 
 const int OAA_FLAG_OVERRUN = 8;
+
+const int OAA_FLAG_SOURCE_STOPPED = 16;
 
 const int OAA_DEVICE_ID_MAX = 256;
 

@@ -383,7 +383,7 @@ void main() {
     });
   });
 
-  group('presets', () {
+  group('loading a preset onto the canvas', () {
     PresetSpec preset(String name) => PresetSpec(
       name: name,
       tabs: const [
@@ -400,79 +400,6 @@ void main() {
         ),
       ],
     );
-
-    test('a saved preset is on disk and in the library', () async {
-      final store = await _store();
-      final container = _container(store);
-
-      final fileName = await container
-          .read(presetLibraryProvider.notifier)
-          .save(preset('Mastering'));
-
-      expect(fileName, 'mastering.json');
-      expect(
-        container.read(presetLibraryProvider).single.preset.name,
-        'Mastering',
-      );
-      expect(
-        await store.readJson('${ConfigDir.presets}/mastering.json'),
-        isNotNull,
-      );
-    });
-
-    test('a second preset of the same name gets its own file', () async {
-      // Two layouts called "Mastering" is the user's business. Refusing the
-      // save would be enforcing a rule the filesystem invented.
-      final container = _container(await _store());
-      final library = container.read(presetLibraryProvider.notifier);
-
-      expect(await library.save(preset('Mastering')), 'mastering.json');
-      expect(await library.save(preset('Mastering')), 'mastering-2.json');
-      expect(container.read(presetLibraryProvider).length, 2);
-    });
-
-    test('saving over a named file replaces it', () async {
-      final container = _container(await _store());
-      final library = container.read(presetLibraryProvider.notifier);
-
-      await library.save(preset('Mastering'));
-      await library.save(preset('Mastering v2'), fileName: 'mastering.json');
-
-      expect(
-        container.read(presetLibraryProvider).single.preset.name,
-        'Mastering v2',
-      );
-    });
-
-    test('a preset survives the round trip through the file', () async {
-      final store = await _store();
-      final container = _container(store);
-
-      await container
-          .read(presetLibraryProvider.notifier)
-          .save(preset('Mastering'));
-      final reloaded = await loadStartupConfig(store);
-      final module = reloaded.presets.single.preset.tabs.single.modules.single;
-
-      expect(module.kind, ModuleKind.numberBox);
-      expect(module.rect.columns, 4);
-      expect(module.options['metric'], 'lufs_i');
-    });
-
-    test('deleting removes both the file and the entry', () async {
-      final store = await _store();
-      final container = _container(store);
-      final library = container.read(presetLibraryProvider.notifier);
-
-      await library.save(preset('Mastering'));
-      expect(await library.remove('mastering.json'), isTrue);
-
-      expect(container.read(presetLibraryProvider), isEmpty);
-      expect(
-        await store.readJson('${ConfigDir.presets}/mastering.json'),
-        isNull,
-      );
-    });
 
     test('loading one replaces the layout and is undoable', () async {
       final container = _container(await _store());

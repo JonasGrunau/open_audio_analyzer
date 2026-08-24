@@ -43,6 +43,17 @@ struct oaa_device {
   int context_ready;
   int device_ready;
   oaa_ring *ring;
+
+  /* Set from miniaudio's notification callback when the backend stops the
+   * device behind our back, cleared when it starts one.
+   *
+   * `ma_device_get_state` is asked first and this is asked second, because the
+   * two do not always agree: the state field describes what the *API* was last
+   * told to do, and a backend that lost its device — an interface unplugged, a
+   * route change the backend could not follow — reports the stop through the
+   * notification while the state still reads `started`. Believing only the
+   * state is how a dead device goes on looking healthy forever. */
+  oaa_atomic_u32 stopped;
 };
 
 struct oaa_device_list {
@@ -77,6 +88,38 @@ static void oaa_device_callback(ma_device *device, void *output,
     return;
   }
   oaa_ring_write(self->ring, (const float *)input, (uint32_t)frame_count);
+}
+
+/*
+ * Not a real-time context, but treated as one: this is called from whichever
+ * thread the backend felt like, including its audio thread, so it does one
+ * atomic store and nothing else. Everything that has to be decided about a
+ * stopped device is decided by the analysis thread in oaa_device_revive.
+ */
+static void oaa_device_notification(const ma_device_notification *notification) {
+  if (notification == NULL || notification->pDevice == NULL) {
+    return;
+  }
+  oaa_device *self = (oaa_device *)notification->pDevice->pUserData;
+  if (self == NULL) {
+    return;
+  }
+
+  switch (notification->type) {
+    case ma_device_notification_type_stopped:
+      oaa_atomic_store_release(&self->stopped, 1);
+      break;
+    case ma_device_notification_type_started:
+      oaa_atomic_store_release(&self->stopped, 0);
+      break;
+    default:
+      /* `rerouted` is deliberately not a stop: miniaudio has already moved the
+       * device to the new default and is delivering again. It arrives on the
+       * one path where the format cannot have changed under us — we asked for
+       * the device's own rate and channel count, so a reroute that produced a
+       * different format would have failed inside miniaudio instead. */
+      break;
+  }
 }
 
 /* ------------------------------------------------------------------------ */
@@ -334,6 +377,7 @@ int32_t oaa_device_open(oaa_device **out, const char *device_id,
   config.sampleRate = 0;
 
   config.dataCallback = oaa_device_callback;
+  config.notificationCallback = oaa_device_notification;
   config.pUserData = self;
 
   if (ma_device_init(&self->context, &config, &self->device) != MA_SUCCESS) {
@@ -384,6 +428,57 @@ int32_t oaa_device_start(oaa_device *device, oaa_ring *ring) {
 
   return ma_device_start(&device->device) == MA_SUCCESS ? OAA_OK
                                                         : OAA_ERR_THREAD;
+}
+
+int32_t oaa_device_running(oaa_device *device) {
+  if (device == NULL) {
+    return 0;
+  }
+#if OAA_TAP_SUPPORTED
+  if (device->tap != NULL) {
+    return oaa_tap_running(device->tap);
+  }
+#endif
+  if (!device->device_ready || device->ring == NULL) {
+    /* Not started yet. Never "stopped": the engine polls this from the moment
+     * the analysis thread begins, and a device that has not been handed its
+     * ring is one the caller has not finished opening. */
+    return 1;
+  }
+  if (oaa_atomic_load_acquire(&device->stopped)) {
+    return 0;
+  }
+  return ma_device_get_state(&device->device) == ma_device_state_started ? 1 : 0;
+}
+
+int32_t oaa_device_revive(oaa_device *device) {
+  if (device == NULL) {
+    return OAA_ERR_INVALID_ARGUMENT;
+  }
+#if OAA_TAP_SUPPORTED
+  if (device->tap != NULL) {
+    return oaa_tap_revive(device->tap);
+  }
+#endif
+  if (!device->device_ready || device->ring == NULL) {
+    return OAA_ERR_WRONG_STATE;
+  }
+
+  /* `ma_device_start` alone, with no stop in front of it. A device the backend
+   * has already stopped is in exactly the state start() expects, and a stop()
+   * on top of it blocks until the backend's own thread has finished unwinding
+   * — on the analysis thread, which is the thread that has to keep publishing.
+   * If the state is transitional, start() refuses and the next poll tries
+   * again a second later, which is the same outcome for free. */
+  if (ma_device_start(&device->device) != MA_SUCCESS) {
+    return OAA_ERR_THREAD;
+  }
+  /* The notification does this too, on the backend's own thread and in its own
+   * time. Doing it here as well is what makes a successful revive visible to
+   * the very next poll rather than to whichever one happens to follow the
+   * callback. */
+  oaa_atomic_store_release(&device->stopped, 0);
+  return OAA_OK;
 }
 
 void oaa_device_close(oaa_device *device) {

@@ -10,9 +10,10 @@ import {
   headingAnchors,
   scrollableTables,
 } from './src/lib/markdown.mjs';
+import { SITE } from './src/lib/app.mjs';
 
 export default defineConfig({
-  site: 'https://open-audio-analyzer.com',
+  site: SITE,
   output: 'static',
   trailingSlash: 'never',
   build: { format: 'file', inlineStylesheets: 'always' },

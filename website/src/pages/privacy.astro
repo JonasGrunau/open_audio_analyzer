@@ -22,6 +22,7 @@
 import { getEntry, render } from 'astro:content';
 
 import Base from '../layouts/Base.astro';
+import { pageSchema } from '../lib/schema.mjs';
 import '../styles/docs.css';
 import { sourceUrl } from '../lib/docs.mjs';
 
@@ -53,6 +54,7 @@ const description =
   description={description}
   path="/privacy"
   slimFooter
+  schema={pageSchema({ title: 'Privacy', description, path: '/privacy' })}
 >
   <div class="shell legal">
     <article class="legal-main">

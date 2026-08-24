@@ -2,7 +2,7 @@
 
 // `AppExitResponse` is a `dart:ui` enum rather than a Flutter one, so neither
 // material.dart nor widgets.dart brings it into scope.
-import 'dart:async' show unawaited;
+import 'dart:async' show Timer, unawaited;
 import 'dart:ui' show AppExitResponse;
 
 import 'package:oaa_core/oaa_core.dart';
@@ -19,7 +19,6 @@ import '../clock/meter_clock.dart';
 import '../data/providers.dart';
 import '../modules/number_box.dart';
 import '../panels/calibration_editor.dart';
-import '../panels/preset_browser.dart';
 import '../panels/report_panel.dart';
 import '../panels/settings_panel.dart';
 import '../panels/theme_editor.dart';
@@ -30,7 +29,9 @@ import '../remote/remote_control.dart';
 import '../remote/remote_display_service.dart';
 import '../storage/startup_config.dart';
 import 'bar_controls.dart';
+import 'file_menu.dart';
 import 'launch_options.dart';
+import 'preset_file.dart';
 import 'shortcuts.dart';
 import 'transport_readout.dart';
 import 'window_chrome.dart';
@@ -66,6 +67,13 @@ class OaaApp extends ConsumerWidget {
       // did follow, because `MaterialApp` puts it here, so the panel came apart
       // into two skins at once. See `showOaaPanel`.
       builder: (context, child) => OaaTheme(colors: colors, child: child!),
+      // **Counting routes, so the macOS File menu knows when to grey.** AppKit
+      // offers a key equivalent to the main menu before the event reaches the
+      // Flutter view, so ⌘O in the menu bar fires while a panel is open — where
+      // the Dart bindings cannot, because a panel route sits above their
+      // `FocusScope`. Without this the same chord would mean different things on
+      // macOS and on Windows. See `RouteDepth`.
+      navigatorObservers: ref.watch(navigatorObserversProvider),
       home: const _Workspace(),
     );
   }
@@ -143,6 +151,57 @@ class _WorkspaceState extends ConsumerState<_Workspace>
   );
 
   AppLifecycleListener? _lifecycle;
+
+  /// How often the local engine is asked whether its capture source is still
+  /// there.
+  ///
+  /// A `Timer`, and not the meter clock that everything else in the application
+  /// hangs off. Two reasons, both of which would have been bugs. A `Ticker`
+  /// stops when the window is occluded — which is exactly when a tablet is the
+  /// screen being used and a laptop lid is shut, so a source that stopped would
+  /// go unrecovered for as long as somebody was relying on the remote display.
+  /// And the clock reads whatever is *on the canvas*, which may be a plugin,
+  /// while the thing that can stop is always the local engine.
+  static const Duration _sourceWatchInterval = Duration(milliseconds: 500);
+
+  /// How long a stopped source is left to the engine's own recovery before the
+  /// application throws the engine away and opens a new one.
+  ///
+  /// The engine retries once a second and fixes everything that does not
+  /// involve the format moving: a tap whose rebuild lost a race with a device
+  /// change, a device the backend stopped. Two seconds is four polls — long
+  /// enough that an outage the engine can repair is repaired without the
+  /// integration being restarted, short enough that somebody watching the
+  /// meters does not have time to conclude the application is broken.
+  static const int _stallPollsBeforeReopen = 4;
+
+  /// How many reopens that did not take before it stops reopening and says so.
+  ///
+  /// A source that stops again within seconds of every reopen is not going to
+  /// be fixed by another one, and a loop of them would discard a measurement
+  /// every two seconds for as long as the application stayed open. Three covers
+  /// a device that is mid-reconfiguration; it is not enough to be a loop.
+  static const int _reopensBeforeGivingUp = 3;
+
+  /// Consecutive healthy polls that put the reopen budget back — thirty
+  /// seconds of a source behaving. Without it the third outage of a session
+  /// would be permanent, and a laptop that sleeps twice a day would stop
+  /// recovering by the afternoon.
+  static const int _healthyPollsToForgive = 60;
+
+  Timer? _sourceWatch;
+
+  /// Said out loud while the capture source is not delivering, because the one
+  /// thing this state used to do was look like nothing.
+  ///
+  /// A `ValueNotifier` for the same reason `MeterClock.overrun` is one: it
+  /// changes on a transition and must not rebuild the notice column twice a
+  /// second in between.
+  final ValueNotifier<String?> _sourceStopped = ValueNotifier<String?>(null);
+
+  int _stalledPolls = 0;
+  int _healthyPolls = 0;
+  int _reopens = 0;
 
   /// What the meters are reading: the active plugin session if one is
   /// connected, and this machine's own engine otherwise.
@@ -223,10 +282,105 @@ class _WorkspaceState extends ConsumerState<_Workspace>
       },
     );
 
+    _sourceWatch = Timer.periodic(_sourceWatchInterval, _watchSource);
+
     // The command line, after the first frame. Both halves need a context below
     // `MaterialApp` — a panel is a route, so it needs the `Navigator` this
     // widget is built under, and it cannot be opened from `main()`.
     WidgetsBinding.instance.addPostFrameCallback((_) => _applyLaunchOptions());
+  }
+
+  /// Notices that the capture source has stopped, and does something about it.
+  ///
+  /// This is the application's half of a bug that stood for eight phases, and
+  /// the half that makes it visible. A capture source that stops — a tap whose
+  /// output device changed to one at another sample rate, an interface the
+  /// backend gave up on, a Bluetooth headset that switched to its 24 kHz voice
+  /// mode — leaves the engine publishing an empty ring at the same forty-seven
+  /// frames a second. Every meter holds its last reading. The window, the
+  /// menus, the canvas and the tab strip all stay perfectly responsive around a
+  /// picture that has stopped moving, RESET moves the readings to their floors
+  /// and they hold *there*, and nothing anywhere says why. The only way out was
+  /// to pick a different source and come back, which rebuilds the engine as a
+  /// side-effect — which is precisely how it was reported: "the meters freeze,
+  /// reset does nothing, and it only comes back when I switch to another
+  /// source."
+  ///
+  /// The engine recovers what it can by itself, at the same format, so most
+  /// outages never reach here. What reaches here is the one thing it cannot do
+  /// from the inside: adopt a format that has moved. Every filter coefficient,
+  /// the true-peak oversampler and the spectrum's axis are derived from the
+  /// sample rate at creation, so following a device to a new one means building
+  /// a new engine — and building a new engine is this widget's job.
+  void _watchSource(Timer _) {
+    if (!mounted) return;
+    final engine = _engine;
+    // Null means `_openFor` failed and `_EngineFailure` is already on screen
+    // saying so in the engine's own words. Nothing to add and nothing to poll.
+    if (engine == null) return;
+
+    // The meter clock reads whatever is on the canvas, so while a plugin holds
+    // it the local engine's snapshot can be minutes stale. One memcpy, twice a
+    // second, on the same thread the clock reads from — two threads acquiring
+    // one engine is undefined, and a `Timer` is not a second thread.
+    engine.refresh();
+    if (!engine.isSourceStopped) {
+      _stalledPolls = 0;
+      if (_sourceStopped.value != null) _sourceStopped.value = null;
+      if (_reopens > 0 && ++_healthyPolls >= _healthyPollsToForgive) {
+        _healthyPolls = 0;
+        _reopens = 0;
+      }
+      return;
+    }
+
+    _healthyPolls = 0;
+    _stalledPolls++;
+
+    // Nothing is said while a plugin holds the canvas. The local engine is
+    // still worth putting back — it is what the user returns to when they
+    // remove the plugin — but "the meters are holding their last reading" is
+    // flatly untrue about meters that are showing a DAW, and a notice nobody
+    // can act on, over a picture it does not describe, is worse than none.
+    final speak = !_onPlugin;
+
+    if (_reopens >= _reopensBeforeGivingUp) {
+      // Naming the workaround rather than offering a button, because there is
+      // no button: choosing the source that is already chosen changes no
+      // setting, so the source listener never fires and nothing reopens. Going
+      // away and coming back is what actually works, and saying so beats
+      // offering a control that does nothing.
+      _sourceStopped.value = speak
+          ? '$_sourceLabel has stopped sending audio $_reopens times and been '
+                'reopened each time. Open Audio Analyzer has stopped reopening '
+                'it. The meters are holding their last reading, not measuring '
+                'silence. Pick another source, and come back to this one when '
+                'the device has settled.'
+          : null;
+      return;
+    }
+
+    if (_stalledPolls < _stallPollsBeforeReopen) {
+      _sourceStopped.value = speak
+          ? '$_sourceLabel has stopped sending audio. The meters are holding '
+                'their last reading, not measuring silence. Waiting for it to '
+                'come back.'
+          : null;
+      return;
+    }
+
+    _stalledPolls = 0;
+    _reopens++;
+    _sourceStopped.value = null;
+    if (speak) {
+      ref
+          .read(canvasNoticeProvider.notifier)
+          .say(
+            '$_sourceLabel stopped sending audio. Reopened it — the '
+            'measurement starts again from here.',
+          );
+    }
+    _openFor(ref.read(settingsProvider), afterStall: true);
   }
 
   /// Clears the integrating measurements, where that is possible.
@@ -292,8 +446,6 @@ class _WorkspaceState extends ConsumerState<_Workspace>
         return;
       case StartupPanel.settings:
         showSettingsPanel(context);
-      case StartupPanel.presets:
-        showPresetBrowser(context);
       case StartupPanel.calibration:
         showCalibrationEditor(context);
       case StartupPanel.theme:
@@ -316,7 +468,17 @@ class _WorkspaceState extends ConsumerState<_Workspace>
   /// them belong to the source. Swapping the audio underneath a half-integrated
   /// loudness measurement would produce a number that averaged two different
   /// programmes at two different rates.
-  void _openFor(AppSettings settings) {
+  void _openFor(AppSettings settings, {bool afterStall = false}) {
+    // A source the *user* chose starts the watch afresh: the budget spent
+    // recovering the last one says nothing about this one, and a stale
+    // give-up notice sitting over a working meter is worse than no notice.
+    if (!afterStall) {
+      _stalledPolls = 0;
+      _healthyPolls = 0;
+      _reopens = 0;
+      _sourceStopped.value = null;
+    }
+
     final (source, deviceId, label) = _resolve(settings);
     final previousEngine = _engine;
     final previousClock = _clock;
@@ -411,6 +573,8 @@ class _WorkspaceState extends ConsumerState<_Workspace>
 
   @override
   void dispose() {
+    _sourceWatch?.cancel();
+    _sourceStopped.dispose();
     _lifecycle?.dispose();
     // The sockets and the publish timer before the engine they read, or the
     // timer gets one more turn against a freed handle.
@@ -444,170 +608,195 @@ class _WorkspaceState extends ConsumerState<_Workspace>
     // allowed to drop cannot be what does that — see `RemoteDisplayScope`. It
     // also carries the service to `showSettingsPanel`, which resolves it before
     // pushing the panel.
-    return RemoteDisplayScope(
-      service: _remote,
-      child: Material(
-        color: colors.background,
-        child: SafeArea(
-          child: (engine == null || clock == null)
-              ? _EngineFailure(message: _failure ?? 'unknown error')
-              // Every keyboard binding in the application, installed once and
-              // above everything it acts on. They used to live inside the canvas,
-              // where they stopped working whenever focus did not — see
-              // lib/src/app/shortcuts.dart.
-              : OaaShortcuts(
-                  onReset: _reset,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      // The status bar is the window's title bar as well on
-                      // macOS — there is no system one left to drag. See
-                      // window_chrome.dart.
-                      WindowDragArea(
-                        child: _StatusBar(
-                          engine: engine,
-                          source: plugin ?? engine,
-                          clock: clock,
-                          remote: _remote,
-                          onReset: _reset,
-                          sourceLabel: _onPlugin
-                              ? _plugins.active!.displayName.toUpperCase()
-                              : _sourceLabel,
-                          // Null unless a DAW could be on the other end. The
-                          // readout itself draws nothing when a host has said
-                          // nothing, so this is about the *row*: an item that is
-                          // permanently blank on every machine metering a sound
-                          // card would still be taking 132 px off a bar that
-                          // measures its width in tens.
-                          transportOf: _onPlugin
-                              ? () =>
-                                    _plugins.active?.transport ?? Transport.none
-                              : null,
-                        ),
-                      ),
-                      const TabStrip(),
-                      // Rebuilds on the transition only, never on the sixty frames
-                      // a second where nothing changed — see MeterClock.overrun.
-                      //
-                      // **The count comes from whatever is being metered, not from
-                      // the local engine.** The flag behind this notice does: the
-                      // clock watches `plugin ?? engine`, so a plugin that
-                      // overran raised it — and the sentence then read the
-                      // desktop's own engine, which is idle while a plugin is on
-                      // the canvas and had discarded nothing. "Audio was lost — 0
-                      // frames were discarded" is a self-contradicting warning
-                      // about a real loss of audio, and the number a user would
-                      // quote in a bug report.
-                      ValueListenableBuilder<bool>(
-                        valueListenable: clock.overrun,
-                        builder: (context, hasOverrun, _) => hasOverrun
-                            ? _NoticeSlot(
-                                child: _Notice(
-                                  severity: colors.over,
-                                  text:
-                                      'Audio was lost — '
-                                      '${(plugin ?? engine).droppedFrames} '
-                                      'frames were discarded because analysis '
-                                      'could not keep up. Integrated loudness and '
-                                      'LRA average every block since the reset, so '
-                                      'they are now averages of less than what '
-                                      'played and cannot be trusted. Press RESET '
-                                      'to start a clean measurement.',
-                                ),
-                              )
-                            : const SizedBox.shrink(),
-                      ),
-                      // A port that could not be bound is shown for the same
-                      // reason: the plugin retries forever and says nothing, so
-                      // an app that cannot accept it looks exactly like a plugin
-                      // that is not sending. The usual cause is a second copy of
-                      // Open Audio Analyzer already running.
-                      ValueListenableBuilder<String?>(
-                        valueListenable: _plugins.failure,
-                        builder: (context, failure, _) => failure == null
-                            ? const SizedBox.shrink()
-                            : _NoticeSlot(
-                                child: _Notice(
-                                  severity: colors.warn,
-                                  text:
-                                      'Plugins cannot connect: $failure '
-                                      'Inserting the VST3 or AU in a DAW will '
-                                      'have no effect until this is resolved.',
-                                ),
-                              ),
-                      ),
-                      // **A switch that came back off, and did not say why.**
-                      // `setEnabled(true)` leaves `isPublishing` false when the
-                      // port cannot be bound — the usual cause is a second copy
-                      // of Open Audio Analyzer already running — so the switch
-                      // in the bar flicks on and back off under the pointer with
-                      // the reason written somewhere nobody is looking.
-                      ValueListenableBuilder<String?>(
-                        valueListenable: _remote.failure,
-                        builder: (context, failure, _) => failure == null
-                            ? const SizedBox.shrink()
-                            : _NoticeSlot(
-                                child: _Notice(
-                                  severity: colors.over,
-                                  text: 'Could not publish: $failure',
-                                ),
-                              ),
-                      ),
-                      // **Publishing to nobody, which is the failure with no
-                      // symptom on this machine.** The port is open, a display
-                      // handed the address by hand connects and draws meters
-                      // perfectly, and only the announcement is gone — so the
-                      // desk looks healthy from the desk and the one screen that
-                      // knows is the tablet, which has no diagnostics on it. It
-                      // used to be written on the pairing panel's own row, where
-                      // it was seen because that panel was the way in to
-                      // everything; with the switch in the bar there is no
-                      // longer a panel anybody has a reason to open. So it is
-                      // said here, beside the other two faults that are true
-                      // right now, and only while publishing is actually on.
-                      ValueListenableBuilder<bool>(
-                        valueListenable: _remote.isPublishing,
-                        builder: (context, publishing, _) => !publishing
-                            ? const SizedBox.shrink()
-                            : ValueListenableBuilder<String?>(
-                                valueListenable: _remote.advertisementFailure,
-                                builder: (context, advertisement, _) =>
-                                    advertisement == null
-                                    ? const SizedBox.shrink()
-                                    : _NoticeSlot(
-                                        child: _Notice(
-                                          severity: colors.warn,
-                                          text:
-                                              '$advertisement Publishing is '
-                                              'working — a display given this '
-                                              'machine’s address by hand, or '
-                                              'sent the pairing code, still '
-                                              'connects.',
-                                        ),
-                                      ),
-                              ),
-                      ),
-                      // Persistence failures are shown rather than logged. A meter
-                      // that has quietly stopped saving is a meter that loses a
-                      // day's work at the moment the user finds out.
-                      if (notice != null)
-                        _NoticeSlot(
-                          child: _Notice(
-                            text: notice,
-                            onDismiss: ref
-                                .read(storageNoticeProvider.notifier)
-                                .clear,
+    // **Below the `Navigator` and above everything else.** The macOS menu bar's
+    // commands open dialogs, so they need a route to open them over; a menu item
+    // does not come with one. Off macOS it is a pass-through.
+    return MacFileMenuHost(
+      child: RemoteDisplayScope(
+        service: _remote,
+        child: Material(
+          color: colors.background,
+          child: SafeArea(
+            child: (engine == null || clock == null)
+                ? _EngineFailure(message: _failure ?? 'unknown error')
+                // Every keyboard binding in the application, installed once and
+                // above everything it acts on. They used to live inside the canvas,
+                // where they stopped working whenever focus did not — see
+                // lib/src/app/shortcuts.dart.
+                : OaaShortcuts(
+                    onReset: _reset,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        // The status bar is the window's title bar as well on
+                        // macOS — there is no system one left to drag. See
+                        // window_chrome.dart.
+                        WindowDragArea(
+                          child: _StatusBar(
+                            engine: engine,
+                            source: plugin ?? engine,
+                            clock: clock,
+                            remote: _remote,
+                            onReset: _reset,
+                            sourceLabel: _onPlugin
+                                ? _plugins.active!.displayName.toUpperCase()
+                                : _sourceLabel,
+                            // Null unless a DAW could be on the other end. The
+                            // readout itself draws nothing when a host has said
+                            // nothing, so this is about the *row*: an item that is
+                            // permanently blank on every machine metering a sound
+                            // card would still be taking 132 px off a bar that
+                            // measures its width in tens.
+                            transportOf: _onPlugin
+                                ? () =>
+                                      _plugins.active?.transport ??
+                                      Transport.none
+                                : null,
                           ),
                         ),
-                      Expanded(
-                        child: GridCanvas(
-                          engine: plugin ?? engine,
-                          clock: clock,
+                        const TabStrip(),
+                        // Rebuilds on the transition only, never on the sixty frames
+                        // a second where nothing changed — see MeterClock.overrun.
+                        //
+                        // **The count comes from whatever is being metered, not from
+                        // the local engine.** The flag behind this notice does: the
+                        // clock watches `plugin ?? engine`, so a plugin that
+                        // overran raised it — and the sentence then read the
+                        // desktop's own engine, which is idle while a plugin is on
+                        // the canvas and had discarded nothing. "Audio was lost — 0
+                        // frames were discarded" is a self-contradicting warning
+                        // about a real loss of audio, and the number a user would
+                        // quote in a bug report.
+                        ValueListenableBuilder<bool>(
+                          valueListenable: clock.overrun,
+                          builder: (context, hasOverrun, _) => hasOverrun
+                              ? _NoticeSlot(
+                                  child: _Notice(
+                                    severity: colors.over,
+                                    text:
+                                        'Audio was lost — '
+                                        '${(plugin ?? engine).droppedFrames} '
+                                        'frames never reached the measurement. '
+                                        'Integrated loudness and '
+                                        'LRA average every block since the reset, so '
+                                        'they are now averages of less than what '
+                                        'played and cannot be trusted. Press RESET '
+                                        'to start a clean measurement.',
+                                  ),
+                                )
+                              : const SizedBox.shrink(),
                         ),
-                      ),
-                    ],
+                        // **A source that stopped, which used to be the one
+                        // failure with no symptom at all.** The engine goes on
+                        // publishing an empty ring, so the meters hold their last
+                        // reading and the rest of the application stays perfectly
+                        // alive around them — see `_watchSource`. Local only: a
+                        // plugin's audio arrives over a socket, and a link that
+                        // has gone quiet is a different fact with its own
+                        // reporting.
+                        ValueListenableBuilder<String?>(
+                          valueListenable: _sourceStopped,
+                          builder: (context, stopped, _) => stopped == null
+                              ? const SizedBox.shrink()
+                              : _NoticeSlot(
+                                  child: _Notice(
+                                    severity: colors.over,
+                                    text: stopped,
+                                  ),
+                                ),
+                        ),
+                        // A port that could not be bound is shown for the same
+                        // reason: the plugin retries forever and says nothing, so
+                        // an app that cannot accept it looks exactly like a plugin
+                        // that is not sending. The usual cause is a second copy of
+                        // Open Audio Analyzer already running.
+                        ValueListenableBuilder<String?>(
+                          valueListenable: _plugins.failure,
+                          builder: (context, failure, _) => failure == null
+                              ? const SizedBox.shrink()
+                              : _NoticeSlot(
+                                  child: _Notice(
+                                    severity: colors.warn,
+                                    text:
+                                        'Plugins cannot connect: $failure '
+                                        'Inserting the VST3 or AU in a DAW will '
+                                        'have no effect until this is resolved.',
+                                  ),
+                                ),
+                        ),
+                        // **A switch that came back off, and did not say why.**
+                        // `setEnabled(true)` leaves `isPublishing` false when the
+                        // port cannot be bound — the usual cause is a second copy
+                        // of Open Audio Analyzer already running — so the switch
+                        // in the bar flicks on and back off under the pointer with
+                        // the reason written somewhere nobody is looking.
+                        ValueListenableBuilder<String?>(
+                          valueListenable: _remote.failure,
+                          builder: (context, failure, _) => failure == null
+                              ? const SizedBox.shrink()
+                              : _NoticeSlot(
+                                  child: _Notice(
+                                    severity: colors.over,
+                                    text: 'Could not publish: $failure',
+                                  ),
+                                ),
+                        ),
+                        // **Publishing to nobody, which is the failure with no
+                        // symptom on this machine.** The port is open, a display
+                        // handed the address by hand connects and draws meters
+                        // perfectly, and only the announcement is gone — so the
+                        // desk looks healthy from the desk and the one screen that
+                        // knows is the tablet, which has no diagnostics on it. It
+                        // used to be written on the pairing panel's own row, where
+                        // it was seen because that panel was the way in to
+                        // everything; with the switch in the bar there is no
+                        // longer a panel anybody has a reason to open. So it is
+                        // said here, beside the other two faults that are true
+                        // right now, and only while publishing is actually on.
+                        ValueListenableBuilder<bool>(
+                          valueListenable: _remote.isPublishing,
+                          builder: (context, publishing, _) => !publishing
+                              ? const SizedBox.shrink()
+                              : ValueListenableBuilder<String?>(
+                                  valueListenable: _remote.advertisementFailure,
+                                  builder: (context, advertisement, _) =>
+                                      advertisement == null
+                                      ? const SizedBox.shrink()
+                                      : _NoticeSlot(
+                                          child: _Notice(
+                                            severity: colors.warn,
+                                            text:
+                                                '$advertisement Publishing is '
+                                                'working — a display given this '
+                                                'machine’s address by hand, or '
+                                                'sent the pairing code, still '
+                                                'connects.',
+                                          ),
+                                        ),
+                                ),
+                        ),
+                        // Persistence failures are shown rather than logged. A meter
+                        // that has quietly stopped saving is a meter that loses a
+                        // day's work at the moment the user finds out.
+                        if (notice != null)
+                          _NoticeSlot(
+                            child: _Notice(
+                              text: notice,
+                              onDismiss: ref
+                                  .read(storageNoticeProvider.notifier)
+                                  .clear,
+                            ),
+                          ),
+                        Expanded(
+                          child: GridCanvas(
+                            engine: plugin ?? engine,
+                            clock: clock,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
+          ),
         ),
       ),
     );
@@ -793,6 +982,22 @@ class _StatusBar extends ConsumerWidget {
           child: LayoutBuilder(
             builder: (context, constraints) {
               final width = constraints.maxWidth;
+
+              // **FILE is in this row on two platforms out of three, and every
+              // gate above its own is that much further out there.** A gate is
+              // a statement about the width at which everything up to and
+              // including that item still fits, so an item added below one
+              // moves it — the same arithmetic that moved every gate by 165 px
+              // when one control became three. macOS keeps the numbers exactly
+              // as they were measured, because there the menu is in the system
+              // menu bar and this button does not exist.
+              //
+              // 58 px: the button and the seam before it. Measured the way the
+              // rest of this row is — `test/scaling_test.dart` sweeps the bar
+              // with the button drawn, and it failed at five widths with the
+              // gates left where macOS wants them.
+              final menuInWindow = ref.watch(fileMenuInWindowProvider);
+              final file = menuInWindow ? 58.0 : 0.0;
               // Each number is the row width at which everything *up to and
               // including* that item still fits, measured rather than
               // estimated — `test/scaling_test.dart` sweeps the whole
@@ -830,9 +1035,9 @@ class _StatusBar extends ConsumerWidget {
               // gates below the format readout, where that seam is 8; 40 for
               // the format gate and the one above it, where it is 24. The
               // margins are the ~35 px they were.
-              final showTransport = transportOf != null && width >= 1270;
-              final showFormat = width >= 1105;
-              final showAnalyse = width >= 920;
+              final showTransport = transportOf != null && width >= 1270 + file;
+              final showFormat = width >= 1105 + file;
+              final showAnalyse = width >= 920 + file;
               // **Three gates where there was one, and PUBLISH outlives both
               // the things it enables.** Whether this machine has an
               // unauthenticated port open is the fact the bar exists to keep
@@ -843,9 +1048,9 @@ class _StatusBar extends ConsumerWidget {
               // you go looking for, and a window this narrow is not one anybody
               // goes looking from. All three numbers are measured, like the rest
               // — see `test/scaling_test.dart`.
-              final showAttach = width >= 820;
-              final showPairingCode = width >= 735;
-              final showPublish = width >= 685;
+              final showAttach = width >= 820 + file;
+              final showPairingCode = width >= 735 + file;
+              final showPublish = width >= 685 + file;
               // The lowest gate, so the item it drops is the last thing
               // standing between the row and its irreducible set. The source
               // picker gives ground with an ellipsis until it is down to its
@@ -854,7 +1059,42 @@ class _StatusBar extends ConsumerWidget {
               // past its edge. `test/scaling_test.dart` sweeps this band at
               // five pixels with the longest names there are, which is the
               // only stride and the only content that sees it.
+              // **FILE outlives every other command in the row.** Off macOS it
+              // is the only way to reach Open and Save without the keyboard,
+              // where ANALYSE FILE, SETTINGS and RESET all have a chord and are
+              // listed in the sheet. It does not outlive `?`, which is how
+              // somebody finds out that the chords exist at all — under this
+              // gate the window is narrower than anything anybody arranges
+              // meters in, and ⌘O still works.
+              //
+              // On macOS the button is not built at all: the menu is in the
+              // system bar. So this gate has to hold for the platforms where it
+              // *is* built, which is what makes it a gate and not a saving.
+              final showFile = menuInWindow && width >= 620;
               final showHelp = width >= 555;
+
+              // The document, in the leading slot the wordmark used to have —
+              // and it earns it by the same test that took the wordmark out.
+              // Three capitals that never changed said nothing about the work;
+              // which preset is open, and whether it has been saved, changes
+              // while you work and is written down nowhere else in the window.
+              //
+              // **The highest gate below the transport readout, and it leaves
+              // before the format does**, which is the row's own priority
+              // rather than a fitting exercise: everything else in this group
+              // says what the reading *is*, and this says what the workspace
+              // is. It is also the widest fixed item in the group — 150 px and
+              // a group seam — and the group's floor is what overflows first.
+              //
+              // Measured, like the rest. At 1124 px of row with a plugin's name
+              // in the source chip the bar ran 9.3 px past its edge, because a
+              // fixed 174 px here starves the one item beside it that shrinks:
+              // the chip was squeezed to 4.7 px and overflowed inside itself.
+              // 1170 is that threshold plus the ~35 px this file carries above
+              // every other one. **The gate is on the row, not the window** —
+              // on macOS they differ by 96 px, so this is about 1266 px of
+              // window; see the plugin band in `test/scaling_test.dart`.
+              final showPreset = width >= 1170 + file;
 
               return Row(
                 children: [
@@ -877,6 +1117,13 @@ class _StatusBar extends ConsumerWidget {
                   Expanded(
                     child: Row(
                       children: [
+                        if (showPreset) ...[
+                          const _PresetReadout(),
+                          // A boundary between two groups rather than a seam
+                          // between two controls: everything after this is
+                          // about the signal, and this is about the file.
+                          const SizedBox(width: Space.xs),
+                        ],
                         // **No wordmark.** The window is the application's
                         // name and the bar's job is what changes while you
                         // work; three capitals that never change were the one
@@ -1006,6 +1253,13 @@ class _StatusBar extends ConsumerWidget {
                     const SizedBox(width: Space.sm),
                     const AttachButton(),
                   ],
+                  // Before ANALYSE FILE because the menu it opens holds it,
+                  // and reading order should not put a command after the menu
+                  // that also offers it.
+                  if (showFile) ...[
+                    const SizedBox(width: Space.sm),
+                    const FileMenuButton(),
+                  ],
                   if (showAnalyse) ...[
                     const SizedBox(width: Space.sm),
                     BarButton(
@@ -1045,11 +1299,13 @@ class _StatusBar extends ConsumerWidget {
                   // words reads as a third word you cannot make out.
                   //
                   // It exists at all because Open Audio Analyzer draws its own
-                  // chrome and so has no menu bar: the usual place a desktop
-                  // user reads a shortcut off — the chord printed beside a menu
-                  // item — is not there, and without this button the sheet is
-                  // only reachable by pressing the key that opens the list of
-                  // keys.
+                  // chrome, so the usual place a desktop user reads a shortcut
+                  // off — the chord printed beside a menu item — covers four of
+                  // them and nothing else. The File menu prints ⌘O, ⌘I, ⌘S and
+                  // ⇧⌘S; every other chord in the application is in this sheet
+                  // and nowhere a pointer can reach, and without this button the
+                  // sheet is only reachable by pressing the key that opens the
+                  // list of keys.
                   if (showHelp) ...[
                     const SizedBox(width: Space.sm),
                     BarButton(
@@ -1064,6 +1320,68 @@ class _StatusBar extends ConsumerWidget {
             },
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Which preset is open, and whether it has been saved.
+///
+/// Not a [BarChip], though it sits where one would. The bar's two chips are the
+/// menus that hold a value — what is being metered, and what against — and they
+/// wear a border because they can be clicked. This is a readout: it is the
+/// window's title, in the bar that is the window's title bar on macOS, and a
+/// border round it would promise a menu that is not there. Off macOS the menu is
+/// two items to the right and says FILE.
+///
+/// **The dot's slot is reserved whether or not there is a dot.** It is one
+/// character, but it is one character on the *left* of everything in the group
+/// beside it — a mark that appears when you drag a module would shift the source,
+/// the sample rate and the playhead by 10 px each time the layout changed.
+class _PresetReadout extends ConsumerWidget {
+  const _PresetReadout();
+
+  /// Long enough for the names people give these ("Mastering — client B"),
+  /// short enough that it is not competing with the source for the group's
+  /// slack. Beyond it the name ellipsises, like both pickers.
+  static const double _maxWidth = 150;
+
+  /// The mark's reservation. `•` in the label style plus the seam before it.
+  static const double _markWidth = Space.sm + Space.xs;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final colors = OaaTheme.of(context);
+    final name = ref.watch(workspaceProvider).preset.name;
+    final modified = ref.watch(presetModifiedProvider);
+
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: _maxWidth),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // `Flexible` inside a `ConstrainedBox`, for the reason `BarChip`
+          // gives: without it the text is measured against unbounded width and
+          // takes it, where the bar's own gates cannot see it.
+          Flexible(
+            child: Text(
+              name.toUpperCase(),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              softWrap: false,
+              style: OaaType.label.copyWith(color: colors.textMuted),
+            ),
+          ),
+          SizedBox(
+            width: _markWidth,
+            child: modified
+                ? Text(
+                    ' •',
+                    style: OaaType.label.copyWith(color: colors.textFaint),
+                  )
+                : null,
+          ),
+        ],
       ),
     );
   }

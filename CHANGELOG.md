@@ -9,7 +9,39 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### 📐 Measurement
+- Audio missed while the capture source was stopped is now counted as lost
+  audio, so the frame count includes it and the warning appears. It previously
+  counted nothing at all: integrated loudness and LRA average every block since
+  the reset, so a device that stopped for a minute produced a reading of the
+  programme minus that minute and presented it exactly like a clean one. A
+  stall's share of the count is derived from the analysis clock rather than from
+  the ring, so it is accurate to about a quarter of a second rather than to the
+  frame — enough to prove audio was lost, which is what the figure is for.
+  Re-measure any session where the warning appeared.
+- The System Output tap no longer measures an output device that has changed its
+  own sample rate. A macOS output device can move rate without ceasing to be the
+  default output — AirPods drop from 48 kHz to 24 kHz the moment anything opens
+  their microphone — and the tap went on delivering while the K-weighting
+  filters, the true-peak oversampler, the spectrum's frequency axis and the
+  elapsed clock all stayed built for the rate the engine opened at. Every
+  reading was then wrong by the ratio between the two rates: at half the rate
+  the spectrum sat an octave low and the elapsed clock ran at half real time,
+  with the meters moving convincingly throughout. The source is now reported as
+  stopped and reopened at the device's new rate. Re-measure anything metered
+  through System Output on a Bluetooth output device.
+
 ### ✨ Added
+- **A File menu, and presets that are documents.** `Open…` picks a preset
+  through the platform's own dialog, starting in the presets folder and reaching
+  anywhere else you point it — a preset somebody sent you now opens where it was
+  downloaded to, instead of having to be moved into the configuration directory
+  first. `Save` writes back to the file it came from without asking, `Save as…`
+  places a copy anywhere and names the preset after the file, and the open
+  preset's name sits at the left of the status bar with a dot beside it when it
+  differs from what is on disk. On macOS the menu is in the system menu bar,
+  after the application menu; on Windows and Linux it is the FILE button in the
+  status bar. Opening a preset over unsaved changes asks whether to save first.
 - A privacy policy, at
   [open-audio-analyzer.com/privacy](https://open-audio-analyzer.com/privacy).
   It states what the microphone, the camera, the local network and the disk are
@@ -20,6 +52,59 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   written for a person rather than for that field.
 
 ### ⚡ Changed
+- The website serves its three typefaces itself instead of loading them from
+  Google Fonts. Reading a page no longer makes a request to Google, which
+  previously saw the IP address of everybody who opened one — the privacy policy
+  said so and now says the opposite. It is also the reason the site's text used
+  to move a moment after the page appeared: the fallback face is a different
+  width, so the first paragraph re-wrapped once the real one arrived.
+- The faintest text on the website — the footer, the small readouts above each
+  section, every table heading and the documentation contents list — is light
+  enough to read. It was the application's own `textFaint`, which is 2.97:1
+  against the page and under what WCAG asks even of large text; in the
+  application it labels a meter you are already looking at, and on a phone in
+  daylight it was text you could not. The application's own interface still has
+  this and is not changed here.
+- ⌘O now opens a preset, and analysing an audio file has moved to ⌘I. The
+  layout is this application's document — the thing that is opened, saved and
+  sent to somebody — so it takes the chord every desktop user tries first, and
+  analysing a file is an import, which is what ⌘I means elsewhere. `Save` on ⌘S
+  and `Save as…` on ⇧⌘S are both new. Ctrl on Windows and Linux, as always.
+- The preset browser is gone, and ⌘P with it. Saving is `Save` and `Save as…`;
+  the list of saved layouts is the presets folder in a file manager, which is
+  also where the delete button that used to be in that panel now lives.
+  Settings → Session still prints that folder and lets you select the path.
+- Whether a preset carries the delivery target and the skin is a property of the
+  preset now, rather than two switches beside a Save button: two rows in the File
+  menu, each asking whether the preset should carry one and ticked when it
+  does. They cannot go in the platform's save dialog — macOS would need a save
+  panel of our own, Windows a plugin of its own, and Linux cannot do it at all
+  — and as properties of the document they survive a save, which the
+  switches did not.
+- The plugin's window is drawn in the application's own palette and the
+  application's own two typefaces, both compiled into the VST3, the Audio Unit
+  and the Standalone rather than asked of the platform — so the panel looks the
+  same in Logic on a Mac as it does in Reaper on Windows, and looks like the
+  tool whose meters it is feeding. What it shows changed with it: a diagram of
+  the three places the path can break, with each run lit only while something is
+  travelling down it, and the socket's dashes moving while frames are actually
+  being sent, so a link that came up and quietly stopped no longer looks
+  identical to one that is working. The middle of that chain is the app icon
+  itself, drawn as line art in the shape macOS masks an icon with, so the thing
+  you picked out of the DAW's plugin browser and the thing in the diagram are
+  recognisably the same object. It also names the format it is loaded in and
+  the host it is loaded into, which are the first two facts on every bug report
+  and were the two nobody wrote down.
+- A dropped-frame warning in the plugin's window no longer erases the readings
+  it is a warning about. The count, the missing playhead and the loudness
+  reading shared one line, so the worst news arrived by deleting the evidence;
+  the readings now have a row of their own and the warning sits directly above
+  the Reset button that answers it.
+- The plugin's window says where the meters are when everything is working. A
+  metering plugin that draws nothing is a confusing object the first time
+  somebody inserts one — it loads, it reports itself healthy, and nothing
+  happens — and the line that was blank in exactly that case is the calmest,
+  most readable moment in the window.
 - The Super Meter's target tick is a plain mark again rather than one cut into
   the arcs. 0.10.0 widened the slot beneath it to stand 1.5 px out either side,
   which put a notch through all three rings at the target; the slot is back to
@@ -41,7 +126,79 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   a set of iPhone screenshots of it. It is iPad-only now, which is what every
   document already said it was.
 
+### 🐛 Fixed
+- The live analyzer's own document no longer offers itself to search engines as
+  `oaa_analyzer_demo`, described as "A new Flutter project.". It is the page the
+  front page loads into an iframe, and it had shipped as the Flutter scaffold
+  wrote it — no language, no viewport, and a title and description that
+  described the project worse than nothing would have. It now says what it is
+  and asks not to be indexed.
+- The website's 404 page no longer asks to be indexed, and no longer tells
+  crawlers that every address without a page is really `/404`.
+- "Linux dependencies" in the building document is a second-level heading, so
+  the page no longer skips from its title straight to a third level.
+- Re-saving a preset no longer silently drops the delivery target or the skin it
+  was carrying. The two switches in the preset browser reset to off every time
+  the panel opened and were never read back from the preset being saved, so
+  opening a layout that carried EBU R 128, moving one module and saving wrote a
+  preset that carried nothing — and nothing in the interface said so. They are
+  rows in the File menu now, and they are ticked from the preset itself.
+- The meters no longer freeze until you switch to another source. A capture
+  source that stopped delivering left the engine publishing an empty ring at the
+  same forty-seven frames a second for the rest of the session: every meter held
+  its last reading, the window and the menus stayed perfectly responsive around
+  it, RESET moved the readings to their floors and they held *there*, and
+  nothing anywhere said why. The engine now notices within a quarter of a
+  second, puts the source back itself when the format allows it, and says so on
+  screen; when only a new engine can follow the device, the application opens
+  one and the notice says the measurement has restarted. Reported as: the meters
+  freeze, reset resets them but they stay stuck, and it only comes back when I
+  switch to another sound source.
+- A System Output tap whose rebuild fails when the default output device changes
+  is no longer dead for the rest of the session. It tore the old chain down,
+  failed to build the new one — a format that had moved, a device that vanished
+  between the notification and the query — and left no producer and nothing that
+  would ever try again. It is retried once a second now, against whatever the
+  default output is at the time, so a device that comes back or a rate that
+  returns is picked up without the source being reselected. Reselecting it was
+  never the remedy the code comments claimed it was: choosing the source that is
+  already chosen changes no setting, so nothing reopened.
+
 ### 🚧 Internal
+- `npm run audit` runs Lighthouse over every page the website publishes, mobile
+  and desktop, and prints the four category scores per page. Nothing in
+  `ci.yml` builds or measures that directory, so the score was only ever as
+  durable as the next change; the page list comes out of the documentation
+  manifest, so a new document is measured without the script being edited. It
+  also parses every JSON-LD block, which no Lighthouse audit does.
+- `website/public/_headers` gives the deploy a cache policy. Cloudflare's
+  default for static assets is `max-age=0, must-revalidate`, which is an ETag
+  round trip for a typeface that will never change again; the fonts are a year
+  and immutable because their filenames carry the family version, the committed
+  photographs a month because they are regenerated in place, and the HTML
+  revalidates so a deploy is seen at once.
+- The website's sitemap is generated from the documentation manifest rather than
+  written by hand, and its `<lastmod>` is each source file's commit date, left
+  out rather than guessed when git cannot answer. The hand-written one it
+  replaces named the front page alone for as long as the documentation had been
+  part of the site.
+- Every page of the website states what it is in JSON-LD rather than all ten
+  claiming to be the application: the front page is the software, a
+  documentation page is a `TechArticle` with a breadcrumb, the privacy policy is
+  a page, and the 404 claims nothing. No rating is asserted, because there is no
+  rating data.
+- The front page's photograph is published at 768, 1024, 1440, 1920 and 2560 px
+  with a `srcset`. It is the element the page's Largest Contentful Paint is
+  measured on, and one 2560 px file was arriving on phones to be drawn a seventh
+  of that wide — a phone now gets 28 or 41 kB depending on its screen, against
+  121 kB before.
+- The plugin's editor renders to a PNG without a DAW.
+  `plugin/test/editor_snapshot.cpp` photographs its five states — waiting,
+  connected, reconnecting, no playhead, dropping frames — in about a second,
+  needing no host, no window and no screen-recording permission. It is the one
+  surface in this repository that nothing but a person loading a bundle could
+  previously look at, and its interesting states were the ones that had to be
+  arranged for.
 - Pressing "Load the live analyzer" on the front page now animates rather than
   swapping its label: the play mark travels to the middle of the picture, the
   label goes the other way and disappears behind it, and the square around the
@@ -49,6 +206,13 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   then the whole control fades out with the frame it was covering. A reader who
   has asked the system for less motion gets the label change instead, and either
   way a live region announces the wait and the end of it.
+- The live analyzer's "play the audio" control sets the gap between its note and
+  its label from `Space` rather than from two monospace spaces, which at that
+  size was 13 px — wider than the padding around the pair, so the note read as
+  sitting nearer the border than the words it belongs to. The note and the words
+  are also centred in the button now: they share a baseline but not a face —
+  `♪` is in neither of the two the demo bundles — so the fallback's descent set
+  the row's depth and left the words two pixels low and the note one.
 - The front page's demo canvas draws its oscilloscope over five seconds,
   overlaid on one centre line and zoomed to fill the lane. A triggered
   twenty-millisecond window is the right default in the application, where the

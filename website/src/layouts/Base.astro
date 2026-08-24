@@ -1,8 +1,14 @@
 ---
+/* The typefaces, before the tokens that name them. Both are inlined into every
+   page by `inlineStylesheets: 'always'`, so the `@font-face` rules arrive in the
+   HTML itself and cost no request — which is the whole reason the files are
+   served from this origin instead of Google's. See scripts/fetch-fonts.mjs. */
+import '../styles/fonts.css';
 import '../styles/global.css';
-/* One source for the version and the repository, read from the application's
-   own pubspec — see src/lib/app.mjs. */
-import { REPO, RELEASES, VERSION } from '../lib/app.mjs';
+/* One source for the version, the repository and the host, read from the
+   application's own pubspec — see src/lib/app.mjs. */
+import { REPO, RELEASES, VERSION, urlFor } from '../lib/app.mjs';
+import { homeSchema } from '../lib/schema.mjs';
 
 interface Props {
   title: string;
@@ -12,11 +18,31 @@ interface Props {
      documentation page it is a second navigation the reader did not ask for,
      below content that is already long, so those pages take one line. */
   slimFooter?: boolean;
+  /* Keeps a page out of the index, and takes its canonical with it. Only `/404`
+     uses it: `not_found_handling: "404-page"` serves that one document at every
+     address that has none, so a self-referential canonical there is a thousand
+     URLs all claiming to be `/404`, and the page itself is a page whose whole
+     content is that there is no page. A crawler needs to be able to *read* the
+     refusal, which is why this is a meta tag and not a line in robots.txt —
+     a disallowed URL is never fetched, so the noindex is never seen and the
+     address can stay indexed on the strength of a link alone. */
+  noindex?: boolean;
+  /* What this page says it is, in JSON-LD. Defaults to the application, which is
+     right for the front page and wrong everywhere else — see src/lib/schema.mjs
+     for why that mattered. */
+  schema?: unknown;
 }
 
-const { title, description, path = '/', slimFooter = false } = Astro.props;
-const site = 'https://open-audio-analyzer.com';
-const canonical = site + (path === '/' ? '' : path);
+const {
+  title,
+  description,
+  path = '/',
+  slimFooter = false,
+  noindex = false,
+  schema,
+} = Astro.props;
+const canonical = urlFor(path);
+const linkedData = schema ?? homeSchema(description);
 /* The documentation is part of this site: the repository's own Markdown,
    rendered at /docs. It was a separate GitHub Pages deployment with its own
    generator and its own visual language, which meant two sites to keep and a
@@ -39,7 +65,7 @@ const nav = [
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{title}</title>
     <meta name="description" content={description} />
-    <link rel="canonical" href={canonical} />
+    {noindex ? <meta name="robots" content="noindex, follow" /> : <link rel="canonical" href={canonical} />}
 
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/icon-180.png" />
@@ -50,34 +76,68 @@ const nav = [
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
     <meta property="og:url" content={canonical} />
-    <meta property="og:image" content={`${site}/og.png`} />
+    <meta property="og:locale" content="en" />
+    <meta property="og:image" content={urlFor('/og.png')} />
+    <meta property="og:image:type" content="image/png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
+    <meta
+      property="og:image:alt"
+      content="Open Audio Analyzer: a canvas of loudness and spectrum meters."
+    />
+    {/* Twitter reads the og:* tags for everything but the card shape, so there
+        are no twitter:title, twitter:description or twitter:image here — they
+        would be a second copy of three strings, kept in step by hand. */}
     <meta name="twitter:card" content="summary_large_image" />
 
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    {/* The three latin faces, warmed before layout asks for them. All three are
+        on the first screen — Archivo sets the headings, navigation and buttons,
+        Google Sans Code the readouts, Source Serif 4 the body prose — and
+        `npm run audit` was the thing that settled how many to name here, not
+        reasoning about it. Measured on the front page, mobile:
+
+          no preload      first paint 2.1 s   largest 2.4 s
+          two of three    first paint 1.2 s   largest 2.6 s
+          all three       first paint 0.9 s   largest 2.6 s
+
+        `font-display: swap` means the fallback paints immediately, so the
+        expectation was that preloading would not move first paint at all. It
+        more than halves it: without a preload the browser does not know a font
+        is wanted until it has parsed enough of the page to lay text out, and
+        the swap period expires into the fallback before the real face lands.
+        The other two subsets — `math` and `symbols`, and every `latin-ext` —
+        are deliberately not here: `unicode-range` keeps them unfetched until a
+        page contains a glyph that needs one, and preloading would throw that
+        away.
+
+        `crossorigin` is not optional and not a copy-paste artefact: a font is
+        fetched in CORS mode whatever its origin, so a preload without it is a
+        different request from the one the stylesheet makes and the file is
+        fetched twice. */}
     <link
-      rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..700&family=Google+Sans+Code:wght@400..600&family=Source+Serif+4:opsz,wght@8..60,400..600&display=swap"
+      rel="preload"
+      href="/fonts/archivo-v25-latin.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link
+      rel="preload"
+      href="/fonts/google-sans-code-v17-latin.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link
+      rel="preload"
+      href="/fonts/source-serif-4-v14-latin.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
     />
 
-    <script
-      type="application/ld+json"
-      set:html={JSON.stringify({
-        '@context': 'https://schema.org',
-        '@type': 'SoftwareApplication',
-        name: 'Open Audio Analyzer',
-        applicationCategory: 'MultimediaApplication',
-        operatingSystem: 'macOS, Windows, Linux, iPadOS, Android',
-        softwareVersion: VERSION,
-        license: 'https://www.gnu.org/licenses/gpl-3.0.html',
-        url: site,
-        codeRepository: REPO,
-        offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
-        description,
-      })}
-    />
+    {/* A 404 describes nothing, so it claims nothing. */}
+    {!noindex && <script type="application/ld+json" set:html={JSON.stringify(linkedData)} />}
   </head>
 
   <body>
@@ -164,7 +224,11 @@ const nav = [
               <p class="foot-lic"><span class="num">MIT</span> — engine, domain model, wire protocol</p>
               <p class="foot-lic"><span class="num">GPL-3.0</span> — application, UI toolkit, CLI</p>
               <p class="foot-lic"><span class="num">AGPL-3.0</span> — the plugin, because it links JUCE</p>
-              <p class="foot-lic"><span class="num">SIL OFL</span> — Inter and Google Sans Code</p>
+              <p class="foot-lic">
+              <span class="num">SIL OFL</span> — the typefaces: Inter in the application,
+              <a class="link-quiet" href="/fonts/OFL.txt">Archivo, Source Serif 4 and Google
+              Sans Code</a> on this site
+            </p>
             </div>
           </div>
 
@@ -330,6 +394,21 @@ const nav = [
   .foot-lic .num {
     color: var(--muted);
     font-size: 0.75rem;
+  }
+
+  /* The licence line is the only place in the footer where a link sits inside a
+     run of prose rather than being the whole row, and `.link-quiet` separates
+     itself from its surroundings by colour alone — `--muted` on `--faint`, which
+     is 1.22:1 between them. Nobody reading with low vision, or on a screen in
+     sunlight, can see a difference that small, so the link takes the hairline
+     underline `.link` uses. The same rule and the same reason apply to the two
+     links in the hero credit; see index.astro. */
+  .foot-lic .link-quiet {
+    border-bottom-color: var(--faint);
+  }
+
+  .foot-lic .link-quiet:hover {
+    border-bottom-color: var(--signal);
   }
 
   .foot-rule {

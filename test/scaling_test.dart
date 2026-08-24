@@ -31,6 +31,7 @@
 import 'dart:io';
 
 import 'package:oaa/src/app/bar_controls.dart';
+import 'package:oaa/src/app/file_menu.dart';
 import 'package:oaa/src/app/oaa_app.dart';
 import 'package:oaa/src/app/shortcuts.dart';
 import 'package:oaa/src/app/transport_readout.dart';
@@ -134,6 +135,7 @@ Future<void> _pumpApp(
   WidgetTester tester,
   Size window, {
   StartupConfig config = const StartupConfig(),
+  bool inWindowMenu = false,
 }) async {
   tester.view.physicalSize = window * 3;
   tester.view.devicePixelRatio = 3;
@@ -145,6 +147,11 @@ Future<void> _pumpApp(
     overrides: [
       configStoreProvider.overrideWithValue(store),
       startupConfigProvider.overrideWithValue(config),
+      // **The whole suite runs on a macOS host, where FILE is never built.**
+      // The menu is in the system menu bar there, so the button that replaces
+      // it on Windows and Linux would take part in no sweep in this file — and
+      // it is 50-odd pixels in a row measured in tens of them.
+      if (inWindowMenu) fileMenuInWindowProvider.overrideWithValue(true),
     ],
   );
   addTearDown(container.dispose);
@@ -387,9 +394,12 @@ void main() {
     // reach the chip's 220 px cap. It was reported from a running application
     // against a suite of 137 green tests.
     //
-    // The band stops at 1200 because every gate the bar has is below it and the
+    // The band stops at 1320 because every gate the bar has is below it and the
     // row only gets slacker above; the stride is what makes this affordable.
-    for (var width = 600.0; width <= 1200.0; width += 5) {
+    // It stopped at 1200 until the preset readout arrived: that gate is 1170 of
+    // *row*, which is about 1266 px of window here, and a band that stopped
+    // short of it would have swept the readout at no width at all.
+    for (var width = 600.0; width <= 1320.0; width += 5) {
       testWidgets('at ${width.toInt()} px with the longest names', (
         tester,
       ) async {
@@ -426,6 +436,40 @@ void main() {
       tester,
     ) async {
       await _pumpAppWithPlugin(tester, kMinimumWindow, config: _longNames);
+    });
+
+    // **And the row Windows and Linux actually draw.** Every case above is the
+    // macOS bar, because that is the host this suite runs on and
+    // `fileMenuInWindowProvider` answers the platform — so FILE, which exists
+    // only where there is no system menu bar to put it in, took part in none of
+    // them. It sits in the trailing group with a gate of its own, and a gate
+    // measured against a row that never contains the item is not a measurement.
+    //
+    // The band stops at 1400 because every gate the bar has is below it and the
+    // row only gets slacker above; the longest names, because the left group's
+    // floor is what overflows first.
+    for (var width = 600.0; width <= 1400.0; width += 20) {
+      testWidgets('at ${width.toInt()} px with the menu in the window', (
+        tester,
+      ) async {
+        await _pumpApp(
+          tester,
+          Size(width, 900),
+          config: _longNames,
+          inWindowMenu: true,
+        );
+      });
+    }
+
+    testWidgets('at the supported minimum with the menu in the window', (
+      tester,
+    ) async {
+      await _pumpApp(
+        tester,
+        kMinimumWindow,
+        config: _longNames,
+        inWindowMenu: true,
+      );
     });
   });
 

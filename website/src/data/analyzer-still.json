@@ -1,4 +1,26 @@
 {
   "width": 2560,
-  "height": 1426
+  "height": 1426,
+  "sources": [
+    {
+      "width": 768,
+      "file": "/analyzer-still-768.webp"
+    },
+    {
+      "width": 1024,
+      "file": "/analyzer-still-1024.webp"
+    },
+    {
+      "width": 1440,
+      "file": "/analyzer-still-1440.webp"
+    },
+    {
+      "width": 1920,
+      "file": "/analyzer-still-1920.webp"
+    },
+    {
+      "width": 2560,
+      "file": "/analyzer-still.webp"
+    }
+  ]
 }

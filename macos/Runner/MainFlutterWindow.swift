@@ -38,6 +38,10 @@ class MainFlutterWindow: NSWindow {
   /// and takes its handler with it — the calls then simply stop arriving.
   private var chrome: FlutterMethodChannel?
 
+  /// The File menu. Retained for the same reason — it owns a channel of its own
+  /// — and built here because this is where the engine's messenger is.
+  private var fileMenu: OaaFileMenu?
+
   /// When the status bar last reported a click, on the monotonic clock.
   ///
   /// The distant past rather than zero: `systemUptime` starts at zero, so a
@@ -94,6 +98,12 @@ class MainFlutterWindow: NSWindow {
     self.chrome?.setMethodCallHandler { [weak self] call, result in
       self?.handle(call, result: result)
     }
+
+    // The menu itself is not built until Dart asks — see `OaaFileMenu.install`.
+    // What has to exist before Dart runs is the channel, so that the first
+    // request is not sent to nothing.
+    self.fileMenu = OaaFileMenu(
+      messenger: flutterViewController.engine.binaryMessenger)
 
     // Only size the window on a genuinely fresh launch. AppKit restores a saved
     // frame through the autosave mechanism, and overriding it every time would

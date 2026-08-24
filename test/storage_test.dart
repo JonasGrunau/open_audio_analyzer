@@ -413,12 +413,11 @@ void main() {
       expect(config.settings.targetFps, 60);
       expect(config.calibrations, isEmpty);
       expect(config.skins, isEmpty);
-      expect(config.presets, isEmpty);
       expect(config.session, isNull);
       expect(config.notice, isNull);
     });
 
-    test('reads settings, targets, skins and presets', () async {
+    test('reads settings, targets and skins', () async {
       final root = _tempDir();
       final store = await _store(root);
 
@@ -442,12 +441,8 @@ void main() {
         'name': 'Mine',
         'colors': {'accent': '#FF00FF'},
       });
-      await store.writeJson('presets/one.json', {
-        'name': 'One',
-        'tabs': [
-          {'name': 'Tab', 'modules': []},
-        ],
-      });
+      // Not presets: they are documents opened by name through a file dialog
+      // and are deliberately not scanned at launch. See `loadStartupConfig`.
 
       final config = await loadStartupConfig(store);
 
@@ -455,7 +450,6 @@ void main() {
       expect(config.settings.skinId, 'daylight');
       expect(config.calibrations.single.id, 'house');
       expect(config.skins.single.id, 'mine');
-      expect(config.presets.single.preset.name, 'One');
       expect(config.notice, isNull);
     });
 
@@ -463,18 +457,19 @@ void main() {
       final root = _tempDir();
       final store = await _store(root);
 
-      await store.writeJson('presets/good.json', {
+      await store.writeJson('skins/good.json', {
+        'id': 'good',
         'name': 'Good',
-        'tabs': [
-          {'name': 'Tab', 'modules': []},
-        ],
+        'colors': {'accent': '#FF00FF'},
       });
-      // Parses as JSON, is not a preset: PresetSpec demands a name.
-      await store.writeJson('presets/nameless.json', {'tabs': []});
+      // Parses as JSON, is not a skin: it has no id.
+      await store.writeJson('skins/nameless.json', {
+        'colors': <String, Object?>{},
+      });
 
       final config = await loadStartupConfig(store);
 
-      expect(config.presets.single.preset.name, 'Good');
+      expect(config.skins.single.id, 'good');
       expect(config.notice, contains('nameless.json'));
     });
 

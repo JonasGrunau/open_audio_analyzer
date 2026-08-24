@@ -59,6 +59,27 @@ const H = 800;
 /// and `shoot` in scripts/lib/headless.mjs.
 const DPR = 2;
 
+/// The widths the still is published at, and why each one exists. The facade is
+/// as wide as `.shell` allows, which is `min(100vw, 1440px)` less a gutter of
+/// 32, 24 or 16 px depending on the width — so the picture is asked for at
+/// anything from about 370 CSS px on a phone to 1376 on a wide desktop, and the
+/// device pixel ratio multiplies all of it.
+///
+/// One 2560 px file served to every one of them was 124 kB arriving on a phone
+/// to be drawn into a box a seventh of its width, and this is the element that
+/// decides the page's Largest Contentful Paint.
+///
+///    768  a mid-range Android: 380 CSS px at a ratio of 1.75 wants 665
+///   1024  a small phone at ratio 2.5 to 2.75
+///   1440  a laptop at ratio 1, where the box is 1286–1376 px, and an iPhone
+///         at ratio 3, which wants about 1074
+///   1920  a laptop at ratio 1.5, and a tablet
+///   2560  the full-width retina case, and the file the `src` attribute names
+///
+/// The largest keeps the bare name so that `<img src>` and anything else
+/// pointing at `/analyzer-still.webp` still resolves.
+const WIDTHS = [768, 1024, 1440, 1920, 2560];
+
 /// Programme to play before freezing.
 ///
 /// The histogram's axis is a minute wide at this size, and a trace that stops a
@@ -151,11 +172,33 @@ try {
     width: Number(/Width:\s*(\d+)/.exec(info)?.[1]),
     height: Number(/Height:\s*(\d+)/.exec(info)?.[1]),
   };
+
+  // The narrower variants, each resampled from the same capture rather than
+  // from each other — `-resize W 0` keeps the aspect ratio, and going through
+  // an intermediate would compress an already-compressed picture.
+  const sources = [];
+  for (const width of WIDTHS) {
+    if (width >= size.width) continue;
+    const file = STILL.replace(/\.webp$/, `-${width}.webp`);
+    execFileSync('cwebp', [
+      '-quiet', '-q', '88', '-sharp_yuv', '-m', '6',
+      '-resize', String(width), '0',
+      png, '-o', file,
+    ]);
+    sources.push({ width, file: `/analyzer-still-${width}.webp` });
+  }
+  sources.push({ width: size.width, file: '/analyzer-still.webp' });
+
   mkdirSync(join(ROOT, 'src/data'), { recursive: true });
-  writeFileSync(STILL_META, `${JSON.stringify(size, null, 2)}\n`);
-  console.log(
-    `  public/analyzer-still.webp  ${(statSync(STILL).size / 1024).toFixed(1)} kB (committed)`,
-  );
+  // `width`/`height` stay the intrinsic size of the largest, because that is
+  // what the `<img>` attributes have to declare for the box to have a shape
+  // before anything is fetched. `sources` is what the srcset is built from, so
+  // the markup names no width this script did not actually write.
+  writeFileSync(STILL_META, `${JSON.stringify({ ...size, sources }, null, 2)}\n`);
+  for (const { file } of sources) {
+    const path = join(ROOT, 'public', file.slice(1));
+    console.log(`  public${file}  ${(statSync(path).size / 1024).toFixed(1)} kB (committed)`);
+  }
 } catch (error) {
   console.error(`  the still failed: ${error.message}`);
   await chrome.close();

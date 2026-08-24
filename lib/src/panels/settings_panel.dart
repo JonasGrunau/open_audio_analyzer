@@ -6,6 +6,8 @@ import 'package:oaa_ui/oaa_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../app/preset_file.dart';
+import '../app/shortcuts.dart';
 import '../clock/meter_clock.dart';
 import '../data/providers.dart';
 import '../remote/publish_settings.dart';
@@ -13,7 +15,6 @@ import '../remote/remote_control.dart';
 import '../remote/remote_display_service.dart';
 import '../storage/config_store.dart';
 import 'calibration_editor.dart';
-import 'preset_browser.dart';
 import 'theme_editor.dart';
 
 /// Opens the settings panel.
@@ -377,6 +378,14 @@ class _SettingsPanelState extends ConsumerState<SettingsPanel> {
 
   // --- Session --------------------------------------------------------------
 
+  /// The chords for Open and Save, as printed for the keyboard in front of the
+  /// user. Read off `oaaShortcuts`, never typed here.
+  String get _openChord =>
+      fileCommandChord(FileCommand.open)?.label(apple: useAppleKeyNames) ?? '';
+
+  String get _saveChord =>
+      fileCommandChord(FileCommand.save)?.label(apple: useAppleKeyNames) ?? '';
+
   Widget _session(AppSettings settings, ConfigStore store) {
     final colors = OaaTheme.of(context);
 
@@ -394,13 +403,15 @@ class _SettingsPanelState extends ConsumerState<SettingsPanel> {
             onChanged: ref.read(settingsProvider.notifier).setRestoreSession,
           ),
         ),
-        PanelRow(
-          label: 'Presets',
-          note: 'Save the current arrangement, or open one you saved before.',
-          child: OaaButton(
-            label: 'Browse',
-            onPressed: () => showPresetBrowser(context),
-          ),
+        // **No button, because presets are not a panel any more.** They are
+        // documents: opened and saved through the platform's own file dialogs
+        // from the File menu, which is in the macOS menu bar and is the FILE
+        // button in the status bar everywhere else. What is worth saying here is
+        // where that is and what it is called, and the chords come off the one
+        // table that owns them so this cannot drift from the sheet.
+        PanelNote(
+          'Presets are files. Open one, or save the arrangement you have, from '
+          'the File menu — $_openChord and $_saveChord.',
         ),
         if (!store.isAvailable)
           PanelNote(
@@ -414,11 +425,11 @@ class _SettingsPanelState extends ConsumerState<SettingsPanel> {
             'in version control.',
           ),
           // **Selectable, and monospaced, because the path is not guessable.**
-          // On macOS the app is sandboxed, so this is a container directory
-          // named after the bundle identifier rather than the
-          // ~/Library/Application Support/Open Audio Analyzer anybody would
-          // think to look in. Printing an unselectable path a user cannot
-          // navigate to is the same as not printing it.
+          // It is the first place anybody goes looking for a preset to mail
+          // somebody, and it is a different directory on each of six platforms —
+          // one of which is an iPad container named after nothing a person would
+          // type. Printing a path a user cannot select is the same as not
+          // printing it.
           Padding(
             padding: const EdgeInsets.only(top: Space.xs),
             child: SelectableText(

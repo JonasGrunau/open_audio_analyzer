@@ -50,6 +50,18 @@
  * wakes from sleep. */
 #define OAA_MAX_CATCHUP_SECONDS 0.25
 
+/* How often the analysis thread asks the capture source whether it is still
+ * running. Twelve blocks: soon enough that a source which has gone away is
+ * reported before a user has finished wondering, and cheap enough to be free —
+ * miniaudio answers with an atomic load, the macOS tap with a try-lock. */
+#define OAA_DEVICE_POLL_SECONDS 0.25
+
+/* And how often it will try to put a stopped one back. Rebuilding a Core Audio
+ * aggregate device is not free, and a device that has gone for good would
+ * otherwise have one built for it four times a second for as long as the
+ * application stays open. */
+#define OAA_DEVICE_REVIVE_SECONDS 1.0
+
 /* How much audio the capture ring holds. Half a second is far more than any
  * ordinary scheduling hiccup needs and costs 384 kB at 48 kHz stereo; sizing
  * it tightly would save nothing worth having and would turn a hiccup into lost
@@ -166,6 +178,20 @@ static void oaa_clear_measurements(oaa_engine *engine) {
     oaa_ring_clear_dropped(&engine->ring);
   }
   engine->frames_done = 0;
+  /* What the source's absence has cost, but not the fact of it: a reset says
+   * "start counting from here", and whether the device is currently gone is not
+   * something a reset has an opinion about. The flag itself is left alone and
+   * republished by the next poll.
+   *
+   * An outage already in progress restarts its clock, because the frames it has
+   * cost so far were charged to the measurement that just ended. Carrying the
+   * original instant across would hand the new measurement a hole that opened
+   * before it began — a user who resets during a stall would be told they had
+   * lost the whole of the previous session's outage. */
+  engine->stalled_frames = 0;
+  if (engine->device_stopped) {
+    engine->device_stopped_seconds = oaa_now_seconds();
+  }
   engine->sample_peak_max_linear = 0.0f;
   engine->corr_sum_lr = 0.0;
   engine->corr_sum_ll = 0.0;
@@ -277,6 +303,79 @@ void oaa_engine_set_silence_reset(oaa_engine *engine, int32_t enabled) {
   }
 }
 
+/*
+ * Asks the capture source whether it is still there, and puts it back when it
+ * is not.
+ *
+ * This is the whole of the answer to a bug that stood for eight phases: a
+ * capture source that stops delivering is invisible. The loop below paces
+ * itself against a monotonic clock rather than against the audio, so it goes on
+ * publishing an empty ring at the same rate for as long as the application is
+ * open — every meter holds its last value, `generation` keeps incrementing, and
+ * the interface stays perfectly responsive around a frozen picture. Reset moves
+ * the readings to their floors and they hold *there*. There was no signal
+ * anywhere that the audio had gone, and no path back except selecting a
+ * different source, which rebuilds the engine as a side-effect.
+ *
+ * Deliberately *not* a timeout on the audio. "No frames for a second" is a
+ * normal state for more than one real device — a monitor source with nothing
+ * playing through it, a loopback with an idle renderer — and a watchdog built
+ * on it would restart healthy hardware on a quiet machine, which costs the
+ * audio either side of the restart. So this asks the source about itself and
+ * acts only on what it says: see oaa_device_running.
+ */
+static void oaa_watch_device(oaa_engine *engine, double now) {
+  if (engine->device == NULL) {
+    return;
+  }
+  if (now - engine->device_polled_seconds < OAA_DEVICE_POLL_SECONDS) {
+    return;
+  }
+  engine->device_polled_seconds = now;
+
+  if (oaa_device_running(engine->device)) {
+    if (engine->device_stopped) {
+      /* What the outage cost, in frames, so that it lands where every other
+       * kind of lost audio lands and raises the same warning. Derived from the
+       * clock and therefore approximate — a producer that has gone away is not
+       * there to report what it did not produce — and rounded up through the
+       * poll interval, which is the granularity of knowing at all. An
+       * integration that spans a hole has to say so; a hole reported as zero
+       * frames is a hole nobody hears about. */
+      const double outage = now - engine->device_stopped_seconds;
+      if (outage > 0.0) {
+        engine->stalled_frames +=
+            (uint64_t)(outage * (double)engine->cfg.sample_rate);
+      }
+      engine->device_stopped = 0;
+    }
+    engine->staging.flags &= ~(uint32_t)OAA_FLAG_SOURCE_STOPPED;
+    return;
+  }
+
+  if (!engine->device_stopped) {
+    engine->device_stopped = 1;
+    engine->device_stopped_seconds = now;
+    /* Attempt the first revive immediately rather than a second from now: the
+     * common case is a tap whose rebuild failed on a device change, and that
+     * one succeeds at once against the device the user is actually listening
+     * to. */
+    engine->device_revived_seconds = now - OAA_DEVICE_REVIVE_SECONDS;
+  }
+  engine->staging.flags |= (uint32_t)OAA_FLAG_SOURCE_STOPPED;
+
+  if (now - engine->device_revived_seconds < OAA_DEVICE_REVIVE_SECONDS) {
+    return;
+  }
+  engine->device_revived_seconds = now;
+
+  /* The result is deliberately not read here. Whether it worked is a question
+   * for the source, not for the call — a start can return success and still
+   * leave a device that never delivers — so the next poll asks the source
+   * again and that answer is the one that clears the flag. */
+  oaa_device_revive(engine->device);
+}
+
 static void *oaa_analysis_thread(void *raw) {
   oaa_engine *engine = (oaa_engine *)raw;
 
@@ -305,9 +404,19 @@ static void *oaa_analysis_thread(void *raw) {
         oaa_analyse_gated(engine, engine->block, got);
       }
 
-      const uint32_t dropped = oaa_ring_dropped(&engine->ring);
-      engine->staging.dropped_frames = dropped;
-      if (dropped > 0) {
+      oaa_watch_device(engine, oaa_now_seconds());
+
+      /* Two counts, one field, because to a measurement they are one event:
+       * audio that played and was not measured. The ring's is exact and this
+       * assignment is why the stall's own count cannot live in the same place —
+       * it would be overwritten twice a hundredth of a second. Saturating
+       * rather than wrapping: a count that rolled over to a small number would
+       * turn a catastrophic loss into a negligible-looking one. */
+      const uint64_t lost =
+          (uint64_t)oaa_ring_dropped(&engine->ring) + engine->stalled_frames;
+      engine->staging.dropped_frames =
+          lost > UINT32_MAX ? UINT32_MAX : (uint32_t)lost;
+      if (lost > 0) {
         engine->staging.flags |= (uint32_t)OAA_FLAG_OVERRUN;
       }
     } else {

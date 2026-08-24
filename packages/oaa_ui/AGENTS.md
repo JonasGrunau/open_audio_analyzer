@@ -15,7 +15,7 @@ exactly once.
 | `src/color_ramp.dart` | What `ColorRamp` paints, and the one place the argument for it is written down: colour carries whatever a module's axes do not. The spectrogram's level ramp — the skin's, or the rainbow — and the oscilloscope's three-band mix, where red, green and blue *are* the bass, the mids and the highs. |
 | `src/grid_geometry.dart` | Grid cells to pixels. The one place the 24×16 canvas becomes a rectangle. |
 | `src/point_buckets.dart` | Marks sorted by the colour they are drawn in, so a display of tens of thousands of them is a few dozen `drawRawPoints` calls. Behind the stereo cloud; the spectrogram drew through it too until real material's run counts outgrew it. |
-| `src/panel.dart` | `PanelScaffold` and the controls panels are assembled from, plus `showOaaPanel` and `showOaaConfirm`. |
+| `src/panel.dart` | `PanelScaffold` and the controls panels are assembled from, plus `showOaaPanel`, `showOaaConfirm` and `showOaaSavePrompt`. |
 | `src/menu_row.dart` | `OaaMenuRow` — one row of a popup menu, and the band and the check that mark the value the menu holds. Every menu in the application is built through it: the panel control, the status bar's two pickers and a module's dozen settings. `selected` is tri-state: `null` is a menu of actions, which gets neither mark nor the column reserved for one. The one widget here handed its palette rather than reading it, for the reason in its header. |
 | `src/qr.dart` | `QrCode` — just enough QR to carry one address, byte mode at error level M — and `OaaQrCode`, which paints it. The one widget here that does not take its colours from the skin: a code is read by thresholding a camera image, and dark-on-light is a property of the format rather than a choice. Held against ZXing by `test/qr_test.dart`. |
 | `src/glyph.dart` | `OaaMark` and `OaaGlyph` — the closed set of marks the interface draws, as paths. There is no icon font, and a mark that is a codepoint is a mark that can go missing. |
@@ -115,6 +115,16 @@ inside it and both are argued in the function's own header: it is **420** wide,
 because a dialog exactly as wide as the panel under it reads as that panel
 having been replaced, and its destructive button is **last**, in the affirmative
 slot, because in a confirmation the destructive action *is* the affirmative one.
+
+`showOaaSavePrompt` is its sibling and the only other modal-over-a-modal: the
+same 420, asked when a command would replace work that is not in a file. It has
+**three** answers, and the third is the reason it is not `showOaaConfirm` with a
+different label — Don't Save is a decision about the document rather than a
+refusal of the question, and collapsing it into Cancel leaves the only way to
+discard an edit being the button that keeps it. Save is last, in the affirmative
+slot, because here the answer that loses nothing is the recommended one; Don't
+Save takes the destructive slot hard left; Cancel, the × and the scrim all
+answer cancel.
 
 `PanelScaffold(title:, child:, onClose:, footer:, width: 620)`.
 
@@ -320,8 +330,8 @@ a route with a zero-length transition, so pushing costs nothing on screen,
 Escape and the system back gesture return to the parent for free, and each
 panel stays a plain widget with its own title. A panel that swapped its own body
 would have to hand-roll the back stack the `Navigator` is already keeping. The
-settings panel has always done this — it pushes the preset browser and the
-delivery-target editor from rows inside itself.
+settings panel has always done this — it pushes the delivery-target editor and
+the theme editor from rows inside itself.
 
 Do not add a Back button when the parent panel is directly behind: the × and
 Escape are the way out, and a third one is clutter.

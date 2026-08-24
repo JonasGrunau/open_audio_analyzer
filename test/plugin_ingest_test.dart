@@ -152,13 +152,18 @@ void main() {
     // the bar at all, which is the half of this that no unit test can see.
     expect(find.byType(TransportReadout), findsOneWidget);
 
-    // And the overrun notice counts the *plugin's* discarded frames. The
-    // fixture reports seven and raises the flag; the sentence used to read the
+    // And the overrun notice counts the *plugin's* lost frames. The fixture
+    // reports seven and raises the flag; the sentence used to read the
     // desktop's own engine, which is idle while a plugin is on the canvas — so
-    // a real loss of audio was reported as "0 frames were discarded", which is
-    // a warning that contradicts itself and a number somebody would quote.
+    // a real loss of audio was reported as zero frames, which is a warning
+    // that contradicts itself and a number somebody would quote.
+    //
+    // The wording changed when a source that stopped became a second way to
+    // lose audio — the frames are no longer "discarded because analysis could
+    // not keep up", because half of them were never produced at all — and what
+    // is pinned here is the count, not the prose around it.
     expect(
-      find.textContaining('7 frames were discarded'),
+      find.textContaining('7 frames never reached the measurement'),
       findsOneWidget,
       reason: 'the notice is counting something other than what is metered',
     );

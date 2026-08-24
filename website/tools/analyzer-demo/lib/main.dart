@@ -394,8 +394,34 @@ class _SoundButton extends StatelessWidget {
   final OaaColors colors;
   final VoidCallback? onPressed;
 
+  /// Pixels to lift the words, so that their ink sits in the middle of the
+  /// button rather than two pixels below it.
+  ///
+  /// **Measured off a 3× rendering, not derived** — the same rule as
+  /// `_HistoryAction._drop` in the application's tab strip, and re-measure it if
+  /// the size or the face moves. The words are low because they share a baseline
+  /// with a note that is in neither bundled face: what sets the row's depth
+  /// below that baseline is some other typeface's descent, so the words sit in a
+  /// box they did not size.
+  ///
+  /// A transform and not padding, which is the version that did nothing: the row
+  /// is already deeper than the words' own box, so two more pixels under them
+  /// grew neither the row nor the button, and a baseline-aligned child does not
+  /// move when the space beneath it does.
+  static const double _sink = 2;
+
+  /// The same correction for the note, which is low by half as much: it is a
+  /// different face from the words it shares a baseline with, so the two are not
+  /// off the middle by the same amount and one value cannot serve both.
+  static const double _noteSink = 1;
+
   @override
   Widget build(BuildContext context) {
+    final style = TextStyle(
+      color: colors.accent,
+      fontFamily: 'Google Sans Code',
+      fontSize: 11,
+    );
     return Semantics(
       button: true,
       label: 'Play the audio this was measured from',
@@ -411,13 +437,37 @@ class _SoundButton extends StatelessWidget {
               horizontal: Space.sm,
               vertical: Space.xs,
             ),
-            child: Text(
-              busy ? 'starting…' : '♪  play the audio',
-              style: TextStyle(
-                color: colors.accent,
-                fontFamily: 'Google Sans Code',
-                fontSize: 11,
-              ),
+            // The mark and the words are one object, so the space between them
+            // has to be smaller than the space around them, or the note reads
+            // as sitting nearer the border than its own label. It was two
+            // monospace spaces, which at this size is 13 px — wider than the
+            // padding on either side of the pair. `Space.sm` is a value rather
+            // than a count of characters.
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              // On the words' baseline. `♪` is in neither bundled face, so it
+              // comes from whatever the host falls back to and its line box is
+              // some other typeface's idea of one; the baseline is the only
+              // thing about it that can be placed.
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
+              children: [
+                // Gone while it starts, with the offer it was making.
+                if (!busy) ...[
+                  Transform.translate(
+                    offset: const Offset(0, -_noteSink),
+                    child: Text('♪', style: style),
+                  ),
+                  const SizedBox(width: Space.sm),
+                ],
+                Transform.translate(
+                  offset: const Offset(0, -_sink),
+                  child: Text(
+                    busy ? 'starting…' : 'play the audio',
+                    style: style,
+                  ),
+                ),
+              ],
             ),
           ),
         ),

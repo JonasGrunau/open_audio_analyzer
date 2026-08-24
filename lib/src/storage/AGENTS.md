@@ -38,6 +38,15 @@ This directory knows about files; it does not know what is in them.
   the mistake is probably a trailing comma, and overwriting it destroys the
   thing they were trying to write. One broken skin costs one skin.
 
+- **`root` is not a boundary.** `readJsonAt` and `writeJsonAt` take an absolute
+  path anywhere on the machine, because a preset opened or saved through a file
+  dialog is wherever the user put it — that is the whole point of presets being
+  documents. They are *here*, rather than in the code that opens the dialog, so
+  that the three rules above still hold for those files: a preset saved to a
+  Desktop is written atomically, and one that cannot be read there names itself
+  in `lastError` instead of throwing. Nothing outside this directory opens a
+  `File`.
+
 - **One file per preset, per skin, per target.** A single `presets.json` is
   marginally less code and takes the whole library out with one corrupt byte,
   and it makes "send me your preset" impossible without a text editor.

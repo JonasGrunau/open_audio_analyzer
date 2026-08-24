@@ -543,18 +543,40 @@ class OaaEngine implements MeterSource {
   @override
   bool get isRunning => !_disposed && _snapshot.flags & 1 != 0;
 
-  /// Frames the capture callback had to discard because analysis fell behind.
+  /// Frames of audio that never reached the measurement, since the last reset.
   ///
   /// Not a diagnostic. Integrated loudness averages every block since the
-  /// reset, so dropped audio does not make the reading stale — it makes it an
+  /// reset, so lost audio does not make the reading stale — it makes it an
   /// average of a different programme than the one that played. Non-zero means
   /// the integrated reading cannot be trusted, and the UI has to say so.
+  ///
+  /// Counts both audio the capture callback had to discard because analysis
+  /// fell behind, and audio missed while the source was stopped — see
+  /// [isSourceStopped]. The second is derived from a clock rather than counted
+  /// by the ring, so it is approximate; a gap reported as zero frames would be
+  /// a gap nobody is told about.
   @override
   int get droppedFrames => _disposed ? 0 : _snapshot.dropped_frames;
 
   /// Whether any audio has been lost since the last reset. Sticky until reset.
   @override
   bool get hasOverrun => !_disposed && _snapshot.flags & (1 << 3) != 0;
+
+  /// Whether the capture source has stopped producing audio.
+  ///
+  /// Not on [MeterSource], and that is deliberate. The two things that can act
+  /// on this — reopening the source, or telling the user which device went
+  /// away — are things only the machine holding the device can do; a remote
+  /// display has no device, no source menu and nothing it could offer. What a
+  /// display sees is what it should see: the desktop reopening the source, and
+  /// em dashes if that fails.
+  ///
+  /// Live rather than sticky, unlike [hasOverrun]: it describes the source now.
+  /// The audio the outage cost stays in [droppedFrames] after it clears.
+  ///
+  /// Only ever true for [OaaSource.device]. Nothing else has a producer that
+  /// can leave.
+  bool get isSourceStopped => !_disposed && _snapshot.flags & (1 << 4) != 0;
 
   /// Whether the loudness readings are measured in this build.
   ///

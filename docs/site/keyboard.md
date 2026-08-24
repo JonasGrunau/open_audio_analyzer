@@ -32,7 +32,6 @@ halfway through.
 | Action | macOS | Windows and Linux |
 | --- | --- | --- |
 | Reset the measurement | ⌘R | Ctrl+R |
-| Analyse a file | ⌘O | Ctrl+O |
 
 ## Tabs
 
@@ -43,12 +42,20 @@ halfway through.
 | Previous tab | ⌃⇧⇥ or ⌘[ | Ctrl+Shift+Tab or Ctrl+[ |
 | New tab | ⌘T | Ctrl+T |
 
+## File
+
+| Action | macOS | Windows and Linux |
+| --- | --- | --- |
+| Open a preset | ⌘O | Ctrl+O |
+| Analyse a file | ⌘I | Ctrl+I |
+| Save the preset | ⌘S | Ctrl+S |
+| Save the preset as a new file | ⇧⌘S | Ctrl+Shift+S |
+
 ## Configuration
 
 | Action | macOS | Windows and Linux |
 | --- | --- | --- |
 | Settings | ⌘, | Ctrl+, |
-| Presets | ⌘P | Ctrl+P |
 | This list | ⇧/ or F1 | Shift+/ or F1 |
 
 ---

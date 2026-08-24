@@ -11,6 +11,25 @@
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
+/* The canonical host, written once.
+ *
+ * It was written twice — here in the layout and again as `site` in
+ * `astro.config.mjs` — and `AGENTS.md` claimed there was one. Two literals of a
+ * host do not disagree loudly: they disagree in a `<link rel="canonical">` and
+ * in a sitemap `<loc>`, which is a page telling a crawler that the page it is
+ * on is a different page. `astro.config.mjs` imports this, and so does
+ * everything that has to name an absolute URL.
+ */
+export const SITE = 'https://open-audio-analyzer.com';
+
+/* Every absolute URL the site states, from the one host and the one rule about
+   trailing slashes (`trailingSlash: 'never'`, so `/docs/install` and not
+   `/docs/install/`). The root is the exception the rule needs stating for: it is
+   `https://open-audio-analyzer.com/`, with the slash, because that is the URL —
+   the bare origin is a host, not an address. Canonical tags and the sitemap both
+   come through here so they cannot describe the site differently. */
+export const urlFor = (path) => new URL(path, SITE).href;
+
 export const REPO = 'https://github.com/JonasGrunau/open_audio_analyzer';
 export const RELEASES = `${REPO}/releases/latest`;
 

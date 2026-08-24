@@ -46,12 +46,41 @@
  * device if its format matches the one the engine was configured with, because
  * the engine's sample rate and channel count are fixed at creation and cannot
  * move underneath a running measurement. If the format does *not* match, the
- * tap stops rather than following, and the meters fall to their floor exactly
- * as they do when any capture device stops delivering. Reselecting the source
- * picks up the new device.
+ * tap stops rather than following.
  *
  * The alternative — following anyway and resampling — is the one thing this
  * engine must never do. See the header of oaa_device.h.
+ *
+ * ---------------------------------------------------------------------------
+ * A tap that has stopped says so
+ *
+ * The paragraph above used to end "and the meters fall to their floor exactly
+ * as they do when any capture device stops delivering. Reselecting the source
+ * picks up the new device." Both halves were wrong, and together they were the
+ * bug this section exists to explain.
+ *
+ * Meters do not fall to their floor when a producer stops. Nothing falls
+ * anywhere: the analysis thread paces itself against a monotonic clock, so it
+ * goes on publishing an empty ring at the same rate and every meter *holds*.
+ * The application looks alive — the window, the menus, the canvas — with a
+ * frozen picture in it, and pressing reset moves the readings to their floors
+ * and then holds those instead. There was no signal anywhere in the interface
+ * that the audio had gone.
+ *
+ * And reselecting the source did not pick anything up, because selecting the
+ * source that is already selected changes no setting, so the application's
+ * source listener never fired. What actually recovered it was choosing a
+ * *different* source and coming back, which rebuilds the engine twice by
+ * side-effect. That is what a user reported: "the meters freeze, reset does
+ * nothing, and it only comes back when I switch to another source."
+ *
+ * So a stopped tap is now a state the engine can see and act on, through the
+ * two calls below. `oaa_tap_running` is polled a few times a second;
+ * `oaa_tap_revive` rebuilds against whatever the default output is *now*, at
+ * the format the engine was built for. When the format has moved, revive keeps
+ * failing — as it must — and OAA_FLAG_SOURCE_STOPPED stays set so the
+ * application can throw the engine away and open a new one, which is the only
+ * thing that can adopt a new rate.
  */
 
 #ifndef OAA_TAP_H
@@ -136,6 +165,32 @@ int32_t oaa_tap_open(oaa_tap **out, uint32_t *sample_rate, uint32_t *channels);
 /* Attaches the ring and starts the IO proc. The ring must have been created
  * with exactly the channel count `oaa_tap_open` reported. */
 int32_t oaa_tap_start(oaa_tap *tap, oaa_ring *ring);
+
+/*
+ * Whether the IO proc is still running.
+ *
+ * Cheap: it reads one flag under a try-lock and asks Core Audio nothing. A
+ * rebuild in flight holds that lock, and a caller who cannot take it is told
+ * the tap is running — somebody is already fixing it, and a second opinion
+ * arrived 250 ms too early is not worth blocking the analysis thread for.
+ */
+int32_t oaa_tap_running(oaa_tap *tap);
+
+/*
+ * Rebuilds a stopped tap against the current default output device, at the
+ * format the engine was built around, and starts it.
+ *
+ * This is what makes the default-output listener's failure recoverable. That
+ * listener tears the chain down and builds a new one, and when the build or the
+ * start fails — a format that moved, a device that vanished between the
+ * notification and the query, an aggregate Core Audio declined to create — it
+ * used to leave no producer at all and nothing that would ever try again.
+ *
+ * Returns OAA_OK when the tap is running by the time it returns, including when
+ * it already was. Failure is an ordinary outcome and the caller is expected to
+ * try again later or give up and reopen.
+ */
+int32_t oaa_tap_revive(oaa_tap *tap);
 
 /* Stops and releases everything, in the reverse of the order it was built.
  * Safe on NULL. */

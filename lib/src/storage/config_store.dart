@@ -36,6 +36,14 @@ typedef StoredJson = ({String fileName, Map<String, Object?> json});
 /// resize and option change; without [scheduleWrite] a user rearranging a tab
 /// would issue a hundred small writes in a few seconds. [flush] exists for
 /// shutdown, when the pending one has to land before the process goes away.
+///
+/// And one thing it is not: **[root] is not a boundary.** [readJsonAt] and
+/// [writeJsonAt] take an absolute path anywhere on the machine, because a preset
+/// opened or saved through a file dialog is wherever the user put it. They are
+/// here rather than in the code that calls a dialog so that the three properties
+/// above still hold for those files — a preset saved to a Desktop is written
+/// atomically, and a preset that cannot be read there names itself in
+/// [lastError] instead of throwing.
 class ConfigStore {
   ConfigStore._(this.root, this._error);
 
@@ -125,10 +133,23 @@ class ConfigStore {
 
   /// Reads one document, or null if it is absent, unreadable or not a JSON
   /// object.
-  Future<Map<String, Object?>?> readJson(String relativePath) async {
+  Future<Map<String, Object?>?> readJson(String relativePath) {
     final file = _file(relativePath);
-    if (file == null) return null;
+    if (file == null) return Future.value(null);
+    return _read(file);
+  }
 
+  /// The same, for a path the user chose rather than one this class composed.
+  ///
+  /// A preset opened from a file dialog can be anywhere — a Desktop, a shared
+  /// drive, a mail attachment — and [root] has nothing to do with it. Reading it
+  /// still goes through this class, because every rule about not throwing and
+  /// naming the file that failed applies to a file somebody picked at least as
+  /// much as to one we wrote.
+  Future<Map<String, Object?>?> readJsonAt(String absolutePath) =>
+      _read(File(absolutePath));
+
+  Future<Map<String, Object?>?> _read(File file) async {
     try {
       if (!await file.exists()) return null;
       final decoded = jsonDecode(await file.readAsString());
@@ -185,13 +206,50 @@ class ConfigStore {
     return results;
   }
 
+  /// Creates one of the subdirectories and answers its full path.
+  ///
+  /// For handing a file dialog somewhere to open in. [readDirectory] tolerates
+  /// a directory that is not there and [writeJson] creates it on the way past,
+  /// so on a fresh installation `presets` does not exist until the first preset
+  /// is saved — and a dialog pointed at a directory that does not exist does not
+  /// say so. It opens wherever the platform last left it, which is somebody's
+  /// Downloads folder.
+  ///
+  /// Null when there is nowhere to write, or when the directory could not be
+  /// created; the caller then lets the platform choose, which is the right
+  /// fallback and not an error worth a notice.
+  Future<String?> ensureDirectory(String directoryName) async {
+    final base = root;
+    if (base == null) return null;
+
+    final path = [base.path, directoryName].join(Platform.pathSeparator);
+    try {
+      await Directory(path).create(recursive: true);
+      return path;
+    } on FileSystemException {
+      return null;
+    }
+  }
+
   // --- Writing ------------------------------------------------------------
 
   /// Writes a document atomically. Returns false if it could not be written.
-  Future<bool> writeJson(String relativePath, Map<String, Object?> json) async {
+  Future<bool> writeJson(String relativePath, Map<String, Object?> json) {
     final file = _file(relativePath);
-    if (file == null) return false;
+    if (file == null) return Future.value(false);
+    return _write(file, json);
+  }
 
+  /// The same, for a path the user chose. See [readJsonAt].
+  ///
+  /// Note that this succeeds when [root] is null: persistence being unavailable
+  /// says nothing about a directory the user has just pointed a save dialog at,
+  /// and refusing here would mean a session with no configuration directory
+  /// could not save a preset to the Desktop either.
+  Future<bool> writeJsonAt(String absolutePath, Map<String, Object?> json) =>
+      _write(File(absolutePath), json);
+
+  Future<bool> _write(File file, Map<String, Object?> json) async {
     // Indented on purpose. These files are meant to be opened, read and edited
     // by hand — that is the entire argument for JSON over anything binary —
     // and a single-line document is not.

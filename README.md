@@ -352,17 +352,17 @@ which is also the only side that knows the interval this user set.
 ### ⌨️ Keyboard
 
 Press `?` or `F1`, or the `?` in the status bar. Open Audio Analyzer draws its
-own chrome and so has no menu bar, which is the usual place a desktop user reads
-a shortcut off — without that sheet the shortcuts would be undiscoverable by
-design.
+own chrome, so apart from the File menu there is no menu bar to read a shortcut
+off — without that sheet most of them would be undiscoverable by design.
 
 `⌫` deletes the selection, arrow keys nudge it a cell and `⇧`+arrows resize it,
 `⌘Z` / `⌘⇧Z` undo and redo, `⌘D` duplicates, `1`–`9` switch tabs, `⌘R` restarts
-the measurement, `⌘O` analyses a file. The full list is on the
+the measurement, `⌘O` opens a preset and `⌘S` saves it, `⌘I` analyses an audio
+file. The full list is on the
 [documentation site](https://open-audio-analyzer.com/docs/keyboard),
-and it is not written twice: the page, the in-app sheet and the bindings
-themselves all come from one table in `lib/src/app/shortcuts.dart`, and a test
-fails if the page has drifted from it.
+and it is not written twice: the page, the in-app sheet, the bindings themselves
+**and the key equivalents in the macOS File menu** all come from one table in
+`lib/src/app/shortcuts.dart`, and a test fails if the page has drifted from it.
 
 Three details that are decisions rather than defaults:
 
@@ -398,9 +398,27 @@ empty panel, which would read as a meter that is broken.
 
 **Presets, Calibrations and Skins** are three independent axes, as in Decibel,
 including the `from preset` indirection. Null means *follow the preset*; a
-concrete id means the user pinned that choice and browsing presets must leave it
+concrete id means the user pinned that choice and opening a preset must leave it
 alone. Without that distinction, either presets cannot carry a target or an
 explicit choice gets silently overwritten.
+
+**A preset is a document, and the File menu treats it like one.** `Open…` picks
+one through the platform's own dialog, starting in the presets folder and
+reaching anywhere else you point it; `Save` writes back to the file it came
+from; `Save as…` places a copy anywhere and takes the preset's name from the
+filename, which is why there is no name field. The open preset sits at the left
+of the status bar with a dot beside it when it differs from the file. On macOS
+the menu is in the system menu bar; on Windows and Linux it is the FILE button
+in the status bar.
+
+Whether a preset carries the delivery target and the skin is a property of the
+preset — two ticked rows in that menu, each asking whether the preset should
+carry one — rather than two switches beside a Save button. They cannot go in
+the platform's save dialog: `file_selector`'s macOS panel exposes five
+properties and no accessory view, Windows would need a plugin of its own, and
+Linux's `GtkFileChooserNative` has no extra-widget API left at all. As properties of the
+document they also survive a save, which the switches did not — see the
+`Fixed` entry in `CHANGELOG.md`.
 
 Delivery targets ship as **data**, not code, so the set can be corrected and
 extended without a release. Six are built in: **Streaming (−14 LUFS)** — which
@@ -463,7 +481,11 @@ skins/*.json           one file per skin
 
 **One file per preset rather than one library file**, deliberately: it means a
 preset can be sent to somebody or dropped in from a forum post, and that one
-corrupt file costs one preset instead of all of them. Every write goes to a
+corrupt file costs one preset instead of all of them. `presets/` is where the
+File menu's dialogs open, and it is not a boundary — a preset can be saved
+anywhere and opened from anywhere, which is what makes the sending work without
+the receiver having to find this directory first. It is also the list: there is
+no preset browser in the application, so deleting one is a file manager's job. Every write goes to a
 temporary file and is renamed over the target, so an interrupted save leaves the
 previous version intact rather than a half-written one. A file that fails to
 parse is named in the interface and left alone — Open Audio Analyzer never
@@ -928,11 +950,14 @@ could load — and a bundle whose slice does not match is, to a DAW, the same
 event as a bundle that is not there.
 
 The plugin connects to the app on `127.0.0.1:47822` and keeps retrying, so it
-does not matter which of the two you start first. Its window is a status panel —
-connected or not, sample rate, channel count, and whether the host is giving it
-a playhead — and nothing else. Several inserts can be connected at once; the
-most recently added is the one on screen, because adding it is the act of
-choosing it.
+does not matter which of the two you start first. Its window is a status panel
+and nothing else: a diagram of the three places the path can break — the host's
+audio, the host's playhead, the socket to the app — with each run of it lit or
+dark, and the socket's dashes travelling while frames are actually being sent.
+Under it, what the host is handing over, how long it has been handing it over,
+the integrated loudness, and one line saying what to do about whatever is wrong.
+Several inserts can be connected at once; the most recently added is the one on
+screen, because adding it is the act of choosing it.
 
 **What the DAW adds that a live input cannot.** The host's transport comes
 across with the audio: play and record state, the playhead in seconds, samples
@@ -1101,13 +1126,24 @@ so a release built from a fork is unsigned and every script says so. See
 
   Two rough edges on the macOS tap, both stated rather than hidden. It follows
   the default output device when you change it — headphones in, headphones out —
-  but only when the new device has the same sample rate and channel count; the
+  but only when the new device has the same sample rate and channel count. The
   engine's DSP is sized once and cannot be resized underneath a running
-  measurement, so a switch to a device with a different format stops the tap
-  instead of following it. Reselecting the source picks the new device up. And
-  if macOS denies the permission, a tap delivers silence rather than an error,
-  which is indistinguishable from genuinely silent audio — if the meters sit at
-  the floor with something obviously playing, check Privacy & Security.
+  measurement, so when the format has moved the tap stops rather than following.
+  The meters say so, and the application opens a new engine at the new device's
+  format a couple of seconds later — which starts the integration again, because
+  it is a different measurement of a different stream. The same applies when an
+  output device changes its *own* rate without ceasing to be the default output,
+  which Bluetooth headsets do whenever something opens their microphone. And if
+  macOS denies the permission, a tap delivers silence rather than an error, which
+  is indistinguishable from genuinely silent audio — if the meters sit at the
+  floor with something obviously playing, check Privacy & Security.
+
+  Worth knowing either way: a tap only receives audio while something is
+  actually playing. An output device with nothing going to it has an idle clock
+  and the tap gets nothing at all, so the meters hold their last reading rather
+  than falling to the floor. That is not a fault and the application does not
+  report it as one — a source that has *stopped* is a different fact, and it is
+  reported.
 - 📁 **Offline analysis does not read Ogg Vorbis, Opus, AAC or ALAC.** WAV,
   AIFF, RF64, Wave64, FLAC and MP3 cover the formats a master is delivered *as*,
   which is what a delivery check is for. The missing ones are what a master is
