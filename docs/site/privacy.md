@@ -23,7 +23,7 @@ only code in the application that touches the filesystem is one file,
 A claim on this page that the source contradicts is a bug; please
 [report it](https://github.com/JonasGrunau/open_audio_analyzer/issues).
 
-Last updated 23 August 2026, for version 0.10.1.
+Last updated 24 August 2026, for version 0.11.0.
 
 ## The short version
 

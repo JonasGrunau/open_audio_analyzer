@@ -75,6 +75,20 @@
   <content_rating type="oars-1.1"/>
 
   <releases>
+    <release version="0.11.0" date="2026-08-24">
+      <description>
+        <p>
+          A preset is a document: Open, Save and Save as in a File menu, with
+          the open preset named in the status bar and marked when it differs
+          from the file. The meters no longer freeze when a capture source stops
+          delivering — the engine notices within a quarter of a second, puts the
+          source back where it can, says so on screen, and counts the audio that
+          was missed as lost. The plugin's window is drawn in the application's
+          own palette and shows which of the three places the path can break
+          has.
+        </p>
+      </description>
+    </release>
     <release version="0.10.1" date="2026-08-23">
       <description>
         <p>

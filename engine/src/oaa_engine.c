@@ -33,7 +33,7 @@
 #include <time.h>
 #endif
 
-#define OAA_VERSION_STRING "0.10.1"
+#define OAA_VERSION_STRING "0.11.0"
 
 #define OAA_DEFAULT_SAMPLE_RATE 48000u
 #define OAA_DEFAULT_CHANNELS 2u

@@ -9,6 +9,8 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.11.0] — 2026-08-24
+
 ### 📐 Measurement
 - Audio missed while the capture source was stopped is now counted as lost
   audio, so the frame count includes it and the warning appears. It previously
@@ -2914,7 +2916,8 @@ meters do not exist yet. See the [roadmap](README.md#roadmap).
 - Licensing is split: MIT for `engine/`, `oaa_engine` and `oaa_core`;
   GPL-3.0-or-later for the application, UI, CLI and plugin.
 
-[unreleased]: https://github.com/JonasGrunau/open_audio_analyzer/compare/v0.10.1...HEAD
+[unreleased]: https://github.com/JonasGrunau/open_audio_analyzer/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/JonasGrunau/open_audio_analyzer/compare/v0.10.1...v0.11.0
 [0.10.1]: https://github.com/JonasGrunau/open_audio_analyzer/compare/v0.10.0...v0.10.1
 [0.10.0]: https://github.com/JonasGrunau/open_audio_analyzer/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/JonasGrunau/open_audio_analyzer/compare/v0.8.0...v0.9.0

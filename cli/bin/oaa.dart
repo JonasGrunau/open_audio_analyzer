@@ -36,7 +36,7 @@ abstract final class ExitCode {
   static const int nonCompliant = 2;
 }
 
-const String _version = 'Open Audio Analyzer 0.10.1';
+const String _version = 'Open Audio Analyzer 0.11.0';
 
 Future<void> main(List<String> arguments) async {
   final parser = _buildParser();

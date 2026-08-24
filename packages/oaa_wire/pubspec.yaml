@@ -2,7 +2,7 @@ name: oaa_wire
 description: >-
   The Open Audio Analyzer wire protocol: framing, and the codec that puts one published
   measurement on a socket. Pure Dart — no Flutter, no dart:ffi, no I/O.
-version: 0.10.1
+version: 0.11.0
 publish_to: 'none'
 
 environment:
