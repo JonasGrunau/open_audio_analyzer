@@ -36,10 +36,28 @@ const author = () => ({
   url: 'https://github.com/JonasGrunau',
 });
 
+/* The site, and what Google calls the *site name* — the line above the URL in a
+   result, which is a different thing from the page's title link below it.
+   Google generates it from the home page, and `WebSite` structured data is the
+   strongest signal it takes; `og:site_name`, `<title>` and the `h1` in
+   `Base.astro` and `index.astro` are the others, and all four say the same four
+   words on purpose. Consistency across them is a documented requirement, not a
+   nicety.
+
+   `alternateName` is what the system falls back on when it is not confident
+   enough to use the preferred name — which is the state a domain-name result
+   means. `OAA` is a real alternative rather than an invented one: it is the
+   prefix on every symbol in the engine and the name of the CLI binary.
+
+   The domain is deliberately **not** in that list. Google's own troubleshooting
+   offers it as a last-resort fallback, and it works — it is the result we are
+   trying to move away from, so listing it would tell the system that the thing
+   already happening is an acceptable answer. */
 const website = () => ({
   '@type': 'WebSite',
   '@id': SITE_ID,
   name: NAME,
+  alternateName: ['OAA'],
   url: urlFor('/'),
   inLanguage: 'en',
   author: { '@id': AUTHOR_ID },

@@ -32,6 +32,27 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   whole recording path runs on Linux rather than on a Mac only. afconvert is
   still preferred where it exists — Apple's AAC is the better encoder at
   128 kbit/s, and the committed excerpt was made with it.
+- `oaa.h` said this build never sets `OAA_FLAG_SPECTRUM_UNAVAILABLE`, and
+  `README.md` repeated it. It does set it: a reset raises the flag and the
+  analysis pass clears it once a full window has been transformed, about 85 ms
+  in. A consumer that believed the header and skipped the check drew the floor —
+  indistinguishable from digital silence — and presented it as a measurement.
+  The flag itself is unchanged, so no ABI version moves.
+- `plugin/AGENTS.md` gave the plugin bundles' macOS deployment target as 11.0.
+  It has been 14.2 since the tap landed, which is what `plugin/CMakeLists.txt`
+  sets and what every other document says.
+- `docs/AGENTS.md` pointed at `tool/AGENTS.md` for how the documentation site is
+  published; that moved to `website/` when `tool/docs.dart` went.
+- `packaging/AGENTS.md` records that GitHub substitutes a dot for each space when
+  an installer is attached to a release, which is why the scripts write
+  `Open Audio Analyzer-…` and the install pages quote
+  `Open.Audio.Analyzer-…`. Nothing said so, and the two read as a stale copy of
+  each other.
+- The site offers `OAA` to Google as an alternative site name. A result was
+  headed `open-audio-analyzer.com` rather than `Open Audio Analyzer`, which is
+  what Google shows when its site-name system is not confident enough to use the
+  name a page states — every other signal already agreed, so `alternateName` is
+  the one lever left. The domain is deliberately not among the alternatives.
 
 ## [0.11.0] — 2026-08-24
 

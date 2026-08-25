@@ -217,8 +217,10 @@ spec rather than to intuition.
 Every one of these is measured today and checked in CI, the spectrum included:
 a full-scale sine on a bin centre reads 0.0 dBFS on every push.
 `OAA_FLAG_SPECTRUM_UNAVAILABLE` stays in the ABI and consumers must keep
-checking it, because a future source that cannot produce a spectrum needs a way
-to say so — but this build never sets it.
+checking it, and this build does set it: every reset raises the flag and it
+clears once a full window has been transformed, about 85 ms in. Until then the
+bands sit at the floor, which is indistinguishable from digital silence. A
+future source that cannot produce a spectrum at all would say so the same way.
 
 ### 🎯 On dynamics, and on honesty
 

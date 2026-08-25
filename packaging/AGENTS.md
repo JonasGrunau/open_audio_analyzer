@@ -32,6 +32,16 @@ Output always lands in `build/packaging/`. `ci.yml`'s packaging jobs run all
 five desktop artefacts, and the IPA, on a tag and on demand; only the upload
 waits for the release.
 
+**The name on disk is not the name a user downloads.** Every script here writes
+`Open Audio Analyzer-<version>-…`, with spaces, and nothing renames it —
+GitHub substitutes a dot for each space when the file is attached to a release,
+so the asset is `Open.Audio.Analyzer-<version>-macos.pkg`. That dotted form is
+what `README.md`'s Installing table and `docs/site/install.md` quote, because it
+is what the download link says; the spaced form is what a `find` in the publish
+step has to survive, which is why that step reads its asset list NUL-delimited.
+The two are the same file, and a change to either half of the name has to be
+made in both places.
+
 Three of the five carry the plug-in and install it behind a checkbox — the
 `pkg`, the Windows `.exe` and the Linux tarball. They therefore cannot be
 built from the application alone, and their `ci.yml` jobs — `macos-pkg`,

@@ -174,10 +174,14 @@ typedef enum {
  * momentary loudness needs 400 ms of signal before it means anything. */
 #define OAA_FLAG_LOUDNESS_UNAVAILABLE (1u << 1)
 
-/* Likewise for the spectrum arrays. **This build does not set it** — the FFT
- * landed with the analyser and spectrogram that draw it. Kept in the ABI for
- * the same reason as the flag above: a source that cannot produce a spectrum
- * needs a way to say so. */
+/* Likewise for the spectrum arrays — but unlike the flag above, **this build
+ * sets it**. `oaa_clear_measurements` raises it on every reset and the analysis
+ * pass clears it only once a full 4096-frame window has been transformed, about
+ * 85 ms in. Until then the bands sit at the floor, which is indistinguishable
+ * from digital silence: a consumer that skips this check draws a spectrum of
+ * nothing and presents it as a measurement. It stays in the ABI for the flag
+ * above's reason as well — a source that cannot produce a spectrum at all needs
+ * a way to say so. */
 #define OAA_FLAG_SPECTRUM_UNAVAILABLE (1u << 2)
 
 /* Audio has been lost since the last reset — see `dropped_frames`. Sticky

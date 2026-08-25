@@ -334,12 +334,16 @@ loaded into a host process, which is a library load. Their only options are
 `xattr -dr com.apple.quarantine` — which `README.md`'s **In a DAW** tells them
 — or Move to Trash.
 
-**Both macOS architectures, and a deployment target of 11.0.** Set at the top of
-`CMakeLists.txt`, with the reasoning there. CMake defaults both to the machine
-doing the build, so the plugin in every release up to 0.5.0 was arm64-only with
-`minos 26.0` in its load commands: unloadable on an Intel Mac, unloadable on any
-macOS older than the runner, and indistinguishable to a DAW from a plugin that
-was never copied in. Check a built bundle with `lipo -info` and
+**Both macOS architectures, and a deployment target of 14.2.** Set at the top
+of `CMakeLists.txt`, with the reasoning there: 14.2 is the version
+`CATapDescription` arrived in, and the engine holds a *strong* reference to that
+class — below it dyld cannot resolve the symbol, so the whole engine framework
+fails to load and the application dies at launch rather than merely losing the
+tap. CMake defaults both settings to the machine doing the build, so the plugin
+in every release up to 0.5.0 was arm64-only with `minos 26.0` in its load
+commands: unloadable on an Intel Mac, unloadable on any macOS older than the
+runner, and indistinguishable to a DAW from a plugin that was never copied in.
+Check a built bundle with `lipo -info` and
 `otool -l | grep -A3 LC_BUILD_VERSION`, not by whether it loads here.
 
 The Dart half of the protocol test is
