@@ -9,18 +9,6 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-### 🚧 Internal
-- `packaging/android/screenshots.sh` photographs the Android build for the Play
-  Store, driven by the fake DAW through the real plugin, the way
-  `packaging/ios/screenshots.sh` already photographed the iPad. An emulator is
-  not on the host's network stack the way an iOS simulator is, so the
-  application binds the emulator's own loopback and `adb forward` is what lets
-  the plugin reach it.
-- The default preset does not fit a real 10-inch tablet. At 1280x800 dp the six
-  readouts along the top row render the words TOO SMALL rather than a number,
-  because the layout wants roughly the iPad Pro's 1376x1032 pt. The screenshot
-  script works around it with a lower density; the layout itself is unchanged.
-
 ## [0.12.0] — 2026-08-25
 
 ### ✨ Added
@@ -41,6 +29,23 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   installed by hand runs wherever it is put.
 
 ### 🚧 Internal
+- `packaging/android/screenshots.sh` photographs the Android build for the Play
+  Store, driven by the fake DAW through the real plugin, the way
+  `packaging/ios/screenshots.sh` already photographed the iPad. An emulator is
+  not on the host's network stack the way an iOS simulator is, so the
+  application binds the emulator's own loopback and `adb forward` is what lets
+  the plugin reach it.
+- The default preset does not fit a real 10-inch tablet. At 1280x800 dp the six
+  readouts along the top row render the words TOO SMALL rather than a number,
+  because the layout wants roughly the iPad Pro's 1376x1032 pt. The screenshot
+  script works around it with a lower density; the layout itself is unchanged.
+- The release on GitHub is titled with the tag alone — `v0.12.0` rather than
+  "Open Audio Analyzer v0.12.0". The repository's name is already printed above
+  every release, so the prefix said it three times in one row and pushed the
+  version off to the right.
+- The Android jobs pin the JDK from `.tool-versions` rather than naming their
+  own. The two disagreed — the file said 25 while CI said 17 — which is the
+  drift the Flutter pin already had a rule against.
 - `packaging/macos/screenshot.sh` photographs the whole desktop application
   window, driven by the fake DAW through the real plugin, the way
   `packaging/ios/screenshots.sh` already photographed the iPad. The website had

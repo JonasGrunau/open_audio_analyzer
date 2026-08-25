@@ -81,6 +81,10 @@ on:
 # no CI.
 env:
   FLUTTER_VERSION: 3.44.5
+  # And the JDK, for the same reason and from the same file. `.tool-versions`
+  # says `java temurin-25.0.1+8.0.LTS`; only the major version is meaningful to
+  # `setup-java`, and only the Android jobs need a JDK at all.
+  JAVA_VERSION: '25'
 
 permissions:
   contents: read
@@ -1008,7 +1012,7 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: ${{ env.JAVA_VERSION }}
 
       - uses: subosito/flutter-action@v2
         with:
@@ -1129,8 +1133,13 @@ jobs:
             -not -path 'artifacts/testflight-ipa/*' \
             -not -path 'artifacts/play-store-aab/*' -print0 | sort -z)
           [ "${#assets[@]}" -gt 0 ] || { echo 'no artefacts to attach' >&2; exit 1; }
+          # The title is the tag and nothing else — `v0.12.0`, not
+          # "Open Audio Analyzer v0.12.0". The repository's name is already
+          # above every release on the page, in the breadcrumb and in the
+          # feed, so the prefix is repeated three times per row and pushes the
+          # version — the one thing a reader is scanning for — to the right.
           gh release create "${GITHUB_REF_NAME}" \
-            --title "Open Audio Analyzer ${GITHUB_REF_NAME}" \
+            --title "${GITHUB_REF_NAME}" \
             --notes-file notes.md \
             "${assets[@]}"
 

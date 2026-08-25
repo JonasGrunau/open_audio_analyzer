@@ -65,7 +65,7 @@ is still not built, and `docs/PLAN.md` for what was planned.
 | `lib/src/app/preset_file.dart` | **The preset as a document.** Which file the canvas came from, whether it still matches that file, and the six File menu commands — one implementation, reached from the keyboard, from the macOS menu bar and from the status bar's own menu. The file dialogs sit behind a seam a test replaces. |
 | `lib/src/app/launch_options.dart` | `--config-dir` and `--open-panel`. Both exist to make something else testable — see the file. |
 | `packaging/icon/make_icons.dart` | The app mark, **read** from `assets/brand/oaa-logo.svg` and rendered into every container the six platforms want — a rounded tile for the desktops, two layers on a 108dp canvas for Android, and a layered `AppIcon.icon` for macOS and iOS that the system lights itself. It carries a path rasteriser because the mark is a stroked cubic path. It also writes the rest of `assets/brand/`, `packaging/icon/oaa.svg` and `website/public/`'s icons — every one except `website/public/favicon.svg`, which is a browser tab's 16 px and is drawn by hand. It wrote the tile over that file until 0.10.0, and there is a note where the line was. |
-| `.tool-versions` | Pins Flutter `3.44.5-stable`. CI pins the same; keep them in step. |
+| `.tool-versions` | Pins Flutter `3.44.5-stable` and the JDK the Android build uses. CI pins both — `FLUTTER_VERSION` and `JAVA_VERSION` at the top of `ci.yml` — keep them in step. |
 
 ## Subdirectories
 

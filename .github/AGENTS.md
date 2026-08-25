@@ -164,8 +164,12 @@ The jobs are split by what they need, and that split is deliberate:
 
 ## Rules
 
-- **`FLUTTER_VERSION` must match `.tool-versions`.** CI that passes on a
-  different Flutter than everybody develops against is worse than no CI.
+- **`FLUTTER_VERSION` and `JAVA_VERSION` must match `.tool-versions`.** CI that
+  passes on a different toolchain than everybody develops against is worse than
+  no CI. The JDK joined that file after the Android jobs landed, and the two
+  disagreed for a day — `.tool-versions` said 25 while `setup-java` said 17,
+  which is exactly the drift this rule exists to stop. Only the Android jobs
+  need a JDK; nothing else in the file reads `JAVA_VERSION`.
 - **Keep all three platforms in the `engine` matrix.** The first CI run failed
   on Linux and macOS and passed on Windows, because `-std=c11` hides POSIX
   declarations behind `__STRICT_ANSI__` and MSVC never sees them. Dropping a
@@ -224,6 +228,16 @@ The jobs are split by what they need, and that split is deliberate:
   dies on `no matches found for .../Open` with all seven builds green. The
   documentation's shell examples quote the names for the same reason — they did
   not, and neither command worked as printed.
+
+- **A release is titled with the tag alone.** `v0.12.0`, never
+  "Open Audio Analyzer v0.12.0". GitHub already prints the repository's name
+  above every release — in the page heading, in the breadcrumb and in the
+  releases feed — so a title that repeats it says the same words three times
+  in one row and pushes the version, which is the only thing anybody is
+  scanning the list for, off to the right. `gh release create` is given
+  `--title "${GITHUB_REF_NAME}"` for that reason; a release published before
+  0.12.0 carries the old form and is left alone, because a released section is
+  never rewritten.
 
 - **A release's notes are its own changelog section, found by version.** The
   publish step reads `## [<tag without the v>]` out of `CHANGELOG.md` and fails
