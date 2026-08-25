@@ -111,6 +111,17 @@ packaging/linux/flatpak/staging/
 *.jks
 *.mobileprovision
 
+# The same mistake, once more, with the one credential that has no extension of
+# its own. A Google service account key is `<project>-<hex>.json`, and it lands
+# in whatever directory the browser was pointed at — which was this one. It
+# cannot be caught by extension, because `*.json` is half the configuration in
+# this repository, so the guard is the *root*: no tracked file at the top level
+# is a .json, and a credential downloaded from a browser has no reason to be
+# there either. Keep the real key outside the checkout entirely —
+# `~/.config/oaa/play-service-account.json` is where this one now lives — and
+# treat this line as the net, not the plan.
+/*.json
+
 # Claude Code's per-checkout state. `RESUME.md` is a pointer into one session's
 # transcript and its checkpoint ref, and a `settings.json` dropped here by a
 # tool names its hooks by absolute path inside one developer's home directory —

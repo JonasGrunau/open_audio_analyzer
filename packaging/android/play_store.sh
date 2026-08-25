@@ -325,6 +325,16 @@ for item in items:
         item = "- " + body
     cleaned.append(item)
 
+# The Internal section is refactors, build and CI, and CHANGELOG.md puts it
+# last "because most readers stop before it". A store listing is the one place
+# where that is not a figure of speech: somebody deciding whether to install an
+# app does not want a note about a screenshot script. It is defined to be the
+# final section, so cutting at it drops that and nothing else.
+for index, item in enumerate(cleaned):
+    if item.lower() == "internal:":
+        cleaned = cleaned[:index]
+        break
+
 budget = LIMIT - len(more) - 2
 kept = []
 for item in cleaned:
