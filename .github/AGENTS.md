@@ -9,7 +9,7 @@ in:
 |---|---|
 | pull request | `checks`, `engine`, `website` |
 | push to `main` | the same, and `website` deploys as well as builds |
-| `workflow_dispatch` | the same, plus `plugin`, every installer and `ipa` |
+| `workflow_dispatch` | the same, plus `plugin`, every installer, `ipa` and `android-aab` |
 
 Three of the installer jobs — `macos-pkg`, `windows-installer` and
 `linux-tarball` — additionally `needs: plugin`, because each of them carries
@@ -21,7 +21,7 @@ differ. The condition on those jobs is the one `plugin` already had, so nothing
 here costs a push anything — what it costs is a release's wall clock, which now
 starts the installers when the slowest JUCE build ends.
 
-| tag `v*` | the same, plus `publish`, and `testflight` after it |
+| tag `v*` | the same, plus `publish`, and `testflight` and `play-store` after it |
 
 It was three files — `ci.yml`, `docs.yml`, `release.yml` — split on the argument
 that packaging is an order of magnitude slower than testing and must not slow
@@ -138,6 +138,29 @@ The jobs are split by what they need, and that split is deliberate:
   A manual dispatch runs `ipa` and not `testflight`, which is the useful half:
   it proves the certificate, the profile and the export without spending a
   build number.
+
+- **`android-aab` and `play-store`** are the same path for the same reason, and
+  Play is the stricter store. A version code it has accepted can never be
+  reused and never lowered, so an upload that ran ahead of a release which then
+  went red would not merely leave a build behind — it would burn the number the
+  retry wanted. `android-aab` builds and signs beside the other packagers,
+  `publish` names it in `needs`, and `play-store` uploads afterwards.
+
+  Where it differs from `ipa` is what a run with no secrets does, and the
+  difference is real rather than a matter of taste. An App Store export with no
+  distribution signature is not an unsigned IPA, it is a *failed export*, so
+  `make_ipa.sh` produces nothing. An Android release build with no upload key
+  **succeeds**: Gradle falls back to the debug key, which is what keeps
+  `flutter run --release` working for a developer who has never seen the
+  credential. So `make_aab.sh` builds either way and declines to hand over what
+  it built — worth having, because Android is compiled nowhere else in this
+  workflow and a dispatch is the only thing standing between that build and six
+  weeks of quiet rot.
+
+  The track is a repository **variable**, not a secret. It is a routing
+  decision somebody should be able to read off the settings page, and unset it
+  means `internal` — Play's nearest thing to TestFlight, and the only default
+  under which a mistake is cheap.
 
 ## Rules
 
@@ -263,6 +286,22 @@ The jobs are split by what they need, and that split is deliberate:
   run, on a step that has nothing to do with the release. `ipa` reports whether
   it built anything and `testflight` skips on `false`. A skipped job says what
   happened; a failed download says something is broken.
+- **The Android version code is `github.run_number` too, and Play is less
+  forgiving than App Store Connect about it.** App Store Connect refuses a
+  build number it has already accepted for a version string; Play refuses a
+  version code it has ever accepted, on any track, forever, and refuses any
+  number below the highest it has seen. There is no recovering a burnt one.
+- **Nothing checks an .aab's signer except `make_aab.sh`, and it must.** An app
+  bundle carries no indication of which key signed it, so a debug-signed one is
+  indistinguishable from a release build until Play rejects it by fingerprint
+  at the end of an upload — which is after the release has been published. The
+  check reads the certificate subject with `keytool -printcert -jarfile`, pins
+  the locale with `-J-Duser.language=en`, and matches on `CN=Android Debug`
+  rather than on the `Owner:` label: keytool is **translated**, so a check
+  written against the label passes on a runner and fails on a German laptop.
+  The debug key's fingerprint is no use for this — the SDK generates a
+  different one on every machine — but its distinguished name is always the
+  same.
 - **The iOS build number is `github.run_number`, not `pubspec.yaml`'s `+N`.**
   App Store Connect refuses a build number it has already accepted for the same
   version string, and it refuses it during the upload — which is after the

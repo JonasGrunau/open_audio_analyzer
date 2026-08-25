@@ -765,6 +765,15 @@ class _Rgb {
 /// rather than at build time — so an icon that is fully opaque but still four
 /// channels wide passes every check on this machine and fails the one that
 /// happens months later in front of the store.
+///
+/// **The other store wants the opposite of that**, which is why the flag is a
+/// parameter rather than a consequence of the shape. Google Play states its
+/// app icon as "32-bit PNG (with alpha)" and its feature graphic as "24-bit
+/// PNG (no alpha)"; the Console checks both. So the Play icon is full bleed
+/// like Apple's — Play rounds it in its own UI, and rounding it here would
+/// round it twice — and is written with an alpha channel that is 255
+/// everywhere. Same pixels, one more channel, and the difference between the
+/// two platforms is a byte in the IHDR.
 Uint8List _png(int size, Uint8List rgba, {bool opaque = false}) {
   final channels = opaque ? 3 : 4;
   final stride = size * channels;
@@ -888,11 +897,14 @@ final Map<String, Uint8List> _cache = {};
 
 /// A PNG of the mark at [size], drawn in [shape]. Cached, because the desktop
 /// sets overlap heavily and a 1024 render is the slow part of this program.
-Uint8List _pngOf(int size, [_Shape shape = _Shape.tile]) =>
-    _cache['$size.${shape.name}'] ??= _png(
+///
+/// [alpha] keeps the channel on a bleed render, whose pixels are opaque either
+/// way. It is Google Play's requirement and nobody else's; see [_png].
+Uint8List _pngOf(int size, [_Shape shape = _Shape.tile, bool alpha = false]) =>
+    _cache['$size.${shape.name}.$alpha'] ??= _png(
       size,
       _render(size, shape),
-      opaque: shape == _Shape.bleed,
+      opaque: shape == _Shape.bleed && !alpha,
     );
 
 void _write(String path, List<int> bytes) {
@@ -999,8 +1011,18 @@ void main() {
   );
 
   // The Play Console asks for this one by hand at upload time; it is not built
-  // into the aab. Full bleed, because the store rounds it in its own UI.
-  _write('packaging/android/play_store_icon.png', _pngOf(512, _Shape.bleed));
+  // into the aab. Full bleed, because the store rounds it in its own UI, and
+  // 32 bit because Play asks for the alpha channel Apple refuses — see [_png].
+  //
+  // It is written twice on purpose. `packaging/android/` is where somebody
+  // filling in a store listing looks, beside the bundle and the script that
+  // uploads it; `assets/brand/` is where this repository keeps the artwork it
+  // publishes, and a store graphic is that. The two are byte identical and
+  // both come from here, which is the same arrangement `oaa-icon.svg` has with
+  // `packaging/icon/oaa.svg` and `website/public/oaa.svg`.
+  final playIcon = _pngOf(512, _Shape.bleed, true);
+  _write('packaging/android/play_store_icon.png', playIcon);
+  _write('assets/brand/play-store-icon.png', playIcon);
 
   // open-audio-analyzer.com. Nothing in `ci.yml` builds the site, so these were
   // copied across by hand and were the next thing certain to go stale.

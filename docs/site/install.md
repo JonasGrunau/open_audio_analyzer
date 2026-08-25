@@ -2,8 +2,9 @@
 
 Every release publishes five desktop downloads, a command-line binary and the
 DAW plugin on its own. Pick the one for your machine; there is nothing else to
-set up. The iPad display is the exception and goes through TestFlight — see
-[iPadOS](#ipados) for why there is nothing to download.
+set up. The two tablet displays are the exception and come from a store — see
+[iPadOS](#ipados) and [Android](#android) for why there is nothing here to
+download.
 
 **Three of them install the plugin for you**, behind a checkbox that starts
 ticked. If you use a DAW, those are the ones to take.
@@ -268,6 +269,46 @@ Apple ID:
 ```sh
 flutter run -d <your ipad>    # `flutter devices` names it
 ```
+
+## Android
+
+Like the iPad build, the Android build is a **display** rather than a second
+analyser: it draws another machine's meters over the local network while the
+desktop application does the measuring. [Remote display](index.html) covers how
+the two find each other.
+
+It is distributed through **Google Play**, and there is no `.apk` on the
+releases page. What a tagged release builds is an `.aab` — an app bundle, which
+is a publishing format rather than an installable file: Play generates the
+actual download from it per device, and signs that download with a key Google
+holds rather than one this repository has. A file you downloaded could not be
+installed, so there is nothing here that would do you any good.
+
+**Play offers it to tablets only.** The manifest asks for a shortest screen
+edge of 600dp — the `sw600dp` line, which a 7-inch tablet is above and a
+handset is not — so a phone does not find the app in the store at all. That is
+a distribution filter and nothing else: it changes nothing about how the
+application behaves, and an unfolded foldable is over the line and eligible.
+The canvas is a grid of meter modules with a scale down each side, and there is
+no phone-sized arrangement of that which is worth reading.
+
+Every tagged release uploads a build to Play's **internal testing** track; ask
+on the [repository](https://github.com/JonasGrunau/open_audio_analyzer) for
+access. Building it yourself needs the Android SDK and no credentials at all,
+and the filter above does not apply — it is the store's, so `flutter run` puts
+the build on whatever device you name:
+
+```sh
+flutter run -d <your device>    # `flutter devices` names it
+```
+
+Two permissions it asks for, and one it does not. The camera is for the QR
+scanner in the host picker, asked for the first time you open it; refusing
+leaves the host list and the typed address exactly as they were. Multicast is
+an install-time permission with no dialog, and without it Android's Wi-Fi
+driver silently discards every mDNS answer, so the desktops never appear.
+`NEARBY_WIFI_DEVICES` is deliberately not declared — it covers scanning and
+managing networks, which this application never does.
 
 ## In a DAW
 

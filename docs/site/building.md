@@ -150,6 +150,8 @@ sh   packaging/linux/make_appimage.sh     # application only
 sh   packaging/linux/make_flatpak.sh      # application only
 sh   packaging/ios/make_ipa.sh            # the iPad build, for TestFlight
 sh   packaging/ios/testflight.sh          # and the upload, separately
+sh   packaging/android/make_aab.sh        # the Android bundle, for Play
+sh   packaging/android/play_store.sh      # and that upload, separately
 ```
 
 Everything lands in `build/packaging/`.
@@ -175,7 +177,12 @@ artefact and warns rather than failing when the variables are absent — a fork
 has no secrets, and a build that stopped there would be useless to it. **The
 IPA is the one exception**, because there is no unsigned form of it: an App
 Store export either has a distribution signature or does not exist, so
-`make_ipa.sh` produces nothing at all and says so.
+`make_ipa.sh` produces nothing at all and says so. **The Android bundle is the
+near-miss**: it builds perfectly well with no upload key, because Gradle falls
+back to the debug key so that `flutter run --release` keeps working — so
+`make_aab.sh` builds it, reads back which certificate actually signed it, and
+discards the bundle rather than offering something Play will reject by
+fingerprint.
 
 | Variable | For |
 | --- | --- |
@@ -189,11 +196,16 @@ Store export either has a distribution signature or does not exist, so
 | `OAA_IOS_TEAM_ID`, `OAA_IOS_SIGNING_IDENTITY` | Optional. They default to the team in the Xcode project and to `Apple Distribution`, which matches whichever such certificate the keychain holds. Set the team when the profile was created under a different one from the project's — `make_ipa.sh` compares the two before it builds, because a mismatch presents as Xcode finding no profile at all. Neither takes quotes: the value is written into an xcconfig verbatim, where a stray `"` is part of the setting |
 | `OAA_ASC_KEY_ID`, `OAA_ASC_ISSUER_ID`, `OAA_ASC_KEY` | An App Store Connect **API key** — its id, the issuer uuid, and base64 of the `.p8`. Needed by `testflight.sh` and nothing else. The key needs the **App Manager** role or the upload is refused with a permissions error that names no role |
 | `OAA_BUILD_NUMBER` | Optional. `CFBundleVersion` for the iPad build; unset, `pubspec.yaml`'s `+N` is used. CI passes the workflow run counter, because App Store Connect refuses a build number it has already accepted for the same version string |
+| `OAA_ANDROID_KEYSTORE`, `OAA_ANDROID_KEYSTORE_PASSWORD`, `OAA_ANDROID_KEY_ALIAS` | base64 of the Android **upload key** — a PKCS#12 or JKS keystore — its password, and the alias of the key pair inside it. Not the app signing key: Play App Signing is mandatory for apps created since 2021, so Google holds that one and re-signs what you upload. An upload key can be reset if you lose it, which is the point of the split |
+| `OAA_ANDROID_KEY_PASSWORD` | Optional. Defaults to the keystore password, which is what `keytool` gives you if you press return at its second prompt |
+| `OAA_ANDROID_KEY_PROPERTIES` | Optional. Path to a Flutter-style `key.properties` instead of the three secrets above; `android/key.properties` is the default and is git-ignored. `make_aab.sh` writes one under `$RUNNER_TEMP` so that no credential lands in the checkout |
+| `OAA_PLAY_SERVICE_ACCOUNT` | A Google service account's JSON key, base64 or raw — `play_store.sh` takes either. It needs the **Release manager** role granted in the Play Console under Users and permissions; a Google Cloud IAM role is a different thing and is not enough on its own |
+| `OAA_PLAY_TRACK`, `OAA_PLAY_STATUS` | Optional. `internal` and `completed`. In CI these are repository *variables* rather than secrets, because a track is a routing decision and not a credential |
 | `OAA_WINDOWS_CERT` | Path to a `.pfx`. Your own machine — a runner has no file to point at |
 | `OAA_WINDOWS_CERT_BASE64` | base64 of that same `.pfx`, which is the form CI can be handed. Used in preference to the path when both are set |
 | `OAA_WINDOWS_CERT_PASS` | The export password, for either form |
 
-Four things that will otherwise cost you an afternoon:
+Five things that will otherwise cost you an afternoon:
 
 - **A signed but un-notarised download is still refused by Gatekeeper.** The
   quarantine flag needs notarisation, not merely a signature. This is true of
@@ -212,6 +224,16 @@ Four things that will otherwise cost you an afternoon:
   finished archive. Run it once by hand, or with `workflow_dispatch`, before
   trusting a tag to it — a dispatch builds and signs the IPA and does not
   upload, which is the useful half of the check.
+- **Google Play will not let you undo anything.** A version code it has
+  accepted can never be reused, and never lowered — so a failed release that
+  had already uploaded burns the number the retry wanted. That is why `ci.yml`
+  runs `play-store` *after* `publish`, and why the version code comes from the
+  workflow's run counter rather than `pubspec.yaml`'s `+N`, which is
+  maintained by hand and collides on a re-run of a tag. Two more things the API
+  simply cannot do: create the app — the package name has to exist in the
+  Console first, made by a person — and publish to a track before the Console's
+  own checklist (store listing, content rating, data safety, target audience)
+  is complete.
 - **A pkg needs a `Developer ID Installer` certificate, which is not the one
   that signs code.** `productbuild --sign` given a `Developer ID Application`
   identity fails with "no identity found", naming a certificate that is in the
@@ -243,6 +265,36 @@ and everything else — the icon with its tile, the mark on its own, the ramp on
 its own, the favicon the site serves — is written from it. Redraw that one file
 and run this; nothing is brought across by hand. The outputs are committed, so
 a release runner never runs this.
+
+The Play Store's own icon comes out of the same run, as
+`packaging/android/play_store_icon.png`. It is the only icon here written full
+bleed *and* with an alpha channel: Play rounds it in its own interface, so
+rounding it first would round it twice, and Play asks for 32 bits where Apple
+rejects any icon that has an alpha channel at all.
+
+### The store graphics
+
+```sh
+sh packaging/android/make_store_graphics.sh
+```
+
+Renders the Play Store feature graphic — the wide card at the top of the store
+listing, which the German Play Console calls the *Vorstellungsgrafik* — into
+`packaging/android/` and `assets/brand/`. It needs Chrome or Chromium on the
+machine and nothing else.
+
+It is a second route to a generated asset, and the one asset that justifies
+one: the card has the product's name set on it, and the rasteriser in
+`make_icons.dart` fills paths rather than setting type. So the card is a page —
+`packaging/android/feature_graphic.html`, laid out in the application's own two
+faces and painted in the palette's own values — and the script screenshots it.
+Edit the page, run the script, commit both PNGs.
+
+Play states this asset as 1024 × 500 and a 24-bit PNG with no alpha, and the
+Console enforces both by hand at upload time, months of listing work in. So the
+script reads the dimensions, the bit depth and the colour type back off the
+finished file and fails on them rather than handing over something the Console
+will refuse.
 
 ## The website, and these pages
 

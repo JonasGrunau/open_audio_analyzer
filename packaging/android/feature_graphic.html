@@ -1,0 +1,138 @@
+<!doctype html>
+<!--
+  The Play Store feature graphic (German Play Console: "Vorstellungsgrafik"),
+  rendered once and committed as play_store_feature_graphic.png.
+
+  It is a page rather than a drawing for the same reason website/scripts/og.html
+  is: the card is set in the application's own two faces and painted in the
+  palette's own values, so a change to either can be re-rendered rather than
+  redrawn. Render it with:
+
+      sh packaging/android/make_store_graphics.sh   (needs Chrome on the machine)
+
+  Google's requirements for this asset are 1024x500 and a 24 bit PNG with no
+  alpha; the guidance beside them is what the composition answers:
+
+    - the focal point stays near the centre and nothing that carries meaning
+      goes near an edge, because the graphic is re-cropped for several surfaces;
+    - the branding is an extension of the app icon rather than a copy of it: the
+      card is a meter in the palette's own signal hue, and the tile never
+      appears on it. The wave was tried here as a watermark and taken out again,
+      because at any opacity that made it legible it was competing with the
+      name, and Play's own guidance is that background elements stay at the
+      edges;
+    - pure white and dark grey blend into the Play Store's own chrome, which is
+      what the teal light source is there to prevent;
+    - fine detail disappears at the size a phone shows this, so there are four
+      elements on the card and no more.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      /* The application's own faces, read straight out of assets/fonts/. The
+         website's three are a different set and belong to the website. */
+      @font-face {
+        font-family: 'Inter';
+        font-weight: 600;
+        src: url('../../assets/fonts/Inter-SemiBold.ttf') format('truetype');
+      }
+      @font-face {
+        font-family: 'Inter';
+        font-weight: 400;
+        src: url('../../assets/fonts/Inter-Regular.ttf') format('truetype');
+      }
+      @font-face {
+        font-family: 'Google Sans Code';
+        font-weight: 500;
+        src: url('../../assets/fonts/GoogleSansCode-Medium.ttf') format('truetype');
+      }
+
+      * { box-sizing: border-box; margin: 0; }
+      html, body { width: 1024px; height: 500px; }
+      body {
+        background: #0b0c0e;
+        font-family: 'Inter', sans-serif;
+        overflow: hidden;
+        position: relative;
+      }
+
+      /* The teal light source. Everything else on the card is dark, and Play's
+         own background is too. */
+      .glow {
+        position: absolute;
+        inset: 0;
+        background:
+          radial-gradient(58% 90% at 74% 52%, rgba(53, 224, 196, 0.22), transparent 68%),
+          radial-gradient(40% 70% at 8% 84%, rgba(32, 170, 146, 0.14), transparent 70%);
+      }
+
+      .card {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 96px;
+      }
+
+      .eyebrow {
+        font-family: 'Google Sans Code', monospace;
+        font-weight: 500;
+        font-size: 15px;
+        letter-spacing: 0.10em;
+        color: #35e0c4;
+        margin-bottom: 22px;
+      }
+      h1 {
+        font-weight: 600;
+        font-size: 64px;
+        line-height: 1.02;
+        letter-spacing: -0.032em;
+        color: #e6e8eb;
+      }
+      p {
+        font-weight: 400;
+        font-size: 21px;
+        line-height: 1.45;
+        letter-spacing: -0.005em;
+        color: #8a9199;
+        margin-top: 22px;
+        max-width: 24ch;
+      }
+
+      /* A meter, drawn from the same values the application draws one from. */
+      .bars { display: flex; align-items: flex-end; gap: 9px; height: 268px; flex: none; }
+      .bars i { width: 17px; display: block; background: #35e0c4; border-radius: 1px; }
+      .bars i.over { background: linear-gradient(to bottom, #ff4d4d 14%, #35e0c4 14%); }
+      .bars i.track { background: #323942; }
+    </style>
+  </head>
+  <body>
+    <div class="glow"></div>
+
+    <div class="card">
+      <div>
+        <div class="eyebrow">EBU R128 · ITU-R BS.1770-4</div>
+        <h1>Open Audio<br />Analyzer</h1>
+        <p>LUFS, true peak and spectrum. Free and open source.</p>
+      </div>
+      <div class="bars" id="bars"></div>
+    </div>
+
+    <script>
+      // A spectrum-ish silhouette, deterministic so the card is reproducible.
+      const heights = [
+        0.30, 0.46, 0.63, 0.82, 0.58, 0.74, 1.0, 0.69, 0.54, 0.61, 0.44, 0.5,
+        0.36, 0.41, 0.28,
+      ];
+      const el = document.getElementById('bars');
+      heights.forEach((h) => {
+        const b = document.createElement('i');
+        b.style.height = Math.round(h * 268) + 'px';
+        if (h === 1.0) b.className = 'over';
+        el.appendChild(b);
+      });
+    </script>
+  </body>
+</html>

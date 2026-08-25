@@ -703,12 +703,23 @@ site](https://open-audio-analyzer.com/docs/install).
 > on your iPad, by you or by anyone. Building it yourself is two lines in
 > [Building](#-building) and needs no credentials at all.
 
+> [!NOTE]
+> **The Android build goes to Google Play, and is not on the releases page
+> either.** Same shape, different reason. What a release builds is an `.aab` —
+> an app bundle, a publishing format rather than an installable file: Play
+> generates each device's download from it and signs that download with a key
+> Google holds. There is no file here anybody could install. Every tag uploads
+> to Play's internal testing track, after the release is published, because a
+> version code Play has accepted can never be reused or lowered. Play offers it
+> to **tablets** only — the manifest asks for a 600dp shortest edge, which is
+> the store's filter and not a runtime one.
+
 The scripts that build these live in [`packaging/`](packaging/AGENTS.md), one
-per artefact, and `ci.yml`'s packaging jobs run all five installers and the iPad
-build on a tag and on demand — only the TestFlight upload waits for the
-release. Each produces an unsigned artefact and says so rather than failing when
-the signing secrets are absent — a fork has none, and a build that stopped there
-would be useless to it.
+per artefact, and `ci.yml`'s packaging jobs run all five installers, the iPad
+build and the Android bundle on a tag and on demand — only the two store
+uploads wait for the release. Each produces an unsigned artefact and says so
+rather than failing when the signing secrets are absent — a fork has none, and
+a build that stopped there would be useless to it.
 
 ---
 

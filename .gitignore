@@ -44,6 +44,13 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 
+# Gradle's own output tree, which is not the `/build/` above — AGP writes its
+# reports here whatever Flutter does with the artefacts. It only appears once
+# somebody builds for Android, so it went unnoticed until `make_aab.sh` made
+# that a routine thing rather than something one person did by hand.
+/android/build/
+/android/.kotlin/
+
 # Workspace packages build their own artifacts.
 packages/*/build/
 packages/*/.dart_tool/

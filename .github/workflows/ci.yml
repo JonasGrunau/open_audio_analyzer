@@ -31,19 +31,23 @@
 #
 #   pull request        checks, engine, the website build
 #   push to main        the same, plus the website deploy
-#   workflow_dispatch   the same, plus the plugin, every installer and the ipa
-#   tag v*              the same, plus publish and then testflight
+#   workflow_dispatch   the same, plus the plugin, every installer, the ipa
+#                       and the Android bundle
+#   tag v*              the same, plus publish, then testflight and play-store
 #
 # The plugin is on the release side of that line with the installers: three
 # parallel JUCE builds is the most expensive thing here by an order of
 # magnitude. What that costs is written above the job.
 #
-# `testflight` is the only job that runs *after* `publish` rather than before
-# it, and that is deliberate. An upload to App Store Connect cannot be taken
-# back, so it happens once the release exists — never leaving a TestFlight
-# build for a version that was never published. Its IPA is built in `ipa`,
-# alongside the other packagers, so a signing failure fails the release instead
-# of following it.
+# `testflight` and `play-store` are the only jobs that run *after* `publish`
+# rather than before it, and that is deliberate. Neither upload can be taken
+# back, so each happens once the release exists — never leaving a store build
+# for a version that was never published. Play is the stricter of the two: a
+# version code it has accepted can never be reused or lowered, so an upload
+# that ran ahead of a release that then failed would burn the number the retry
+# wanted. Both artefacts are built alongside the other packagers, in `ipa` and
+# `android-aab`, so a signing failure fails the release instead of following
+# it.
 #
 # ---------------------------------------------------------------------------
 # The AppImage runner is deliberately old
@@ -968,6 +972,91 @@ jobs:
           if-no-files-found: error
 
   # -------------------------------------------------------------------------
+  # The Android bundle
+  #
+  # The same two-job shape as `ipa` and `testflight`, for the same reason: a
+  # Play version code, once accepted, can never be reused or lowered, so the
+  # upload happens after the release exists. `android-aab` builds beside the
+  # other packagers; `play-store` uploads, at the very end.
+  #
+  # Where it differs from `ipa` is what a run with no secrets does. An App
+  # Store export with no signature is not an unsigned IPA, it is a failed
+  # export — so `make_ipa.sh` produces nothing. An Android release build with
+  # no upload key *succeeds*: Gradle falls back to the debug key, which is what
+  # keeps `flutter run --release` working for a developer who has never seen
+  # the credential. So this builds either way and `make_aab.sh` declines to
+  # hand over what it built, which is worth having on its own — Android is
+  # otherwise compiled nowhere in this workflow, and a dispatch is the only
+  # thing standing between that build and six weeks of quiet rot.
+  #
+  # `setup-java` is explicit rather than left to the image's default JDK. The
+  # image ships several, `JAVA_HOME` moves when the runner label is bumped, and
+  # AGP fails on the wrong one with a message about an unsupported class file
+  # version that names no toolchain.
+  # -------------------------------------------------------------------------
+
+  android-aab:
+    name: Android bundle
+    needs: checks
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    outputs:
+      built: ${{ steps.built.outputs.built }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      # OAA_BUILD_NUMBER is the run counter, and it is the same argument the
+      # iPad build makes: Play refuses a version code it has already accepted,
+      # refuses it during the upload — which here is after the release has been
+      # published — and never lets it be lowered afterwards. `pubspec.yaml`'s
+      # `+N` is maintained by hand and collides on a re-run of a tag.
+      - name: Build and sign
+        env:
+          OAA_ANDROID_KEYSTORE: ${{ secrets.OAA_ANDROID_KEYSTORE }}
+          OAA_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.OAA_ANDROID_KEYSTORE_PASSWORD }}
+          OAA_ANDROID_KEY_ALIAS: ${{ secrets.OAA_ANDROID_KEY_ALIAS }}
+          OAA_ANDROID_KEY_PASSWORD: ${{ secrets.OAA_ANDROID_KEY_PASSWORD }}
+          OAA_BUILD_NUMBER: ${{ github.run_number }}
+        run: sh packaging/android/make_aab.sh
+
+      # Whether anything was offered is a job output, and `play-store` is gated
+      # on it — the same gate `testflight` has and for the same failure. Without
+      # it, a tag in a repository with no Android secrets succeeds here having
+      # produced nothing, no artefact is created, and `download-artifact` errors
+      # on a name that does not exist: a release that went out perfectly well
+      # turns red on a step that has nothing to do with it.
+      - name: Built?
+        id: built
+        run: |
+          if ls build/packaging/*.aab >/dev/null 2>&1; then
+            echo 'built=true' >>"$GITHUB_OUTPUT"
+          else
+            echo 'built=false' >>"$GITHUB_OUTPUT"
+            echo 'No bundle offered: the Android signing secrets are not set.'
+          fi
+
+      # `ignore` rather than `error`, as for the IPA. A debug-signed bundle is
+      # discarded rather than uploaded, so a fork produces no file and that is
+      # the correct outcome, not a failure.
+      - uses: actions/upload-artifact@v4
+        if: steps.built.outputs.built == 'true'
+        with:
+          name: play-store-aab
+          path: build/packaging/*.aab
+          if-no-files-found: error
+
+  # -------------------------------------------------------------------------
   # The release
   #
   # `needs` names the test jobs as well as the packaging ones, which is the
@@ -978,7 +1067,7 @@ jobs:
   publish:
     name: Publish
     needs: [checks, engine, plugin, macos-pkg, windows-installer, linux-tarball,
-            linux-appimage, linux-flatpak, cli, ipa]
+            linux-appimage, linux-flatpak, cli, ipa, android-aab]
     runs-on: ubuntu-latest
     # Only a tag becomes a release. A manual run is a check that the scripts
     # still work, and it leaves its artefacts on the run rather than publishing
@@ -1037,7 +1126,8 @@ jobs:
             assets+=("$file")
             echo "attaching $file"
           done < <(find artifacts -type f \
-            -not -path 'artifacts/testflight-ipa/*' -print0 | sort -z)
+            -not -path 'artifacts/testflight-ipa/*' \
+            -not -path 'artifacts/play-store-aab/*' -print0 | sort -z)
           [ "${#assets[@]}" -gt 0 ] || { echo 'no artefacts to attach' >&2; exit 1; }
           gh release create "${GITHUB_REF_NAME}" \
             --title "Open Audio Analyzer ${GITHUB_REF_NAME}" \
@@ -1092,3 +1182,59 @@ jobs:
           OAA_ASC_ISSUER_ID: ${{ secrets.OAA_ASC_ISSUER_ID }}
           OAA_ASC_KEY: ${{ secrets.OAA_ASC_KEY }}
         run: sh packaging/ios/testflight.sh
+
+  # -------------------------------------------------------------------------
+  # Google Play, after the release and not before it
+  #
+  # `needs: publish`, for the reason `testflight` has and one more. An upload
+  # to App Store Connect cannot be withdrawn; a Play upload cannot be withdrawn
+  # *and* it consumes a version code permanently — Play will never accept that
+  # number again, on any track, and will never accept a lower one. So a failed
+  # release that had already uploaded would not merely leave a build behind, it
+  # would burn the number the retry wanted.
+  #
+  # The bundle therefore travels from `android-aab` as an artefact and this is
+  # the last thing in the file. `publish` only runs on a tag, so this only runs
+  # on a tag: a manual dispatch builds and signs the bundle and stops there,
+  # which is the check that the upload key works without spending a version
+  # code on it.
+  #
+  # The track is a repository *variable* rather than a secret, because it is
+  # not one — it is a routing decision somebody should be able to read off the
+  # settings page and change without editing this file. Unset, the script
+  # sends to `internal`, which is Play's nearest thing to TestFlight and the
+  # only default under which a mistake is cheap. Promoting a build to
+  # production stays a deliberate act in the Console.
+  #
+  # It does not wait for Play to finish processing the bundle, for the same
+  # reason `testflight` does not: that happens after the upload is accepted and
+  # a workflow holding a runner open for it would be paying for a progress bar.
+  # -------------------------------------------------------------------------
+
+  play-store:
+    name: Play Store
+    # `publish` for the ordering, `android-aab` for its output — `publish`
+    # already needs `android-aab`, so this adds a name to read and not a wait.
+    needs: [publish, android-aab]
+    if: startsWith(github.ref, 'refs/tags/v') && needs.android-aab.outputs.built == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: play-store-aab
+          path: build/packaging
+
+      # A service account, not a Google account. The same distinction
+      # `testflight.sh` documents for App Store Connect: a person's account has
+      # a password, a second factor and consent screens, so it fails on a
+      # runner as though the credential were wrong. The account needs the
+      # Release manager role granted in the Play Console — a Cloud IAM role is
+      # a different thing and is not enough on its own.
+      - name: Upload
+        env:
+          OAA_PLAY_SERVICE_ACCOUNT: ${{ secrets.OAA_PLAY_SERVICE_ACCOUNT }}
+          OAA_PLAY_TRACK: ${{ vars.OAA_PLAY_TRACK }}
+          OAA_PLAY_STATUS: ${{ vars.OAA_PLAY_STATUS }}
+        run: sh packaging/android/play_store.sh

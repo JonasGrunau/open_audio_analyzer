@@ -9,7 +9,41 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### ✨ Added
+- The Android build is distributed through Google Play. A tagged release builds
+  a signed app bundle and uploads it to the internal testing track once the
+  release is published, so a build on a track always belongs to a release that
+  exists. There is no `.apk` on the releases page and there will not be one: an
+  app bundle is a publishing format rather than an installable file, and the
+  download Play generates from it is signed with a key Google holds. Play offers
+  it to tablets only: the manifest asks for a 600dp shortest screen edge, which
+  a 7-inch tablet clears and a handset does not. It is a store filter and not a
+  runtime one — nothing about the application behaves differently, and a build
+  installed by hand runs wherever it is put.
+
 ### 🚧 Internal
+- The Play Store listing's two graphics are generated and committed. The icon is
+  written by `packaging/icon/make_icons.dart` like every other icon, now with the
+  alpha channel Play asks for and Apple rejects; the feature graphic is a card
+  set in the application's own faces, rendered from a page by
+  `packaging/android/make_store_graphics.sh`. Both were going to be exported by
+  hand from a drawing at upload time, which is the arrangement the icon
+  generator exists to have ended.
+- The Android release build signs with a real upload key when one is configured,
+  where it signed with the debug key unconditionally. Without the key it still
+  falls back to the debug key, so `flutter run --release` keeps working for
+  somebody who has never seen the credential — but `packaging/android/make_aab.sh`
+  reads the certificate back off the finished bundle and discards a debug-signed
+  one rather than offering it. Nothing in an `.aab` records which key signed it,
+  so Play rejecting it by fingerprint at the end of an upload would otherwise be
+  the first thing to notice.
+- The Android version code is the workflow's run counter, for the reason the
+  iPad build's already is. Play refuses a version code it has ever accepted, on
+  any track, and refuses any number below the highest it has seen; the
+  hand-maintained `+N` in `pubspec.yaml` collides on a re-run of a tag.
+- `android/build/` and `android/.kotlin/` are git-ignored. Gradle writes them
+  whatever Flutter does with the artefacts, and they only appear once somebody
+  builds for Android — which nothing here did routinely until now.
 - The website is built by CI on every event and deployed to Cloudflare on a push
   to `main`. It was deployed by hand, which is as durable as somebody
   remembering: the site reads the application's version out of `pubspec.yaml` at

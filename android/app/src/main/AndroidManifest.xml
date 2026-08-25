@@ -16,6 +16,25 @@
          so there is a dialog, and a refusal is a sentence in the panel
          rather than a camera that shows nothing. -->
     <uses-permission android:name="android.permission.CAMERA"/>
+    <!-- Tablets only, and this line is the whole of that decision.
+         **There is no "tablet only" setting in the Play Console.** Google
+         states a build's audience as "your manifest declarations and your
+         console exclusion rules", and the Console's half of that is a device
+         model picked out of the catalogue by hand, or a rule over RAM or
+         System on a Chip. Neither of those is a screen, so looking for the
+         setting there is looking for something that is not built — which costs
+         an afternoon, because the Gerätekatalog page exists, has an
+         "Ausschlussregeln verwalten" button on it, and simply does not offer
+         the axis you came for.
+         600dp is the sw600dp qualifier: the shortest edge of a 7 inch tablet.
+         A handset is 320 to 480, so this is the line that separates them, and
+         an unfolded foldable is above it and stays eligible.
+         The system ignores this attribute at runtime — it changes nothing
+         about how the application behaves on a device it is already on. It is
+         read by the store and by the store only, which is what makes it
+         untestable on hardware: the check is Play's device catalogue after an
+         upload, and nothing before that will tell you it worked. -->
+    <supports-screens android:requiresSmallestWidthDp="600"/>
     <application
         android:label="Audio Analyzer"
         android:name="${applicationName}"
