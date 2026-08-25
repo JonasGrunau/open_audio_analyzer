@@ -63,8 +63,23 @@
 #       cmake -B plugin/build -S plugin -DCMAKE_BUILD_TYPE=Release
 #       cmake --build plugin/build
 #
-# Usage: sh packaging/ios/screenshots.sh
+# Usage: sh packaging/ios/screenshots.sh [--canvas-only]
+#
+# **`--canvas-only` posts no mouse events at all.** The taps below are CGEvents
+# aimed at the Simulator's window, which means that for the two or three minutes
+# a full run takes, the pointer belongs to this script and not to the person at
+# the machine. Only the four navigated pictures need them; `01-loudness` is shot
+# before the first tap, off the canvas the app opens on. So a run that wants only
+# that one — the website's tablet plate does — can and should skip the rest.
 set -eu
+
+CANVAS_ONLY=0
+for arg in "$@"; do
+  case "$arg" in
+    --canvas-only) CANVAS_ONLY=1 ;;
+    *) printf 'unknown option: %s\n' "$arg" >&2; exit 2 ;;
+  esac
+done
 
 DEVICE_NAME="OAA-Screenshots"
 DEVICE_TYPE="com.apple.CoreSimulator.SimDeviceType.iPad-Pro-13-inch-M4-16GB"
@@ -293,9 +308,33 @@ BTN_TARGET_X=727;    BTN_ATTACH_X=1010;   BTN_SETTINGS_X=1208; BAR_Y=52
 BTN_MODULE_X=1322
 CLOSE_X=976;         CLOSE_ATTACH_Y=294
 
+# **Paired with SETTLE in packaging/macos/screenshot.sh.** `01-loudness` is the
+# website's tablet plate and it sits beside the desktop one under a paragraph
+# saying the meter across the room cannot disagree with the one under your hand
+# — so the two have to be at the same transport position, or the page argues
+# with itself. They cannot be simultaneous: the plugin dials one address and one
+# application holds 47822. They do not need to be, because the engine is
+# deterministic. This waits 74 on top of the 6 above and lands at about 1:19,
+# which is where that script lands too.
+#
+# The activate is cursor-free — AppleScript, not a posted event — and it is here
+# because the app inside the simulator stops drawing when its window is hidden,
+# exactly as the desktop one does.
+osascript -e 'tell application "Simulator" to activate' >/dev/null 2>&1 || true
 say "Waiting for a minute of programme..."
-sleep 70
+# 74.7 and not 74: the desktop shot lands on frame 21 of its second and this one
+# landed on frame 4, which is two thirds of a second of programme and exactly the
+# 0.1 LU the two plates differed by. The overhead either side of this sleep is
+# repeatable to about a sixth of a second, so the fraction is worth carrying.
+sleep 74.7
 shot 01-loudness
+
+if [ "$CANVAS_ONLY" -eq 1 ]; then
+  say ""
+  say "One screenshot in $OUT, and no mouse events were posted."
+  say "Every reading in it was measured by the engine from $TRACK."
+  exit 0
+fi
 
 say "Spectrum..."
 tap "$TAB_SPECTRUM_X" "$TAB_Y" 3

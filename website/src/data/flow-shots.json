@@ -1,0 +1,14 @@
+{
+  "plugin": {
+    "width": 1200,
+    "height": 862
+  },
+  "desktop": {
+    "width": 1200,
+    "height": 754
+  },
+  "tablet": {
+    "width": 1200,
+    "height": 900
+  }
+}

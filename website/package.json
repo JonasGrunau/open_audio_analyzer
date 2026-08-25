@@ -16,7 +16,8 @@
     "fonts": "node scripts/fetch-fonts.mjs",
     "modules": "node scripts/render-modules.mjs",
     "record": "node scripts/record.mjs",
-    "analyzer": "node scripts/render-analyzer.mjs"
+    "analyzer": "node scripts/render-analyzer.mjs",
+    "flow": "node scripts/render-flow.mjs"
   },
   "devDependencies": {
     "astro": "^7.2.4",

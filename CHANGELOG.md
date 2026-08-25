@@ -10,6 +10,11 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### ✨ Added
+- The front page shows how the parts fit together. A new section between the
+  analyzer and the module catalogue follows one stream of audio through the
+  three programs that read it — the plugin measuring in a DAW, the desktop
+  drawing the canvas, a tablet mirroring it over Wi-Fi — with a photograph of
+  each. It was only ever stated in prose, two-thirds of the way down the page.
 - The Android build is distributed through Google Play. A tagged release builds
   a signed app bundle and uploads it to the internal testing track once the
   release is published, so a build on a track always belongs to a release that
@@ -22,6 +27,10 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   installed by hand runs wherever it is put.
 
 ### 🚧 Internal
+- `packaging/macos/screenshot.sh` photographs the whole desktop application
+  window, driven by the fake DAW through the real plugin, the way
+  `packaging/ios/screenshots.sh` already photographed the iPad. The website had
+  no picture of the application as a program — only of its meters.
 - The Play Store listing's two graphics are generated and committed. The icon is
   written by `packaging/icon/make_icons.dart` like every other icon, now with the
   alpha channel Play asks for and Apple rejects; the feature graphic is a card

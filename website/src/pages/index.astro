@@ -8,6 +8,12 @@ import { REPO, RELEASES, VERSION } from '../lib/app.mjs';
 /* Written by `npm run analyzer` beside the still it describes, so the facade is
    sized from the picture that exists rather than from a number typed here. */
 import still from '../data/analyzer-still.json';
+/* Written by `npm run flow` beside the pictures it describes, the same way and
+   for the same reason as the still above — and it is also the gate. A stage
+   whose photograph has not been taken on this machine has no entry here and is
+   simply not drawn, so the section is short rather than broken. See
+   scripts/render-flow.mjs, which says what each one needs. */
+import flowShots from '../data/flow-shots.json';
 
 /* Whether `npm run analyzer` has been run.
    `public/analyzer/` is about 4 MB of compiled Flutter and is git-ignored — so
@@ -19,6 +25,66 @@ import still from '../data/analyzer-still.json';
 const hasDemo = existsSync(join(process.cwd(), 'public/analyzer/index.html'));
 
 const DOCS = '/docs';
+
+/* The signal path: three programs, one stream of audio, and the same numbers in
+   all three of them.
+
+   This is the claim the rest of the page rests on — that the meters in a DAW,
+   on the desktop and on a tablet are not three implementations that happen to
+   agree, but one engine read from three places. It is stated in prose further
+   down, under `#reach`; here it is shown, because a reader who has to be told
+   that three sets of meters agree has already been given something to doubt.
+
+   Every plate is a photograph of the real thing, taken by `npm run flow`.
+   `website/AGENTS.md` is why: a tool that publishes real numbers beside
+   invented pictures has no way to notice when the drawing and the meter drift
+   apart, and that is the one failure a metering tool cannot ship. */
+const FLOW = [
+  [
+    'plugin',
+    'In your DAW',
+    'The plugin measures',
+    `Insert the <strong>VST3</strong> or the <strong>Audio Unit</strong> on your master bus. It
+     draws no meters of its own — only this panel, saying the link is live — and streams what it
+     measured, along with where your transport is, to the app.`,
+    `The plugin's panel, linked. A diagram across the top shows the host on the left and the
+     analyzer app on the right, both ends lit, with audio and playhead running into the plugin's
+     mark and a dashed line carrying the measurements out the other side; the host reads receiving
+     and the app reads linked. Below it the input is 48k and 2 channels, elapsed time is one hour
+     two minutes, and integrated loudness is −14.3.`,
+  ],
+  [
+    'desktop',
+    'On the desktop',
+    'The app draws it',
+    `The canvas you arranged, reading what arrived: every module on it showing the same instant of
+     the same audio. Whether that audio came from the plugin, from an input or from a file, the
+     meters cannot tell — and nothing about them has to change.`,
+    `The desktop canvas, eight modules reading one instant: a LUFS meter and a set of concentric
+     loudness arcs both at −9.9, a spectrum analyser, a loudness histogram running against a −14
+     target line, a delivery verdict reading NOT READY with two failures and one pass, per-channel
+     peak bars, a waveform, and a latched true-peak alert at −0.2.`,
+  ],
+  [
+    'tablet',
+    'Across the room',
+    'A tablet reads it too',
+    `The same application, on an iPad. Attach it to the plugin your session is running and it meters
+     that stream over Wi-Fi — or flip <strong>PUBLISH</strong> on the desktop and it draws that
+     canvas instead. Either way the layout is stored as cells on a grid rather than as fractions of
+     a window, so what you built on a 32-inch monitor opens on a tablet still looking arranged on
+     purpose.`,
+    `The application running on an iPad in landscape, attached over Wi-Fi to the same plugin: six
+     loudness readouts along the top, a LUFS meter, concentric loudness arcs reading −8.9, a
+     per-channel peak meter, a delivery verdict reading NOT READY, a VU meter, a loudness histogram
+     against a −14 target line, a distribution and a latched true-peak alert.`,
+  ],
+];
+
+/* Only the stages whose photograph exists. Two of the three are committed; the
+   tablet's needs an iPad simulator, so a machine without one builds a site that
+   is complete and one plate shorter rather than a site with a hole in it. */
+const flow = FLOW.filter(([id]) => flowShots[id]);
 
 /* The catalogue. Every one of these is one ModuleFrame plus a painter in the
    application, reading the same MeterSource and repainting from the same
@@ -260,6 +326,52 @@ const PLATFORMS = [
 
   </section>
 
+  <!-- ===================== the signal path ===================== -->
+  <section class="section shell" id="workflow">
+    <div class="section-head">
+      <div>
+        <p class="label">How it works</p>
+        <h2 class="section-title">One stream of audio,<br />measured once</h2>
+      </div>
+    </div>
+
+    <p class="prose flow-intro">
+      Nothing along this path measures anything twice. The plugin takes the readings, the desktop
+      draws them, and a tablet across the room draws the same ones — one engine, one set of
+      numbers, three places to read them. So the meter you glance at from the far side of the studio
+      cannot quietly disagree with the one under your hand.
+    </p>
+
+    <ol class="flow" style={`--flow-n: ${flow.length}`}>
+      {
+        flow.map(([id, where, name, body, alt], i) => (
+          <li class="flow-step">
+            <p class="flow-mark">
+              <span class="flow-n num">{String(i + 1).padStart(2, '0')}</span>
+              <span class="flow-where">{where}</span>
+            </p>
+            {/* The tablet is the one plate that is a picture of an object rather
+                than a picture of a screen, so it is the one that gets a bezel.
+                See the note on the radius in the stylesheet. */}
+            <figure class={id === 'tablet' ? 'flow-plate flow-device' : 'flow-plate'}>
+              <img
+                src={`/flow/${id}.webp`}
+                alt={alt}
+                width={flowShots[id].width}
+                height={flowShots[id].height}
+                loading="lazy"
+                decoding="async"
+                sizes="(min-width: 1081px) 30vw, (min-width: 561px) calc(100vw - 48px), calc(100vw - 32px)"
+              />
+            </figure>
+            <h3 class="flow-name">{name}</h3>
+            <p class="prose flow-body" set:html={body} />
+          </li>
+        ))
+      }
+    </ol>
+  </section>
+
   <section class="section shell" id="modules">
     <div class="section-head">
       <div>
@@ -413,23 +525,18 @@ const PLATFORMS = [
       <article class="stack-16">
         <h3>In a DAW</h3>
         <p class="prose reach-p">
-          A <strong>VST3</strong> and an <strong>Audio Unit</strong> that draw nothing. Insert one on
-          a track, a bus or the master, and the desktop app meters what your DAW is playing —
-          through the same engine and on the same canvas as a live input. The plugin measures and
-          sends it across; the app draws it. So what you read while mixing is not a second set of
-          meters built to look like the first — it is the first, watching your session.
+          A <strong>VST3</strong> and an <strong>Audio Unit</strong>, on a track, a bus or the
+          master. What you read while mixing is not a second set of meters built to look like the
+          first — it is the first, watching your session.
         </p>
       </article>
 
       <article class="stack-16">
         <h3>On a tablet</h3>
         <p class="prose reach-p">
-          Flip <strong>PUBLISH</strong> in the desktop’s status bar and a tablet mirrors the canvas
-          over Wi-Fi. It finds the host by itself, or reads a pairing code off the desktop’s screen
-          with its camera, or takes an address typed by hand — <strong>three routes, because the
-          first one is what a venue’s Wi-Fi blocks.</strong> A layout is stored as cells on a grid
-          rather than as fractions of a window, so the arrangement you built on a 32-inch monitor
-          opens on an 11-inch tablet still looking arranged on purpose.
+          It finds the host by itself, or reads a pairing code off the desktop’s screen with its
+          camera, or takes an address typed by hand — <strong>three routes, because the first one is
+          what a venue’s Wi-Fi blocks.</strong>
         </p>
       </article>
 
@@ -1023,6 +1130,189 @@ const PLATFORMS = [
     margin: var(--s4) 0 0;
   }
 
+  /* ---------- the signal path ---------- */
+
+  .flow-intro {
+    margin-bottom: var(--s48);
+  }
+
+  .flow {
+    display: grid;
+    /* The connector's head is a square turned 45 degrees, so its point reaches
+       half a diagonal out of the box it was laid out in — `(sqrt2 - 1) / 2` of
+       its own side further on than the offset says. Unaccounted for, that
+       overhang is measured *into* the plate the head is pointing at: the tip
+       crossed the frame and landed on the picture. `--head-out` takes it back
+       off, `--plate-edge` adds the plate's own hairline, and `--head-clear`
+       holds the point off the frame by a readable amount — flush, the teal tip
+       and the grey border met and read as one smudged corner. */
+    --head: var(--s8);
+    --head-out: calc(0.2072 * var(--head));
+    --plate-edge: 1px;
+    --head-clear: var(--s8);
+    /* Set on the element from `flow.length`, because a stage whose photograph is
+       missing is not drawn and three columns holding two plates would leave a
+       third of the row empty. */
+    grid-template-columns: repeat(var(--flow-n), minmax(0, 1fr));
+    /* Four rows the stages share, so that the numbers, the pictures, the names
+       and the paragraphs each start on one line across the whole row. Without
+       it every stage is its own column and the row below the plates comes out
+       ragged: the pictures are 1.39, 1.33 and 1.33 of their width and the
+       tablet carries a bezel besides, so the three headings sat at three
+       different heights — a dozen pixels apart, which is little enough to read
+       as sloppy rather than as deliberate. */
+    grid-template-rows: auto auto auto auto;
+    gap: var(--s48);
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .flow-step {
+    display: grid;
+    grid-row: span 4;
+    grid-template-rows: subgrid;
+    row-gap: 0;
+  }
+
+  /* The plate keeps its own height inside the shared row rather than stretching
+     to the tallest — stretching would put the difference back *inside* the
+     frame, as a band of panel under the picture, which is the thing the plate
+     is meant not to have. Out here it is a few pixels of page. */
+  .flow-plate {
+    align-self: start;
+  }
+
+  .flow-mark {
+    display: flex;
+    align-items: baseline;
+    gap: var(--s12);
+    padding-bottom: var(--s12);
+    border-bottom: 1px solid var(--hair-strong);
+    margin-bottom: var(--s16);
+  }
+
+  .flow-n {
+    font-size: 0.75rem;
+    color: var(--signal);
+  }
+
+  .flow-where {
+    font-family: var(--display);
+    font-size: 0.6875rem;
+    font-weight: 600;
+    font-variation-settings: 'wdth' 112;
+    letter-spacing: 0.155em;
+    text-transform: uppercase;
+    color: var(--muted);
+    line-height: 1;
+  }
+
+  /* The plate, and the one box the connectors are hung from.
+     Not `.module` — that frame is the application's own title bar and is
+     reserved for things that are instrument-like, and a photograph of a module
+     already has one inside it. Two nested title bars is one too many. */
+  .flow-plate {
+    position: relative;
+    /* A `figure` carries `margin: 1em 40px` from the user-agent stylesheet, and
+       40 px a side is enough to be obviously wrong and not enough to look like
+       a bug: every plate sat narrower than the hairline over it and than the
+       paragraph under it, on every width. */
+    margin: 0;
+    padding: var(--s16);
+    background: var(--panel);
+    border: 1px solid var(--hair);
+  }
+
+  /* `height: auto` is load-bearing, and its absence is invisible in the markup.
+     Every picture here carries `width` and `height` attributes so its box has a
+     shape before the file arrives — and those attributes are a definite height,
+     which is enough to make `aspect-ratio` do nothing at all. The first version
+     of this asked for a 4:3 box and got 550x862 instead: the plate stood twice
+     as tall as the photograph inside it, with the picture floating in the middle
+     of a field of panel. Letting the height follow the width is also the better
+     answer to the three sources disagreeing about shape — 1.39 against 1.33 is a
+     three per cent difference in plate height, which nobody can see, and it
+     costs no letterboxing anywhere. */
+  .flow-plate img {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+
+  /* The tablet, as an object rather than as a screenshot.
+
+     **This is the only border-radius on the site, and it is deliberate.** There
+     is not another one outside the facade's play button, and the house rule is
+     square corners, no shadows, no gradients — depth is a background step and a
+     hairline. The exception holds because this radius is not a style applied to
+     a surface: it is the shape of a real object, and a tablet drawn with square
+     corners is a drawing of something else. It stays this narrow. If a second
+     one is ever wanted somewhere, that is the moment to take this one out
+     rather than to start a set. */
+  .flow-device {
+    padding: var(--s12);
+    background: var(--raised);
+    border-color: var(--hair-strong);
+    border-radius: var(--s24);
+  }
+
+  .flow-device img {
+    border-radius: var(--s8);
+  }
+
+  .flow-name {
+    margin-top: var(--s24);
+  }
+
+  .flow-body {
+    margin-top: var(--s12);
+    font-size: 1rem;
+  }
+
+  /* The connector.
+
+     Borrowed rather than invented: the plugin's own panel draws the link
+     between the host and the app as a dashed line running out of its mark, and
+     that panel is the first plate in this row. The page is repeating the
+     product's drawing, which is the only reason it is allowed to be teal — the
+     signal hue means a measurement on this site and nothing else, and what
+     travels this line is measurements.
+
+     Hung from the plate rather than from the step, so it sits on the middle of
+     the picture whatever the heading above it does. It is static: the site has
+     no ambient motion anywhere, an animated dash needs either a gradient or an
+     SVG and the first is against the house rules, and the arrow already says
+     which way the audio is going. */
+  .flow-step + .flow-step .flow-plate::before,
+  .flow-step + .flow-step .flow-plate::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    /* An absolutely positioned box is placed against its container's *padding*
+       box, which is inside the border — so plain `right: 100%` starts the line
+       a hairline in. The line leaves the plate behind it and stops short of the
+       one ahead, which is the asymmetry the arrow is making anyway. */
+    right: calc(100% + var(--plate-edge) + var(--head-clear));
+  }
+
+  .flow-step + .flow-step .flow-plate::before {
+    width: calc(var(--s48) - var(--head-clear));
+    border-top: 1px dashed var(--signal-dim);
+  }
+
+  /* The head, as two borders on a rotated square — no glyph, because an arrow
+     typed as text is at the mercy of whatever face the host substitutes, which
+     is the same trap the facade's play triangle is drawn to avoid. */
+  .flow-step + .flow-step .flow-plate::after {
+    width: var(--head);
+    height: var(--head);
+    right: calc(100% + var(--plate-edge) + var(--head-clear) + var(--head-out));
+    border-top: 1px solid var(--signal);
+    border-right: 1px solid var(--signal);
+    transform: translateY(-50%) rotate(45deg);
+  }
+
   /* ---------- catalogue ---------- */
 
   .mod-intro {
@@ -1250,6 +1540,50 @@ const PLATFORMS = [
     .gaps {
       grid-template-columns: minmax(0, 1fr);
       gap: var(--s32);
+    }
+
+    /* Stacked, the connector cannot stay on the plate: it would have to cross
+       the previous step's description and its own step's heading to get there.
+       It moves to the top of the step instead, standing in the grid gap between
+       one stage's last line and the next one's number, which is where a reader
+       going down the column actually crosses from one to the other. */
+    .flow {
+      grid-template-columns: minmax(0, 1fr);
+      grid-template-rows: none;
+      gap: var(--s32);
+    }
+    .flow-step {
+      display: block;
+      grid-row: auto;
+      position: relative;
+    }
+    .flow-step + .flow-step .flow-plate::before,
+    .flow-step + .flow-step .flow-plate::after {
+      content: none;
+    }
+    /* Down the middle, not down the left edge. Left-aligned it ran into the
+       stage number it was pointing at — the head landed on the `02` rather than
+       above it. Nothing else is centred in this column, but nothing else is in
+       the gap either. */
+    .flow-step + .flow-step::before,
+    .flow-step + .flow-step::after {
+      content: '';
+      position: absolute;
+      bottom: 100%;
+      left: 50%;
+    }
+    .flow-step + .flow-step::before {
+      height: calc(var(--s32) - var(--head-clear));
+      bottom: calc(100% + var(--head-clear));
+      border-left: 1px dashed var(--signal-dim);
+    }
+    .flow-step + .flow-step::after {
+      width: var(--head);
+      height: var(--head);
+      bottom: calc(100% + var(--head-clear) + var(--head-out));
+      border-right: 1px solid var(--signal);
+      border-bottom: 1px solid var(--signal);
+      transform: translateX(-50%) rotate(45deg);
     }
   }
 
