@@ -175,7 +175,7 @@ class _QrScannerPanelState extends State<QrScannerPanel> {
             ruled: false,
             note:
                 'On the machine you want to watch: the code button beside '
-                'PUBLISH in its status bar, or Settings → Publish. Point '
+                'PUBLISH in its menu bar, or Settings → Publish. Point '
                 'this at the square it shows.',
             children: [
               // A fixed shape rather than the camera's own. The preview is

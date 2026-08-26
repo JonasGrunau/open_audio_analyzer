@@ -42,7 +42,7 @@ final presetDocumentProvider =
 /// With no file yet, the baseline is what the canvas opened with — yesterday's
 /// session or the built-in default, neither of which anybody has edited. Without
 /// that fallback the mark would depend on the moment this provider was first
-/// read, which is the moment the status bar first drew it, which depends on how
+/// read, which is the moment the menu bar first drew it, which depends on how
 /// wide the window is.
 final presetModifiedProvider = Provider<bool>((ref) {
   final saved = ref.watch(presetDocumentProvider).saved;
@@ -212,8 +212,8 @@ final presetDialogsProvider = Provider<PresetDialogs>(
 
 /// Everything on the File menu, as one list.
 ///
-/// The menu is drawn twice — in the macOS menu bar and in the status bar
-/// everywhere else — and both are built from this. The label lives here; the
+/// The menu is drawn twice — in the macOS system menu bar and in the window's
+/// own menu bar everywhere else — and both are built from this. The label lives here; the
 /// chord does not, because a chord belongs to `oaaShortcuts` and nowhere else.
 enum FileCommand {
   open('open', 'Open…'),
@@ -262,7 +262,7 @@ bool? fileCommandChecked(FileCommand command, WidgetRef ref) =>
 
 /// Runs one. The only entry point; three callers share it.
 ///
-/// The keyboard, the macOS menu bar and the status bar's own menu all end up
+/// The keyboard, the macOS menu bar and the window's own File menu all end up
 /// here, so there is one implementation of what Save means and one place a
 /// dialog is opened from.
 Future<void> runFileCommand(
@@ -345,12 +345,21 @@ Future<void> _saveAs(WidgetRef ref) async {
 Future<bool> _keepOrDiscard(BuildContext context, WidgetRef ref) async {
   if (!ref.read(presetModifiedProvider)) return true;
 
+  // **Named only if it has a name.** A layout that has never been saved carries
+  // the placeholder, and quoting that back — `"Unnamed" has changes that are not
+  // in a file` — reads as a preset somebody called Unnamed rather than as one
+  // nobody has called anything. The file is the document, so having no file is
+  // exactly the case with nothing to quote.
+  final document = ref.read(presetDocumentProvider);
   final name = ref.read(workspaceProvider).preset.name;
+  final subject = document.path == null
+      ? 'The layout on the canvas'
+      : '"$name"';
   final answer = await showOaaSavePrompt(
     context: context,
     title: 'Unsaved changes',
     message:
-        '"$name" has changes that are not in a file. Opening another preset '
+        '$subject has changes that are not in a file. Opening another preset '
         'replaces the layout on the canvas.',
   );
 
@@ -373,6 +382,13 @@ Future<bool> _keepOrDiscard(BuildContext context, WidgetRef ref) async {
 /// does not need to be safe for automatic naming, and round-tripping through the
 /// slug would turn "Mastering Setup" into "mastering-setup" the moment it was
 /// saved. Only the separators have to go — a name is one path component.
+///
+/// **A layout nobody has named yet arrives here as `kUnnamedPreset`, and the
+/// dialog opens with `Unnamed.json` in its name field.** That is the point: the
+/// same word the menu bar is printing, in the one place where replacing it with
+/// a real one is the whole gesture. A dialog pre-filled with a plausible name
+/// somebody did not choose is how `Loudness.json` ended up in people's presets
+/// folders.
 String _suggestedFileName(String name) {
   final cleaned = name.replaceAll(RegExp(r'[/\\]'), '-').trim();
   return '${cleaned.isEmpty ? 'Preset' : cleaned}.json';

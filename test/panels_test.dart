@@ -236,7 +236,7 @@ void main() {
       expect(find.text('SESSION'), findsOneWidget);
     });
 
-    // The switch is in the status bar and nowhere else, so the section says
+    // The switch is in the menu bar and nowhere else, so the section says
     // where it is rather than offering a second one that could disagree with
     // it. What it does carry is the live state, which the bar has no room to
     // print.
@@ -251,7 +251,7 @@ void main() {
       );
 
       expect(
-        find.text('Off. The switch is PUBLISH, in the status bar.'),
+        find.text('Off. The switch is PUBLISH, in the menu bar.'),
         findsOneWidget,
       );
 
@@ -888,7 +888,7 @@ void main() {
               colors: colors,
               child: Material(
                 child: Center(
-                  // The three the status bar builds, in the order it builds
+                  // The three the menu bar builds, in the order it builds
                   // them. Not the whole bar: this group is about what the
                   // controls do, and `test/scaling_test.dart` is what holds
                   // whether they fit.

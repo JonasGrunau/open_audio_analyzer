@@ -406,7 +406,7 @@ class _SettingsPanelState extends ConsumerState<SettingsPanel> {
         // **No button, because presets are not a panel any more.** They are
         // documents: opened and saved through the platform's own file dialogs
         // from the File menu, which is in the macOS menu bar and is the FILE
-        // button in the status bar everywhere else. What is worth saying here is
+        // button in the menu bar everywhere else. What is worth saying here is
         // where that is and what it is called, and the chords come off the one
         // table that owns them so this cannot drift from the sheet.
         PanelNote(

@@ -3,6 +3,7 @@
 // `AppExitResponse` is a `dart:ui` enum rather than a Flutter one, so neither
 // material.dart nor widgets.dart brings it into scope.
 import 'dart:async' show Timer, unawaited;
+import 'dart:math' as math;
 import 'dart:ui' show AppExitResponse;
 
 import 'package:oaa_core/oaa_core.dart';
@@ -138,8 +139,11 @@ class _WorkspaceState extends ConsumerState<_Workspace>
   /// pointed at the engine, so it has to be told when the engine is replaced —
   /// otherwise it keeps acquiring through a destroyed one and sends freed memory
   /// to the tablet as a measurement. And the button that used to own it is
-  /// dropped from the status bar below 620 px of window width, so narrowing the
-  /// window tore down an active session with nothing anywhere saying why.
+  /// dropped from the bar below 620 px of window width, so narrowing the
+  /// window tore down an active session with nothing anywhere saying why. That
+  /// gate is gone — the remote group survives every width the menu bar is built
+  /// at now — but the rule it taught is not: a control a row may drop is a
+  /// control nothing may depend on running.
   late final RemoteDisplayService _remote = RemoteDisplayService(
     null, // no engine yet; `_openFor` attaches one
     abiVersion: OaaEngine.abiVersion,
@@ -672,7 +676,7 @@ class _WorkspaceState extends ConsumerState<_Workspace>
     // widgets it does use — popup menus, tooltips — assert on having a Material
     // ancestor and throw at runtime without one. A bare `Material` costs
     // nothing and is cheaper than reimplementing menus to avoid it.
-    // **Above both branches, and above the status bar.** It drives the publish
+    // **Above both branches, and above both bars.** It drives the publish
     // service from the settings and the workspace, and a control the bar is
     // allowed to drop cannot be what does that — see `RemoteDisplayScope`. It
     // also carries the service to `showSettingsPanel`, which resolves it before
@@ -697,31 +701,11 @@ class _WorkspaceState extends ConsumerState<_Workspace>
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        // The status bar is the window's title bar as well on
+                        // The menu bar is the window's title bar as well on
                         // macOS — there is no system one left to drag. See
                         // window_chrome.dart.
                         WindowDragArea(
-                          child: _StatusBar(
-                            engine: engine,
-                            source: plugin ?? engine,
-                            clock: clock,
-                            remote: _remote,
-                            onReset: _reset,
-                            sourceLabel: _onPlugin
-                                ? _plugins.active!.displayName.toUpperCase()
-                                : _sourceLabel,
-                            // Null unless a DAW could be on the other end. The
-                            // readout itself draws nothing when a host has said
-                            // nothing, so this is about the *row*: an item that is
-                            // permanently blank on every machine metering a sound
-                            // card would still be taking 132 px off a bar that
-                            // measures its width in tens.
-                            transportOf: _onPlugin
-                                ? () =>
-                                      _plugins.active?.transport ??
-                                      Transport.none
-                                : null,
-                          ),
+                          child: _MenuBar(remote: _remote, onReset: _reset),
                         ),
                         const TabStrip(),
                         // Rebuilds on the transition only, never on the sixty frames
@@ -862,6 +846,33 @@ class _WorkspaceState extends ConsumerState<_Workspace>
                             clock: clock,
                           ),
                         ),
+                        // **Under the canvas, which is what makes it a status
+                        // bar rather than a second menu bar.** Everything in it
+                        // is a reading or the units of one, and a reading
+                        // belongs at the edge of the thing it is about: the
+                        // window's own bottom edge is where a person's eye goes
+                        // for "what is this and how long has it been running",
+                        // and it is not somewhere a pointer travels on its way
+                        // to a command. It is outside `WindowDragArea` on
+                        // purpose — the window is dragged by its title bar, and
+                        // this row is not one.
+                        _StatusBar(
+                          source: plugin ?? engine,
+                          clock: clock,
+                          sourceLabel: _onPlugin
+                              ? _plugins.active!.displayName.toUpperCase()
+                              : _sourceLabel,
+                          // Null unless a DAW could be on the other end. The
+                          // readout itself draws nothing when a host has said
+                          // nothing, so this is about the *row*: an item that is
+                          // permanently blank on every machine metering a sound
+                          // card would still be taking 108 px off a row that
+                          // measures its width in tens.
+                          transportOf: _onPlugin
+                              ? () =>
+                                    _plugins.active?.transport ?? Transport.none
+                              : null,
+                        ),
                       ],
                     ),
                   ),
@@ -910,7 +921,7 @@ class _EngineFailure extends StatelessWidget {
             ),
             const SizedBox(height: Space.lg),
             // The way out of a bad device selection, from the one screen that
-            // has no status bar to change it from.
+            // has no source picker to change it from.
             Consumer(
               builder: (context, ref, _) => OaaButton(
                 label: 'Use the test tone',
@@ -923,7 +934,7 @@ class _EngineFailure extends StatelessWidget {
             // And the way out for the machine this screen is most likely to be
             // on. A tablet has no capture device to select, so it arrives here
             // on launch and every other route to the remote display runs
-            // through the status bar that this screen does not have — which
+            // through the menu bar that this screen does not have — which
             // would leave the display feature unreachable on exactly the
             // hardware it was built for.
             OaaButton(
@@ -941,29 +952,43 @@ class _EngineFailure extends StatelessWidget {
   }
 }
 
-/// The bar across the top: what is being measured, for how long, against what.
-class _StatusBar extends ConsumerWidget {
-  const _StatusBar({
-    required this.engine,
-    required this.source,
-    required this.clock,
-    required this.remote,
-    required this.onReset,
-    required this.sourceLabel,
-    required this.transportOf,
-  });
+// ---------------------------------------------------------------------------
+// The two bars
 
-  /// This machine's engine. Only what the *source picker* acts on — the
-  /// readings come from [source], which may be a plugin instead.
-  final OaaEngine engine;
+/// The bar across the top: the commands, and the document they act on.
+///
+/// **It was the status bar for eight phases, and everything it reported is in
+/// [_StatusBar] across the bottom of the window now.** What is left is what you
+/// *do* — the File menu, the three remote controls, the two panels, RESET and
+/// the shortcut sheet — with the open preset's name centred between them.
+///
+/// The split is the whole point rather than a tidying. One row holding the
+/// source, the format, two clocks, the delivery target and eight commands had
+/// no width left for the document's own name: the name had the highest gate in
+/// the bar below the playhead's and was gone under 1170 px of row, and the
+/// readings it competed with are the things a person *reads* while working
+/// rather than presses. Reading a measurement and pressing a button are two
+/// different acts and they have a row each now. What that bought is measurable:
+/// the top row fits every one of its controls at 480 px, where the old bar had
+/// dropped four of them and was still 121 px over its edge at the narrowest
+/// window a platform allowed.
+///
+/// **PUBLISH no longer has a gate, and that closes a hole this bar used to
+/// document.** It was the last of the remote group to be dropped, and below its
+/// gate there was no way anywhere in the application to stop publishing — a
+/// capability taken away by a window width. With the readings gone the whole
+/// group fits at every width the row is built at.
+///
+/// **On macOS this is still the window's title bar** — there is no system one
+/// left to disagree with it — which is what a centred document name is the Mac
+/// idiom for, and why the row leaves the window buttons room at its leading
+/// edge. See `window_chrome.dart`.
+class _MenuBar extends ConsumerWidget {
+  const _MenuBar({required this.remote, required this.onReset});
 
-  /// What is being measured: the engine, or a connected plugin's frames.
-  final MeterSource source;
-
-  final MeterClock clock;
-
-  /// Passed through rather than created here: the row this widget builds is
-  /// dropped on a narrow window, and the socket must not be.
+  /// Passed through rather than created here: this widget rebuilds whenever the
+  /// document does, and a socket owned by a `build` is a socket a rebuild can
+  /// tear down. See `RemoteDisplayScope`.
   final RemoteDisplayService remote;
 
   /// Not `engine.reset`: a plugin cannot be reset from here, and a button that
@@ -971,31 +996,11 @@ class _StatusBar extends ConsumerWidget {
   /// it cannot. See `_WorkspaceState._reset`.
   final VoidCallback onReset;
 
-  final String sourceLabel;
-
-  /// The DAW's playhead, read at paint time, or null when nothing being metered
-  /// could have one.
-  ///
-  /// A getter rather than a `Transport`, because this widget rebuilds a few
-  /// times an hour and the position moves ninety times a second. See
-  /// [TransportReadout].
-  final Transport Function()? transportOf;
-
-  static const double height = 40;
+  static const double height = BarMetrics.rowHeight;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final colors = OaaTheme.of(context);
-    final settings = ref.watch(settingsProvider);
-    final calibration = ref.watch(calibrationProvider);
-
-    // The clock is the single throttle point, so both the setting and the
-    // platform's accessibility preference are pushed into it rather than read
-    // from it. `disableAnimations` is the OS-level "reduce motion" switch; on
-    // a metering tool it becomes a ceiling on the redraw rate, because the
-    // motion here is the measurement and cannot be removed. See MeterClock.
-    clock.targetFps = settings.targetFps;
-    clock.reducedMotion = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
 
     return SizedBox(
       height: height,
@@ -1009,198 +1014,411 @@ class _StatusBar extends ConsumerWidget {
             ),
           ),
         ),
-        child: Padding(
-          // Leading and trailing rather than symmetric: on macOS the three
-          // window buttons are drawn over the top of this bar, and OAA cannot
-          // start until they have ended. See WindowChrome.statusBarLeading.
-          padding: EdgeInsets.only(
-            left: WindowChrome.statusBarLeading,
-            right: Space.md,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final width = constraints.maxWidth;
+
+            // Leading and trailing rather than symmetric: on macOS the three
+            // window buttons are drawn over the top of this bar, and Open Audio
+            // Analyzer cannot start until they have ended. See
+            // `WindowChrome.menuBarLeading`.
+            final leading = WindowChrome.menuBarLeading;
+
+            // **FILE exists only where there is no system menu bar to put the
+            // File menu in.** It costs the leading group 66 px on Windows and
+            // Linux and nothing on macOS — where the window buttons cost 64 of
+            // it anyway, which is why the numbers below hold on all three
+            // platforms from one set of measurements. `test/scaling_test.dart`
+            // sweeps the row in both arrangements.
+            final inWindow = ref.watch(fileMenuInWindowProvider);
+
+            // **Where each group ends, measured from the window's own edge**,
+            // which is what the centred name has to clear. The leading number
+            // carries the window buttons on macOS and the FILE button off it,
+            // because both sit between the window's edge and the first thing
+            // that could touch them; the two arrangements come to 186 px and
+            // 188 px, so one set of numbers answers all three platforms.
+            //
+            // **The groups are grouped by meaning rather than by width, and the
+            // name pays for it.** A file on disk is on the left — the document
+            // the canvas came from, and a recording to measure — and everything
+            // that is another screen or this application's own state is on the
+            // right. That leaves 186 px against 394 px, and a name centred in
+            // the *window* has to clear the wider of the two twice over, so it
+            // needs 900 px of window before there is room to draw it. That is
+            // under the narrowest window the application supports, which is the
+            // number that had to be beaten: the readout this replaced needed
+            // 1266 px, and was in neither the middle nor a group.
+            final leadingWith =
+                leading +
+                (inWindow ? BarMetrics.file + Space.sm : 0) +
+                BarMetrics.analyse;
+            final leadingWithout = leading + (inWindow ? BarMetrics.file : 0);
+            const trailingAll =
+                Space.md +
+                BarMetrics.pairingCode +
+                Space.sm +
+                BarMetrics.publish +
+                Space.sm +
+                BarMetrics.attach +
+                Space.sm +
+                BarMetrics.settings +
+                Space.sm +
+                BarMetrics.reset +
+                Space.sm +
+                BarMetrics.help;
+
+            // Two gates, in the order the items leave: the two commands with a
+            // chord and a menu row behind them. Everything else in the row
+            // stays at every width the row is built at.
+            //
+            // ANALYSE FILE goes first because ⌘I reaches it and the File menu
+            // lists it — it is the one command here that is offered three ways.
+            // ATTACH second because becoming somebody else's display is a thing
+            // you go looking for, and a window this narrow is not one anybody
+            // goes looking from; the pairing code stays because it is half of
+            // the switch beside it, and publishing you cannot hand anybody the
+            // address for is publishing to nobody.
+            //
+            // Arithmetic on the table above rather than two measured totals, so
+            // that a label growing moves the gate that admits it instead of
+            // being caught by the margin — and so that macOS's window buttons
+            // and the other platforms' FILE button, which differ by 2 px, are
+            // each answered with their own number. Below 394 px the row has
+            // nothing left it is honest to drop; that is well under half the
+            // narrowest window any of the three platforms allows, and
+            // `test/scaling_test.dart` sweeps to 480.
+            final showAnalyse =
+                width >= leadingWith + trailingAll + BarMetrics.margin;
+            final showAttach =
+                width >=
+                (showAnalyse ? leadingWith : leadingWithout) +
+                    trailingAll +
+                    BarMetrics.margin;
+
+            final leadingEdge = showAnalyse ? leadingWith : leadingWithout;
+            final trailingEdge =
+                trailingAll - (showAttach ? 0 : BarMetrics.attach + Space.sm);
+
+            // **Centred in the window, so the room is symmetric about its
+            // centre and has to clear the wider group twice.** That is what
+            // makes it a title rather than an item, and it is also why the two
+            // marks in the trailing group are worth what they cost a reader:
+            // with `SETTINGS` and `RESET` spelled out, the wider group is 455 px
+            // and this arithmetic gives the name nothing at all until 1026 px of
+            // window. With the marks it has 124 px at the narrowest window the
+            // application supports and 604 px at the default one.
+            final room =
+                width -
+                2 * math.max(leadingEdge, trailingEdge) -
+                2 * BarMetrics.titleGap;
+
+            return Stack(
+              // Both layers are the row: one holds the controls, the other
+              // holds the name centred between them. Expanded rather than the
+              // default loose fit, or a `Center` in here shrink-wraps its child
+              // and is then aligned to the stack's own corner.
+              fit: StackFit.expand,
+              children: [
+                // **A layer of its own, and not a child of the row.** A row can
+                // only centre a child between its neighbours, and these
+                // neighbours are nothing like the same width — 186 px of window
+                // buttons and one command against 394 px of everything else.
+                // Centred in the window is what a document's name means, on the
+                // row that is the window's title bar on macOS; centred between
+                // those two groups it would sit 104 px left of where a reader
+                // looks for it.
+                //
+                // Nothing overlaps because [room] is what the wider group
+                // leaves: it is the *smaller* of the two clearances, doubled, so
+                // a title that fits it clears both. Below the floor there is no
+                // title at all rather than a name given three characters and an
+                // ellipsis. `test/scaling_test.dart` measures the distance from
+                // the name to every control in the row at every width it sweeps,
+                // which is the assertion an overflow check cannot make: two
+                // layers of a `Stack` overlap in silence.
+                if (room >= BarMetrics.titleFloor)
+                  Center(
+                    child: SizedBox(
+                      width: math.min(room, BarMetrics.titleCap),
+                      child: const _PresetTitle(),
+                    ),
+                  ),
+                Padding(
+                  padding: EdgeInsets.only(left: leading, right: Space.md),
+                  child: Row(
+                    children: [
+                      // **FILE all the way at the leading edge**, where a menu
+                      // bar's first menu is on every platform that has one. On
+                      // macOS that is where the system menu bar already puts it
+                      // and this button is not built at all.
+                      if (inWindow) ...[
+                        const FileMenuButton(),
+                        // **The row's own seam, like every other gap in it.**
+                        // This was `Space.md`, on the reasoning that a menu and
+                        // a command are two kinds of thing and deserve a group
+                        // boundary between them. On screen it is one gap in a
+                        // row of eight that is twice the others, which reads as
+                        // a control that was placed rather than as two groups —
+                        // the same lesson the pairing code learnt in the other
+                        // direction further down this row, where 4 px between
+                        // two related controls read as a spacing mistake rather
+                        // than as grouping.
+                        const SizedBox(width: Space.sm),
+                      ],
+                      // **After the menu that also offers it**, which is why it
+                      // is on this side of the row: the File menu's second entry
+                      // is "Analyse an audio file…", and reading order should
+                      // not put a command before the menu that holds it. Both of
+                      // them are a file on disk; nothing else in this row is.
+                      if (showAnalyse)
+                        BarButton(
+                          label: 'ANALYSE FILE',
+                          onPressed: () => showReportPanel(context),
+                        ),
+                      // **The slack, and the row's only flexible child.**
+                      // Nothing in either group may be `Flexible`: `Spacer` is
+                      // an `Expanded` with `flex: 1` and `Flexible` defaults to
+                      // `flex: 1` too, so `RenderFlex` would divide the free
+                      // space between them — the Spacer is tight and takes its
+                      // share, a loose `Flexible` takes only what its child asks
+                      // for, and the difference is laid out after the last
+                      // child. The whole trailing group then drifts left by half
+                      // of every pixel the window gains, with nothing
+                      // overflowing and no assertion fired.
+                      const Spacer(),
+                      // Before the switch, because it hands out the address of
+                      // the port the switch opens and is inert until that port
+                      // is open. At the row's own `Space.sm` like every other
+                      // seam in it: a tighter gap to pair the two visually was
+                      // tried, and a seam that is 4 px where its neighbours are
+                      // 8 does not read as grouping — it reads as a spacing
+                      // mistake, which in a row whose borders are the only
+                      // horizontal line is the one thing the eye does catch.
+                      PairingCodeButton(service: remote),
+                      const SizedBox(width: Space.sm),
+                      PublishSwitch(service: remote),
+                      if (showAttach) ...[
+                        const SizedBox(width: Space.sm),
+                        const AttachButton(),
+                      ],
+                      const SizedBox(width: Space.sm),
+                      // **A mark rather than the word, and the word is what it
+                      // cost the row.** `SETTINGS` and `RESET` were 145 px of a
+                      // trailing group that a centred document name has to clear
+                      // twice over; two marks are 84, and that 61 px is the
+                      // difference between the name being on screen at the
+                      // narrowest window the application supports and it needing
+                      // 1026 px. See `OaaMark`, where the exception to a closed
+                      // set of marks is argued.
+                      BarButton(
+                        mark: OaaMark.settings,
+                        tooltip: 'Settings',
+                        semanticLabel: 'Settings',
+                        onPressed: () => showSettingsPanel(context),
+                      ),
+                      const SizedBox(width: Space.sm),
+                      BarButton(
+                        mark: OaaMark.restart,
+                        // **The scope was always in the tooltip, which is what
+                        // makes this one safe to draw as a mark.** `RESET` beside
+                        // `SETTINGS` in identical chrome read as "reset
+                        // everything" — the layout, the target, the application —
+                        // when what it discards is the integration in progress,
+                        // so this sentence has been carrying the part that
+                        // matters from the start. Somebody twenty minutes into an
+                        // integrated measurement needs to know that before they
+                        // click, not after.
+                        //
+                        // Wording tracks the contract at oaa_engine_reset() in
+                        // oaa.h. If that changes, this changes with it — a
+                        // button that describes the wrong thing is worse than one
+                        // that describes nothing.
+                        tooltip:
+                            'Restart the measurement — integrated loudness, '
+                            'LRA, the max-since-reset peaks, the clip counters '
+                            'and the elapsed clock. Momentary readings, the '
+                            'layout and the delivery target are untouched.',
+                        semanticLabel: 'Restart the measurement',
+                        onPressed: onReset,
+                      ),
+                      const SizedBox(width: Space.sm),
+                      // Last, and outside the working set on purpose.
+                      // Everything to its left is something you do to the
+                      // measurement or to the machine; this is about the
+                      // application. It keeps its `?` where the two beside it
+                      // became marks, because a question mark *is* the mark for
+                      // it — and it is a third of the width of the shortest
+                      // honest word for a sheet of key bindings.
+                      //
+                      // It exists at all because Open Audio Analyzer draws its
+                      // own chrome, so the usual place a desktop user reads a
+                      // shortcut off — the chord printed beside a menu item —
+                      // covers four of them and nothing else. The File menu
+                      // prints ⌘O, ⌘I, ⌘S and ⇧⌘S; every other chord in the
+                      // application is in this sheet and nowhere a pointer can
+                      // reach, and without this button the sheet is only
+                      // reachable by pressing the key that opens the list of
+                      // keys.
+                      BarButton(
+                        label: '?',
+                        // Drawn at a mark's size, because that is what it is
+                        // now standing among: at the row's 10 px it was the
+                        // smallest ink in a group that is otherwise two marks
+                        // in a 16 px box. See `BarButton.labelIsMark`.
+                        labelIsMark: true,
+                        tooltip: 'Keyboard shortcuts',
+                        semanticLabel: 'Keyboard shortcuts',
+                        onPressed: () => showShortcutsSheet(context),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+/// The bar across the bottom: what is being measured, for how long, against
+/// what.
+///
+/// **Everything here is a reading or the units of one, and that is the whole
+/// membership rule.** The source and the format say what is being measured; the
+/// playhead and the elapsed clock say when and for how long; the delivery target
+/// is what every PASS and FAIL on the canvas is a verdict against, which makes
+/// naming it beside the readings the meter's units rather than a shortcut to a
+/// setting. Nothing in this row does anything to the measurement — the two
+/// pickers change what is *measured* and what it is measured *against*, which is
+/// the same statement read the other way round.
+///
+/// **The two pickers are chips and stay chips.** They report a value and open on
+/// a click, and the source spent eight phases as a bare dot and a word beside
+/// four bordered controls, which reads as a caption rather than as a menu: the
+/// commonest thing anybody changes in either bar was the one item that did not
+/// look changeable. See `BarChip`.
+///
+/// It is not the window's title bar and has no window buttons drawn over it, so
+/// unlike [_MenuBar] its leading padding is `Space.md` on every platform and its
+/// gates are one set of numbers rather than two.
+class _StatusBar extends ConsumerWidget {
+  const _StatusBar({
+    required this.source,
+    required this.clock,
+    required this.sourceLabel,
+    required this.transportOf,
+  });
+
+  /// What is being measured: this machine's engine, or a connected plugin's
+  /// frames.
+  final MeterSource source;
+
+  final MeterClock clock;
+
+  final String sourceLabel;
+
+  /// The DAW's playhead, read at paint time, or null when nothing being metered
+  /// could have one.
+  ///
+  /// A getter rather than a `Transport`, because this widget rebuilds a few
+  /// times an hour and the position moves ninety times a second. See
+  /// [TransportReadout].
+  final Transport Function()? transportOf;
+
+  static const double height = BarMetrics.rowHeight;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final colors = OaaTheme.of(context);
+    final settings = ref.watch(settingsProvider);
+    final calibration = ref.watch(calibrationProvider);
+
+    // The clock is the single throttle point, so both the setting and the
+    // platform's accessibility preference are pushed into it rather than read
+    // from it. `disableAnimations` is the OS-level "reduce motion" switch; on
+    // a metering tool it becomes a ceiling on the redraw rate, because the
+    // motion here is the measurement and cannot be removed. See MeterClock.
+    //
+    // **In this row rather than the one above because this is the row that
+    // watches the settings anyway**, and neither bar is ever dropped — only
+    // items inside them are. Anything that has to keep happening whatever the
+    // window is doing belongs above both, in `RemoteDisplayScope`.
+    clock.targetFps = settings.targetFps;
+    clock.reducedMotion = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+
+    return SizedBox(
+      height: height,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: colors.panel,
+          // The hairline is on top here, because the edge this row shares with
+          // the canvas is its upper one. The two bars' borders face each other.
+          border: Border(
+            top: BorderSide(color: colors.hairline, width: OaaStroke.hairline),
           ),
-          // **What earns a place in the bar is what changes while you work,
-          // or what a reading has to be read against.** The source, the
-          // elapsed clock and RESET are the first; the delivery target is the
-          // second — every PASS and FAIL on the canvas is a verdict against
-          // it, so naming it beside them is the meter's units, not a shortcut
-          // to a setting. The refresh rate was neither. It is chosen once for
-          // a machine and never looked at again, and its chip sat in the bar
-          // duplicating a control two clicks away for no other reason than
-          // that it fit — so it is in the settings panel now and only there.
-          //
-          // **A narrow window cannot hold everything, and a Row that cannot
-          // hold its children does not shrink them — it overflows.** One gate
-          // was not enough: at the smallest window the platform allows, the
-          // bar ran 121 px past its own edge, which is a debug stripe in
-          // development and silently clipped controls in a release build.
-          //
-          // So the items leave in order of how little they carry, each at the
-          // width below which the rest no longer fit. What stays at the
-          // narrowest width is what the rule above says stays: the source, the
-          // elapsed clock, the delivery target and RESET.
-          //
-          // **Most of what leaves is still reachable and PUBLISH is not.**
-          // ANALYSE FILE, SETTINGS, RESET and `?` all have shortcuts, listed in
-          // the sheet the `?` opens and in docs/site/keyboard.md. The three
-          // remote controls have none, so under the lowest gate there is no way
-          // in the application to stop publishing. That width is under every
-          // desktop minimum except macOS's, which is the only platform that
-          // sets one — and a chord that opens a network socket by accident is
-          // the wrong fix. It is stated rather than papered over: this is the
-          // one item whose absence takes a capability away instead of hiding
-          // it.
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final width = constraints.maxWidth;
+        ),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final width = constraints.maxWidth;
 
-              // **FILE is in this row on two platforms out of three, and every
-              // gate above its own is that much further out there.** A gate is
-              // a statement about the width at which everything up to and
-              // including that item still fits, so an item added below one
-              // moves it — the same arithmetic that moved every gate by 165 px
-              // when one control became three. macOS keeps the numbers exactly
-              // as they were measured, because there the menu is in the system
-              // menu bar and this button does not exist.
-              //
-              // 58 px: the button and the seam before it. Measured the way the
-              // rest of this row is — `test/scaling_test.dart` sweeps the bar
-              // with the button drawn, and it failed at five widths with the
-              // gates left where macOS wants them.
-              final menuInWindow = ref.watch(fileMenuInWindowProvider);
-              final file = menuInWindow ? 58.0 : 0.0;
-              // Each number is the row width at which everything *up to and
-              // including* that item still fits, measured rather than
-              // estimated — `test/scaling_test.dart` sweeps the whole
-              // application every 20 px and fails on the overflow, and the
-              // margin above each measured threshold is about 35 px for the
-              // longest string the item beside it can hold. 860 was the single
-              // gate this replaced, and it was 20 px short of even its own
-              // case: the bar fitted at every window anybody had opened and
-              // ran 121 px past the edge at the smallest one the platform
-              // allowed.
-              //
-              // Somewhere below 504 the irreducible set — source, clock,
-              // target, SETTINGS, RESET — does not fit either, and there is no
-              // honest item left to drop. 504 is the narrowest row
-              // `test/scaling_test.dart` sweeps and it fits — with 8 px to
-              // spare, which the chip and its seam took 24 of. A measured
-              // width rather than the round number this used to be, and either
-              // way barely half the supported minimum window: what happens
-              // below it is left to the platform.
-              // The transport readout is the widest single item the bar can
-              // gain — 92 px and its two gaps — and the only one that is not
-              // always there, so it opens last and highest. It is measured the
-              // same way as the rest: with the readout forced on and the
-              // longest target name there is, and leaving the same ~35 px of
-              // margin the gates below it carry. Every gate above the remote
-              // group moved by 161 px when one control there became three.
-              // `test/scaling_test.dart` sweeps the bar with a real plugin
-              // attached, which is the only state this item exists in.
-              // **Every one of them moved in the change that put the source
-              // in a chip**, because every one is a number about the *left
-              // group's* floor as much as about its own item: what overflows
-              // at the bottom of the bar is the group inside the `Expanded`,
-              // and that group's floor is now a bordered chip — its dot, plus
-              // 16 px of padding, plus the seam after it. 25 px for the five
-              // gates below the format readout, where that seam is 8; 40 for
-              // the format gate and the one above it, where it is 24. The
-              // margins are the ~35 px they were.
-              final showTransport = transportOf != null && width >= 1270 + file;
-              final showFormat = width >= 1105 + file;
-              final showAnalyse = width >= 920 + file;
-              // **Three gates where there was one, and PUBLISH outlives both
-              // the things it enables.** Whether this machine has an
-              // unauthenticated port open is the fact the bar exists to keep
-              // legible, so it is the last of the group to go. The pairing code
-              // outlives ATTACH because it is half of the switch beside it —
-              // publishing you cannot hand anybody the address for is publishing
-              // to nobody — while becoming somebody else's display is a thing
-              // you go looking for, and a window this narrow is not one anybody
-              // goes looking from. All three numbers are measured, like the rest
-              // — see `test/scaling_test.dart`.
-              final showAttach = width >= 820 + file;
-              final showPairingCode = width >= 735 + file;
-              final showPublish = width >= 685 + file;
-              // The lowest gate, so the item it drops is the last thing
-              // standing between the row and its irreducible set. The source
-              // picker gives ground with an ellipsis until it is down to its
-              // dot, and that is the group's floor: with `?` open at 524 px of
-              // row, the group had 34 px to put a 38 px chip in and ran 4 px
-              // past its edge. `test/scaling_test.dart` sweeps this band at
-              // five pixels with the longest names there are, which is the
-              // only stride and the only content that sees it.
-              // **FILE outlives every other command in the row.** Off macOS it
-              // is the only way to reach Open and Save without the keyboard,
-              // where ANALYSE FILE, SETTINGS and RESET all have a chord and are
-              // listed in the sheet. It does not outlive `?`, which is how
-              // somebody finds out that the chords exist at all — under this
-              // gate the window is narrower than anything anybody arranges
-              // meters in, and ⌘O still works.
-              //
-              // On macOS the button is not built at all: the menu is in the
-              // system bar. So this gate has to hold for the platforms where it
-              // *is* built, which is what makes it a gate and not a saving.
-              final showFile = menuInWindow && width >= 620;
-              final showHelp = width >= 555;
+            // The row with nothing in it that a gate can take away: what is
+            // being measured, for how long, and against what. 384 px, so it
+            // fits at 480 with room to spare — which is where both rows stop
+            // and half the narrowest window any platform allows.
+            const irreducible =
+                Space.md * 2 +
+                BarMetrics.chipFloor +
+                Space.sm +
+                BarMetrics.elapsed +
+                Space.md +
+                BarMetrics.pickerCap;
 
-              // The document, in the leading slot the wordmark used to have —
-              // and it earns it by the same test that took the wordmark out.
-              // Three capitals that never changed said nothing about the work;
-              // which preset is open, and whether it has been saved, changes
-              // while you work and is written down nowhere else in the window.
-              //
-              // **The highest gate below the transport readout, and it leaves
-              // before the format does**, which is the row's own priority
-              // rather than a fitting exercise: everything else in this group
-              // says what the reading *is*, and this says what the workspace
-              // is. It is also the widest fixed item in the group — 150 px and
-              // a group seam — and the group's floor is what overflows first.
-              //
-              // Measured, like the rest. At 1124 px of row with a plugin's name
-              // in the source chip the bar ran 9.3 px past its edge, because a
-              // fixed 174 px here starves the one item beside it that shrinks:
-              // the chip was squeezed to 4.7 px and overflowed inside itself.
-              // 1170 is that threshold plus the ~35 px this file carries above
-              // every other one. **The gate is on the row, not the window** —
-              // on macOS they differ by 96 px, so this is about 1266 px of
-              // window; see the plugin band in `test/scaling_test.dart`.
-              final showPreset = width >= 1170 + file;
+            // Two gates, in the order the items leave, both arithmetic on the
+            // table above and both counting the *longest* string the item can
+            // print rather than the one this machine happens to be showing.
+            // That distinction is the one that ships: the format readout is
+            // 112 px at 48 kHz stereo and 126 at 192 kHz with 24 channels.
+            //
+            // The playhead is the widest single item this row can gain — 92 px
+            // and its gap — and the only one that is not always there, so it
+            // opens last and highest. The format readout goes next: a sample
+            // rate and a channel count are what the source chip beside it
+            // already implies, where the elapsed clock and the delivery target
+            // are readings nothing else in the window carries.
+            //
+            // The seam the left group ends with is `Space.lg` above the format
+            // gate and `Space.sm` below it — it is sized to whichever item the
+            // group ends with — so both are counted where they belong.
+            const withFormat =
+                irreducible -
+                Space.sm +
+                Space.md +
+                BarMetrics.format +
+                Space.lg;
+            const withTransport =
+                withFormat + TransportReadout.defaultWidth + Space.md;
 
-              return Row(
+            final showFormat = width >= withFormat + BarMetrics.margin;
+            final showTransport =
+                transportOf != null &&
+                width >= withTransport + BarMetrics.margin;
+
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: Space.md),
+              child: Row(
                 children: [
                   // **The left group is the slack.** It is `Expanded`, so it
                   // takes whatever the right group leaves and pushes that group
-                  // flush right — the job a `Spacer` used to do here.
-                  //
-                  // The Spacer is gone because it cannot coexist with a child
-                  // that shrinks, and the bar needs one. Both pickers cap at
-                  // 220 px and ellipsis, so a long device name and a long target
-                  // name together add about 200 px that the width gates below
-                  // never counted; at 950 px every gate was open and the row ran
-                  // 18 px past its edge. Making the source picker `Flexible`
-                  // fixes that — but `Flexible` and `Spacer` both default to
-                  // `flex: 1`, so `RenderFlex` splits the free space between
-                  // them, the loose picker takes only what it needs, and the
-                  // Spacer's half is laid out *after* the last child. That is
-                  // the bug described two comments down, and this is the shape
-                  // that has neither.
+                  // flush right — the job a `Spacer` used to do here, and it
+                  // cannot be one: the source picker shrinks, and a `Flexible`
+                  // sharing a row with a `Spacer` splits the free space with it.
+                  // See the note in `_MenuBar`'s row.
                   Expanded(
                     child: Row(
                       children: [
-                        if (showPreset) ...[
-                          const _PresetReadout(),
-                          // A boundary between two groups rather than a seam
-                          // between two controls: everything after this is
-                          // about the signal, and this is about the file.
-                          const SizedBox(width: Space.xs),
-                        ],
-                        // **No wordmark.** The window is the application's
-                        // name and the bar's job is what changes while you
-                        // work; three capitals that never change were the one
-                        // item here that said nothing about the signal. Its
-                        // gate went with it, and the gates above it are left
-                        // where they are — they are the widths at which the
-                        // row still *fits*, and it now fits with about 34 px
-                        // to spare above 955.
                         Flexible(
                           child: _SourcePicker(
                             label: sourceLabel,
@@ -1219,65 +1437,48 @@ class _StatusBar extends ConsumerWidget {
                             softWrap: false,
                           ),
                         ],
-                        // **The seam between the two groups, and it is the
-                        // left group that pays for it.** The group's children
-                        // pack left, so the space after them is whatever the
-                        // window is not using — which is zero from the moment
-                        // the row is full. That used to mean the sample rate
-                        // ran flush into the playhead, and it was stated and
-                        // left alone; a bordered source chip makes it a
-                        // hairline touching the elapsed clock's digits, which
-                        // is the spacing mistake the eye does catch in a row
-                        // whose borders are its only horizontal line.
+                        // **The seam between the two groups, and it is the left
+                        // group that pays for it.** The group's children pack
+                        // left, so the space after them is whatever the window
+                        // is not using — which is zero from the moment the row
+                        // is full. That used to leave the sample rate running
+                        // flush into the playhead, and with a bordered source
+                        // chip it is a hairline touching the elapsed clock's
+                        // digits, which is the spacing mistake the eye does
+                        // catch in a row whose borders are its only horizontal
+                        // line.
                         //
                         // Inside the `Expanded` rather than after it, which is
-                        // what makes it free: a fixed box out in the bar's own
-                        // row would add 24 px to a sum that does not shrink and
-                        // move every gate above. Here the picker gives up 24 px
-                        // of name it was going to ellipsise anyway, and the only
-                        // number that moves is the lowest gate — the left
-                        // group's floor is now the chip plus this.
+                        // what makes it free: a fixed box out in the row itself
+                        // would add to a sum that does not shrink and move both
+                        // gates above it. Here the picker gives up 24 px of
+                        // name it was going to ellipsise anyway.
                         //
-                        // **Sized to what is on the other side of it, which
-                        // is the item this group ends with.** Above the format
-                        // gate that is a text readout and the seam is a
-                        // boundary between two groups, which is `Space.lg` and
-                        // is asserted as such — `test/scaling_test.dart` holds
-                        // the distance from the sample rate to the playhead,
-                        // the one thing in this row an overflow check cannot
-                        // see. Below it the group ends in a bordered chip and
-                        // the seam is a seam between controls, which is the
-                        // `Space.sm` every gap in the right-hand group is.
-                        //
-                        // Not a saving: 24 px at the bottom of the bar does
-                        // not exist. With the chip's own 16 it put the left
-                        // group's floor past the row at 600 px and past the
-                        // analyse gate at 1000, and 8 is what the item beside
-                        // it wants there anyway.
+                        // **Sized to what is on the other side of it, which is
+                        // the item this group ends with.** Above the format gate
+                        // that is a text readout and the seam is a boundary
+                        // between two groups; below it the group ends in a
+                        // bordered chip and the seam is the `Space.sm` every
+                        // seam between controls is.
                         SizedBox(width: showFormat ? Space.lg : Space.sm),
                       ],
                     ),
                   ),
-                  // **Left of the elapsed clock, because they are two clocks
-                  // and only one of them is a measurement.** This is where the
+                  // **Left of the elapsed clock, because they are two clocks and
+                  // only one of them is a measurement.** This is where the
                   // session is; the one beside it is how long this reading has
-                  // been running. Reading order puts the host's time first —
-                  // it is the one somebody says out loud to another person in
-                  // the room — and the measurement's own clock next to the
-                  // target it is being judged against.
+                  // been running. Reading order puts the host's time first — it
+                  // is the one somebody says out loud to another person in the
+                  // room — and the measurement's own clock next to the target it
+                  // is being judged against.
                   if (showTransport) ...[
-                    // No gap of its own: the left group carries the boundary
-                    // now and carries it at every width, which is what the
-                    // conditional one here could not do — the gap existed only
-                    // when a plugin was attached and the window was wide enough
-                    // to show its readout.
                     TransportReadout(
                       transportOf: transportOf!,
                       repaint: clock,
                       // Packed left, like the tablet's — and there is nothing
-                      // left over to push anywhere, because the box is the
-                      // width of the format the host is reporting rather than
-                      // of the widest one there is. See the note at the top of
+                      // left over to push anywhere, because the box is the width
+                      // of the format the host is reporting rather than of the
+                      // widest one there is. See the note at the top of
                       // `transport_readout.dart`.
                       align: TransportAlign.leading,
                     ),
@@ -1286,134 +1487,51 @@ class _StatusBar extends ConsumerWidget {
                   ElapsedReadout(engine: source, clock: clock),
                   const SizedBox(width: Space.md),
                   // Bounded, not `Flexible`. A `Flexible` here shares the row's
-                  // free space with the `Spacer` above — both default to
-                  // `flex: 1`, so `RenderFlex` hands each of them half. The
-                  // Spacer is tight and takes its half; this one is loose and
-                  // takes only the width of the name, and the leftover half is
-                  // laid out *after* the last child. Everything from the
-                  // elapsed clock rightwards then sat in the middle of the bar
-                  // with a gap beside it that grew as the window did.
+                  // free space with the `Expanded` group above — both default to
+                  // `flex: 1`, so `RenderFlex` hands each of them half, the loose
+                  // one takes only the width of the name, and the leftover half
+                  // is laid out *after* the last child. Everything from the
+                  // elapsed clock rightwards then sits in the middle of the bar
+                  // with a gap beside it that grows as the window does.
                   //
                   // A maximum with an ellipsis is what the source picker two
                   // rows up already does, and it is the honest constraint: the
-                  // bar drops whole items on a narrow window rather than
+                  // row drops whole items on a narrow window rather than
                   // squeezing them — see the `showFormat` gate.
                   ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 220),
+                    constraints: const BoxConstraints(
+                      maxWidth: BarMetrics.pickerCap,
+                    ),
                     child: _CalibrationPicker(calibration: calibration),
                   ),
-                  // Before the switch, because it hands out the address of the
-                  // port the switch opens and is inert until that port is open.
-                  // At the row's own `Space.sm` like every other seam in it: a
-                  // tighter gap to pair the two visually was tried, and a seam
-                  // that is 4 px where its neighbours are 8 does not read as
-                  // grouping — it reads as a spacing mistake, which in a row
-                  // whose borders are the only horizontal line is the one thing
-                  // the eye does catch.
-                  if (showPairingCode) ...[
-                    const SizedBox(width: Space.sm),
-                    PairingCodeButton(service: remote),
-                  ],
-                  if (showPublish) ...[
-                    const SizedBox(width: Space.sm),
-                    PublishSwitch(service: remote),
-                  ],
-                  if (showAttach) ...[
-                    const SizedBox(width: Space.sm),
-                    const AttachButton(),
-                  ],
-                  // Before ANALYSE FILE because the menu it opens holds it,
-                  // and reading order should not put a command after the menu
-                  // that also offers it.
-                  if (showFile) ...[
-                    const SizedBox(width: Space.sm),
-                    const FileMenuButton(),
-                  ],
-                  if (showAnalyse) ...[
-                    const SizedBox(width: Space.sm),
-                    BarButton(
-                      label: 'ANALYSE FILE',
-                      onPressed: () => showReportPanel(context),
-                    ),
-                  ],
-                  const SizedBox(width: Space.sm),
-                  BarButton(
-                    label: 'SETTINGS',
-                    onPressed: () => showSettingsPanel(context),
-                  ),
-                  const SizedBox(width: Space.sm),
-                  // The scope has to be on the button. `RESET` beside
-                  // `SETTINGS` in identical chrome reads as "reset everything"
-                  // — the layout, the target, the app — when what it actually
-                  // discards is the integration in progress. Somebody twenty
-                  // minutes into an integrated measurement needs to know that
-                  // before they click, not after.
-                  BarButton(
-                    label: 'RESET',
-                    // Wording tracks the contract at oaa_engine_reset() in
-                    // oaa.h. If that changes, this changes with it — a button
-                    // that describes the wrong thing is worse than one that
-                    // describes nothing.
-                    tooltip:
-                        'Restarts the measurement — integrated loudness, LRA, '
-                        'the max-since-reset peaks, the clip counters and the '
-                        'elapsed clock. Momentary readings, the layout and the '
-                        'delivery target are untouched.',
-                    onPressed: onReset,
-                  ),
-                  // Last, and outside the working set on purpose. Everything to
-                  // its left is about the measurement in progress — what is
-                  // being measured, against what, and how to start again. This
-                  // is about the application, and a glyph sitting between two
-                  // words reads as a third word you cannot make out.
-                  //
-                  // It exists at all because Open Audio Analyzer draws its own
-                  // chrome, so the usual place a desktop user reads a shortcut
-                  // off — the chord printed beside a menu item — covers four of
-                  // them and nothing else. The File menu prints ⌘O, ⌘I, ⌘S and
-                  // ⇧⌘S; every other chord in the application is in this sheet
-                  // and nowhere a pointer can reach, and without this button the
-                  // sheet is only reachable by pressing the key that opens the
-                  // list of keys.
-                  if (showHelp) ...[
-                    const SizedBox(width: Space.sm),
-                    BarButton(
-                      label: '?',
-                      tooltip: 'Keyboard shortcuts',
-                      semanticLabel: 'Keyboard shortcuts',
-                      onPressed: () => showShortcutsSheet(context),
-                    ),
-                  ],
                 ],
-              );
-            },
-          ),
+              ),
+            );
+          },
         ),
       ),
     );
   }
 }
 
-/// Which preset is open, and whether it has been saved.
+/// Which preset is open, and whether it has been saved, centred in the top row.
 ///
-/// Not a [BarChip], though it sits where one would. The bar's two chips are the
+/// Not a [BarChip], though it sits in a row of controls. The two chips are the
 /// menus that hold a value — what is being metered, and what against — and they
 /// wear a border because they can be clicked. This is a readout: it is the
-/// window's title, in the bar that is the window's title bar on macOS, and a
-/// border round it would promise a menu that is not there. Off macOS the menu is
-/// two items to the right and says FILE.
+/// window's title, in the row that is the window's title bar on macOS, and a
+/// border round it would promise a menu that is not there. The menu is at the
+/// other end of the row and says FILE, or on macOS it is in the system menu bar.
 ///
-/// **The dot's slot is reserved whether or not there is a dot.** It is one
-/// character, but it is one character on the *left* of everything in the group
-/// beside it — a mark that appears when you drag a module would shift the source,
-/// the sample rate and the playhead by 10 px each time the layout changed.
-class _PresetReadout extends ConsumerWidget {
-  const _PresetReadout();
-
-  /// Long enough for the names people give these ("Mastering — client B"),
-  /// short enough that it is not competing with the source for the group's
-  /// slack. Beyond it the name ellipsises, like both pickers.
-  static const double _maxWidth = 150;
+/// **The mark's slot is reserved on both sides of the name.** It is one
+/// character, and a character on one side only of a *centred* readout moves the
+/// name half its width every time the layout is edited — a title that shifts
+/// when you drag a module. Reserved twice, the ink stays where it is and the
+/// mark appears in room that was already being left for it. The old readout
+/// reserved it once, on the left of the group beside it, because there it was a
+/// leading item and everything to its right would have moved instead.
+class _PresetTitle extends ConsumerWidget {
+  const _PresetTitle();
 
   /// The mark's reservation. `•` in the label style plus the seam before it.
   static const double _markWidth = Space.sm + Space.xs;
@@ -1424,34 +1542,36 @@ class _PresetReadout extends ConsumerWidget {
     final name = ref.watch(workspaceProvider).preset.name;
     final modified = ref.watch(presetModifiedProvider);
 
-    return ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: _maxWidth),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // `Flexible` inside a `ConstrainedBox`, for the reason `BarChip`
-          // gives: without it the text is measured against unbounded width and
-          // takes it, where the bar's own gates cannot see it.
-          Flexible(
-            child: Text(
-              name.toUpperCase(),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              softWrap: false,
-              style: OaaType.label.copyWith(color: colors.textMuted),
-            ),
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        // The mark's mirror. Nothing is drawn in it ever; it is here so that
+        // the name either side of it is the same distance from the window's
+        // centre whether the document has been touched or not.
+        const SizedBox(width: _markWidth),
+        // `Flexible` inside a sized box, for the reason `BarChip` gives:
+        // without it the text is measured against unbounded width and takes
+        // it, where the room this title was given cannot see it.
+        Flexible(
+          child: Text(
+            name.toUpperCase(),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            softWrap: false,
+            textAlign: TextAlign.center,
+            style: OaaType.label.copyWith(color: colors.textMuted),
           ),
-          SizedBox(
-            width: _markWidth,
-            child: modified
-                ? Text(
-                    ' •',
-                    style: OaaType.label.copyWith(color: colors.textFaint),
-                  )
-                : null,
-          ),
-        ],
-      ),
+        ),
+        SizedBox(
+          width: _markWidth,
+          child: modified
+              ? Text(
+                  ' •',
+                  style: OaaType.label.copyWith(color: colors.textFaint),
+                )
+              : null,
+        ),
+      ],
     );
   }
 }

@@ -74,7 +74,7 @@ class WorkspaceController extends Notifier<Workspace> {
   /// compares against for a canvas that has never been saved to a file. Held
   /// here rather than read out of the document, because the document provider
   /// cannot know when it was first looked at: a modified mark that depended on
-  /// whether the status bar happened to be wide enough to draw it would be no
+  /// whether the menu bar happened to be wide enough to draw it would be no
   /// mark at all.
 
   /// Deep enough to cover a working session's worth of mistakes, bounded
@@ -336,6 +336,16 @@ class WorkspaceController extends Notifier<Workspace> {
   }
 }
 
+/// The name a layout carries until somebody saves it under one of their own.
+///
+/// One word in one place, because three things read it: the document name
+/// centred in the menu bar, the name field the save dialog opens with, and the
+/// prompt that asks whether to keep unsaved work. A layout is named by being
+/// saved — the file *is* the document, which is what lets the name field go —
+/// so until then the honest answer is that it has no name, and printing
+/// "Unnamed" is how the window says so without inventing one.
+const String kUnnamedPreset = 'Unnamed';
+
 /// What Open Audio Analyzer opens with.
 ///
 /// A working meter bridge on the first tab and the frequency displays on the
@@ -355,6 +365,14 @@ class WorkspaceController extends Notifier<Workspace> {
 /// `_WorkspaceState.initState` — and a layout only becomes a preset when
 /// somebody names it, because silently mutating the preset a user loaded is how
 /// a preset library becomes untrustworthy.
+///
+/// **Which is why it is called [kUnnamedPreset] and not "Loudness".** It was
+/// named after the tab it opens on, and the menu bar then printed a document
+/// name nobody had chosen — a fresh install looked like it had a preset called
+/// LOUDNESS open, and Save as offered `Loudness.json` as though that were the
+/// name to keep. The placeholder says the true thing instead: nothing has been
+/// named yet, and the save dialog carries the same word into the name field for
+/// the user to replace with their own.
 PresetSpec defaultPreset() {
   const metrics = [
     Metric.lufsMomentary,
@@ -381,7 +399,7 @@ PresetSpec defaultPreset() {
   );
 
   return PresetSpec(
-    name: 'Loudness',
+    name: kUnnamedPreset,
     tabs: [
       TabSpec(
         name: 'Loudness',

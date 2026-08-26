@@ -7,6 +7,7 @@ import 'display_host.dart';
 import 'mdns/host_discovery.dart';
 import 'pair_link.dart';
 import 'qr_scanner.dart';
+import 'this_machine.dart';
 
 /// Choosing a host to attach to: what discovery found, and the address you type
 /// when discovery cannot work.
@@ -39,6 +40,7 @@ class HostPickerPanel extends StatefulWidget {
     required this.onConnect,
     this.onClose,
     this.discovery,
+    this.thisMachine,
     super.key,
   });
 
@@ -56,6 +58,12 @@ class HostPickerPanel extends StatefulWidget {
   /// alternative is a widget test that opens a multicast socket.
   final HostDiscovery? discovery;
 
+  /// Which addresses are the machine this panel is being read on. Null means
+  /// ask the machine, which is what every caller passes; a test passes its
+  /// own, because the alternative is asserting against whatever network the
+  /// suite happens to be running on. See [ThisMachine].
+  final ThisMachine? thisMachine;
+
   @override
   State<HostPickerPanel> createState() => _HostPickerPanelState();
 }
@@ -66,6 +74,11 @@ class _HostPickerPanelState extends State<HostPickerPanel> {
   /// tree. A picker that outlived its browser would show a list nothing was
   /// refreshing.
   late final HostDiscovery _browser = widget.discovery ?? createHostDiscovery();
+
+  /// The machine this panel is on, so that none of the three ways out of it
+  /// can point back at it. See [ThisMachine] for why that is worth a file.
+  late final ThisMachine _self = widget.thisMachine ?? ThisMachine();
+
   final TextEditingController _address = TextEditingController();
 
   /// Whether the address field has anything in it, which is the only thing the
@@ -75,7 +88,7 @@ class _HostPickerPanelState extends State<HostPickerPanel> {
   /// the host list underneath it.
   bool _typed = false;
 
-  /// Whether the last press of Connect was refused by the parser.
+  /// Why the last attempt to connect was refused, or null while none has been.
   ///
   /// **A button that does nothing is worse than one that says no.** `PairLink`
   /// is strict — a mistyped port is a refusal rather than a host name with a
@@ -83,12 +96,20 @@ class _HostPickerPanelState extends State<HostPickerPanel> {
   /// seconds later for a reason nobody can read — and strictness with no
   /// feedback is a Connect button that swallows the press. Cleared on the next
   /// keystroke, so it marks the attempt and not the field.
-  bool _refused = false;
+  _Refusal? _refusal;
 
   @override
   void initState() {
     super.initState();
     _browser.start();
+    // Not awaited, and the rebuild is asked for rather than assumed. It
+    // completes in milliseconds — an interface list and a host name, no
+    // network — but it is still a future, and the list it filters is drawn
+    // from announcements that arrive on their own schedule. A row drawn
+    // before the answer came back is a row that could be this machine.
+    _self.resolve().then((_) {
+      if (mounted) setState(() {});
+    });
   }
 
   @override
@@ -105,16 +126,33 @@ class _HostPickerPanelState extends State<HostPickerPanel> {
   void _submit() {
     final link = PairLink.parse(_address.text);
     if (link == null) {
-      setState(() => _refused = true);
+      setState(() => _refusal = _Refusal.notAnAddress);
       return;
     }
-    widget.onConnect(link.host, link.port);
+    _connect(link.host, link.port);
+  }
+
+  /// The one door out of this panel.
+  ///
+  /// All three ways in come through it — a tapped row, a scanned code, a typed
+  /// address — because "that is this computer" is one answer and not three,
+  /// and because two of the three would otherwise have no answer at all. The
+  /// list hides this machine rather than offering a row that refuses, so what
+  /// reaches the refusal here is an address somebody typed or a code somebody
+  /// pointed a camera at; the tapped path keeps it because a row can be drawn
+  /// before [ThisMachine.resolve] has said what this machine is.
+  void _connect(String host, int port) {
+    if (_self.contains(host)) {
+      setState(() => _refusal = _Refusal.thisMachine);
+      return;
+    }
+    widget.onConnect(host, port);
   }
 
   /// The camera, and then out of it by the same door a tapped host leaves by.
   ///
-  /// The scanner pops itself and hands the address to [HostPickerPanel.onConnect]
-  /// unchanged, so what happens next is the caller's business exactly as it is
+  /// The scanner pops itself and hands the address to [_connect] unchanged, so
+  /// what happens next is the caller's business exactly as it is
   /// for a discovered host — the desktop pushes a display screen, the tablet
   /// connects the client it already has. A scanner that knew which of those it
   /// was in would be the second implementation of "choose a host".
@@ -125,7 +163,7 @@ class _HostPickerPanelState extends State<HostPickerPanel> {
         onClose: () => Navigator.of(context).pop(),
         onConnect: (host, port) {
           Navigator.of(context).pop();
-          widget.onConnect(host, port);
+          _connect(host, port);
         },
       ),
     );
@@ -177,7 +215,22 @@ class _HostPickerPanelState extends State<HostPickerPanel> {
               _browser.failure,
             ]),
             builder: (context, _) {
-              final hosts = _browser.hosts.value;
+              // **This machine is dropped rather than shown and refused.** A
+              // desktop that is publishing hears its own announcement — one
+              // process, one multicast group, a browser and a responder in it
+              // — so on a machine that is alone on the network the only row
+              // there is is the machine reading the list, and a row that
+              // cannot be tapped is a promise the product does not keep. It is
+              // worth saying that it happened, though: the alternative reads
+              // as a search that has found nothing, which sends somebody to
+              // check the network when discovery has just demonstrated that it
+              // works.
+              final found = _browser.hosts.value;
+              final hosts = [
+                for (final host in found)
+                  if (!_self.contains(host.address)) host,
+              ];
+              final onlySelf = hosts.isEmpty && found.isNotEmpty;
               final browsing = _browser.isBrowsing.value;
               final failure = _browser.failure.value;
 
@@ -185,6 +238,9 @@ class _HostPickerPanelState extends State<HostPickerPanel> {
                 title: 'On this network',
                 note: hosts.isNotEmpty
                     ? 'Tap a host to show its meters here.'
+                    : onlySelf
+                    ? 'The only host on this network is this machine, and a '
+                          'machine cannot be its own display.'
                     // A search that is running *and* has something in its way
                     // does not get to say it is looking: on Android a browse
                     // whose multicast lock was refused sends its query, hears
@@ -206,7 +262,7 @@ class _HostPickerPanelState extends State<HostPickerPanel> {
                       // the row brightens under the pointer instead.
                       mark: OaaMark.broadcast,
                       opens: true,
-                      onTap: () => widget.onConnect(host.address, host.port),
+                      onTap: () => _connect(host.address, host.port),
                     ),
                   // Stated rather than shown as an empty list, which reads as
                   // "nothing is running" and sends somebody to check the wrong
@@ -219,7 +275,12 @@ class _HostPickerPanelState extends State<HostPickerPanel> {
                   // reason to show: Android's multicast lock can be refused on
                   // a socket that binds and joins perfectly, and a browse in
                   // that state is running and deaf.
-                  if (hosts.isEmpty && (failure != null || !browsing))
+                  // Never over [onlySelf]: a search that has just found this
+                  // machine is a search that is working, and both of the
+                  // sentences below would be saying it is not.
+                  if (hosts.isEmpty &&
+                      !onlySelf &&
+                      (failure != null || !browsing))
                     PanelNote(
                       failure ??
                           'This device cannot search the network for hosts. '
@@ -249,7 +310,7 @@ class _HostPickerPanelState extends State<HostPickerPanel> {
                   note:
                       'The machine you want to watch shows one under '
                       'Settings → Publish, or from the code button beside '
-                      'PUBLISH in its status bar.',
+                      'PUBLISH in its menu bar.',
                   onTap: _scan,
                 ),
               ],
@@ -270,20 +331,30 @@ class _HostPickerPanelState extends State<HostPickerPanel> {
                   hintText: '192.168.1.20',
                   onChanged: (text) {
                     final typed = text.trim().isNotEmpty;
-                    if (typed != _typed || _refused) {
+                    if (typed != _typed || _refusal != null) {
                       setState(() {
                         _typed = typed;
-                        _refused = false;
+                        _refusal = null;
                       });
                     }
                   },
                   onSubmitted: (_) => _submit(),
                 ),
               ),
-              if (_refused)
+              if (_refusal != null)
                 PanelNote(
-                  'That is not an address. A name or an IP, and a port after a '
-                  'colon if this machine does not use ${DisplayHost.defaultPort}.',
+                  switch (_refusal!) {
+                    // "That machine", not "this machine", now that the panel
+                    // has a second refusal and it is about this one.
+                    _Refusal.notAnAddress =>
+                      'That is not an address. A name or an IP, and a port '
+                          'after a colon if that machine does not use '
+                          '${DisplayHost.defaultPort}.',
+                    _Refusal.thisMachine =>
+                      'That address is this machine. A display shows another '
+                          'machine’s meters; this one’s are on the canvas '
+                          'behind this panel.',
+                  },
                   tone: colors.warn,
                   mark: OaaMark.warning,
                 ),
@@ -304,3 +375,11 @@ class _HostPickerPanelState extends State<HostPickerPanel> {
         '${format == null ? '' : '  ·  $format'}';
   }
 }
+
+/// Why a press of Connect did not connect.
+///
+/// Two sentences rather than one flag, because the two refusals send somebody
+/// to two different places: the first one says the text is not an address, and
+/// the second says it is a perfectly good address for the machine they are
+/// already sitting at.
+enum _Refusal { notAnAddress, thisMachine }

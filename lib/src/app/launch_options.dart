@@ -24,6 +24,13 @@
 /// between panels being visually reviewed and being reviewed by whoever happens
 /// to have the right permission.
 ///
+/// **The in-window File menu is not one of these, and was for one afternoon.**
+/// Drawing the FILE button on a Mac is the same kind of debug-build affordance
+/// and it was `--in-window-menu` to begin with, which meant the row two thirds
+/// of the platforms ship was on screen only for somebody who remembered a flag.
+/// It is what a debug build does now — see `fileMenuInWindowProvider` — and a
+/// flag nobody has to pass is a flag that should not exist.
+///
 /// Parsing is done by hand. `package:args` is a dependency the CLI already
 /// carries, but the application deliberately does not, and two flags do not
 /// justify one: see the dependency rule in `CLAUDE.md`.

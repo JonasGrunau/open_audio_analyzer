@@ -5,7 +5,7 @@ The application. GPL-3.0-or-later.
 | Path | Purpose |
 |------|---------|
 | `main.dart` | Parses the command line, loads the configuration, `runApp(ProviderScope(...))`. Nothing else. |
-| `src/app/` | The shell: window, status bar, the keyboard shortcut table, and the launch options. See its own `AGENTS.md`. |
+| `src/app/` | The shell: window, the menu bar across the top and the status bar across the bottom, the keyboard shortcut table, and the launch options. See its own `AGENTS.md`. |
 | `src/canvas/` | The grid canvas, the tab strip and the layout controller. See its own `AGENTS.md`. |
 | `src/clock/` | `MeterClock` — the only `Ticker` in the app. |
 | `src/data/` | Riverpod providers (configuration only), `metric_reader.dart`, `offline_job.dart`, and `mic_permission.dart` — the last being the microphone request Android needs before a capture device will open at all, and which no other platform needs because every other one grants capture through the act of opening one. Its absence is what made Android look display-only for a phase. |
@@ -109,6 +109,27 @@ The application. GPL-3.0-or-later.
   `minBodyWidth`/`minBodyHeight` on `ModuleKind` and let the frame substitute
   the placeholder. A painter that returns early draws nothing, and nothing with
   a title bar over it is a panel the user reads as broken rather than as small.
+- **A display whose picture would be a tautology names the reason instead.**
+  The engine copies channel 0 into the right slot of the scope and reports every
+  spectrum band at dead centre when there is only one channel — both are true and
+  both are documented in `docs/METRICS.md` — but *drawing* them gives the Phase
+  Scope a hard vertical line that never moves and the Stereo Cloud a bright
+  column down the middle of its face, and a display that cannot change is read as
+  one that has stuck. The cloud's version was reported as a broken module. Both
+  say **MONO SOURCE** across the middle now, keep their graticule drawn, and
+  break the guides around the words rather than striking through them. The phase
+  scope's correlation bar goes with the scatter — an empty track, because a bar
+  pinned against its right end is the same tautology one row lower — while the
+  *number* stays measured and available in a Number Box. Not the
+  `ModuleTooSmall` placeholder and not an em dash: the module is not
+  unavailable, it is showing everything a one-channel signal has.
+- **A module that stops plotting has to keep ageing what it has already
+  plotted.** The two above accumulate, so *not writing* is not the same as
+  writing nothing: a trail that simply stopped being filled would hold the last
+  stereo frame at full brightness for the rest of the session — a Lissajous
+  figure of audio that is no longer playing. The cloud's fade runs anyway and the
+  scope's ring is advanced with `blank()` frames, so switching to a mono input
+  dissolves what was there over the display's own length.
 - **A module that accumulates advances on `engine.generation`, never on
   `paint`.** Paint also runs on a resize, a theme change, or an ancestor marking
   the subtree dirty. A spectrogram that scrolled on those would invent time that

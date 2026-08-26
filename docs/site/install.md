@@ -255,7 +255,7 @@ floor is 15 because Apple stops accepting uploads built against anything lower
 in Spring 2027, and a build nobody can upload is a build nobody can install.
 
 The quickest of the three ways is the camera: on the desktop, the code button
-beside PUBLISH in the status bar; on the iPad, Scan
+beside PUBLISH in the menu bar; on the iPad, Scan
 a QR code. iPadOS asks for camera permission the first time, and refusing it
 leaves the host list and the typed address exactly as they were.
 
@@ -301,18 +301,41 @@ application behaves, and an unfolded foldable is over the line and eligible.
 The canvas is a grid of meter modules with a scale down each side, and there is
 no phone-sized arrangement of that which is worth reading.
 
-Every tagged release uploads a build to Play, and it is a **closed test** — so
-the store listing is not public and
-`play.google.com/store/apps/details?id=com.openaudioanalyzer.oaa` answers 404 to
-anybody who has not joined it. Joining is self-service and takes a Google
-account:
+Every tagged release uploads a build to Play, and it is a **closed test**. That
+has two consequences worth knowing before you try to install it.
 
-**[Join the closed test](https://play.google.com/apps/testing/com.openaudioanalyzer.oaa)**
+**The listing is not public.**
+`play.google.com/store/apps/details?id=com.openaudioanalyzer.oaa` is not
+findable by search and does not resolve for an account that is not testing it.
 
-That page adds your account to the tester list and then hands you the listing,
-which works from that point on. It is also what the Google Play badge on the
-[front page](/) points at, and for the same reason: a badge that sent a reader
-to the listing would send every one of them to a 404.
+**The opt-in link is not an invitation.** A closed test grants access by list:
+Play only lets an account opt in if that account is already on the track's
+tester list — an email list or a Google Group the developer has added. Opting in
+is the second step, never the first, so the link below does nothing on its own
+for an account nobody has added yet.
+
+So it is two steps, in this order:
+
+1. **Ask to be added** — open an issue on the
+   [repository](https://github.com/JonasGrunau/open_audio_analyzer/issues) with
+   the Google account address you use on the tablet. It has to be that account:
+   Play matches the tester list against the account signed in to the Play Store,
+   not against whoever opened the link.
+2. **Opt in**, once you have been added. Play gives the test two links and they
+   are not interchangeable — use the one that matches what you are reading this
+   on:
+
+   | Where you are | Link |
+   |---|---|
+   | A browser, on any machine | [Opt in on the web](https://play.google.com/apps/testing/com.openaudioanalyzer.oaa) |
+   | The Android tablet itself | [Open it in the Play Store](https://play.google.com/store/apps/details?id=com.openaudioanalyzer.oaa) |
+
+   The Google Play badge on the [front page](/) leads to
+   [the same three steps](/testing), which is where to send anybody who asks how
+   to get in.
+
+Changes to a tester list can take a few hours to reach the store, so if the
+listing still refuses you immediately after being added, that is why.
 
 Building it yourself needs the Android SDK and no credentials at all, and the
 filter above does not apply — it is the store's, so `flutter run` puts the build

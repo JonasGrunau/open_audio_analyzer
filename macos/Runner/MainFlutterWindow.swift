@@ -2,33 +2,42 @@ import Cocoa
 import FlutterMacOS
 
 class MainFlutterWindow: NSWindow {
-  /// Flutter's stock 800x600 is too small for a canvas of meters — the status
-  /// bar alone has to drop controls to fit. These are the sizes a metering
+  /// Flutter's stock 800x600 is too small for a canvas of meters — the menu bar
+  /// alone has to drop controls to fit. These are the sizes a metering
   /// workspace is actually usable at.
   ///
   /// The minimum is arithmetic, not taste. The canvas is a fixed 24x16 cells at
-  /// every window size, so the row height is `(height - 104) / 16` after the
-  /// status bar, the tab strip and the canvas inset; the smallest module in the
-  /// default preset is two rows, and it needs 24 px of body left over once its
-  /// title bar and margin are taken. That puts the floor at 768. The old 480
-  /// gave a two-row module 12 px of body, which is why every Number Box on the
-  /// default tab was an empty panel. The width is the point below which the
-  /// status bar starts dropping controls it should not have to.
+  /// every window size, so the row height is `(height - 144) / 16` after the
+  /// menu bar, the tab strip, the status bar and the canvas inset; the smallest
+  /// module in the default preset is two rows, and it needs 24 px of body left
+  /// over once its title bar and margin are taken. That puts the floor at 808.
+  /// The old 480 gave a two-row module 12 px of body, which is why every Number
+  /// Box on the default tab was an empty panel.
+  ///
+  /// **808 rather than 768 because of the status bar across the bottom.** It
+  /// takes 40 px off the canvas, and the two-row module at 768 had 4 px of body
+  /// to spare while the Alert Meter had none at all — so the row that carries
+  /// the readings had to be paid for out of the window rather than out of the
+  /// modules. `kMinimumWindow` in `test/scaling_test.dart` is the same pair of
+  /// numbers, and it draws every module at its smallest legal size to prove it.
+  ///
+  /// The width is the point below which the menu bar starts dropping controls
+  /// it should not have to.
   private static let defaultSize = NSSize(width: 1440, height: 900)
-  private static let minimumSize = NSSize(width: 960, height: 768)
+  private static let minimumSize = NSSize(width: 960, height: 808)
 
   /// The height of the bar Flutter draws across the top of the window.
   ///
-  /// **The same number as `_StatusBar.height` in `lib/src/app/oaa_app.dart`.**
+  /// **The same number as `_MenuBar.height` in `lib/src/app/oaa_app.dart`.**
   /// There is no way to share it — this file is compiled before Dart runs, and
   /// the buttons have to be in the right place in the first frame, not after a
   /// round trip. What it buys is the window buttons sitting on the row they are
   /// now part of; if the two drift apart they sit slightly above or below it,
   /// which reads as a rendering fault rather than a style.
-  private static let statusBarHeight: CGFloat = 40
+  private static let menuBarHeight: CGFloat = 40
 
   /// The default skin's `panel`, so that the window that appears before Flutter
-  /// has drawn anything is already the colour the status bar will be. Dart
+  /// has drawn anything is already the colour the two bars will be. Dart
   /// replaces it with the active skin's on the first build — see
   /// `lib/src/app/window_chrome.dart`.
   private static let initialBackground = NSColor(
@@ -42,7 +51,7 @@ class MainFlutterWindow: NSWindow {
   /// — and built here because this is where the engine's messenger is.
   private var fileMenu: OaaFileMenu?
 
-  /// When the status bar last reported a click, on the monotonic clock.
+  /// When the menu bar last reported a click, on the monotonic clock.
   ///
   /// The distant past rather than zero: `systemUptime` starts at zero, so a
   /// click in the first half second after a boot would otherwise be the second
@@ -76,15 +85,15 @@ class MainFlutterWindow: NSWindow {
     // removes the one piece of text in the window whose font, colour and weight
     // Open Audio Analyzer does not choose. What is left is a single bar of
     // `panel` from the top edge down, with the three window buttons sitting
-    // inside it on the same row as OAA and the source.
+    // inside it on the same row as the File menu and the document's name.
     //
     // Dragging the window goes with the title bar, and so does zooming it by
-    // double-clicking one; the status bar asks for both back over the channel
+    // double-clicking one; the menu bar asks for both back over the channel
     // below. Neither is a style choice — a window that cannot be moved is a
     // regression, and a Mac window whose top edge ignores a double click is one
     // that answers a gesture every other window on the machine answers.
     //
-    // What the status bar sends is one click at a time. Recognising the pair in
+    // What the menu bar sends is one click at a time. Recognising the pair in
     // Flutter costs a `DoubleTapGestureRecognizer`, and everything under one of
     // those answers 300 ms late — see `WindowDragArea`.
     self.styleMask.insert(.fullSizeContentView)
@@ -189,7 +198,7 @@ class MainFlutterWindow: NSWindow {
     self.appearance = NSAppearance(named: isLight ? .aqua : .darkAqua)
   }
 
-  /// The status bar's own background answered a click.
+  /// The menu bar's own background answered a click.
   ///
   /// Dart sends one of these per click the bar wins outright — a click a control
   /// in the row took is never one of them, which is the division AppKit draws in
@@ -236,14 +245,14 @@ class MainFlutterWindow: NSWindow {
     }
   }
 
-  /// Centres the window buttons in the status bar.
+  /// Centres the window buttons in the menu bar.
   ///
   /// AppKit centres them in a 28 pt title bar. There is no title bar; there is
-  /// a 40 pt status bar, and buttons sitting 6 pt above the row they are part
-  /// of look like a bug in the row rather than a decision about the buttons.
+  /// a 40 pt menu bar, and buttons sitting 6 pt above the row they are part of
+  /// look like a bug in the row rather than a decision about the buttons.
   ///
   /// Only the vertical position moves. The horizontal one is AppKit's and is
-  /// what `WindowChrome.statusBarLeading` on the Dart side leaves room for; a
+  /// what `WindowChrome.menuBarLeading` on the Dart side leaves room for; a
   /// window whose buttons are not where every other window's are is a window
   /// people miss.
   private func alignWindowButtons() {
@@ -253,12 +262,12 @@ class MainFlutterWindow: NSWindow {
 
     // Not flipped: y counts up from the bottom of the container, whose top edge
     // is the top edge of the window.
-    let centre = container.bounds.height - MainFlutterWindow.statusBarHeight / 2
+    let centre = container.bounds.height - MainFlutterWindow.menuBarHeight / 2
 
     for button in buttons {
       var frame = button.frame
       // Clamped, because in full screen the container is shorter than the
-      // status bar and an unclamped origin would push the buttons out of it.
+      // menu bar and an unclamped origin would push the buttons out of it.
       frame.origin.y = max(0, (centre - frame.height / 2).rounded())
       button.frame = frame
     }

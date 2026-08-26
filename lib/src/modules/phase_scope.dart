@@ -187,6 +187,12 @@ class _PhaseScopeModuleState extends State<PhaseScopeModule> {
   ui.Paragraph? _left;
   ui.Paragraph? _right;
   ui.Paragraph? _mono;
+
+  /// Why the face is empty on a one-channel source. See the painter.
+  ///
+  /// Not [_mono], which is the `M` at the top of the graticule — that one is an
+  /// axis label and is drawn whatever the source is.
+  ui.Paragraph? _monoNotice;
   Color? _builtColor;
 
   /// One [Paint] per age, alpha `_decay^age`.
@@ -213,7 +219,21 @@ class _PhaseScopeModuleState extends State<PhaseScopeModule> {
   /// needs every sample; this one needs a representative scatter of them.
   void write(Float32List scope, int frames) {
     if (scope.isEmpty || frames <= 0) return;
+    _writeInto(scope, frames);
+  }
 
+  /// Advances the ring with a frame of nothing in it.
+  ///
+  /// What a mono source gets, and it is not the same as not writing at all: the
+  /// trail is a ring of frames with a fixed alpha per age, so a scope that
+  /// simply stopped being written would hold the last stereo frame at full
+  /// brightness for the rest of the session — a Lissajous figure of audio that
+  /// stopped playing. Ageing it out with empty frames is what makes changing to
+  /// a mono input *dissolve* the cloud over the trail's own length, which is
+  /// what the stereo cloud's fade does for the same reason.
+  void blank() => _writeInto(null, 0);
+
+  void _writeInto(Float32List? scope, int frames) {
     final take = frames < MeterShape.scopePoints
         ? frames
         : MeterShape.scopePoints;
@@ -244,12 +264,13 @@ class _PhaseScopeModuleState extends State<PhaseScopeModule> {
     for (var i = 0; i < MeterShape.scopePoints; i++) {
       final to = base + _order[i] * 2;
       if (i < take) {
-        _ring[to] = scope[from + i * 2];
+        _ring[to] = scope![from + i * 2];
         _ring[to + 1] = scope[from + i * 2 + 1];
       } else {
-        // A short run — the link dropped a frame, or nothing has been measured
-        // yet. NaN rather than a stale pair: `drawRawPoints` skips it, where a
-        // leftover would draw a sample from a different moment.
+        // A short run — the link dropped a frame, the source is mono and
+        // nothing is being plotted, or nothing has been measured yet. NaN
+        // rather than a stale pair: `drawRawPoints` skips it, where a leftover
+        // would draw a sample from a different moment.
         _ring[to] = double.nan;
         _ring[to + 1] = double.nan;
       }
@@ -269,6 +290,10 @@ class _PhaseScopeModuleState extends State<PhaseScopeModule> {
       _left = layoutParagraph('L', style);
       _right = layoutParagraph('R', style);
       _mono = layoutParagraph('M', style);
+      _monoNotice = layoutParagraph(
+        'MONO SOURCE',
+        OaaType.label.copyWith(color: colors.textMuted),
+      );
     }
 
     if (_builtTrail != colors.accent) {
@@ -341,9 +366,23 @@ class _PhaseScopePainter extends MeterPainter {
         math.min(plot.width, plot.height) / 2 / math.sqrt2 - Space.xs;
     if (radius <= 0) return;
 
+    // **A one-channel source is not plotted at all.** The engine duplicates
+    // channel 0 into the scope's right slot — see `oaa_scope_append` — so a mono
+    // signal is L=R exactly, and this display rotates that diagonal upright: a
+    // hard, bright, perfectly straight vertical line, every frame, whatever the
+    // audio does. It is a true drawing of a tautology, and it is
+    // indistinguishable from a scope that has stuck. The stereo cloud had the
+    // same shape of bug reported as a broken module, and this is the same answer
+    // — stop plotting and name the reason.
+    final stereo = engine.channels >= 2;
+
     if (engine.generation != 0 && engine.generation != state.lastGeneration) {
       state.lastGeneration = engine.generation;
-      state.write(engine.scope, engine.scopeFrames);
+      if (stereo) {
+        state.write(engine.scope, engine.scopeFrames);
+      } else {
+        state.blank();
+      }
     }
 
     // --- The trail, oldest first so the newest frame is on top --------------
@@ -370,18 +409,38 @@ class _PhaseScopePainter extends MeterPainter {
 
     // --- Guides, drawn fresh each frame so the trail cannot burn them in ----
     canvas.drawCircle(centre, radius * math.sqrt2, _guide);
-    canvas.drawLine(
-      Offset(centre.dx, centre.dy - radius * math.sqrt2),
-      Offset(centre.dx, centre.dy + radius * math.sqrt2),
-      _guide,
-    );
-    canvas.drawLine(
-      Offset(centre.dx - radius * math.sqrt2, centre.dy),
-      Offset(centre.dx + radius * math.sqrt2, centre.dy),
-      _guide,
-    );
 
     final reach = radius * math.sqrt2;
+    final notice = stereo ? null : state._monoNotice!;
+
+    // Both axes are broken around the notice when there is one. A hairline
+    // through the middle of a word reads as a strikethrough, which is the
+    // opposite of what the notice says, and the vertical one would split it in
+    // two — this display's cross meets exactly where the words go.
+    final holdX = notice == null ? 0.0 : notice.longestLine / 2 + Space.sm;
+    final holdY = notice == null ? 0.0 : notice.height / 2 + Space.xs;
+
+    for (final (from, to) in [
+      (
+        Offset(centre.dx, centre.dy - reach),
+        Offset(centre.dx, centre.dy - holdY),
+      ),
+      (
+        Offset(centre.dx, centre.dy + holdY),
+        Offset(centre.dx, centre.dy + reach),
+      ),
+      (
+        Offset(centre.dx - reach, centre.dy),
+        Offset(centre.dx - holdX, centre.dy),
+      ),
+      (
+        Offset(centre.dx + holdX, centre.dy),
+        Offset(centre.dx + reach, centre.dy),
+      ),
+    ]) {
+      canvas.drawLine(from, to, _guide);
+    }
+
     _label(
       canvas,
       state._mono!,
@@ -398,10 +457,34 @@ class _PhaseScopePainter extends MeterPainter {
       Offset(centre.dx + reach * 0.72, centre.dy - reach * 0.72 + Space.sm),
     );
 
+    if (notice != null) {
+      // Over the graticule, which stays drawn: the module is not unavailable,
+      // it is showing everything a one-channel signal has to show, which is why
+      // it names the reason rather than blanking the face.
+      canvas.drawParagraph(
+        notice,
+        Offset(
+          centre.dx - notice.longestLine / 2,
+          centre.dy - notice.height / 2,
+        ),
+      );
+    }
+
     // --- Correlation --------------------------------------------------------
     // The same fact as the shape above, as a number you can read off. −1 is a
     // signal that will disappear in mono, which is the failure a phase scope
     // exists to catch and the one thing about it worth quantifying.
+    //
+    // **Empty on a one-channel source, track and no fill.** The engine answers
+    // +1 for mono deliberately — "perfectly correlated with itself", see
+    // `oaa_analyse` — and that is true, but a bar pinned hard against its right
+    // end is the same tautology the scatter above refuses to draw, in the same
+    // module, a few pixels below the words saying there is nothing to show. The
+    // number is in `docs/METRICS.md` and in a Number Box for anybody who wants
+    // it; what this module draws is the stereo field, and a mono source has
+    // none. An empty track rather than no bar at all, because the row is part of
+    // the module's shape and a face that changes height when the source does
+    // reads as a different module.
     final track = Rect.fromLTWH(
       0,
       size.height - _correlationHeight,
@@ -414,7 +497,7 @@ class _PhaseScopePainter extends MeterPainter {
     canvas.drawRRect(rounded, _correlationTrack);
 
     final correlation = engine.correlation;
-    if (!correlation.isNaN) {
+    if (stereo && !correlation.isNaN) {
       final centreX = track.center.dx;
       final extent = correlation.clamp(-1.0, 1.0) * track.width / 2;
       _correlation.color = correlation < 0 ? colors.warn : colors.meterFill;

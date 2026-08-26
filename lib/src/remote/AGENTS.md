@@ -13,8 +13,9 @@ halves live here.
 | `host_picker.dart` | Choosing a host — what discovery found, the code a camera reads, and the address you type when neither worked. One panel, pushed by the desktop's ATTACH button and shown by the display screen itself. |
 | `remote_display_service.dart` | The socket and the mDNS advertisement as one switch. |
 | `pair_link.dart` | `oaa://host:port` — what a pairing code carries, and the one parser behind both it and the address somebody types. |
+| `this_machine.dart` | Whether an address is the machine asking. A publishing desktop hears its own announcement, so the picker has to know which row is itself. |
 | `qr_scanner.dart` | The camera half of pairing: a viewfinder over `mobile_scanner`, and `canScanQrCodes`, which is why the row is absent on Windows and Linux rather than disabled. |
-| `remote_control.dart` | `RemoteDisplayScope`, which drives the service and carries it, and the three controls the status bar shows: `PublishSwitch`, `PairingCodeButton`, `AttachButton`. |
+| `remote_control.dart` | `RemoteDisplayScope`, which drives the service and carries it, and the three controls the menu bar shows: `PublishSwitch`, `PairingCodeButton`, `AttachButton`. |
 | `publish_settings.dart` | `PublishSection` — everything about publishing except the switch — and `PairingCodePanel` behind it. |
 | `mdns/dns_message.dart` | Just enough DNS to advertise and find one service. |
 | `mdns/mdns_service.dart` | The responder, and the browser every platform but iOS uses. |
@@ -48,7 +49,7 @@ halves live here.
 
 - **This directory owns a socket, not a design system.** `remote_control.dart`
   and `publish_settings.dart` are what a desktop user looks at — three controls
-  in the status bar and one section of the settings panel — and the first of
+  in the menu bar and one section of the settings panel — and the first of
   them was written twice over as stock Material — a `TextButton` in a row of
   `BarButton`s and an `AlertDialog` where every other panel is a
   `PanelScaffold`. The second one did not merely look wrong: a route pushed
@@ -79,7 +80,7 @@ halves live here.
   its own and pushed one of two answers, which fixed the footer and left both
   halves two presses deep behind a word.
 
-  They are two controls in the status bar now — **PUBLISH**, a switch, and
+  They are two controls in the menu bar now — **PUBLISH**, a switch, and
   **ATTACH**, a button — and each does its whole half in one press. What the
   panel's Send row existed to carry, the switch carries better: publishing is
   legible from the bar without opening anything, because it is the bar.
@@ -110,11 +111,24 @@ halves live here.
 
   It offers three ways in, in the order they cost the person holding the
   tablet: a host discovery found, a code the camera reads, and an address typed
-  by hand. **All three end at the same `onConnect`** — the scanner pops itself
+  by hand. **All three end at the same `_connect`** — the scanner pops itself
   and hands back a host and a port exactly as a tapped row does, and knows
   nothing about whether the caller will push a display screen or connect a
   client it already has. A scanner that knew which of those it was in would be
   the second implementation of the thing the rule above says there is one of.
+
+  **That one door is also where a machine is refused itself.** A desktop that is
+  publishing hears its own announcement — the browser and the responder are two
+  objects in one process on one multicast group — so its own name is a row in
+  its own list, and on a machine alone on the network it is the only row. What
+  tapping it did was cover the canvas with a socket-fed copy of the canvas:
+  measured once, serialised, decoded a frame later and drawn twice, with the
+  port open, the handshake done and the link saying Connected, so nothing
+  anywhere said what had happened. `this_machine.dart` answers the question and
+  `_connect` asks it. The list drops its own machine rather than drawing a row
+  that refuses — and says that is why it is empty, because "no hosts found" over
+  a search that has just found this one sends somebody to check a network that
+  is working.
 
 - **A pairing code is an address, and `PairLink` is the only thing that reads
   one.** The field and the camera are the same question asked twice, and two

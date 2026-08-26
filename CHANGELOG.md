@@ -10,25 +10,114 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### ✨ Added
+- **A status bar across the bottom of the window.** Everything the top row used
+  to report is in it: the signal source, the sample rate and channel count, the
+  DAW's playhead, the elapsed clock and the delivery target. What is left in the
+  top row is what you press — the File menu, ANALYSE FILE, the pairing code,
+  PUBLISH, ATTACH, settings, restart and `?` — with the open preset's name
+  centred between them, which on macOS is where a window's title goes because
+  that row is the title bar.
+- A layout nobody has saved yet is called **Unnamed** rather than Loudness, and
+  that is the word the Save as dialog opens with for you to replace. A fresh
+  install used to print a document name nobody had chosen and offer
+  `Loudness.json` as though it were the name to keep.
 - The front page carries the App Store and Google Play badges, beside the
-  Download, Source and Documentation buttons. The Play badge is the way into the
-  Android closed test: it links to the tester opt-in page rather than to the
-  store listing, which answers 404 to everybody who has not joined yet. The App
-  Store badge is drawn but not linked, over a `iPad — coming soon` caption,
-  until the iPad build clears review.
+  Download, Source and Documentation buttons. The App Store badge is drawn
+  greyed and unlinked until the iPad build clears review, which is the whole of
+  what says so — each badge stands on its own artwork, with no caption under
+  it.
+- A new page at `/testing` explains how to get into the Android closed test, in
+  three steps. It is where the Google Play badge leads, and it exists because
+  neither URL Play offers can be sent to a stranger: a closed test grants access
+  by list rather than by link, so both of them turn away anybody who is not
+  already a tester, and neither explains why.
+
+### ⚡ Changed
+- **The File menu moved to the far left of the top row**, where a menu bar's
+  first menu is, on Windows and Linux. It was between ATTACH and ANALYSE FILE at
+  the right-hand end.
+- **SETTINGS and RESET are drawn as marks** — two faders, and a ring with an
+  arrowhead — beside the `?` that was already one. Both keep a tooltip, and
+  RESET's has always been where the scope of what it discards is written. The
+  words were 145 px of a row that has to leave room for the document's name;
+  the marks are 84.
+- The smallest supported window is now **960x808**, up from 960x768 (macOS; the
+  only platform that enforces one). The canvas is a fixed 24x16 cells, so a row
+  taken out of the window is height taken off every module: at 768 the smallest
+  module in the default preset had 4 px of body to spare and the Alert Meter had
+  none, so the new row is paid for by the window rather than by the meters.
+- The prompt that asks about unsaved work says "The layout on the canvas has
+  changes that are not in a file" for a layout that has never been saved, rather
+  than quoting the placeholder name back at you.
+- The file analysis dialog opens without 64 px of empty space above and below
+  its drop zone. It also no longer changes height when you drop a file: the idle
+  state and the analysing state are now within a few pixels of each other.
 
 ### 🐛 Fixed
+- **The open preset's name no longer disappears on a window under 1266 px.** It
+  had the highest width gate in the old single row and was the first thing
+  dropped; centred in the top row it needs 900 px, which is under the narrowest
+  window the application supports.
+- **PUBLISH can no longer be taken away by narrowing the window.** It was the
+  last of the three remote controls to be dropped, and under that width there
+  was no way anywhere in the application to stop publishing — a capability
+  removed by a window size. The whole remote group now survives every width the
+  row is built at.
+- **The Phase Scope no longer looks broken on a mono source.** A one-channel
+  source is `L == R` exactly — the engine copies channel 0 into the right slot,
+  which is true and documented — and rotating that gives a hard vertical line
+  that never moves, indistinguishable from a display that has stuck. It says
+  **MONO SOURCE** across the face now, keeps its graticule, dissolves whatever
+  trail was there rather than freezing it, and draws its correlation bar as an
+  empty track — `+1` pinned against the right end is the same tautology one row
+  lower. Correlation is still measured, and a Number Box set to it still prints
+  the number. The Stereo Cloud has said this since 0.2.0 for the same reason.
 - Android can measure a live input. The manifest declared no `RECORD_AUDIO`, so
   Android refused every capture device while the canvas, the modules and the
   engine behind them all worked — which looked like the platform being a remote
   display by design, and was documented that way. It asks for the microphone
   when you first choose an input, not at launch, so a tablet that only mirrors
   another machine is never asked.
+- **The File menu reads as one menu.** Three things, all of them visible the
+  first time it was drawn on the machine it is written on: the shortcuts are in
+  one column at the right of the menu rather than packed against the end of
+  each label, where `Ctrl+O` sat 90 px left of `Ctrl+I`; all six labels are in
+  one column, where the two rows that carry a tick used to be indented past the
+  four that cannot; and neither tick row is greyed while it is off, because the
+  two are checkboxes and not a choice between each other. Windows and Linux
+  only — macOS draws this menu in the system menu bar.
+- The gap between FILE and ANALYSE FILE is the same 8 px seam as everywhere
+  else in the top row. It was 16, meant as a boundary between a menu and a
+  command, and read as one control placed wrong.
+- **A machine can no longer attach to itself.** A desktop that is publishing
+  hears its own announcement, so its own name was a row in its own host list —
+  the only row, on a machine alone on the network — and tapping it covered the
+  canvas with a copy of the canvas, arriving over a socket a frame late, with
+  nothing failing anywhere to say so. The list leaves this machine out and says
+  that is why it is empty, and an address typed or a code scanned that points
+  here is refused with a sentence instead of dialled.
 
 ### 🚧 Internal
 - Apple's and Google's badge artwork is committed under `website/public/badges/`
   exactly as each publishes it, and the trademark credit line both of them
   require is in the site footer.
+- Both rows' width gates are arithmetic on one table of measured control widths
+  (`BarMetrics`) rather than eight hand-measured totals, and `scaling_test.dart`
+  holds every number in that table against the widget it names — from both
+  sides, so a bound that has gone slack fails as loudly as one that has been
+  outgrown. Twice a gate was measured against a string the running application
+  had already replaced, and both times the suite stayed green while the row ran
+  off its edge.
+- The sweep that pumps the whole application at every width now runs from 480 px
+  rather than 600, which is where both rows actually stop, and it measures the
+  distance from the centred document name to every control in the top row: the
+  name is a layer of a `Stack`, and two layers of a `Stack` overlap in silence.
+- A debug build draws the FILE button on macOS as well, beside ANALYSE FILE,
+  so the row two thirds of the platforms ship can be looked at on the machine
+  most of this is written on — both defects it has had were ones a glance would
+  have caught. Release builds are unchanged: a Mac's File menu is in the system
+  menu bar. It was `--in-window-menu` for an afternoon; a flag nobody remembers
+  to pass shows nobody anything.
 
 ## [0.12.0] — 2026-08-25
 

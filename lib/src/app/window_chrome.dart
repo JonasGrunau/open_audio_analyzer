@@ -4,22 +4,22 @@
 ///
 /// Open Audio Analyzer's window has no title bar on macOS. The frame belongs to
 /// Flutter from the top edge down and AppKit keeps drawing only the three
-/// window buttons, which now sit inside the status bar on the same row as the
-/// source and the delivery target — see `macos/Runner/MainFlutterWindow.swift`
+/// window buttons, which now sit inside the menu bar on the same row as the
+/// File menu and the document's name — see `macos/Runner/MainFlutterWindow.swift`
 /// for the window side of it.
 ///
 /// Three consequences land here:
 ///
-///  * The status bar has to leave the buttons room at its leading edge.
-///    [statusBarLeading] is that room.
+///  * The menu bar has to leave the buttons room at its leading edge.
+///    [menuBarLeading] is that room.
 ///  * A window with no title bar cannot be moved or zoomed by one, so the
-///    status bar asks for both itself — [startDrag] and [titleBarClick].
+///    menu bar asks for both itself — [startDrag] and [titleBarClick].
 ///    Without them the window cannot be moved at all and a double click on its
 ///    top edge does nothing, and neither of those is a style choice.
 ///
 ///    **Only the single click crosses the channel; the pair is counted on the
 ///    window side.** A `DoubleTapGestureRecognizer` here would hold the
-///    gesture arena over the whole status bar for 300 ms and every button in
+///    gesture arena over the whole menu bar for 300 ms and every button in
 ///    the row would answer that late — see [WindowDragArea]. AppKit is also
 ///    the only side that knows the double-click interval this user set and
 ///    what they asked a title bar's double click to do.
@@ -43,7 +43,7 @@ abstract final class WindowChrome {
   /// and the window simply keeps the colour it launched with.
   static const MethodChannel _channel = MethodChannel('oaa/window_chrome');
 
-  /// The status bar's leading padding.
+  /// The menu bar's leading padding.
   ///
   /// **Not a `Space` value, and deliberately not expressed as one.** AppKit
   /// puts the close button 20 pt from the leading edge and the other two on
@@ -53,8 +53,11 @@ abstract final class WindowChrome {
   /// take the row off the buttons rather than with them.
   ///
   /// 80 leaves the same gap after the buttons that [Space.md] leaves before
-  /// the source chip on a platform that still has a title bar of its own.
-  static double get statusBarLeading => Platform.isMacOS ? 80 : Space.md;
+  /// the FILE button on a platform that still has a title bar of its own — and
+  /// that is also what the two numbers being close together buys the row: the
+  /// leading group ends within 2 px of where it does off macOS, so the name
+  /// centred in the window clears both arrangements from one measurement.
+  static double get menuBarLeading => Platform.isMacOS ? 80 : Space.md;
 
   static OaaColors? _applied;
 
@@ -110,7 +113,7 @@ abstract final class WindowChrome {
 
 /// The strip of the window that behaves like a title bar.
 ///
-/// Wraps the status bar, which is the only thing at the top edge and therefore
+/// Wraps the menu bar, which is the only thing at the top edge and therefore
 /// the only place the gestures a title bar used to answer can go. Off macOS it
 /// is its child and nothing else.
 class WindowDragArea extends StatelessWidget {
@@ -149,7 +152,7 @@ class WindowDragArea extends StatelessWidget {
       // **And a two-finger gesture may not either.** A trackpad pan is not a
       // button press, so the recogniser's button filter never sees it and it
       // wins the arena on the start event — a two-finger scroll anywhere over
-      // the status bar handed the window to the compositor to drag. See
+      // the menu bar handed the window to the compositor to drag. See
       // [kDragDevices].
       // It bounds the tap as well, which costs nothing: a click on a trackpad
       // is reported as a mouse, and that kind is used for pan and zoom alone.

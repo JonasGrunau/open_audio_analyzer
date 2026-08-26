@@ -12,8 +12,8 @@
 // **Painted, not built.** The position moves at the publish rate, so a
 // `ValueListenableBuilder` here would rebuild a widget thirty times a second for
 // as long as a DAW is rolling. `ElapsedReadout` in `lib/src/modules/
-// number_box.dart` is the same shape and says the same thing: the status bar is
-// exactly where that habit starts.
+// number_box.dart` is the same shape and says the same thing: a bar of readings
+// is exactly where that habit starts.
 //
 // **It draws what fits and nothing it cannot back up.** The fields are in
 // priority order — position, tempo, meter — and each is skipped if the box is

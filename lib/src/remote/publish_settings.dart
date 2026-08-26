@@ -20,7 +20,7 @@ import 'remote_display_service.dart';
 /// bar, which is assembled in `oaa_app.dart` out of a control defined here.
 ///
 /// **The switch is deliberately not in it.** Publishing is turned on and off
-/// from the status bar, where it is visible without opening anything, and a
+/// from the menu bar, where it is visible without opening anything, and a
 /// second toggle here would be a second place for one state to be read from —
 /// which is how two controls come to disagree. The section's own note says
 /// where the switch is, and carries the live state so that "am I being watched"
@@ -93,12 +93,12 @@ class _PublishSectionState extends ConsumerState<PublishSection> {
         builder: (context, clients, _) => PanelSection(
           title: 'Publish',
           // **The live state goes in the heading's note.** The switch is in the
-          // status bar, so a section that said only "sends these meters to
+          // menu bar, so a section that said only "sends these meters to
           // displays" would be a page of configuration for something the panel
           // never says is running — and the attached-display count is not in
           // the bar either, which leaves this the one place it is written down.
           note: switch ((publishing, clients)) {
-            (false, _) => 'Off. The switch is PUBLISH, in the status bar.',
+            (false, _) => 'Off. The switch is PUBLISH, in the menu bar.',
             (true, 0) => 'Publishing. No displays attached.',
             (true, 1) => 'Publishing. 1 display attached.',
             (true, final n) => 'Publishing. $n displays attached.',
@@ -339,12 +339,12 @@ class _PairingCodePanelState extends ConsumerState<PairingCodePanel> {
             title: 'Point a tablet at this',
             ruled: false,
             // **Named per device, because the two do not have the same route
-            // to it.** A tablet has no status bar: it opens on the connect
+            // to it.** A tablet has no menu bar: it opens on the connect
             // screen and the scanner is a row on it. A desktop watching another
             // desktop gets there through ATTACH.
             note:
                 'On a tablet: Scan a QR code, on the screen it opens with. On '
-                'another desktop: ATTACH in the status bar.',
+                'another desktop: ATTACH in the menu bar.',
             children: [
               Center(
                 child: code == null
@@ -410,7 +410,7 @@ class _PairingCodePanelState extends ConsumerState<PairingCodePanel> {
                     ? const SizedBox.shrink()
                     : PanelNote(
                         'Publishing is off, so nothing is listening at this '
-                        'address yet. Turn on PUBLISH in the status bar.',
+                        'address yet. Turn on PUBLISH in the menu bar.',
                         tone: colors.warn,
                         mark: OaaMark.warning,
                       ),

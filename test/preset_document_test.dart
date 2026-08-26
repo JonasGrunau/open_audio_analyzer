@@ -453,15 +453,21 @@ void main() {
       final container = _container(await _storeFor(tester), dialogs: dialogs);
       final host = await _pump(tester, container);
 
+      // The placeholder is what a layout nobody has saved carries, and it is
+      // what the save dialog opens with — so the name changing *is* the
+      // observable outcome of this command.
+      expect(container.read(workspaceProvider).preset.name, kUnnamedPreset);
+
       unawaited(runFileCommand(FileCommand.saveAs, host.context, host.ref));
       await _until(
         tester,
-        () => container.read(workspaceProvider).preset.name != 'Loudness',
+        () => container.read(workspaceProvider).preset.name != kUnnamedPreset,
       );
 
       // The file is the document, so the file's name is the document's name.
       // This is what lets the name field go.
       expect(container.read(workspaceProvider).preset.name, 'Mastering Setup');
+      expect(dialogs.suggestedName, '$kUnnamedPreset.json');
     });
 
     testWidgets('the save dialog opens in the presets folder', (tester) async {
@@ -524,12 +530,66 @@ void main() {
   // is never built — so without pumping it deliberately this path ships
   // untested on the two platforms that are the only ones to use it.
   //
-  // The button alone, not the status bar it lives in: whether the *row* still
+  // The button alone, not the menu bar it lives in: whether the *row* still
   // fits once FILE is in it is a question about widths, and it is swept at
   // every one of them in `test/scaling_test.dart`, which is also the only file
   // that loads the real fonts. Measuring a layout here would measure the
   // fallback font's metrics instead.
   group('the in-window menu', () {
+    // **A debug build draws this button on a Mac and this suite must not see
+    // it.** `fileMenuInWindowProvider` reads `kDebugMode`, so that the row two
+    // thirds of the platforms ship is on screen for somebody running the
+    // application on the machine it is written on — and the suite is also a
+    // debug build on a macOS host, so the same term would put the Windows
+    // arrangement into every widget test in it and leave the row a Mac ships
+    // covered by nothing. `FLUTTER_TEST` is what separates the two, and this is
+    // the assertion that fails if it is ever tidied away.
+    //
+    // Off macOS it reads true either way, which is what the platform does, so
+    // this proves nothing on a Linux runner and everything on this desk.
+    test('a test run is given the platform, not the debug affordance', () {
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+
+      expect(
+        container.read(fileMenuInWindowProvider),
+        !Platform.isMacOS,
+        reason:
+            'The suite is seeing the debug build\'s arrangement of the menu '
+            'bar rather than this platform\'s. Every width gate in '
+            'test/scaling_test.dart is measured against the platform\'s.',
+      );
+    });
+
+    test('and the arrangement each of the three runs gets', () {
+      // A Mac ships the system menu bar and nothing in the window; a debug run
+      // on one draws the button as well, so the row can be looked at; and the
+      // suite, which is a debug run on a Mac too, is given what a Mac ships.
+      expect(
+        fileMenuInWindow(macOS: true, debug: false, underTest: false),
+        isFalse,
+      );
+      expect(
+        fileMenuInWindow(macOS: true, debug: true, underTest: false),
+        isTrue,
+      );
+      expect(
+        fileMenuInWindow(macOS: true, debug: true, underTest: true),
+        isFalse,
+      );
+
+      // Everywhere else the button is the product, in every build there is.
+      for (final debug in [true, false]) {
+        for (final underTest in [true, false]) {
+          expect(
+            fileMenuInWindow(macOS: false, debug: debug, underTest: underTest),
+            isTrue,
+            reason: 'Windows and Linux have no other File menu to fall back on',
+          );
+        }
+      }
+    });
+
     Future<ProviderContainer> pumpButton(WidgetTester tester) async {
       final store = ConfigStore.disabled();
       addTearDown(store.dispose);
@@ -589,6 +649,92 @@ void main() {
       expect(find.text('Ctrl+I'), findsOneWidget);
       expect(find.text('Ctrl+S'), findsOneWidget);
       expect(find.text('Ctrl+Shift+S'), findsOneWidget);
+    });
+
+    // **One column of labels and one column of chords.** Both were wrong at
+    // once and both are invisible to every other assertion in this file: the
+    // rows carried their chord packed against the end of the label, so `Ctrl+O`
+    // sat 90 px left of `Ctrl+I`, and the two toggles reserved the check's
+    // column while the four actions did not, so the labels stepped sideways at
+    // the divider. macOS draws this same menu from the same table with all six
+    // labels in one column and every chord against the right edge, which is
+    // what the two platforms that build *this* one should also get.
+    //
+    // Measured rather than looked at, and positions only: this file does not
+    // load the shipped typefaces, so a label's width here is the fallback
+    // font's. Where a label *starts* and where a chord column *ends* are
+    // padding and layout, and neither moves with the font.
+    testWidgets('every label starts in one column, every chord ends in one', (
+      tester,
+    ) async {
+      await pumpButton(tester);
+      await tester.tap(find.text('FILE'));
+      await tester.pumpAndSettle();
+
+      final labels = <String, double>{
+        for (final command in FileCommand.values)
+          command.id: tester
+              .getTopLeft(
+                command.isToggle
+                    ? find.textContaining(command.label)
+                    : find.text(command.label),
+              )
+              .dx,
+      };
+      final column = labels.values.first;
+      for (final entry in labels.entries) {
+        expect(
+          entry.value,
+          moreOrLessEquals(column, epsilon: 0.5),
+          reason:
+              '${entry.key} starts at ${entry.value.toStringAsFixed(1)} px '
+              'where the rest of the menu starts at '
+              '${column.toStringAsFixed(1)}. A menu that mixes actions with '
+              'ticked rows still has one column of labels — see '
+              'OaaMenuRow.reservesCheck.',
+        );
+      }
+
+      final chords = <String, double>{
+        for (final chord in ['Ctrl+O', 'Ctrl+I', 'Ctrl+S', 'Ctrl+Shift+S'])
+          chord: tester.getTopRight(find.text(chord)).dx,
+      };
+      final edge = chords.values.first;
+      for (final entry in chords.entries) {
+        expect(
+          entry.value,
+          moreOrLessEquals(edge, epsilon: 0.5),
+          reason:
+              '${entry.key} ends at ${entry.value.toStringAsFixed(1)} px where '
+              'the other chords end at ${edge.toStringAsFixed(1)}. The chords '
+              'are a column at the right of the menu, not a suffix on the '
+              'label.',
+        );
+      }
+    });
+
+    // A tick is a checkbox here and not one option of several: both rows can
+    // be on, both can be off, and neither is unavailable. Muted ink is what a
+    // menu of options uses for the values it does not hold, and it read as two
+    // commands that could not be pressed.
+    testWidgets('an unticked row is drawn in the same ink as an action', (
+      tester,
+    ) async {
+      await pumpButton(tester);
+      await tester.tap(find.text('FILE'));
+      await tester.pumpAndSettle();
+
+      Color? inkOf(Finder finder) => tester.widget<Text>(finder).style?.color;
+
+      final action = inkOf(find.text(FileCommand.open.label));
+      expect(action, OaaColors.precisionInstrument.textPrimary);
+      for (final command in FileCommand.values.where((c) => c.isToggle)) {
+        expect(
+          inkOf(find.textContaining(command.label)),
+          action,
+          reason: '${command.id} is unticked and drawn as though disabled',
+        );
+      }
     });
 
     testWidgets('a carry row ticks from the menu', (tester) async {

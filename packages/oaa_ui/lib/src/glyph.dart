@@ -18,8 +18,8 @@ import 'tokens.dart';
 /// **The set is closed, and it is short on purpose.** A vocabulary that gains a
 /// mark per panel is one nobody learns: the reader has to stop and decode each
 /// one, which is slower than the word it replaced and looks busier than the
-/// plain row it replaced. These nine earn their place by saying something the
-/// text beside them does not —
+/// plain row it replaced. Nine of these eleven earn their place by saying
+/// something the text beside them does not —
 ///
 /// - [broadcast] is a machine putting measurements on the network. It marks the
 ///   half of the remote panel that sends, and every host a search found.
@@ -49,6 +49,28 @@ import 'tokens.dart';
 ///   and the eye has a mirrored pair's direction before it has read anything.
 ///   They ride beside those two words rather than replacing them — a mark tells
 ///   the pair apart faster than the words do, and names neither on its own.
+///
+/// The last two are the exception to that rule and the argument for them is a
+/// different one: [settings] and [restart] **replace** a word rather than
+/// annotating one, which is the thing this set exists not to do.
+///
+/// - [settings] is two faders. It is the row of sliders and pickers the panel
+///   it opens actually is, and it is one of the two or three marks a reader
+///   already holds without being taught — which is the test that matters here,
+///   because nothing beside it says the word.
+/// - [restart] is a ring with a gap and a head on it: go round again. What it
+///   opens is not a door but a decision, so it keeps the tooltip its word
+///   carried, which named the scope the word could not.
+///
+/// What earns them the exception is arithmetic rather than taste. They sit in
+/// the menu bar, which on macOS is the window's title bar, and that row's width
+/// is what decides whether the open document's name can be centred in the window
+/// at all: `SETTINGS` and `RESET` are 145 px of the 457 px the trailing group
+/// came to, and two marks are 84. The 61 px is the difference between a name on
+/// screen at the narrowest window the application supports and a name that needs
+/// 1026 px before it can be drawn. A mark that costs a reader a beat of decoding
+/// is a poor trade for 61 px in a panel, where a control has a row to itself;
+/// it is a good one for the row that has to hold everything.
 ///
 /// Anything past these is a design decision to make here, not at a call site.
 enum OaaMark {
@@ -80,6 +102,12 @@ enum OaaMark {
 
   /// Step forward again.
   redo,
+
+  /// Two faders: the settings panel, named by what is in it.
+  settings,
+
+  /// Start again — a ring with a gap and a head on it.
+  restart,
 }
 
 /// One [OaaMark], painted at [size] in [color].
@@ -276,6 +304,128 @@ class _MarkPainter extends CustomPainter {
         _uturn(canvas, s, stroke, mirrored: false);
       case OaaMark.redo:
         _uturn(canvas, s, stroke, mirrored: true);
+
+      // Two faders on their rails, at different settings — a mixer's own
+      // picture of a preference. Two rather than the three Material's `tune`
+      // draws: at sixteen pixels the third rail closes the gaps between them
+      // and the mark reads as a hatch pattern.
+      //
+      // The knobs are filled dots rather than the vertical caps a fader
+      // actually has, because a cap is the same weight of line as the rail it
+      // crosses and the two merge; a dot is the one shape in this set that
+      // cannot be mistaken for the stroke it sits on. They are off-centre in
+      // opposite directions, which is what says these are *set* to something
+      // rather than being a pair of lines.
+      case OaaMark.settings:
+        for (final (y, x) in const [(0.32, 0.36), (0.68, 0.64)]) {
+          canvas.drawLine(p(0.08, y), p(0.92, y), stroke);
+          canvas.drawCircle(p(x, y), s * 0.13, fill);
+        }
+
+      // A ring interrupted at the top, with an arrowhead standing in the
+      // interruption: the measurement starts again from here. Drawn clockwise
+      // because that is the direction a clock runs and this restarts one.
+      //
+      // Smaller than the square it is drawn in, unlike the two faders above: a
+      // ring reads bigger than its own bounds where two horizontal rules read
+      // smaller than theirs, so matching the geometry would leave the two
+      // buttons looking mismatched. 0.30 is the radius at which they weigh the
+      // same.
+      //
+      // **`Icons.refresh` is the canonical shape and it was compared against
+      // this one, at 16 px, side by side.** It costs nothing to use —
+      // `uses-material-design: true` already pays for the font, and Flutter
+      // tree-shakes it to the glyphs a build actually draws — and it is not
+      // adopted for the reason `tab_strip.dart` gives about `Icons.undo`: it is
+      // drawn on a 24 dp grid at Material's own ink weight, which is heavier
+      // than the hairlines everything else in this interface is made from, and
+      // it would sit in the same 40 px row as `qr` and one seam from `undo`.
+      // Two vocabularies in one row is worse than either. What the comparison
+      // *did* settle is the size of the head below: it is Material's, because a
+      // head small enough to be tasteful is a head nobody reads as an arrow.
+      //
+      // **The head is a filled triangle, not two strokes turned off the arc.**
+      // Two barbs were tried and are wrong at both ends of the size range for
+      // the reason `_weight` exists: the stroke is a fixed 1.5 px whatever the
+      // mark is drawn at, so barbs long enough to read at 16 px are a pair of
+      // whiskers half the radius long at 96, and barbs short enough to look
+      // right at 96 are one pixel of ink each in a row. A silhouette has no
+      // stroke width to be out of proportion with, and it is the shape
+      // everything else in this set uses when a mark has to hold at a row's
+      // size — see [qr]'s cut rings.
+      case OaaMark.restart:
+        // **The head is level: its tip sits exactly halfway up its own
+        // height.** That is the property, and it is what the two attempts
+        // before this one did not have — the tip was a hair above the base's
+        // lower corner, so a triangle that is geometrically fine read as an
+        // arrow pointing steeply down out of the ring rather than round it.
+        //
+        // Level and *on the circle* at the same time takes a vertical base
+        // standing behind the tip, not a radial one: with a radial base the tip
+        // can be level or it can be on the circle, never both — solve
+        // `sin(θ) = -1` and the tip lands on the base's own midpoint. So the
+        // base is a vertical chord [length] behind the tip, which crosses the
+        // ring rather than sitting on it, and the arc's ink stops at that
+        // crossing so its round cap ends underneath the head.
+        //
+        // Every coordinate comes out of the angle and the radius, so the tip
+        // cannot leave the ring the way a head built off the *tangent* does: at
+        // this size that one sat 0.048 outside a radius of 0.30, a sixth of the
+        // radius, and read exactly as an arrow that had come off its own path.
+        const radius = 0.30;
+
+        /// Where the tip sits, clockwise from twelve o'clock, in radians.
+        ///
+        /// One o'clock: far enough round that the head lies across the top
+        /// right, which is the corner every refresh mark in every toolkit puts
+        /// it in, and the one the eye reads as "and round again".
+        const lead = 0.6;
+
+        /// How far behind the tip the base stands, and half its height.
+        ///
+        /// The two are a shape rather than two sizes: 0.26 by 0.29 is an
+        /// arrowhead, 0.26 by 0.20 is a dart and 0.15 by 0.29 is a wedge. The
+        /// head is drawn at 16 px in the menu bar and nowhere else, so both are
+        /// large — a matched pair much under this disappears at that size, and
+        /// this one was twice measured against `Icons.refresh` in the same
+        /// 24 px button.
+        const length = 0.26;
+        const half = 0.145;
+
+        /// The opening left between the tip and where the ring resumes, so it
+        /// reads as interrupted rather than closed. The head breaks most of it.
+        const gap = 0.5;
+
+        const stops = -math.pi / 2;
+        const tipAngle = stops + lead;
+        final tipX = math.cos(tipAngle) * radius;
+        final tipY = math.sin(tipAngle) * radius;
+        final baseX = tipX - length;
+
+        // The upper crossing of the base's line with the circle. Negative y is
+        // above the centre, which is the half the head is in.
+        final endAngle = math.atan2(
+          -math.sqrt(radius * radius - baseX * baseX),
+          baseX,
+        );
+
+        canvas.drawArc(
+          Rect.fromCircle(center: p(0.5, 0.5), radius: radius * s),
+          tipAngle + gap,
+          endAngle + 2 * math.pi - tipAngle - gap,
+          false,
+          stroke,
+        );
+
+        Offset at(double x, double y) => p(0.5 + x, 0.5 + y);
+        canvas.drawPath(
+          Path()
+            ..moveTo(at(tipX, tipY).dx, at(tipX, tipY).dy)
+            ..lineTo(at(baseX, tipY - half).dx, at(baseX, tipY - half).dy)
+            ..lineTo(at(baseX, tipY + half).dx, at(baseX, tipY + half).dy)
+            ..close(),
+          fill,
+        );
     }
   }
 

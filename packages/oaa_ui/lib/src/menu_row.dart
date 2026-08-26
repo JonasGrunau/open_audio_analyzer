@@ -59,6 +59,14 @@ import 'tokens.dart';
 /// the labels step sideways every time the value moves and the menu reads as
 /// two lists.
 ///
+/// **[reservesCheck] is that third case for a menu that is both.** The File
+/// menu is four actions and two toggles, and tri-state alone gave it two
+/// columns of labels with a divider between them — the actions where a menu
+/// row has always sat, the toggles a check's width to the right of them, in one
+/// menu that a Mac draws in the system bar with every label in one column. A
+/// row that can never carry a check still keeps its column when the menu it is
+/// in has rows that can.
+///
 /// It owns the row's padding because the fill has to span it. A
 /// `PopupMenuItem` pads its own child, so a decoration built inside that
 /// padding stops short of the menu's edges. Callers build the item with
@@ -89,6 +97,7 @@ class OaaMenuRow extends StatelessWidget {
     required this.colors,
     required this.selected,
     required this.child,
+    this.reservesCheck = false,
     super.key,
   });
 
@@ -102,6 +111,13 @@ class OaaMenuRow extends StatelessWidget {
   /// The row's content. Normally the label, and nothing else — the mark that
   /// says this row is the current value belongs to this widget now.
   final Widget child;
+
+  /// Whether to keep the check's column on a row that can never carry one.
+  ///
+  /// For a menu that mixes actions with values — see the note above. Ignored
+  /// where [selected] is not null, because such a row reserves the column by
+  /// being what it is.
+  final bool reservesCheck;
 
   /// What the `PopupMenuItem` above one of these must be built with.
   ///
@@ -145,10 +161,10 @@ class OaaMenuRow extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: Space.md),
           child: Row(
             children: [
-              if (selected != null)
+              if (selected != null || reservesCheck)
                 SizedBox(
                   width: _column,
-                  child: selected!
+                  child: selected ?? false
                       ? Align(
                           alignment: AlignmentDirectional.centerStart,
                           child: OaaGlyph(

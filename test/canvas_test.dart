@@ -85,13 +85,14 @@ class _HarnessState extends State<_Harness>
 /// Builds the canvas over a live engine and returns the container so a test can
 /// read the layout back.
 Future<ProviderContainer> _pump(WidgetTester tester) async {
-  // The smallest window the application supports, not the 800x600 the test
-  // binding defaults to. The canvas is a fixed 24x16 cells at every window
+  // The smallest window the application supports — `kMinimumWindow` in
+  // `test/scaling_test.dart`, which is where that number is kept — rather than
+  // the 800x600 the test binding defaults to. The canvas is a fixed 24x16 cells at every window
   // size, so the surface decides how many pixels a module gets: at 600 tall a
   // two-row Number Box has less body than a digit, and "every kind fits at its
   // default size" is a question with no answer until the window is one the
   // application would actually open. See test/scaling_test.dart.
-  tester.view.physicalSize = const Size(960, 768) * 3;
+  tester.view.physicalSize = const Size(960, 808) * 3;
   tester.view.devicePixelRatio = 3;
   addTearDown(tester.view.reset);
 

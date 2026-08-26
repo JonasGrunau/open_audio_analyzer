@@ -89,7 +89,7 @@ that decides *what a pointer means* belongs here.
   arena from the first tap until `kDoubleTapTimeout` — 300 ms — and a held
   arena is never swept, so *every* tap recogniser under it waits that long to
   resolve. Both routes into "add a module here" and "rename this tab" were
-  double clicks, and they made the tabs and the whole macOS status bar feel
+  double clicks, and they made the tabs and the whole macOS menu bar feel
   like an application that was busy. A long press is the touch-and-mouse
   gesture that costs nothing: it rejects the moment the pointer lifts early.
   The macOS window's top edge does answer a double click, and it is not an

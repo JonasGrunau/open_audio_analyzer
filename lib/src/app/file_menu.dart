@@ -4,8 +4,8 @@
 ///
 /// macOS gets a real menu in the system menu bar, because that is where a Mac
 /// user looks and because Open Audio Analyzer has no title bar to hint
-/// otherwise. Windows and Linux get [FileMenuButton] in the status bar, beside
-/// the other things you do to the application. Both are built from
+/// otherwise. Windows and Linux get [FileMenuButton] at the leading edge of the
+/// menu bar, where a menu bar's first menu is. Both are built from
 /// [FileCommand] and both run [runFileCommand], so there is one answer to what
 /// Save means.
 ///
@@ -46,10 +46,49 @@ import 'shortcuts.dart';
 
 /// Whether this platform draws the menu inside the window.
 ///
-/// A provider rather than a getter so that a test can pump the status bar in
-/// either arrangement: the whole widget suite runs on a macOS host, where the
-/// real answer is false and the in-window menu would never be exercised.
-final fileMenuInWindowProvider = Provider<bool>((ref) => !Platform.isMacOS);
+/// True everywhere but macOS, where the File menu belongs in the system menu
+/// bar — **and true on a debug macOS build as well**, because that button is
+/// the row two thirds of the platforms ship and a Mac is the machine most of
+/// this application is written on. It was never once on screen there, and both
+/// defects it has had were ones a glance would have caught: a menu whose
+/// chords did not line up, and before that a button in the wrong row. A debug
+/// Mac therefore carries its File menu twice, in the system bar and in the
+/// window. That is a thing to look at a button with and never a thing to ship,
+/// which is what `kDebugMode` says.
+///
+/// **Except under `flutter test`, and that exception is the whole reason this
+/// is a provider.** The suite runs on a macOS host in a debug build, so reading
+/// `kDebugMode` alone would put the Windows arrangement — 58 px more in the
+/// leading group — into every test in it and leave the row a Mac actually
+/// ships covered by nothing. Under test this answers what the platform does,
+/// and a test that wants the other arrangement overrides it, which
+/// `test/scaling_test.dart` does for a band of its width sweep.
+final fileMenuInWindowProvider = Provider<bool>(
+  (ref) => fileMenuInWindow(
+    macOS: Platform.isMacOS,
+    debug: kDebugMode,
+    underTest: _underTest,
+  ),
+);
+
+/// The decision above, as arithmetic on the three facts it is made of.
+///
+/// **A function because the interesting case is the one the suite cannot
+/// look at.** `flutter test` is the third argument, so a test that reads the
+/// provider on a Mac can only ever be told what a Mac ships — the branch that
+/// draws the button for somebody running the application is unreachable from
+/// inside a test run, and would go untested in a file whose whole subject is a
+/// button that went untested. Here the truth table is a table.
+@visibleForTesting
+bool fileMenuInWindow({
+  required bool macOS,
+  required bool debug,
+  required bool underTest,
+}) => !macOS || (debug && !underTest);
+
+/// Whether the widget suite is what is running. `flutter test` says so in the
+/// environment, and it is the only thing that does.
+final bool _underTest = Platform.environment.containsKey('FLUTTER_TEST');
 
 // ---------------------------------------------------------------------------
 // In the window
@@ -115,28 +154,52 @@ class FileMenuButton extends ConsumerWidget {
             child: OaaMenuRow(
               colors: colors,
               selected: checks[command],
+              // **Every row of this menu keeps the check's column, including
+              // the four that can never be ticked.** Two of the six are the
+              // state of the open preset and four are things to do, so without
+              // this the labels sit in two columns 16 px apart with a divider
+              // between them — and the same menu, drawn by macOS from the same
+              // table, puts all six in one column with the ticks in the margin.
+              reservesCheck: true,
               child: Row(
-                mainAxisSize: MainAxisSize.min,
                 children: [
-                  // `Flexible`, so a row that reaches the bound above
-                  // ellipsises instead of pushing the chord off the row.
-                  Flexible(
+                  // **`Expanded`, which is what puts the chords in a column.**
+                  // The row was `MainAxisSize.min` with the label `Flexible`,
+                  // and that packs label and chord together at the leading
+                  // edge: the chord box then floats at whatever x the label
+                  // happens to end at, so `Ctrl+O` sat 90 px left of `Ctrl+I`
+                  // in a menu whose whole point is that the chords are
+                  // readable down the column. The fixed width below aligns a
+                  // chord inside its own box and can do nothing about where
+                  // that box is.
+                  //
+                  // It costs the menu nothing to measure: `RenderFlex` reports
+                  // its maximum intrinsic width as the label plus the
+                  // inflexible children either side of it, which is the same
+                  // number `MainAxisSize.min` gave, and that number is what a
+                  // popup menu sizes itself from.
+                  Expanded(
                     child: Text(
                       command.label,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       softWrap: false,
-                      style: OaaType.body.copyWith(
-                        color: checks[command] == false
-                            ? colors.textMuted
-                            : colors.textPrimary,
-                      ),
+                      // **Full ink whether the box is ticked or not.** The
+                      // two rows that carry a tick here are checkboxes and not
+                      // a choice between each other: either can be on with the
+                      // other off, and nothing about an unticked one is
+                      // unavailable. Muting the unticked row is what a menu of
+                      // options does, where the muted rows are the values the
+                      // menu does not currently hold — this menu holds no such
+                      // value, so the same ink read as two commands that could
+                      // not be pressed.
+                      style: OaaType.body.copyWith(color: colors.textPrimary),
                     ),
                   ),
-                  // **A reservation, not a gap.** The chords are printed in a
-                  // fixed column so they line up down the menu; a `Spacer`
-                  // here would make the row's intrinsic width unbounded, which
-                  // is what a popup menu measures itself from.
+                  // The smallest gap a label is allowed to come to its chord
+                  // at, which is what the row gives up first when the bound
+                  // above is reached — the label ellipsises rather than the
+                  // chord moving.
                   const SizedBox(width: Space.lg),
                   SizedBox(
                     width: _chordColumn,

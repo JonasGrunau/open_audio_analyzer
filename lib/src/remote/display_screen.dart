@@ -11,6 +11,7 @@ import '../canvas/module_host.dart';
 import '../clock/meter_clock.dart';
 import 'display_client.dart';
 import 'host_picker.dart';
+import 'this_machine.dart';
 
 /// The tablet's whole world: attach to a host, then draw what it is measuring.
 ///
@@ -29,7 +30,12 @@ import 'host_picker.dart';
 /// a way for anyone on the venue Wi-Fi to interfere with the measurement
 /// somebody is making.
 class RemoteDisplayScreen extends StatefulWidget {
-  const RemoteDisplayScreen({this.host, this.port, super.key});
+  const RemoteDisplayScreen({
+    this.host,
+    this.port,
+    this.thisMachine,
+    super.key,
+  });
 
   /// Where to attach on arrival, when something upstream already asked.
   ///
@@ -39,6 +45,15 @@ class RemoteDisplayScreen extends StatefulWidget {
   /// between the two.
   final String? host;
   final int? port;
+
+  /// Handed to the picker below, and to nothing else. Null means ask the
+  /// machine, which is what the application passes; a test passes its own so
+  /// that it can type a loopback address at a host it started itself — which
+  /// the picker refuses, correctly, from anybody who is not a test. See
+  /// [ThisMachine], and note that a [host] given here is *not* checked against
+  /// it: this screen attaches where it is told, and the one place that decides
+  /// whether an address may be attached to is the picker.
+  final ThisMachine? thisMachine;
 
   @override
   State<RemoteDisplayScreen> createState() => _RemoteDisplayScreenState();
@@ -113,7 +128,7 @@ class _RemoteDisplayScreenState extends State<RemoteDisplayScreen>
     // The clock's ceiling, which nothing else on this screen would ever set.
     //
     // On the desktop both this and `targetFps` are pushed by `_StatusBar` in
-    // `lib/src/app/oaa_app.dart`, and a display has no status bar — so a tablet
+    // `lib/src/app/oaa_app.dart`, and a display has neither bar — so a tablet
     // ran at the `MeterClock` default of 60 fps and ignored the platform's
     // reduce-motion preference outright, on the one kind of hardware where a
     // person is most likely to have asked for it. This is the half that costs
@@ -151,6 +166,7 @@ class _RemoteDisplayScreenState extends State<RemoteDisplayScreen>
                       // with no route under it to go back to; see [_leave].
                       ? HostPickerPanel(
                           onConnect: _connect,
+                          thisMachine: widget.thisMachine,
                           onClose: Navigator.of(context).canPop()
                               ? () => Navigator.of(context).pop()
                               : null,
@@ -228,7 +244,7 @@ class _LiveDisplay extends StatelessWidget {
 /// The strip along the top: who this is, whether the picture is current, and
 /// which tab is showing.
 ///
-/// Built like the desktop's own status bar — panel fill under a hairline, and
+/// Built like the desktop's own bars — panel fill under a hairline, and
 /// `oaa_ui` controls on it. The tabs and the way out were stock `TextButton`s,
 /// which in a theme that has stripped Material of its splash and highlight are
 /// text with no border, no hover and no focus ring: three controls that could
@@ -270,7 +286,7 @@ class _LinkBar extends StatelessWidget {
       ),
       child: Padding(
         // **`Space.sm` above and below a `OaaControl.height` control, not
-        // `Space.xs`.** This bar is not the desktop's 40 px status bar and does
+        // `Space.xs`.** This bar is not one of the desktop's 40 px rows and does
         // not have its problem: there is no source, no clock, no calibration and
         // no frame rate to fit, just a name, the tabs and the way out. At 4 px
         // the segmented control and the button stood a hair off the hairline

@@ -16,7 +16,7 @@ exactly once.
 | `src/grid_geometry.dart` | Grid cells to pixels. The one place the 24×16 canvas becomes a rectangle. |
 | `src/point_buckets.dart` | Marks sorted by the colour they are drawn in, so a display of tens of thousands of them is a few dozen `drawRawPoints` calls. Behind the stereo cloud; the spectrogram drew through it too until real material's run counts outgrew it. |
 | `src/panel.dart` | `PanelScaffold` and the controls panels are assembled from, plus `showOaaPanel`, `showOaaConfirm` and `showOaaSavePrompt`. |
-| `src/menu_row.dart` | `OaaMenuRow` — one row of a popup menu, and the band and the check that mark the value the menu holds. Every menu in the application is built through it: the panel control, the status bar's two pickers and a module's dozen settings. `selected` is tri-state: `null` is a menu of actions, which gets neither mark nor the column reserved for one. The one widget here handed its palette rather than reading it, for the reason in its header. |
+| `src/menu_row.dart` | `OaaMenuRow` — one row of a popup menu, and the band and the check that mark the value the menu holds. Every menu in the application is built through it: the panel control, the status bar's two pickers and a module's dozen settings. `selected` is tri-state: `null` is a menu of actions, which gets neither mark nor the column reserved for one; `reservesCheck` is the fourth case, for the menu that is both — the File menu's four actions keep the column its two toggles need, or the labels step sideways at the divider. The one widget here handed its palette rather than reading it, for the reason in its header. |
 | `src/qr.dart` | `QrCode` — just enough QR to carry one address, byte mode at error level M — and `OaaQrCode`, which paints it. The one widget here that does not take its colours from the skin: a code is read by thresholding a camera image, and dark-on-light is a property of the format rather than a choice. Held against ZXing by `test/qr_test.dart`. |
 | `src/glyph.dart` | `OaaMark` and `OaaGlyph` — the closed set of marks the interface draws, as paths. There is no icon font, and a mark that is a codepoint is a mark that can go missing. |
 | `src/skin_palette.dart` | The one adapter between a `Skin` (data, in `oaa_core`) and a `OaaColors`, plus `skinArgb` — the one place a `Color` is quantised back to the eight-bit hex the format stores. |
@@ -262,16 +262,65 @@ the caret should be, on both menus, on every platform. Draw it — `src/glyph.da
 holds the set, `_Caret` is the one that predates it, and `OaaMark.check` is the
 second of the two the sentence above names.
 
-**The set of marks is closed, and it is nine.** `OaaMark.broadcast`,
-`display`, `chevron`, `check`, `qr`, `scan`, `warning`, `undo` and `redo`. `display` has
+**The set of marks is closed, and it is eleven.** `OaaMark.broadcast`,
+`display`, `chevron`, `check`, `qr`, `scan`, `warning`, `undo`, `redo`,
+`settings` and `restart`. `display` has
 had no call site since the remote display's chooser panel became two controls in
-the status bar; it is kept rather than deleted because it is half of a pair
+the menu bar; it is kept rather than deleted because it is half of a pair
 — "this machine sends" against "this machine shows" — and the set is a
 vocabulary rather than an inventory of what is currently drawn. A vocabulary
 that gains a mark per panel is one nobody learns — the reader stops to decode each one, which
 is slower than the word it replaced — so a new mark is a decision to make in
 `glyph.dart`, with a sentence saying what it tells the reader that the text
 beside it does not. There is no icon font here and there is not going to be one.
+
+**Nine of the eleven annotate a word; the last two replace one, and that is an
+exception with its argument written down.** `settings` and `restart` are the
+menu bar's two panel commands drawn as marks, and what earns them the exception
+is arithmetic rather than taste: that row's width is what decides whether the
+open document's name can be centred in the window at all, and `SETTINGS` plus
+`RESET` are 61 px more of it than two marks. Both are also marks a reader
+already holds without being taught, which is the test the rule above is really
+applying — a fader pair and a ring with a head on it are not new vocabulary.
+The full argument is in `glyph.dart`'s own doc comment; do not extend it to a
+third by analogy.
+
+**The Material set was compared, not ignored.** `Icons.refresh` and
+`Icons.restart_alt` are the canonical shapes, the font is already paid for by
+`uses-material-design: true`, and Flutter tree-shakes it to what a build draws —
+so the argument against them is not cost. It is the one `tab_strip.dart` makes
+about `Icons.undo`: Material's icons are drawn on a 24 dp grid at their own ink
+weight, several times heavier than the hairlines this interface is made from, and
+one of them in the menu bar would sit beside `qr` and a seam from `undo`. Two
+vocabularies in one row is worse than either. What the comparison settled is the
+*size* of `restart`'s head — it is Material's, because a head small enough to be
+tasteful is a head nobody reads as an arrow, and this one was twice too small
+before it was held against theirs at 16 px in the same button.
+
+**An arrowhead is a filled silhouette, not two strokes.** `restart`'s head was
+drawn as two barbs turned off the arc's tangent first, and it is wrong at both
+ends of the size range for the reason `_weight` exists: the stroke is a fixed
+1.5 px whatever the mark is drawn at, so barbs long enough to read at 16 px are
+whiskers half the radius long at 96, and barbs short enough to look right at 96
+are a pixel of ink each in a row. A triangle has no stroke width to be out of
+proportion with.
+
+**A head on a circle is solved from the circle, and its tip is level.** Two
+properties, and `restart` took four attempts to hold both. A triangle built off
+the *tangent* leaves the curve as it grows: at the size this head has to be, its
+tip sat 0.048 outside a ring of radius 0.30 — a sixth of the radius, which reads
+exactly as an arrow that has come off its own path. And a head whose tip is not
+halfway up its own height reads as an arrow pointing out of the ring rather than
+round it, however correct the geometry is; that was the version with a *radial*
+base, where the tip landed a hair above the base's lower corner.
+
+The two cannot both be had with a radial base — solve `sin(θ) = -1` and the tip
+lands on the base's own midpoint — so the base is a vertical chord standing
+`length` behind a tip that is on the circle, crossing the ring rather than
+sitting on it, and the arc's ink stops at that crossing so the stroke's round cap
+ends underneath the head. `length` against `2 * half` is a shape rather than two
+sizes: 0.26 by 0.29 is an arrowhead, 0.26 by 0.20 is a dart, 0.15 by 0.29 is a
+wedge. Both are large because the mark is drawn at 16 px and nowhere else.
 
 **A mark on a `PanelNote` centres on the note, not on its first line.** The
 mark annotates the whole sentence, and every note that carries one wraps — two

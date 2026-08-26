@@ -122,8 +122,9 @@ if (wanted('tablet')) {
   // plate wants the canvas rather than a panel sitting over it — and 05 is the
   // frame with the ATTACH panel open. It also does not currently *have* that
   // panel open: the script taps hardcoded coordinates read off a finished
-  // screenshot, the status bar has gained a FILE button since they were
-  // measured, and the tap that should hit ATTACH now lands one button along.
+  // screenshot, and the row has moved twice since they were measured — it gained
+  // a FILE button, and then the readings left it for a status bar of their own —
+  // so the tap that should hit ATTACH lands somewhere else entirely.
   // Both files are the same canvas until that is fixed; this one is the one
   // that is meant to be.
   const shot = join(REPO, 'build/packaging/screenshots/01-loudness.png');

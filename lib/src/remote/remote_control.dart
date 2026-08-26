@@ -94,7 +94,7 @@ class _RemoteDisplayScope extends InheritedWidget {
       !identical(service, old.service);
 }
 
-/// The status bar's publish switch.
+/// The menu bar's publish switch.
 ///
 /// **A view onto the service, and nothing more.** It owns no socket, adopts no
 /// settings and starts nothing when it is built — see [RemoteDisplayScope] for
@@ -224,7 +224,7 @@ class _PairingCodeButtonState extends State<PairingCodeButton> {
   }
 }
 
-/// The status bar's way to become somebody else's display.
+/// The menu bar's way to become somebody else's display.
 ///
 /// **It opens the host picker directly.** It used to sit behind a panel that
 /// asked which end of the link this machine was — a question with two answers

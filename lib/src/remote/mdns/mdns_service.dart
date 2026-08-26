@@ -234,7 +234,7 @@ class MdnsResponder {
   /// as a machine has two — and the machine that renames itself is the user's,
   /// in System Settings, because a meter announced itself carelessly.
   @visibleForTesting
-  String get hostName => '${_sanitise(instanceLabel)}-oaa.local';
+  String get hostName => oaaHostName(instanceName);
 
   bool get isAdvertising => _socket != null;
 
@@ -769,6 +769,18 @@ Future<List<InternetAddress>> _localAddresses() async {
     return const [];
   }
 }
+
+/// The `.local` name an instance is advertised under, derived rather than
+/// stored.
+///
+/// Here rather than inside [MdnsResponder] because the browsing end needs the
+/// same derivation to recognise it: on iOS a discovered host's address *is*
+/// this name — the system responder hands back the SRV target — so this is the
+/// only way `this_machine.dart` can tell an iPad's own advertisement from
+/// somebody else's. Two derivations would be two answers, and the one that
+/// disagreed would be the one that let a machine attach to itself.
+String oaaHostName(String instanceName) =>
+    '${_sanitise(instanceName.replaceAll('.', '-'))}-oaa.local';
 
 /// DNS-SD instance names are free-form, but a host name is not. Anything that
 /// is not a letter, digit or hyphen becomes a hyphen.

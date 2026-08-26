@@ -62,7 +62,7 @@ is still not built, and `docs/PLAN.md` for what was planned.
 | `packages/oaa_core/lib/src/report.dart` | `AnalysisReport` and the delivery verdict. Holds no engine handle, so it round-trips through JSON. |
 | `cli/bin/oaa.dart` | The `oaa` analyser. Its exit code is the product — see `cli/AGENTS.md`. |
 | `lib/src/app/shortcuts.dart` | Every keyboard shortcut, as one table. The bindings, the `?` sheet, `docs/site/keyboard.md` **and the macOS File menu's key equivalents** are all derived from it; `test/shortcuts_test.dart` fails when the page has drifted. |
-| `lib/src/app/preset_file.dart` | **The preset as a document.** Which file the canvas came from, whether it still matches that file, and the six File menu commands — one implementation, reached from the keyboard, from the macOS menu bar and from the status bar's own menu. The file dialogs sit behind a seam a test replaces. |
+| `lib/src/app/preset_file.dart` | **The preset as a document.** Which file the canvas came from, whether it still matches that file, and the six File menu commands — one implementation, reached from the keyboard, from the macOS menu bar and from the FILE button at the leading edge of the window's own menu bar. The file dialogs sit behind a seam a test replaces. Its name is what the menu bar prints in the middle of the row, and `Unnamed` until somebody saves it. |
 | `lib/src/app/launch_options.dart` | `--config-dir` and `--open-panel`. Both exist to make something else testable — see the file. |
 | `packaging/icon/make_icons.dart` | The app mark, **read** from `assets/brand/oaa-logo.svg` and rendered into every container the six platforms want — a rounded tile for the desktops, two layers on a 108dp canvas for Android, and a layered `AppIcon.icon` for macOS and iOS that the system lights itself. It carries a path rasteriser because the mark is a stroked cubic path. It also writes the rest of `assets/brand/`, `packaging/icon/oaa.svg` and `website/public/`'s icons — every one except `website/public/favicon.svg`, which is a browser tab's 16 px and is drawn by hand. It wrote the tile over that file until 0.10.0, and there is a note where the line was. |
 | `.tool-versions` | Pins Flutter `3.44.5-stable` and the JDK the Android build uses. CI pins both — `FLUTTER_VERSION` and `JAVA_VERSION` at the top of `ci.yml` — keep them in step. |
@@ -171,7 +171,7 @@ is unaffected: it never links JUCE — it talks to the plugin over a socket.
   `kDoubleTapTimeout` expires 300 ms later, and a held arena is never swept — so
   every tap recogniser beneath one, anywhere in the subtree, waits a third of a
   second before it can win. Three gestures were double clicks and each delayed
-  everything under it: the status bar's zoom made every control in the row late
+  everything under it: the menu bar's zoom made every control in the row late
   on macOS, a tab's rename made switching tabs late, and adding a module on
   empty canvas made clearing the selection late. It presents as an application
   that is slow rather than as a gesture that is waiting, which is why it stood
@@ -205,7 +205,7 @@ is unaffected: it never links JUCE — it talks to the plugin over a socket.
   also a two-finger-gesture detector. On macOS a two-finger tap is how a
   trackpad sends a right click, so right-clicking a module's title bar flashed
   the placement grid on screen; a two-finger scroll over one dragged the module,
-  and over the status bar it handed the whole window to the compositor. All
+  and over the menu bar it handed the whole window to the compositor. All
   three sites are one constant in `packages/oaa_ui/lib/src/drag_devices.dart`.
 
 - **A panel is built outside the application's `Material`,** because that lives
@@ -336,7 +336,7 @@ is unaffected: it never links JUCE — it talks to the plugin over a socket.
   window images and titles are the only things screen recording gates.
   `CGPreflightPostEventAccess()` says up front whether the posting is allowed at
   all, which is what tells a gesture that did nothing apart from a script that
-  was denied. The status bar's double-click zoom, the interval that pairs it and
+  was denied. The menu bar's double-click zoom, the interval that pairs it and
   the drag it shares a detector with were all checked this way.
 
 - **A feature that only fails on the device is a feature nobody tested.** Three

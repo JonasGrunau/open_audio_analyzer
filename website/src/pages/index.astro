@@ -181,7 +181,7 @@ const GAPS = [
   ],
   [
     'The tablet link has no password.',
-    'Anyone who can reach the port can read your meters and your layout — not your audio, which never goes on the wire, and nothing on the tablet can change anything on the desktop. Publishing is off at every launch on purpose and is switched on from the status bar, where you can see that it is on. <strong>Do not switch it on at a venue whose Wi-Fi you do not control.</strong>',
+    'Anyone who can reach the port can read your meters and your layout — not your audio, which never goes on the wire, and nothing on the tablet can change anything on the desktop. Publishing is off at every launch on purpose and is switched on from the menu bar, where you can see that it is on. <strong>Do not switch it on at a venue whose Wi-Fi you do not control.</strong>',
   ],
 ];
 
@@ -285,7 +285,6 @@ const PLATFORMS = [
               />
             </span>
           )}
-          <span class="store-cap">iPad — coming soon</span>
         </div>
 
         <div class="store">
@@ -299,7 +298,6 @@ const PLATFORMS = [
               decoding="async"
             />
           </a>
-          <span class="store-cap">Join the closed test</span>
         </div>
       </div>
     </div>
@@ -885,20 +883,6 @@ const PLATFORMS = [
     width: auto;
   }
 
-  /* One style for both captions, whether or not the badge above is a link. They
-     are a readout line about the badge — which platform, and what state it is
-     in — in the same face and the same `--faint` as `.hero-meta` under them, and
-     nothing about them is an affordance: the badges are what you press, and a
-     store badge is a control every reader already recognises without being
-     underlined into one. */
-  .store-cap {
-    font-family: var(--readout);
-    font-size: 0.6875rem;
-    letter-spacing: 0.02em;
-    color: var(--faint);
-    white-space: nowrap;
-  }
-
   /* The badge that is not a link yet, greyed so the pending state is visible
      rather than only readable. A `<span>` rather than an `<a>` is exactly the
      condition — `index.astro` renders the anchor the moment `APP_STORE` is set
@@ -907,8 +891,9 @@ const PLATFORMS = [
 
      Opacity rather than a filter: the badge is already monochrome, so
      `grayscale()` would do nothing, and blending it toward the page background
-     is what "not yet" looks like on a dark ground. The caption underneath still
-     carries the words; this only means you no longer have to read them to know.
+     is what "not yet" looks like on a dark ground. It is the only thing that
+     says so now — the caption that used to spell it out is gone — which is why
+     it stays.
 
      See the block header for why this one property is here at all. */
   span.store-badge .store-art {

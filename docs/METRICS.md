@@ -137,6 +137,19 @@ report that number under any name.
 Mono sources report correlation `+1` and balance `0`. Saying so is more useful
 than reporting nothing, and it is also true.
 
+**The two displays that plot the stereo field do not draw it, though.** The raw
+sample stream a goniometer reads is built the same way the spectrum's pan is —
+channel 0 is copied into the right slot of every frame when there is only one
+channel — so a one-channel source is `L == R` exactly, and the Phase Scope
+rotates that into a hard, perfectly straight vertical line that never moves. It
+is a true picture of a tautology and it is indistinguishable from a display that
+has stuck, which is what the Stereo Cloud's version of it was reported as. Both
+say **MONO SOURCE** across the face instead and leave their graticule drawn. The
+correlation bar under the Phase Scope is drawn as an empty track for the same
+reason: `+1` pinned hard against its right end is the same tautology one row
+lower. The number itself is still measured and still available — a Number Box set
+to `Correlation` prints it, and so does an offline report.
+
 ## Spectrum
 
 | Metric | Unit | Definition | Availability |
@@ -177,7 +190,8 @@ Spectrum pan needs a front pair. A one-channel source reports every band at `0`,
 for the same reason correlation reports `+1` — mono is dead centre, and it is
 true. The stereo cloud does not *draw* that, because a column of centred bands
 is a bright vertical line down the middle of the display and is read as a
-broken module rather than as a mono signal; it says **MONO SOURCE** instead.
+broken module rather than as a mono signal; it says **MONO SOURCE** instead, as
+the Phase Scope does for the same reason — see **Stereo field**.
 
 Levels are window-compensated: a full-scale sine on a bin centre reads
 0.0 dBFS, and that is asserted on every push. A tone **between** two bin centres

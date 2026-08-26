@@ -76,7 +76,7 @@ Future<void> _pumpUntil(
 
 void main() {
   testWidgets('a connected plugin takes the canvas', (tester) async {
-    // Wide enough that the status bar keeps every item: it drops whole entries
+    // Wide enough that both bars keep every item: they drop whole entries
     // rather than squeezing them, and the source label is what is asserted on.
     tester.view.physicalSize = const Size(1600, 1000);
     tester.view.devicePixelRatio = 1.0;

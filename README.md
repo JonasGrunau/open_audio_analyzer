@@ -89,7 +89,7 @@ approximating.
 | 📐 | **Loudness and true peak are verified** against the EBU Tech 3341/3342 cases, and the spectrum against a sine of known amplitude on a bin centre, on Linux, macOS and Windows on every push. |
 | 💾 | **What you set up is remembered** — the layout, the delivery target, the skin and the capture device — and reopens with the window. Settings, presets, your own delivery targets and your own skins are plain JSON files in a documented directory; see [Configuration](#-configuration). |
 | 🔍 | **Files are analysed offline** by the app and by the [`oaa` CLI](#-analysing-files). |
-| 📱 | **A tablet [mirrors the canvas](#-roadmap)** over Wi-Fi. Flip **PUBLISH** in the desktop's status bar; the tablet finds it by itself, or reads a **pairing code** off its screen, or takes an address typed by hand — three routes, because the first one is what a venue's Wi-Fi blocks. |
+| 📱 | **A tablet [mirrors the canvas](#-roadmap)** over Wi-Fi. Flip **PUBLISH** in the desktop's menu bar; the tablet finds it by itself, or reads a **pairing code** off its screen, or takes an address typed by hand — three routes, because the first one is what a venue's Wi-Fi blocks. |
 | 🎛️ | **A headless [VST3 / AU plugin](#-in-a-daw)** meters what your DAW is playing. |
 | 🔊 | **Your system's own output is metered with nothing to install** — WASAPI loopback on Windows, a Core Audio process tap on macOS 14.2+, a monitor source on Linux. No driver, and on macOS the audio still reaches your speakers while it is measured. |
 | 📦 | **The installers carry the plugin and install it for you**, behind a checkbox that starts ticked — a macOS pkg, a Windows installer and a Linux tarball, plus an AppImage and a flatpak for the application alone. See [Installing](#-installing), and the [documentation site](https://open-audio-analyzer.com/docs). |
@@ -119,7 +119,7 @@ plus a painter, reads the same `MeterSource`, and repaints from the same clock.
 | **Spectrum Analyzer** | Level against frequency, log-spaced, tilted so a mix reads roughly flat, with a peak hold. |
 | **Spectrogram** | Frequency against time, with level as colour. `Colour` chooses the ramp: the skin's own, whose brightness rises monotonically through the accent hue, or `Full RGB` — the spectrogram rainbow, indigo through green and yellow to red and white, which separates far more steps of level than one hue can. The skin ramp is what it opens on. |
 | **Oscilloscope** | The waveform itself, one lane per channel or both overlaid: triggered at scope speeds, rolling from half a second up, locked to the DAW's bar grid when a plugin is attached, or swept from a transient at a level you set. Height and trigger threshold are sliders on the module, because both are chosen by watching the picture move; `AUTO` beside the threshold takes it from the loudest transient instead, six decibels under so the sweep starts inside the attack rather than on top of it. `Colour: Full RGB` draws each column in the colour of its own balance of bass, mids and highs — red, green and blue as the three channels, so a kick is red, a hat is blue and a full-spectrum hit is white — taken from the spectrum measured for the block that column's samples came from and kept with the column, so the history holds still. It opens on the accent hue it always had. |
-| **Phase Scope** | A goniometer: left against right, rotated so mono stands upright. |
+| **Phase Scope** | A goniometer: left against right, rotated so mono stands upright. Needs two channels; on a one-channel source it says **MONO SOURCE** rather than drawing the straight line one produces. |
 | **Stereo Cloud** | Where each frequency sits in the stereo image, accumulated over time. |
 
 Every one of these that draws a bar, an arc or an area against the delivery
@@ -304,6 +304,23 @@ tolerance.
 
 ## 🧩 Layout
 
+**The window is two bars and a canvas.** Across the top is the **menu bar**:
+the File menu at the far left where a platform draws one, ANALYSE FILE beside
+it, the open preset's name centred in the row, and the pairing code, PUBLISH,
+ATTACH, settings, restart and `?` packed against the right edge. Across the
+bottom is the **status bar**: what is being measured and in what format on the
+left, and the DAW's playhead, the elapsed clock and the delivery target on the
+right. Everything you *read* is in one row and everything you *press* is in the
+other, and on macOS the top row is the window's title bar as well — which is why
+the document's name is centred in it.
+
+They were one row for eight phases, and it could not hold both jobs: the readings
+and eight commands together left the document's own name with the highest width
+gate in the bar, so it was the first thing to disappear on any window under
+1266 px. Splitting them dropped that to 900, and stopped the row dropping
+PUBLISH — the one control whose absence used to take a capability away rather
+than hide it — at any width at all.
+
 Open Audio Analyzer's canvas is a **24-column snapping grid** rather than
 Decibel's free pixel positioning. 24 divides by 2, 3, 4, 6, 8 and 12, so halves,
 thirds and quarters are all exact — a 12-column grid cannot express thirds and
@@ -345,7 +362,7 @@ feels broken, in exchange for a gesture a long press does better on both a mouse
 and a tablet.
 
 The one double click in the application is the window's own top edge on macOS,
-where the status bar *is* the title bar: double-clicking it does whatever the
+where the menu bar *is* the title bar: double-clicking it does whatever the
 Mac's "double-click a window's title bar to" setting says, because a window that
 ignores that gesture is a window that ignores the system. Flutter still
 recognises nothing but a single click there — AppKit pairs them, in the runner,
@@ -353,7 +370,7 @@ which is also the only side that knows the interval this user set.
 
 ### ⌨️ Keyboard
 
-Press `?` or `F1`, or the `?` in the status bar. Open Audio Analyzer draws its
+Press `?` or `F1`, or the `?` at the end of the menu bar. Open Audio Analyzer draws its
 own chrome, so apart from the File menu there is no menu bar to read a shortcut
 off — without that sheet most of them would be undiscoverable by design.
 
@@ -408,10 +425,12 @@ explicit choice gets silently overwritten.
 one through the platform's own dialog, starting in the presets folder and
 reaching anywhere else you point it; `Save` writes back to the file it came
 from; `Save as…` places a copy anywhere and takes the preset's name from the
-filename, which is why there is no name field. The open preset sits at the left
-of the status bar with a dot beside it when it differs from the file. On macOS
-the menu is in the system menu bar; on Windows and Linux it is the FILE button
-in the status bar.
+filename, which is why there is no name field. A layout nobody has saved yet is
+called **Unnamed**, and that is the word the save dialog opens with for you to
+replace. The open preset's name is centred in the menu bar — it is the window's
+title, and on macOS it literally is — with a dot beside it when the canvas
+differs from the file. On macOS the menu is in the system menu bar; on Windows
+and Linux it is the FILE button at the far left of that same row.
 
 Whether a preset carries the delivery target and the skin is a property of the
 preset — two ticked rows in that menu, each asking whether the preset should
@@ -711,11 +730,11 @@ site](https://open-audio-analyzer.com/docs/install).
 > Google holds. There is no file here anybody could install. Every tag uploads
 > to Play, after the release is published, because a version code Play has
 > accepted can never be reused or lowered. It is a **closed test**, which grants
-> access **by list rather than by link**: Play only lets an account opt in once
-> the developer has put it on the track's tester list, so neither the listing nor
-> the opt-in URL does anything for a stranger who follows it cold.
-> [Join the test](https://open-audio-analyzer.com/testing) has the two steps in
-> order. Play offers it to **tablets** only — the manifest asks for a 600dp shortest edge, which is
+> access by list rather than by link: the listing does not resolve until your
+> Google account has been added to the tester list, and the opt-in link cannot
+> add it — [ask on the repository](https://github.com/JonasGrunau/open_audio_analyzer/issues)
+> first, then opt in. [Installing](docs/site/install.md#android) has both steps. Play offers it
+> to **tablets** only — the manifest asks for a 600dp shortest edge, which is
 > the store's filter and not a runtime one.
 
 The scripts that build these live in [`packaging/`](packaging/AGENTS.md), one
@@ -1203,7 +1222,7 @@ so a release built from a fork is unsigned and every script says so. See
 - 📡 **Publishing is never remembered, on purpose.** The display's name, port
   and update rate persist like every other setting — they are in Settings under
   **Publish** — but whether to publish does not, and starts off at every launch.
-  The switch is **PUBLISH** in the status bar, deliberately not in the panel:
+  The switch is **PUBLISH** in the menu bar, deliberately not in the panel:
   an unauthenticated port that is open needs to be visible without opening
   anything. There is no password on that port, and a
   remembered "yes" means a laptop carried to a café starts advertising itself
@@ -1229,7 +1248,7 @@ so a release built from a fork is unsigned and every script says so. See
 - 🪟 **A light skin does not lighten the window frame on Windows or Linux.**
   Everything Open Audio Analyzer paints follows the skin; the window frame
   belongs to the operating system, and Flutter has no supported desktop API for
-  it. macOS no longer has a title bar at all — the status bar runs to the top
+  it. macOS no longer has a title bar at all — the menu bar runs to the top
   edge and the window buttons sit inside it — but that took platform code in the
   runner, and the other two each need their own.
 - 🧪 **Native assets are young.** Recommended since Flutter 3.38, but the

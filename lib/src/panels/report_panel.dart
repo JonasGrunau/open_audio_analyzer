@@ -378,45 +378,52 @@ class _DropZone extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = OaaTheme.of(context);
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: Space.xxl),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Painted, not decorated. A DecoratedBox here would swallow the
-          // pointer events the button below it needs — the same trap the
-          // module frames hit, documented at the head of module_frame.dart.
-          CustomPaint(
-            painter: _DropOutlinePainter(
-              color: active ? colors.accent : colors.hairlineStrong,
-            ),
-            child: SizedBox(
-              width: double.infinity,
-              height: 140,
-              child: Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      'Drop an audio file here',
-                      style: OaaType.body.copyWith(
-                        color: active ? colors.accent : colors.textPrimary,
-                      ),
+    // **No vertical padding of its own, unlike the two states that replace
+    // it.** `_Message` and the progress view are one short row each and would
+    // hang under the title bar without air; this state has a 140 px outlined
+    // zone and a button, which is a body already — and the panel itself is
+    // padded by `Space.md`. With `Space.xxl` on top of that the dialog opened
+    // 64 px of nothing above the zone and 64 below.
+    //
+    // It also lands the two states within a few pixels of the same height, so
+    // dropping a file no longer resizes the panel under the pointer: 188 px of
+    // zone and button here against 181 of text, bar and Cancel there.
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Painted, not decorated. A DecoratedBox here would swallow the
+        // pointer events the button below it needs — the same trap the
+        // module frames hit, documented at the head of module_frame.dart.
+        CustomPaint(
+          painter: _DropOutlinePainter(
+            color: active ? colors.accent : colors.hairlineStrong,
+          ),
+          child: SizedBox(
+            width: double.infinity,
+            height: 140,
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Drop an audio file here',
+                    style: OaaType.body.copyWith(
+                      color: active ? colors.accent : colors.textPrimary,
                     ),
-                    const SizedBox(height: Space.xs),
-                    Text(
-                      'WAV, AIFF, RF64, Wave64, FLAC, MP3',
-                      style: OaaType.caption.copyWith(color: colors.textFaint),
-                    ),
-                  ],
-                ),
+                  ),
+                  const SizedBox(height: Space.xs),
+                  Text(
+                    'WAV, AIFF, RF64, Wave64, FLAC, MP3',
+                    style: OaaType.caption.copyWith(color: colors.textFaint),
+                  ),
+                ],
               ),
             ),
           ),
-          const SizedBox(height: Space.md),
-          OaaButton(label: 'Choose a file…', onPressed: onPick),
-        ],
-      ),
+        ),
+        const SizedBox(height: Space.md),
+        OaaButton(label: 'Choose a file…', onPressed: onPick),
+      ],
     );
   }
 }

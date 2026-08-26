@@ -10,6 +10,7 @@
 import 'package:oaa/src/app/transport_readout.dart';
 import 'package:oaa/src/remote/display_host.dart';
 import 'package:oaa/src/remote/display_screen.dart';
+import 'package:oaa/src/remote/this_machine.dart';
 import 'package:oaa_core/oaa_core.dart';
 import 'package:oaa_ui/oaa_ui.dart';
 import 'package:flutter/material.dart';
@@ -44,7 +45,13 @@ void main() {
     await tester.pumpWidget(
       OaaTheme(
         colors: OaaColors.precisionInstrument,
-        child: const MaterialApp(home: RemoteDisplayScreen()),
+        child: MaterialApp(
+          // Nowhere, so that the address typed below — a host this test
+          // started in its own process, on loopback — is not refused as this
+          // machine, which is exactly what the picker does to anybody who is
+          // not a test. See `ThisMachine`.
+          home: RemoteDisplayScreen(thisMachine: ThisMachine.nowhere()),
+        ),
       ),
     );
 
@@ -109,7 +116,13 @@ void main() {
     await tester.pumpWidget(
       OaaTheme(
         colors: OaaColors.precisionInstrument,
-        child: const MaterialApp(home: RemoteDisplayScreen()),
+        child: MaterialApp(
+          // Nowhere, so that the address typed below — a host this test
+          // started in its own process, on loopback — is not refused as this
+          // machine, which is exactly what the picker does to anybody who is
+          // not a test. See `ThisMachine`.
+          home: RemoteDisplayScreen(thisMachine: ThisMachine.nowhere()),
+        ),
       ),
     );
 
@@ -204,7 +217,13 @@ void main() {
     await tester.pumpWidget(
       OaaTheme(
         colors: OaaColors.precisionInstrument,
-        child: const MaterialApp(home: RemoteDisplayScreen()),
+        child: MaterialApp(
+          // Nowhere, so that the address typed below — a host this test
+          // started in its own process, on loopback — is not refused as this
+          // machine, which is exactly what the picker does to anybody who is
+          // not a test. See `ThisMachine`.
+          home: RemoteDisplayScreen(thisMachine: ThisMachine.nowhere()),
+        ),
       ),
     );
     await tester.pump();

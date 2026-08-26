@@ -12,12 +12,14 @@
 
 import 'dart:io';
 
+import 'package:oaa/src/remote/display_host.dart';
 import 'package:oaa/src/remote/host_picker.dart';
 import 'package:oaa/src/remote/mdns/bonjour_discovery.dart';
 import 'package:oaa/src/remote/mdns/dns_message.dart';
 import 'package:oaa/src/remote/mdns/host_discovery.dart';
 import 'package:oaa/src/remote/mdns/mdns_service.dart';
 import 'package:oaa/src/remote/mdns/multicast_lock.dart';
+import 'package:oaa/src/remote/this_machine.dart';
 import 'package:oaa_ui/oaa_ui.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -592,6 +594,142 @@ void main() {
     });
   });
 
+  // A desktop that is publishing hears its own announcement: the browser and
+  // the responder are two objects in one process on one multicast group. So
+  // the first row in the list, on a machine that is alone on the network, is
+  // the machine the list is being read on — and attaching to it puts up a
+  // socket-fed copy of the canvas it just covered, with nothing failing
+  // anywhere to say so.
+  group('a machine cannot be its own display', () {
+    DiscoveredHost at(String address, {String name = 'Studio Mac'}) =>
+        DiscoveredHost(
+          instanceName: name.toLowerCase().replaceAll(' ', '-'),
+          address: address,
+          port: 45678,
+          txt: {'name': name},
+          seenAt: DateTime.utc(2026),
+        );
+
+    Widget panelFinding(
+      List<DiscoveredHost> hosts, {
+      List<String> self = const ['192.168.1.20'],
+      void Function(String host, int port)? onConnect,
+    }) => _panel(
+      _StaticDiscovery()
+        ..isBrowsing.value = true
+        ..hosts.value = hosts,
+      self: ThisMachine.at(self),
+      onConnect: onConnect,
+    );
+
+    testWidgets('this machine is not one of the rows', (tester) async {
+      await tester.pumpWidget(
+        panelFinding([
+          at('192.168.1.20'),
+          at('192.168.1.31', name: 'Live Room'),
+        ]),
+      );
+
+      expect(find.text('Live Room'), findsOneWidget);
+      expect(find.text('Studio Mac'), findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('and the empty list says that is what happened', (
+      tester,
+    ) async {
+      // Not "Looking for hosts on this network…", which is what a search that
+      // has found nothing says, and not "this device cannot search", which is
+      // a warning about a search that has just demonstrably worked. Both send
+      // somebody to check a network that is fine.
+      await tester.pumpWidget(panelFinding([at('192.168.1.20')]));
+
+      expect(find.textContaining('only host on this network'), findsOneWidget);
+      expect(find.textContaining('Looking for hosts'), findsNothing);
+      expect(find.textContaining('cannot search the network'), findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('a typed self address is refused rather than dialled', (
+      tester,
+    ) async {
+      final dialled = <String>[];
+      await tester.pumpWidget(
+        panelFinding(
+          const [],
+          onConnect: (host, port) => dialled.add('$host:$port'),
+        ),
+      );
+
+      await tester.enterText(find.byType(OaaTextField), '192.168.1.20');
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('CONNECT'), warnIfMissed: false);
+      await tester.pumpAndSettle();
+
+      expect(dialled, isEmpty);
+      expect(find.textContaining('is this machine'), findsOneWidget);
+
+      // Somebody else's address, through the same button, still goes.
+      await tester.enterText(find.byType(OaaTextField), '192.168.1.31');
+      await tester.pumpAndSettle();
+      expect(find.textContaining('is this machine'), findsNothing);
+      await tester.tap(find.text('CONNECT'), warnIfMissed: false);
+      await tester.pumpAndSettle();
+
+      expect(dialled, ['192.168.1.31:${DisplayHost.defaultPort}']);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('and so is loopback, which no interface list contains', (
+      tester,
+    ) async {
+      final dialled = <String>[];
+      await tester.pumpWidget(
+        panelFinding(
+          const [],
+          self: const [],
+          onConnect: (host, port) => dialled.add('$host:$port'),
+        ),
+      );
+
+      await tester.enterText(
+        find.byType(OaaTextField),
+        'localhost:${DisplayHost.defaultPort}',
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('CONNECT'), warnIfMissed: false);
+      await tester.pumpAndSettle();
+
+      expect(dialled, isEmpty);
+      expect(find.textContaining('is this machine'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    test('one address, however it is written', () {
+      final machine = ThisMachine.at(const ['192.168.1.20', 'fe80::1']);
+
+      expect(machine.contains('192.168.1.20'), isTrue);
+      expect(machine.contains(' 192.168.1.20 '), isTrue);
+      // A zone names the interface a link-local address is local to; brackets
+      // are the picker's parser writing an IPv6 literal so a port can follow
+      // it. Neither is part of the address.
+      expect(machine.contains('FE80::1%en0'), isTrue);
+      expect(machine.contains('[fe80:0:0:0:0:0:0:1]'), isTrue);
+      // The whole of 127/8, not the one address in it anybody types.
+      expect(machine.contains('127.0.0.1'), isTrue);
+      expect(machine.contains('127.94.0.2'), isTrue);
+      expect(machine.contains('localhost.'), isTrue);
+
+      expect(machine.contains('192.168.1.31'), isFalse);
+      expect(machine.contains('studio-mac.local'), isFalse);
+      expect(machine.contains(''), isFalse);
+    });
+  });
+
   group('what the panel says when it cannot search', () {
     testWidgets('the reason, when there is one', (tester) async {
       final discovery = _StaticDiscovery()
@@ -654,10 +792,22 @@ void main() {
   });
 }
 
-Widget _panel(HostDiscovery discovery) => OaaTheme(
+Widget _panel(
+  HostDiscovery discovery, {
+  ThisMachine? self,
+  void Function(String host, int port)? onConnect,
+}) => OaaTheme(
   colors: OaaColors.precisionInstrument,
   child: MaterialApp(
-    home: HostPickerPanel(onConnect: (_, _) {}, discovery: discovery),
+    home: HostPickerPanel(
+      onConnect: onConnect ?? (_, _) {},
+      discovery: discovery,
+      // Never the real one in a test. `ThisMachine` reads the interfaces, so
+      // the alternative is a suite that passes or fails on what the machine
+      // running it is plugged into — and an awaited real read inside a
+      // `testWidgets` body never completes at all.
+      thisMachine: self ?? ThisMachine.at(const []),
+    ),
   ),
 );
 

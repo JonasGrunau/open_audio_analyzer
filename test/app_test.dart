@@ -82,7 +82,7 @@ void main() {
   });
 
   group('WindowDragArea', () {
-    // The status bar is the window's title bar on macOS, so every control in
+    // The menu bar is the window's title bar on macOS, so every control in
     // it sits under this widget's gesture recognisers. It answered a double
     // click with a zoom, and a `DoubleTapGestureRecognizer` holds the gesture
     // arena until `kDoubleTapTimeout` expires — so nothing underneath could
@@ -139,7 +139,7 @@ void main() {
       await tester.pumpWidget(
         _wrap(
           const WindowDragArea(
-            // The status bar reduced to the part that matters here: a filled
+            // The menu bar reduced to the part that matters here: a filled
             // box, which is opaque to a hit test. `deferToChild` sees a click
             // only where something under it does, and the bar's own fill is
             // what answers for it between the controls.
