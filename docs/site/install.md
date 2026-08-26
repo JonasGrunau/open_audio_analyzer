@@ -292,11 +292,22 @@ application behaves, and an unfolded foldable is over the line and eligible.
 The canvas is a grid of meter modules with a scale down each side, and there is
 no phone-sized arrangement of that which is worth reading.
 
-Every tagged release uploads a build to Play's **internal testing** track; ask
-on the [repository](https://github.com/JonasGrunau/open_audio_analyzer) for
-access. Building it yourself needs the Android SDK and no credentials at all,
-and the filter above does not apply — it is the store's, so `flutter run` puts
-the build on whatever device you name:
+Every tagged release uploads a build to Play, and it is a **closed test** — so
+the store listing is not public and
+`play.google.com/store/apps/details?id=com.openaudioanalyzer.oaa` answers 404 to
+anybody who has not joined it. Joining is self-service and takes a Google
+account:
+
+**[Join the closed test](https://play.google.com/apps/testing/com.openaudioanalyzer.oaa)**
+
+That page adds your account to the tester list and then hands you the listing,
+which works from that point on. It is also what the Google Play badge on the
+[front page](/) points at, and for the same reason: a badge that sent a reader
+to the listing would send every one of them to a 404.
+
+Building it yourself needs the Android SDK and no credentials at all, and the
+filter above does not apply — it is the store's, so `flutter run` puts the build
+on whatever device you name:
 
 ```sh
 flutter run -d <your device>    # `flutter devices` names it

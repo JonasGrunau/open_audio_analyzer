@@ -709,8 +709,11 @@ site](https://open-audio-analyzer.com/docs/install).
 > an app bundle, a publishing format rather than an installable file: Play
 > generates each device's download from it and signs that download with a key
 > Google holds. There is no file here anybody could install. Every tag uploads
-> to Play's internal testing track, after the release is published, because a
-> version code Play has accepted can never be reused or lowered. Play offers it
+> to Play, after the release is published, because a version code Play has
+> accepted can never be reused or lowered. It is a **closed test**, so the
+> listing URL is a 404 until you have joined it —
+> [join here](https://play.google.com/apps/testing/com.openaudioanalyzer.oaa),
+> which takes a Google account and nothing else. Play offers it
 > to **tablets** only — the manifest asks for a 600dp shortest edge, which is
 > the store's filter and not a runtime one.
 

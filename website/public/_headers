@@ -56,6 +56,12 @@
 /oaa.svg
   Cache-Control: public, max-age=2592000
 
+# Apple's and Google's badge artwork. A month, like the photographs and for the
+# same reason: both owners publish revisions and both guidelines say to use the
+# current one, so `immutable` would be a promise this repository cannot keep.
+/badges/*
+  Cache-Control: public, max-age=2592000
+
 # Compiled Flutter, rebuilt by every `npm run deploy` with no change of name.
 # A day, because a reader who pressed the button yesterday should not be handed
 # last release's analyzer, and it is 6.8 MB nobody fetches unless they press it.

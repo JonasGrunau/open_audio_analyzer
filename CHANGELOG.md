@@ -9,6 +9,19 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### ✨ Added
+- The front page carries the App Store and Google Play badges, beside the
+  Download, Source and Documentation buttons. The Play badge is the way into the
+  Android closed test: it links to the tester opt-in page rather than to the
+  store listing, which answers 404 to everybody who has not joined yet. The App
+  Store badge is drawn but not linked, over a `iPad — coming soon` caption,
+  until the iPad build clears review.
+
+### 🚧 Internal
+- Apple's and Google's badge artwork is committed under `website/public/badges/`
+  exactly as each publishes it, and the trademark credit line both of them
+  require is in the site footer.
+
 ## [0.12.0] — 2026-08-25
 
 ### ✨ Added

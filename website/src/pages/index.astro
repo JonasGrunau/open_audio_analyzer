@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import Base from '../layouts/Base.astro';
 /* Read from the application's own pubspec, so the version on the download
    button cannot be a release behind. See src/lib/app.mjs. */
-import { REPO, RELEASES, VERSION } from '../lib/app.mjs';
+import { REPO, RELEASES, VERSION, PLAY_TESTING, APP_STORE } from '../lib/app.mjs';
 /* Written by `npm run analyzer` beside the still it describes, so the facade is
    sized from the picture that exists rather than from a number typed here. */
 import still from '../data/analyzer-still.json';
@@ -228,13 +228,73 @@ const PLATFORMS = [
         A free and open-source loudness and spectrum analyzer. Fourteen meter modules on a canvas
         you arrange — on the desktop, inside your DAW, and on a tablet beside the desk.
       </p>
+    </div>
 
-      <div class="cta">
-        <a class="btn btn-primary" href={RELEASES} rel="noopener">Download {VERSION}</a>
-        <a class="btn" href={REPO} rel="noopener">Source</a>
-        <a class="btn" href={DOCS}>Documentation</a>
+    <!--
+      The button row sits outside `.hero-lede` on purpose. That box is
+      `max-width: 62ch`, which is the measure the deck is set to and the reason
+      the sentence above reads as a statement; a row of controls is not prose
+      and inherited nothing from it but a wrap. Three buttons and two store
+      badges are about 850 px, so inside the measure the badges fell to a second
+      line at every window width there is.
+
+      Apple's badge is first because Apple's guidelines say it is — "Place the
+      App Store badge first in the lineup of badges" — and Google's ask only
+      that theirs be "the same size or larger than the other badges", which
+      equal height satisfies. Both artworks are used exactly as their owners
+      publish them: the black badge with its grey border, no recolouring, no
+      hover transform, and nothing typeset inside the quarter-of-a-badge-height
+      of clear space each of them requires. That is what `--s12` under a 48 px
+      badge is measuring out, and it is why the captions are a gap rather than
+      an overlay.
+    -->
+    <div class="cta">
+      <a class="btn btn-primary" href={RELEASES} rel="noopener">Download {VERSION}</a>
+      <a class="btn" href={REPO} rel="noopener">Source</a>
+      <a class="btn" href={DOCS}>Documentation</a>
+
+      <div class="stores">
+        <div class="store">
+          {APP_STORE ? (
+            <a class="store-badge" href={APP_STORE} rel="noopener">
+              <img
+                class="store-art"
+                src="/badges/app-store.svg"
+                alt="Download on the App Store"
+                width="144"
+                height="48"
+                decoding="async"
+              />
+            </a>
+          ) : (
+            <span class="store-badge">
+              <img
+                class="store-art"
+                src="/badges/app-store.svg"
+                alt="Download on the App Store"
+                width="144"
+                height="48"
+                decoding="async"
+              />
+            </span>
+          )}
+          <span class="store-cap">iPad — coming soon</span>
+        </div>
+
+        <div class="store">
+          <a class="store-badge" href={PLAY_TESTING} rel="noopener">
+            <img
+              class="store-art"
+              src="/badges/google-play.svg"
+              alt="Get it on Google Play"
+              width="162"
+              height="48"
+              decoding="async"
+            />
+          </a>
+          <span class="store-cap">Join the closed test</span>
+        </div>
       </div>
-
     </div>
 
     <!-- What the plate said, in the space of a line. Anything a reader has to
@@ -740,8 +800,99 @@ const PLATFORMS = [
   .cta {
     display: flex;
     flex-wrap: wrap;
+    /* The badges are taller than the buttons, because each one carries a caption
+       under it. `flex-start` is what keeps the two badge artworks on the same
+       baseline as the three buttons and lets the captions hang into the space
+       below, which was empty anyway. `center` would push the buttons down by
+       half a caption and align nothing to anything. */
+    align-items: flex-start;
     gap: var(--s12);
     margin-top: var(--s32);
+  }
+
+  /* ---------- the two app store badges ----------
+     Vendor artwork, used unaltered, and the CSS here only ever positions it.
+     Nothing in this block may set a colour, a filter, an opacity or a transform
+     on `.store-art`: both guidelines forbid recolouring or modifying the badge,
+     and Apple's forbids animating it as well. Everything that says which of the
+     two you can actually press is carried by the caption below the badge, in
+     this site's own type, outside the clear space. */
+  .stores {
+    display: flex;
+    flex-wrap: wrap;
+    /* Google asks for one quarter of the badge height as clear space, which is
+       12 px under a 48 px badge; Apple asks for the same quarter. `--s16`
+       between the two badges clears both with room to spare. */
+    gap: var(--s16);
+    /* The hairline is the seam between what this project publishes and what a
+       store does. It is drawn on the left of the group rather than as an
+       element of its own so that it wraps with the badges instead of stranding
+       itself at the end of the button row. */
+    position: relative;
+    margin-left: var(--s12);
+    padding-left: var(--s24);
+  }
+
+  .stores::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 1px;
+    /* The button height, not the group's: the seam belongs to the row the
+       badges are in line with, and running it down past the captions would make
+       it the tallest mark on the screen. */
+    height: var(--s48);
+    background: var(--hair-strong);
+  }
+
+  .store {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    /* The clear space itself. Both guidelines say no typography inside a
+       quarter of the badge height, and this is that quarter measured out. */
+    gap: var(--s12);
+  }
+
+  /* The link is the badge and only the badge. The caption below is a subline
+     about the badge, not a second half of it, so it sits outside the anchor —
+     otherwise the click target is an L-shape that reaches down into the clear
+     space, and the caption reads as a label the artwork is missing. */
+  .store-badge {
+    display: block;
+  }
+
+  .store-art {
+    display: block;
+    height: var(--s48);
+    /* Width follows the artwork's own aspect ratio. Never a fixed width — both
+       guidelines forbid stretching the badge, and the two of them are not the
+       same shape: 3.37:1 for Google Play against 2.99:1 for the App Store. */
+    width: auto;
+  }
+
+  /* One style for both captions, whether or not the badge above is a link. They
+     are a readout line about the badge — which platform, and what state it is
+     in — in the same face and the same `--faint` as `.hero-meta` under them, and
+     nothing about them is an affordance: the badges are what you press, and a
+     store badge is a control every reader already recognises without being
+     underlined into one. */
+  .store-cap {
+    font-family: var(--readout);
+    font-size: 0.6875rem;
+    letter-spacing: 0.02em;
+    color: var(--faint);
+    white-space: nowrap;
+  }
+
+  /* Keyboard focus lands on the badge, so it has to be visible there. An
+     outline is drawn outside the element and disappears with the focus, which
+     is why it is the one mark allowed to cross into the clear space — the
+     alternative is a link nobody navigating by keyboard can find. */
+  a.store-badge:focus-visible {
+    outline: 2px solid var(--signal);
+    outline-offset: var(--s4);
   }
 
   /* Where the five-row plate went: platforms, what it loads into, what it
@@ -1516,6 +1667,25 @@ const PLATFORMS = [
   @media (max-width: 1240px) {
     .cat {
       grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+  }
+
+  /* Three buttons and two badges measure about 850 px. Rather than let the
+     group tear at whatever width the text happens to run out — one badge up,
+     one badge down, and a seam hanging off the end of the button row — it is
+     sent to a line of its own just before that would start happening, and the
+     seam goes with it: a vertical hairline at the start of a line separates
+     nothing from anything. */
+  @media (max-width: 980px) {
+    .stores {
+      flex-basis: 100%;
+      margin-left: 0;
+      padding-left: 0;
+      margin-top: var(--s8);
+    }
+
+    .stores::before {
+      display: none;
     }
   }
 

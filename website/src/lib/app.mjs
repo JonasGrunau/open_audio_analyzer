@@ -53,3 +53,22 @@ function versionFromPubspec() {
 }
 
 export const VERSION = versionFromPubspec();
+
+/* Where the two app stores are, and the fact that only one of them has
+   anything on it.
+ *
+ * `PLAY_TESTING` is deliberately **not** the store listing. Android ships on a
+ * closed testing track, and `play.google.com/store/apps/details?id=…` answers
+ * 404 to everybody who has not already joined it — which is every reader of
+ * this page, so the badge would be a broken link to exactly the people it is
+ * meant to recruit. `play.google.com/apps/testing/<package>` is the opt-in
+ * page: it takes a Google account, adds it to the tester list, and only then
+ * hands over the listing link. It is a Google Play URL, which is what the badge
+ * guidelines ask the badge to point at.
+ *
+ * `APP_STORE` is null and the App Store badge is drawn unlinked beside its
+ * `Coming soon` caption. When the iPad build clears review this becomes the
+ * product URL and `index.astro` links the badge without any other change. */
+export const PLAY_PACKAGE = 'com.openaudioanalyzer.oaa';
+export const PLAY_TESTING = `https://play.google.com/apps/testing/${PLAY_PACKAGE}`;
+export const APP_STORE = null;

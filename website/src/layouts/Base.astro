@@ -233,6 +233,20 @@ const nav = [
             </div>
           </div>
 
+          <!-- Not boilerplate, and not optional. Apple's marketing guidelines
+               require a credit line naming Apple and the Apple logo wherever
+               the App Store badge is shown, and Google's ask the same for the
+               Play badge; the badges are in the hero of the front page, which
+               is the only page carrying this footer. Neither mark belongs to
+               this project and neither store endorses it, which the last
+               sentence is there to say. -->
+          <p class="foot-tm">
+            Apple, the Apple logo and iPad are trademarks of Apple Inc., registered in the U.S.
+            and other countries and regions. App Store is a service mark of Apple Inc. Google
+            Play and the Google Play logo are trademarks of Google LLC. Open Audio Analyzer is
+            not affiliated with, endorsed by or sponsored by either company.
+          </p>
+
           <div class="foot-rule">
             <span class="num">© 2026 Jonas Grunau</span>
             <span class="num">open-audio-analyzer.com</span>
@@ -412,8 +426,20 @@ const nav = [
     border-bottom-color: var(--signal);
   }
 
+  /* Legal small print: the only text on the site set smaller than the footer
+     rule, because it is a requirement to be met rather than a line to be read.
+     It keeps a measure — a licence notice run the full 1440 px is four words
+     per eye movement and nobody finishes it. */
+  .foot-tm {
+    margin-top: var(--s48);
+    max-width: 96ch;
+    font-size: 0.6875rem;
+    line-height: 1.6;
+    color: var(--faint);
+  }
+
   .foot-rule {
-    margin-top: var(--s64);
+    margin-top: var(--s24);
     padding-top: var(--s16);
     border-top: 1px solid var(--hair);
     display: flex;
