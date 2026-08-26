@@ -1,0 +1,307 @@
+---
+/* /testing — where the Google Play badge lands.
+ *
+ * The badge used to point straight at Play, and both of the URLs Play offers
+ * are a dead end for the person the badge is trying to recruit. A closed test
+ * grants access **by list, not by link**: Play's own documentation says a user
+ * must "be included in the managed track configuration" *and* "actively opt
+ * into the corresponding test program", and only open testing gets the sentence
+ * about any user with the link being able to join. So the opt-in page turns away
+ * anybody the developer has not already added, and the store listing does not
+ * resolve for them at all — with no explanation on either, because Play is not
+ * going to tell a stranger why an app they cannot see is refusing them.
+ *
+ * This page is the missing explanation, and it is why the badge points here
+ * rather than at Play. Google's badge guidelines constrain the artwork —
+ * colour, elements, scale, resolution, clear space, minimum size — and say
+ * nothing at all about where the badge may link, which was checked before this
+ * was built. Apple's *do* constrain the destination, which is one more reason
+ * the App Store badge on the front page is not a link.
+ *
+ * The two Play URLs are printed side by side rather than chosen for the reader
+ * by sniffing the user agent. An earlier version did sniff, and a labelled pair
+ * is better than a guess in both directions: the guess is wrong on a tablet
+ * pretending to be a desktop, and the reader who is on a laptop *now* and will
+ * install on a tablet *later* needs to see both anyway.
+ */
+import Base from '../layouts/Base.astro';
+import { pageSchema } from '../lib/schema.mjs';
+import { REPO, PLAY_TESTING, PLAY_LISTING, TESTER_GROUP } from '../lib/app.mjs';
+
+const description =
+  'How to join the Android closed test for Open Audio Analyzer: get your ' +
+  'Google account on the tester list, opt in, then install from Play. Tablets ' +
+  'only, and the account has to be the one signed in on the tablet.';
+---
+
+<Base
+  title="Join the Android test — Open Audio Analyzer"
+  description={description}
+  path="/testing"
+  schema={pageSchema({ title: 'Join the Android test', description, path: '/testing' })}
+>
+  <section class="shell head">
+    <div class="col">
+    <p class="eyebrow num">Android · closed test</p>
+    <h1>Join the Android test</h1>
+    <p class="prose deck">
+      The Android build is on Google Play as a <strong>closed test</strong>, which grants access
+      by list rather than by link. Your Google account has to be on the tester list before Play
+      will let you in — so the two steps below are in that order, and the second one does nothing
+      without the first.
+    </p>
+    </div>
+  </section>
+
+  <section class="shell steps">
+    <div class="col">
+    <!-- Step one. Two versions of it: a public Google Group listed on the track
+         makes this self-service, and until one exists it is a request to a
+         person, which works and is slower. `TESTER_GROUP` is the switch.
+
+         The group copy is deliberately true for both of Google's public join
+         settings — "Anyone on the web can join" lets a reader straight in,
+         "Anyone on the web can ask" holds them for the owner's approval — so
+         the sentence covers the second without over-promising the first.
+         Changing that setting later must not mean editing this page. -->
+    <article class="step">
+      <p class="step-n num">01</p>
+      <div class="step-body">
+        <h2>Get on the tester list</h2>
+        {TESTER_GROUP ? (
+          <>
+            <p class="prose">
+              Join the tester group. It is a public Google Group, and membership of it is what puts
+              you on Play's tester list — so this is the whole of step one. If the group asks you to
+              request membership rather than letting you straight in, it is approved by hand and you
+              will get an email when it is done.
+            </p>
+            <p class="cta-row">
+              <a class="btn btn-primary" href={TESTER_GROUP} rel="noopener">Join the tester group</a>
+            </p>
+            <p class="prose note">
+              Join it with <strong>the same Google account you are signed in to on the tablet</strong>.
+              Play matches the tester list against the account signed in to the Play Store, not
+              against whoever opened the link — a different address is the single most common
+              reason step 2 refuses somebody.
+            </p>
+          </>
+        ) : (
+          <>
+            <p class="prose">
+              The self-service group is not up yet, so this step is a request. Open an issue with
+              the Google account address you use on the tablet and it gets added to the list.
+            </p>
+            <p class="cta-row">
+              <a class="btn btn-primary" href={`${REPO}/issues/new?title=Android%20tester%20access`} rel="noopener">
+                Ask for tester access
+              </a>
+            </p>
+            <p class="prose note">
+              It has to be <strong>the Google account you are signed in to on the tablet</strong>.
+              Play matches the tester list against the account signed in to the Play Store, not
+              against whoever opened the link.
+            </p>
+          </>
+        )}
+      </div>
+    </article>
+
+    <article class="step">
+      <p class="step-n num">02</p>
+      <div class="step-body">
+        <h2>Opt in</h2>
+        <p class="prose">
+          Being on the list is permission; opting in is accepting it, and Play needs both. Play
+          gives the test two links for this and they are not interchangeable — take the one that
+          matches what you are reading this on.
+        </p>
+
+        <div class="links">
+          <a class="link-card" href={PLAY_TESTING} rel="noopener">
+            <span class="link-k num">In a browser</span>
+            <span class="link-t">Opt in on the web</span>
+            <span class="link-u num">play.google.com/apps/testing</span>
+          </a>
+          <a class="link-card" href={PLAY_LISTING} rel="noopener">
+            <span class="link-k num">On the tablet</span>
+            <span class="link-t">Open in the Play Store</span>
+            <span class="link-u num">play.google.com/store/apps</span>
+          </a>
+        </div>
+
+        <p class="prose note">
+          A tester list can take <strong>a few hours</strong> to reach the store. If either link
+          still refuses you right after being added, that is why — it is not something you did
+          wrong, and it clears on its own.
+        </p>
+      </div>
+    </article>
+
+    <article class="step">
+      <p class="step-n num">03</p>
+      <div class="step-body">
+        <h2>Install it, and stay opted in</h2>
+        <p class="prose">
+          Once you are opted in the listing behaves like any other app page and installs from
+          Play.
+        </p>
+        <p class="prose note">
+          Please leave it installed and stay opted in rather than joining and leaving. Google
+          counts a closed test by testers who have been <strong>continuously</strong> opted in,
+          and somebody who opts out and back in starts that count again from zero.
+        </p>
+      </div>
+    </article>
+    </div>
+  </section>
+</Base>
+
+<style>
+  /* One centred column, the way `/privacy` is centred and for the reason its
+     stylesheet already writes down: `.shell` is 1440 px, and a column of this
+     width sitting at the default margin leaves 600-odd pixels of nothing beside
+     it. Every other page fills the shell — the manual holds its left with a
+     15 rem nav rail — so a bare block inside it reads as lopsided rather than
+     as narrow. The number gutter is part of the column, so the rule is on a
+     wrapper each section shares rather than on the prose. */
+  /* The column, and it is on an inner wrapper rather than on the sections
+     themselves so that all three start at the same x. `.shell` carries the
+     page gutter as padding, so a `max-width` on the section includes that
+     gutter and a `max-width` on a child does not — which is a difference of one
+     gutter between two blocks that are both "52rem centred", and it showed as
+     the closing section sitting a visible 30 px left of the steps above it. */
+  .col {
+    max-width: 46rem;
+    margin-inline: auto;
+  }
+
+  .head {
+    padding-block: var(--s64) var(--s48);
+  }
+
+  .head h1 {
+    margin-top: var(--s16);
+  }
+
+  .deck {
+    margin-top: var(--s24);
+    max-width: 62ch;
+    font-size: clamp(1.0625rem, 1.2vw, 1.1875rem);
+    line-height: 1.55;
+    color: var(--text);
+  }
+
+  /* ---------- the three steps ----------
+     A rule between them rather than three boxes. The page is read top to bottom
+     once, and a card per step would make three things to look at where there is
+     one thing to do. */
+  .steps {
+    padding-bottom: var(--s64);
+  }
+
+  .step {
+    display: grid;
+    grid-template-columns: var(--s64) minmax(0, 1fr);
+    gap: var(--s24);
+    padding-block: var(--s32);
+    border-top: 1px solid var(--hair);
+  }
+
+  .step-n {
+    font-size: 0.875rem;
+    color: var(--signal);
+    letter-spacing: 0.06em;
+    /* Optically on the heading's cap line rather than its box: the number is
+       set at less than half the heading's size, so aligning the two boxes puts
+       the digits visibly high. */
+    padding-top: 0.15em;
+  }
+
+  .step-body {
+    max-width: 68ch;
+  }
+
+  .step-body h2 {
+    font-size: clamp(1.125rem, 1.4vw, 1.3125rem);
+  }
+
+  .step-body .prose {
+    margin-top: var(--s16);
+    line-height: 1.6;
+  }
+
+  .note {
+    color: var(--muted);
+    font-size: 0.9375rem;
+  }
+
+  .cta-row {
+    margin-top: var(--s24);
+  }
+
+  /* ---------- the two Play links ----------
+     Side by side and equally weighted, because the page cannot know which one
+     the reader wants and guessing it from a user agent is how the previous
+     version got it wrong on a tablet in desktop mode. */
+  .links {
+    margin-top: var(--s24);
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--s16);
+  }
+
+  .link-card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--s4);
+    padding: var(--s16);
+    border: 1px solid var(--hair-strong);
+    background: var(--panel);
+    transition: border-color 140ms linear;
+  }
+
+  .link-card:hover {
+    border-color: var(--signal);
+  }
+
+  .link-k {
+    font-size: 0.6875rem;
+    color: var(--faint);
+    letter-spacing: 0.04em;
+  }
+
+  .link-t {
+    font-family: var(--display);
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  .link-card:hover .link-t {
+    color: var(--signal);
+  }
+
+  .link-u {
+    font-size: 0.6875rem;
+    color: var(--faint);
+    /* The URL is here so a reader can see where the button goes before pressing
+       it, which on a page about a store that keeps refusing people is worth the
+       line. It is truncated rather than wrapped: the point is the host and the
+       shape of the path, not the package name a third time. */
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  @media (max-width: 720px) {
+    .step {
+      grid-template-columns: minmax(0, 1fr);
+      gap: var(--s8);
+    }
+
+    .links {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+</style>

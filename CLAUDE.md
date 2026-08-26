@@ -49,7 +49,7 @@ is still not built, and `docs/PLAN.md` for what was planned.
 | `packages/oaa_core/lib/src/layout.dart` | `ModuleSpec` / `TabSpec` / `PresetSpec` — the serialised layout model. |
 | `packages/oaa_core/lib/src/meter_source.dart` | `MeterSource` — everything a module is allowed to read. `OaaEngine` implements it; so does the remote display's decoder. |
 | `docs/WIRE.md` | The wire protocol, normative. Three implementations, none written against another. |
-| `ios/Runner/OaaBonjour.swift` | One of the application's **five** platform channels, and every one of them exists because a platform will not answer a question Flutter can. iOS refuses an app the multicast socket every other platform browses with, so a tablet searches through the system's Bonjour responder instead; `lib/src/remote/mdns/host_discovery.dart` is where the two meet. The others: `lib/src/app/window_chrome.dart` over `oaa/window_chrome`, which removes the macOS title bar; `macos/Runner/OaaFileMenu.swift` over `oaa/file_menu`, which is the File menu, because `PlatformMenuBar` can carry no checkmark and would replace the stock Edit menu — see `lib/src/app/file_menu.dart`, which sends it labels, ticks and the chords off the shortcut table; and Android's two — `OaaMulticastLock.kt`, without which its multicast socket receives nothing, and `OaaFilesDir.kt`, without which it has nowhere to save. Both Android halves are registered in `android/app/src/main/kotlin/com/openaudioanalyzer/oaa/MainActivity.kt`. |
+| `ios/Runner/OaaBonjour.swift` | One of the application's **six** platform channels, and every one of them exists because a platform will not answer a question Flutter can. iOS refuses an app the multicast socket every other platform browses with, so a tablet searches through the system's Bonjour responder instead; `lib/src/remote/mdns/host_discovery.dart` is where the two meet. The others: `lib/src/app/window_chrome.dart` over `oaa/window_chrome`, which removes the macOS title bar; `macos/Runner/OaaFileMenu.swift` over `oaa/file_menu`, which is the File menu, because `PlatformMenuBar` can carry no checkmark and would replace the stock Edit menu — see `lib/src/app/file_menu.dart`, which sends it labels, ticks and the chords off the shortcut table; and Android's three — `OaaMulticastLock.kt`, without which its multicast socket receives nothing; `OaaFilesDir.kt`, without which it has nowhere to save; and `OaaMicPermission.kt`, without which it cannot open an input at all. All three are registered in `android/app/src/main/kotlin/com/openaudioanalyzer/oaa/MainActivity.kt`, and all three are the same failure shape — an Android capability that is *absent* rather than broken, with every call below it succeeding and nothing logged. Two of the three shipped missing. |
 | `packages/oaa_core/lib/src/grid.dart` | Every rule about where a module may go, as pure functions. No pixels. |
 | `lib/src/canvas/grid_canvas.dart` | The canvas: drag, resize, selection, the preview overlay. |
 | `lib/src/canvas/workspace.dart` | The one path every layout edit takes, and the undo history. |
@@ -688,8 +688,17 @@ Two of these fail in a way that looks like something else:
 
 `oaa_engine` → `oaa_core` as well, for `MeterSource` and nothing else. The rule
 that matters is unchanged and points the other way: **`oaa_core` must never
-learn about `dart:ffi`**. Three of the four consumers have no engine, and the
-remote display has no native library at all.
+learn about `dart:ffi`**. Three of the four *consumers* — the CLI's domain use,
+the wire codec, the display's decoder — reach for the vocabulary without the
+engine, and the decoder has no native library behind it at all.
+
+**That is a statement about code paths and not about platforms.** The engine is
+compiled for all six, iOS and Android included, and `lib/` is one application
+with one entry point and no platform branch: a tablet runs the same canvas, the
+same fourteen modules and the same engine the desktop does, and *additionally*
+can draw a remote host's meters through the decoder. Read the sentence above as
+"tablets are display-only" and you get the claim that stood in `install.md` for
+a phase and was wrong.
 
 ### External
 

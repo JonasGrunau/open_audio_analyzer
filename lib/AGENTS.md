@@ -8,7 +8,7 @@ The application. GPL-3.0-or-later.
 | `src/app/` | The shell: window, status bar, the keyboard shortcut table, and the launch options. See its own `AGENTS.md`. |
 | `src/canvas/` | The grid canvas, the tab strip and the layout controller. See its own `AGENTS.md`. |
 | `src/clock/` | `MeterClock` — the only `Ticker` in the app. |
-| `src/data/` | Riverpod providers (configuration only) and `metric_reader.dart`. |
+| `src/data/` | Riverpod providers (configuration only), `metric_reader.dart`, `offline_job.dart`, and `mic_permission.dart` — the last being the microphone request Android needs before a capture device will open at all, and which no other platform needs because every other one grants capture through the act of opening one. Its absence is what made Android look display-only for a phase. |
 | `src/modules/` | One file per meter module, all fourteen. Bodies only — the frame is the canvas's. |
 | `src/panels/` | Settings, presets, the delivery-target editor, the skin editor, the report. See its own `AGENTS.md`. |
 | `src/storage/` | Where configuration lives and how it is read and written. See its own `AGENTS.md`. |

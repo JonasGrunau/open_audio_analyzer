@@ -242,9 +242,11 @@ module-null-sink` gives you a monitor source Open Audio Analyzer can open.
 
 ## iPadOS
 
-The iPad build is a **display**, not a second analyser: it draws another
-machine's meters over the local network, with the desktop application doing the
-measuring. [Remote display](index.html) covers how the two find each other.
+The iPad build is **the same application as the desktop one**: the same canvas
+of meter modules, the same engine compiled in behind them, the same painters
+drawing them. It measures an input on the iPad itself, and it can draw another
+machine's meters over the local network instead — [Remote display](index.html)
+covers how the two find each other. Neither is a cut-down version of the other.
 
 It needs **iPadOS 15 or later**, which costs no device: iPadOS 13, 14 and 15
 run on the same iPads — every model back to the Air 2 and the mini 4 — so if
@@ -272,10 +274,17 @@ flutter run -d <your ipad>    # `flutter devices` names it
 
 ## Android
 
-Like the iPad build, the Android build is a **display** rather than a second
-analyser: it draws another machine's meters over the local network while the
-desktop application does the measuring. [Remote display](index.html) covers how
-the two find each other.
+The Android build is **the same application as the desktop one** — the same
+canvas, the same modules, the same engine compiled into it. It measures an input
+on the tablet itself, and it can draw another machine's meters over the local
+network instead; [Remote display](index.html) covers how the two find each
+other. Neither is a cut-down version of the other.
+
+> **Before 0.12.1 there was no live input on Android**, because the manifest
+> declared no `RECORD_AUDIO` and Android will not open a microphone without it.
+> Everything above it worked, which is why the platform was described here as a
+> display rather than an analyser — it looked like a design and it was an
+> omission.
 
 It is distributed through **Google Play**, and there is no `.apk` on the
 releases page. What a tagged release builds is an `.aab` — an app bundle, which
@@ -313,13 +322,16 @@ on whatever device you name:
 flutter run -d <your device>    # `flutter devices` names it
 ```
 
-Two permissions it asks for, and one it does not. The camera is for the QR
-scanner in the host picker, asked for the first time you open it; refusing
-leaves the host list and the typed address exactly as they were. Multicast is
-an install-time permission with no dialog, and without it Android's Wi-Fi
-driver silently discards every mDNS answer, so the desktops never appear.
-`NEARBY_WIFI_DEVICES` is deliberately not declared — it covers scanning and
-managing networks, which this application never does.
+Three permissions it asks for, and one it does not. The **microphone** is the
+input it measures, asked for when you first choose one rather than at launch —
+so a tablet that only ever mirrors another machine is never asked, and refusing
+leaves whatever was playing alone. The **camera** is for the QR scanner in the
+host picker, asked for the first time you open it; refusing leaves the host list
+and the typed address exactly as they were. **Multicast** is an install-time
+permission with no dialog, and without it Android's Wi-Fi driver silently
+discards every mDNS answer, so the desktops never appear. `NEARBY_WIFI_DEVICES`
+is deliberately not declared — it covers scanning and managing networks, which
+this application never does.
 
 ## In a DAW
 

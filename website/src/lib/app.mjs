@@ -57,18 +57,49 @@ export const VERSION = versionFromPubspec();
 /* Where the two app stores are, and the fact that only one of them has
    anything on it.
  *
- * `PLAY_TESTING` is deliberately **not** the store listing. Android ships on a
- * closed testing track, and `play.google.com/store/apps/details?id=…` answers
- * 404 to everybody who has not already joined it — which is every reader of
- * this page, so the badge would be a broken link to exactly the people it is
- * meant to recruit. `play.google.com/apps/testing/<package>` is the opt-in
- * page: it takes a Google account, adds it to the tester list, and only then
- * hands over the listing link. It is a Google Play URL, which is what the badge
- * guidelines ask the badge to point at.
+ * Google Play hands out **two** links for a closed test and they are not
+ * interchangeable:
+ *
+ *   `PLAY_TESTING`  — `play.google.com/apps/testing/<package>`, the opt-in
+ *                     page. A web page, and the one Play Console calls "join on
+ *                     the web".
+ *   `PLAY_LISTING`  — `play.google.com/store/apps/details?id=<package>`, the
+ *                     listing. On Android this is a deep link the Play Store
+ *                     app answers itself; in a desktop browser it is a 404.
+ *
+ * Neither is the badge's destination. **Both are useless on their own**,
+ * because a closed test grants access by list and not by link: Play only lets
+ * an account opt in if the developer has already put that account on the
+ * track's tester list, so a reader who follows either link cold is turned away
+ * with no idea why. The badge points at `/testing` instead — a page that says
+ * get on the list first, then opt in, and hands over both links there, labelled
+ * for what each is for.
+ *
+ * `TESTER_GROUP_NAME` is the Google Group that makes step one self-service: a
+ * public group anybody can join, listed on the Play track, so the reader adds
+ * themselves rather than waiting on somebody to paste their address into the
+ * Console. **Until it exists this is null**, and `/testing` falls back to asking
+ * on the repository — which works, and is slower for both sides.
+ *
+ * It is the group's **short name** and not either of the two strings that name
+ * the group, because there are two and they are not interchangeable: the
+ * website needs the web address `groups.google.com/g/<name>`, and Play Console
+ * needs the email address `<name>@googlegroups.com`. Typing the wrong one into
+ * either place fails quietly — Play accepts a malformed group and simply never
+ * matches anybody against it, and a mailto in an href is a link that does
+ * nothing useful. One name, derived twice, cannot disagree with itself.
  *
  * `APP_STORE` is null and the App Store badge is drawn unlinked beside its
  * `Coming soon` caption. When the iPad build clears review this becomes the
  * product URL and `index.astro` links the badge without any other change. */
 export const PLAY_PACKAGE = 'com.openaudioanalyzer.oaa';
 export const PLAY_TESTING = `https://play.google.com/apps/testing/${PLAY_PACKAGE}`;
+export const PLAY_LISTING = `https://play.google.com/store/apps/details?id=${PLAY_PACKAGE}`;
+/* The group's short name — `open-audio-analyzer-testers`, not a URL and not an
+   email address. Set it and `/testing` switches step one to self-service.
+   Play Console's Testers tab wants `${TESTER_GROUP_NAME}@googlegroups.com`. */
+export const TESTER_GROUP_NAME = 'open-audio-analyzer-closed-test';
+export const TESTER_GROUP = TESTER_GROUP_NAME
+  ? `https://groups.google.com/g/${TESTER_GROUP_NAME}`
+  : null;
 export const APP_STORE = null;

@@ -16,6 +16,24 @@
          so there is a dialog, and a refusal is a sentence in the panel
          rather than a camera that shows nothing. -->
     <uses-permission android:name="android.permission.CAMERA"/>
+    <!-- The input Open Audio Analyzer measures.
+
+         **This was missing until 0.12.1, and its absence was silent.** The
+         engine is compiled for Android with miniaudio in it exactly as it is
+         for every other platform, so the canvas, the modules and the painters
+         were all present and correct — and the one thing they had nothing to
+         draw was a live signal, because AudioRecord cannot be constructed
+         without this and miniaudio reports the failure as a device that will
+         not open. It looked like the platform was display-only, and the
+         documentation said so for a phase. It is the same class of failure as
+         the multicast lock above: an Android capability that is absent rather
+         than broken, with nothing in any log to say which.
+
+         Runtime, so there is a dialog, and it is asked for when somebody
+         chooses an input rather than at launch — a tablet that only ever
+         mirrors another machine's meters is never asked at all. See
+         OaaMicPermission.kt and lib/src/data/mic_permission.dart. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
     <!-- Tablets only, and this line is the whole of that decision.
          **There is no "tablet only" setting in the Play Console.** Google
          states a build's audience as "your manifest declarations and your

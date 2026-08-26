@@ -17,6 +17,14 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Store badge is drawn but not linked, over a `iPad — coming soon` caption,
   until the iPad build clears review.
 
+### 🐛 Fixed
+- Android can measure a live input. The manifest declared no `RECORD_AUDIO`, so
+  Android refused every capture device while the canvas, the modules and the
+  engine behind them all worked — which looked like the platform being a remote
+  display by design, and was documented that way. It asks for the microphone
+  when you first choose an input, not at launch, so a tablet that only mirrors
+  another machine is never asked.
+
 ### 🚧 Internal
 - Apple's and Google's badge artwork is committed under `website/public/badges/`
   exactly as each publishes it, and the trademark credit line both of them

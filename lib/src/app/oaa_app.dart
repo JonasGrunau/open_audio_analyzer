@@ -17,6 +17,7 @@ import '../canvas/tab_strip.dart';
 import '../canvas/workspace.dart';
 import '../clock/meter_clock.dart';
 import '../data/providers.dart';
+import '../data/mic_permission.dart';
 import '../modules/number_box.dart';
 import '../panels/calibration_editor.dart';
 import '../panels/report_panel.dart';
@@ -121,6 +122,14 @@ class _WorkspaceState extends ConsumerState<_Workspace>
   MeterClock? _clock;
   String? _failure;
   String _sourceLabel = 'TEST TONE';
+
+  /// Whether a microphone request is open, so a second one is not started.
+  ///
+  /// Android only, and only ever true while its dialog is on screen. The
+  /// settings listener fires on every change of source, and a user who taps
+  /// through two inputs while the dialog is up would otherwise stack requests
+  /// the platform side refuses one at a time.
+  bool _askingForMic = false;
 
   /// Publishing to a tablet, owned here rather than by the status-bar button
   /// that switches it on.
@@ -480,6 +489,66 @@ class _WorkspaceState extends ConsumerState<_Workspace>
     }
 
     final (source, deviceId, label) = _resolve(settings);
+
+    // **Android will not open a capture device until the user has been asked.**
+    // Every other platform grants capture through the act of opening one, so
+    // this is the only place in the application that has to ask first — and
+    // asking here rather than at launch means a tablet that only ever mirrors
+    // another machine's meters is never asked at all. `isRequired` is false
+    // everywhere else, so this whole branch compiles out of five of six builds.
+    //
+    // Re-entrant by design: the answer arrives a dialog later, and the second
+    // pass through `_openFor` finds the permission held and opens the device.
+    // The test tone and silence do not touch an input and never come through
+    // here, which is what keeps the canvas alive while the dialog is up.
+    if (source == OaaSource.device && MicPermission.isRequired) {
+      unawaited(_openForWithMic(settings, label, afterStall: afterStall));
+      return;
+    }
+
+    _openResolved(source, deviceId, label);
+  }
+
+  /// Asks for the microphone, then opens the source it is for.
+  ///
+  /// Split out of [_openFor] so that the synchronous path — which is every
+  /// platform but Android, and Android's own built-in sources — stays
+  /// synchronous. A `setState` after an await needs its `mounted` check, and a
+  /// source the user changed *while the dialog was up* has to win over the one
+  /// that opened it, which is what re-reading the settings at the end is for.
+  Future<void> _openForWithMic(
+    AppSettings settings,
+    String label, {
+    required bool afterStall,
+  }) async {
+    if (_askingForMic) return;
+    _askingForMic = true;
+    final granted = await MicPermission.ensure();
+    _askingForMic = false;
+    if (!mounted) return;
+
+    if (!granted) {
+      // Not a fault, and not something to retry: the user answered. Say so
+      // where every other source failure is said, and leave whatever was
+      // playing alone rather than tearing the canvas down over it.
+      setState(() {
+        _failure =
+            'Open Audio Analyzer needs the microphone to measure an input. '
+            'Android has refused it — grant it in Settings › Apps › Open Audio '
+            'Analyzer › Permissions, or pick another source.';
+        _sourceLabel = label;
+      });
+      return;
+    }
+
+    // The dialog is modal but the settings are not frozen behind it, and the
+    // engine this method was called for may no longer be the one wanted.
+    final (source, deviceId, current) = _resolve(ref.read(settingsProvider));
+    _openResolved(source, deviceId, current);
+  }
+
+  /// The engine swap itself, once there is nothing left to ask.
+  void _openResolved(OaaSource source, String? deviceId, String label) {
     final previousEngine = _engine;
     final previousClock = _clock;
 

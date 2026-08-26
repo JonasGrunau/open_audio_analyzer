@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import Base from '../layouts/Base.astro';
 /* Read from the application's own pubspec, so the version on the download
    button cannot be a release behind. See src/lib/app.mjs. */
-import { REPO, RELEASES, VERSION, PLAY_TESTING, APP_STORE } from '../lib/app.mjs';
+import { REPO, RELEASES, VERSION, APP_STORE } from '../lib/app.mjs';
 /* Written by `npm run analyzer` beside the still it describes, so the facade is
    sized from the picture that exists rather than from a number typed here. */
 import still from '../data/analyzer-still.json';
@@ -247,6 +247,13 @@ const PLATFORMS = [
       of clear space each of them requires. That is what `--s12` under a 48 px
       badge is measuring out, and it is why the captions are a gap rather than
       an overlay.
+
+      The Play badge points at `/testing`, not at Play. Both of the URLs Play
+      offers for a closed test turn away everybody who is not already on the
+      tester list, and neither says why — so the badge would recruit nobody.
+      Google's badge guidelines constrain the artwork and say nothing about the
+      destination, which was checked; Apple's do constrain it, which is one more
+      reason their badge is not a link here.
     -->
     <div class="cta">
       <a class="btn btn-primary" href={RELEASES} rel="noopener">Download {VERSION}</a>
@@ -282,7 +289,7 @@ const PLATFORMS = [
         </div>
 
         <div class="store">
-          <a class="store-badge" href={PLAY_TESTING} rel="noopener">
+          <a class="store-badge" href="/testing">
             <img
               class="store-art"
               src="/badges/google-play.svg"
@@ -811,12 +818,18 @@ const PLATFORMS = [
   }
 
   /* ---------- the two app store badges ----------
-     Vendor artwork, used unaltered, and the CSS here only ever positions it.
-     Nothing in this block may set a colour, a filter, an opacity or a transform
-     on `.store-art`: both guidelines forbid recolouring or modifying the badge,
-     and Apple's forbids animating it as well. Everything that says which of the
-     two you can actually press is carried by the caption below the badge, in
-     this site's own type, outside the clear space. */
+     Vendor artwork. The CSS here only ever positions it, with **one deliberate
+     exception** recorded below: no recolouring, no filter, no transform, no
+     hover state and no animation on `.store-art`, because Google's guidelines
+     forbid altering the badge and Apple's forbid animating it as well.
+
+     The exception is the dimming of the App Store badge while there is no iPad
+     app to download, which is a departure from Apple's "Don't modify … the App
+     Store badge" made knowingly and at the maintainer's instruction. It is
+     scoped as tightly as it can be — see `span.store-badge` — so it applies to
+     the pending badge and to nothing else, and it disappears by itself the day
+     `APP_STORE` gets a URL. Do not widen it, and do not take it as licence to
+     restyle the live badge. */
   .stores {
     display: flex;
     flex-wrap: wrap;
@@ -884,6 +897,22 @@ const PLATFORMS = [
     letter-spacing: 0.02em;
     color: var(--faint);
     white-space: nowrap;
+  }
+
+  /* The badge that is not a link yet, greyed so the pending state is visible
+     rather than only readable. A `<span>` rather than an `<a>` is exactly the
+     condition — `index.astro` renders the anchor the moment `APP_STORE` is set
+     — so there is no class to remember to remove and no way for this to outlive
+     the thing it describes.
+
+     Opacity rather than a filter: the badge is already monochrome, so
+     `grayscale()` would do nothing, and blending it toward the page background
+     is what "not yet" looks like on a dark ground. The caption underneath still
+     carries the words; this only means you no longer have to read them to know.
+
+     See the block header for why this one property is here at all. */
+  span.store-badge .store-art {
+    opacity: 0.42;
   }
 
   /* Keyboard focus lands on the badge, so it has to be visible there. An

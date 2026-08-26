@@ -37,11 +37,14 @@ const ROOT = resolve(process.cwd(), '..');
 
 /* Every published URL, and the file in the repository it is rendered from.
    `/privacy` is named because it is the one page outside the manual's
-   manifest — see src/pages/privacy.astro. */
+   manifest — see src/pages/privacy.astro. `/testing` is the other, and is
+   where the Google Play badge lands; it is a page rather than a chapter of the
+   manual, so it is named here too. */
 const ENTRIES = [
   { path: '/', source: 'website/src/pages/index.astro' },
   ...PAGES.map((page) => ({ path: href(page.slug), source: page.source })),
   { path: '/privacy', source: 'docs/site/privacy.md' },
+  { path: '/testing', source: 'website/src/pages/testing.astro' },
 ];
 
 /* `/analyzer/index.html` is deliberately absent. It is a real address and it is
