@@ -9,6 +9,8 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.13.0] — 2026-08-27
+
 ### ✨ Added
 - **A status bar across the bottom of the window.** Everything the top row used
   to report is in it: the signal source, the sample rate and channel count, the
@@ -3133,7 +3135,8 @@ meters do not exist yet. See the [roadmap](README.md#roadmap).
 - Licensing is split: MIT for `engine/`, `oaa_engine` and `oaa_core`;
   GPL-3.0-or-later for the application, UI, CLI and plugin.
 
-[unreleased]: https://github.com/JonasGrunau/open_audio_analyzer/compare/v0.12.0...HEAD
+[unreleased]: https://github.com/JonasGrunau/open_audio_analyzer/compare/v0.13.0...HEAD
+[0.13.0]: https://github.com/JonasGrunau/open_audio_analyzer/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/JonasGrunau/open_audio_analyzer/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/JonasGrunau/open_audio_analyzer/compare/v0.10.1...v0.11.0
 [0.10.1]: https://github.com/JonasGrunau/open_audio_analyzer/compare/v0.10.0...v0.10.1
