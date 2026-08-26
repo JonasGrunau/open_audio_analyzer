@@ -710,11 +710,12 @@ site](https://open-audio-analyzer.com/docs/install).
 > generates each device's download from it and signs that download with a key
 > Google holds. There is no file here anybody could install. Every tag uploads
 > to Play, after the release is published, because a version code Play has
-> accepted can never be reused or lowered. It is a **closed test**, so the
-> listing URL is a 404 until you have joined it —
-> [join here](https://play.google.com/apps/testing/com.openaudioanalyzer.oaa),
-> which takes a Google account and nothing else. Play offers it
-> to **tablets** only — the manifest asks for a 600dp shortest edge, which is
+> accepted can never be reused or lowered. It is a **closed test**, which grants
+> access **by list rather than by link**: Play only lets an account opt in once
+> the developer has put it on the track's tester list, so neither the listing nor
+> the opt-in URL does anything for a stranger who follows it cold.
+> [Join the test](https://open-audio-analyzer.com/testing) has the two steps in
+> order. Play offers it to **tablets** only — the manifest asks for a 600dp shortest edge, which is
 > the store's filter and not a runtime one.
 
 The scripts that build these live in [`packaging/`](packaging/AGENTS.md), one
