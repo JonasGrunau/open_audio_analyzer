@@ -1,10 +1,9 @@
 # Analysing files
 
 Open Audio Analyzer measures a file the same way it measures an input, because
-it is the same code. The decoder reads blocks and pushes them through the
-measurement path a capture device drives; there is no second DSP path and no
-offline approximation. A test asserts exactly that, on the same samples analysed
-both ways.
+it is the same code: the decoder pushes what it reads through the measurement
+path a capture device drives. There is no offline approximation, and a test
+holds the two readings against each other on the same samples.
 
 **Nothing is resampled and nothing is remixed.** A file is measured at its own
 sample rate and channel count, because a converter in front of a measurement
@@ -41,9 +40,8 @@ oaa --format csv -o loudness.csv master.wav    # the loudness timeline
 oaa --list-targets                             # what you can measure against
 ```
 
-`oaa` carries no Flutter runtime — it is the executable and the engine as a
-shared library beside it, and nothing else has to be installed — which is what
-makes it usable inside somebody else's CI.
+`oaa` needs nothing installed beside it — the executable and the engine as a
+shared library — which is what makes it usable inside somebody else's CI.
 
 ### The exit code is the point
 

@@ -34,8 +34,8 @@ export const PAGES = [
     nav: 'Install',
     blurb:
       'pkg, Windows installer, tarball, AppImage and flatpak — which of them ' +
-      'installs the plugin for you, and what each one will not do. The two ' +
-      'tablet displays come from a store instead.',
+      'installs the plugin for you, and what each one will not do. The tablet ' +
+      'builds come from a store instead.',
     section: 'Using Open Audio Analyzer',
   },
   {

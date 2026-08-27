@@ -45,10 +45,8 @@ const description =
     <p class="eyebrow num">Android · closed test</p>
     <h1>Join the Android test</h1>
     <p class="prose deck">
-      The Android build is on Google Play as a <strong>closed test</strong>, which grants access
-      by list rather than by link. Your Google account has to be on the tester list before Play
-      will let you in — so the two steps below are in that order, and the second one does nothing
-      without the first.
+      The Android build is on Google Play as a <strong>closed test</strong>, your Google 
+      account has to be on the tester list before Play will let you in. Do these in order:
     </p>
     </div>
   </section>
@@ -71,19 +69,16 @@ const description =
         {TESTER_GROUP ? (
           <>
             <p class="prose">
-              Join the tester group. It is a public Google Group, and membership of it is what puts
-              you on Play's tester list — so this is the whole of step one. If the group asks you to
-              request membership rather than letting you straight in, it is approved by hand and you
-              will get an email when it is done.
+              Join the tester group. It is a public Google Group, and being in it is what puts you on
+              Play's tester list.
             </p>
             <p class="cta-row">
               <a class="btn btn-primary" href={TESTER_GROUP} rel="noopener">Join the tester group</a>
             </p>
             <p class="prose note">
               Join it with <strong>the same Google account you are signed in to on the tablet</strong>.
-              Play matches the tester list against the account signed in to the Play Store, not
-              against whoever opened the link — a different address is the single most common
-              reason step 2 refuses somebody.
+              Play matches the tester list against the account signed in to the Play Store, a different 
+              address is the single most common reason step 2 refuses somebody.
             </p>
           </>
         ) : (
@@ -112,9 +107,9 @@ const description =
       <div class="step-body">
         <h2>Opt in</h2>
         <p class="prose">
-          Being on the list is permission; opting in is accepting it, and Play needs both. Play
-          gives the test two links for this and they are not interchangeable — take the one that
-          matches what you are reading this on.
+          Being on the list is permission; opting in is accepting it, and Play wants both. It gives
+          the test two links for this and they are not interchangeable, so take the one that matches
+          what you are reading this on.
         </p>
 
         <div class="links">
@@ -143,13 +138,14 @@ const description =
       <div class="step-body">
         <h2>Install it, and stay opted in</h2>
         <p class="prose">
-          Once you are opted in the listing behaves like any other app page and installs from
+          Once you are opted in, the listing behaves like any other app page and installs from
           Play.
         </p>
         <p class="prose note">
-          Please leave it installed and stay opted in rather than joining and leaving. Google
-          counts a closed test by testers who have been <strong>continuously</strong> opted in,
-          and somebody who opts out and back in starts that count again from zero.
+          Please leave it installed and stay opted in rather than joining and leaving. Google counts
+          a closed test by testers who have been <strong>continuously</strong> opted in, and it wants
+          twelve of them for fourteen unbroken days before the app can leave closed testing — so
+          somebody who opts out and back in starts that count again from zero.
         </p>
       </div>
     </article>

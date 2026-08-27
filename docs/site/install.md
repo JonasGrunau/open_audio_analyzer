@@ -2,7 +2,7 @@
 
 Every release publishes five desktop downloads, a command-line binary and the
 DAW plugin on its own. Pick the one for your machine; there is nothing else to
-set up. The two tablet displays are the exception and come from a store — see
+set up. The two tablet builds are the exception and come from a store — see
 [iPadOS](#ipados) and [Android](#android) for why there is nothing here to
 download.
 
@@ -75,9 +75,8 @@ than logged.
 
 **Open Audio Analyzer will ask for local network permission the first time you
 publish to a tablet,** and it needs it to announce itself. Declining leaves the
-port open and the advertisement blocked, so the desktop says it is publishing
-and no tablet ever lists it — the panel names this now, but the two facts are
-genuinely separate: a display given the address by hand still connects and
+port open and the announcement blocked, so the desktop says it is publishing and
+no tablet ever lists it. A tablet given the address by hand still connects and
 works.
 
 **Open Audio Analyzer will ask for camera permission the first time you scan a
@@ -100,11 +99,9 @@ System audio is the one to check first, because it is the only one of the four
 whose refusal is silent — see below.
 
 **There is no Mac App Store build and there will not be one.** The store
-requires the app sandbox, and a sandboxed application has its home directory
-redirected into `~/Library/Containers`, which would put your presets, skins and
-delivery targets somewhere no user goes looking and no override could escape.
-Open Audio Analyzer is distributed directly, signed with a Developer ID and
-notarised.
+requires the app sandbox, which would move your presets, skins and delivery
+targets into a private container you cannot open. Open Audio Analyzer is
+distributed directly, signed with a Developer ID and notarised.
 
 ### System audio
 
@@ -123,9 +120,7 @@ Three things worth knowing:
 - **macOS may ask for permission to record system audio** the first time you
   choose it. If you decline, the tap delivers silence rather than an error, so
   the meters sit at the floor — which looks exactly like genuinely quiet audio.
-  Apple does this deliberately: every Core Audio call still returns success and
-  the callbacks still arrive on schedule, carrying nothing but zeros, so that
-  software cannot tell that it has been refused. There is no error for Open
+  Apple designed the refusal to be undetectable, so there is no error for Open
   Audio Analyzer to show you.
 
   If the meters sit at the floor with something obviously playing, look under
@@ -171,11 +166,10 @@ plug-in too.
 **Windows will warn you before it runs.** SmartScreen shows *"Windows protected
 your PC"*; click **More info → Run anyway**. Windows may also flag the download
 in your browser first. That is the current state of the installer and not a
-sign that something is wrong with the file — releases are not yet signed with an
-Authenticode certificate, and an ordinary certificate would not remove the
-warning immediately anyway, since SmartScreen goes by a reputation the download
-has to accumulate. Verify the file against the checksums on the release page if
-you want certainty.
+sign that something is wrong with the file — releases are not yet signed, and a
+certificate would not clear the warning immediately anyway, because SmartScreen
+goes by a reputation a download has to accumulate. Verify the file against the
+checksums on the release page if you want certainty.
 
 Open Audio Analyzer asks for microphone permission on first use of a capture
 device, and Windows may also need it enabled under **Settings → Privacy →
@@ -221,10 +215,9 @@ chmod +x Open.Audio.Analyzer-0.11.0-x86_64.AppImage
 ```
 
 GTK 3 is expected from the host — every desktop Linux that can run a Flutter
-application already has it — and everything else travels inside the file. The
-AppImage is built on the oldest supported runner, because glibc is
-forward-compatible and not backward-compatible: one built on a newer
-distribution simply refuses to start on an older one.
+application already has it — and everything else travels inside the file. It is
+built on the oldest distribution the project supports, so it starts on newer
+ones as well.
 
 ### Flatpak
 
@@ -233,8 +226,8 @@ flatpak install --user Open.Audio.Analyzer-0.11.0-x86_64.flatpak
 flatpak run com.openaudioanalyzer.oaa
 ```
 
-The flatpak carries its own runtime, so the glibc caveat above does not apply.
-It is granted audio, network and filesystem access — [the manifest says why for
+The flatpak carries its own runtime, so it does not depend on the host's
+libraries at all. It is granted audio, network and filesystem access — [the manifest says why for
 each](https://github.com/JonasGrunau/open_audio_analyzer/blob/main/packaging/linux/flatpak/com.openaudioanalyzer.oaa.yml).
 
 For system audio on either, PipeWire's own loopback or `pactl load-module
@@ -250,9 +243,7 @@ covers how the two find each other. Neither is a cut-down version of the other.
 
 It needs **iPadOS 15 or later**, which costs no device: iPadOS 13, 14 and 15
 run on the same iPads — every model back to the Air 2 and the mini 4 — so if
-yours could run the display before, it can still run it after updating. The
-floor is 15 because Apple stops accepting uploads built against anything lower
-in Spring 2027, and a build nobody can upload is a build nobody can install.
+yours could run it before, it can still run it after updating.
 
 The quickest of the three ways is the camera: on the desktop, the code button
 beside PUBLISH in the menu bar; on the iPad, Scan
@@ -287,19 +278,16 @@ other. Neither is a cut-down version of the other.
 > omission.
 
 It is distributed through **Google Play**, and there is no `.apk` on the
-releases page. What a tagged release builds is an `.aab` — an app bundle, which
-is a publishing format rather than an installable file: Play generates the
-actual download from it per device, and signs that download with a key Google
-holds rather than one this repository has. A file you downloaded could not be
-installed, so there is nothing here that would do you any good.
+releases page. What a tagged release builds is an `.aab`, a publishing format
+rather than an installable file: Play generates the download from it per device
+and signs it with a key Google holds. There is nothing here you could install.
 
-**Play offers it to tablets only.** The manifest asks for a shortest screen
-edge of 600dp — the `sw600dp` line, which a 7-inch tablet is above and a
-handset is not — so a phone does not find the app in the store at all. That is
-a distribution filter and nothing else: it changes nothing about how the
-application behaves, and an unfolded foldable is over the line and eligible.
-The canvas is a grid of meter modules with a scale down each side, and there is
-no phone-sized arrangement of that which is worth reading.
+**Play offers it to tablets only.** It asks for a shortest screen edge of
+600dp, which a 7-inch tablet is above and a handset is not, so a phone does not
+find the app in the store at all; an unfolded foldable is over the line and
+eligible. The canvas is a grid of meter modules with a scale down each side, and
+there is no phone-sized arrangement of that worth reading. Nothing about how the
+application behaves changes either way.
 
 Every tagged release uploads a build to Play, and it is a **closed test**. That
 has two consequences worth knowing before you try to install it.
@@ -331,7 +319,7 @@ So it is two steps, in this order:
    | The Android tablet itself | [Open it in the Play Store](https://play.google.com/store/apps/details?id=com.openaudioanalyzer.oaa) |
 
    The Google Play badge on the [front page](/) leads to
-   [the same three steps](/testing), which is where to send anybody who asks how
+   [the same instructions](/testing), which is where to send anybody who asks how
    to get in.
 
 Changes to a tester list can take a few hours to reach the store, so if the
@@ -351,10 +339,9 @@ so a tablet that only ever mirrors another machine is never asked, and refusing
 leaves whatever was playing alone. The **camera** is for the QR scanner in the
 host picker, asked for the first time you open it; refusing leaves the host list
 and the typed address exactly as they were. **Multicast** is an install-time
-permission with no dialog, and without it Android's Wi-Fi driver silently
-discards every mDNS answer, so the desktops never appear. `NEARBY_WIFI_DEVICES`
-is deliberately not declared — it covers scanning and managing networks, which
-this application never does.
+permission with no dialog, and it is what lets the tablet see a desktop
+publishing on the network. `NEARBY_WIFI_DEVICES` is deliberately not declared:
+it covers scanning and managing networks, which this application never does.
 
 ## In a DAW
 
@@ -415,9 +402,8 @@ and neither version of it names the real problem:
 A plugin you built yourself has no flag to remove. A downloaded one needs
 either the line above or a *notarised* bundle — a Developer ID signature alone
 does not clear the flag, which is the part that surprises people. Whether a
-given release is notarised depends on whether the project's signing credentials
-were present when it was built; `packaging/macos/notarize.sh` documents them,
-and `xattr` works either way.
+given release is notarised depends on whether the signing credentials were
+present when it was built, and `xattr` works either way.
 
 **None of this applies to the pkg.** Files placed by an installer are not
 quarantined, so a plugin installed that way carries no flag to remove — which

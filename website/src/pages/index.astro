@@ -45,8 +45,8 @@ const FLOW = [
     'In your DAW',
     'The plugin measures',
     `Insert the <strong>VST3</strong> or the <strong>Audio Unit</strong> on your master bus. It
-     draws no meters of its own — only this panel, saying the link is live — and streams what it
-     measured, along with where your transport is, to the app.`,
+     draws no meters of its own: the panel says the link is live and that is all it does. What it
+     measures goes to the app, along with where your playhead is.`,
     `The plugin's panel, linked. A diagram across the top shows the host on the left and the
      analyzer app on the right, both ends lit, with audio and playhead running into the plugin's
      mark and a dashed line carrying the measurements out the other side; the host reads receiving
@@ -57,9 +57,9 @@ const FLOW = [
     'desktop',
     'On the desktop',
     'The app draws it',
-    `The canvas you arranged, reading what arrived: every module on it showing the same instant of
-     the same audio. Whether that audio came from the plugin, from an input or from a file, the
-     meters cannot tell — and nothing about them has to change.`,
+    `The canvas you arranged, every module on it reading the same instant of the same audio. It
+     makes no difference whether that audio came from the plugin, from an input or from a file: the
+     meters are the same meters.`,
     `The desktop canvas, eight modules reading one instant: a LUFS meter and a set of concentric
      loudness arcs both at −9.9, a spectrum analyser, a loudness histogram running against a −14
      target line, a delivery verdict reading NOT READY with two failures and one pass, per-channel
@@ -70,10 +70,9 @@ const FLOW = [
     'Across the room',
     'A tablet reads it too',
     `The same application, on an iPad. Attach it to the plugin your session is running and it meters
-     that stream over Wi-Fi — or flip <strong>PUBLISH</strong> on the desktop and it draws that
-     canvas instead. Either way the layout is stored as cells on a grid rather than as fractions of
-     a window, so what you built on a 32-inch monitor opens on a tablet still looking arranged on
-     purpose.`,
+     that stream over Wi-Fi, or press <strong>PUBLISH</strong> on the desktop and it draws that
+     canvas instead. What you arranged on a 32-inch monitor opens on the tablet still looking
+     arranged, not squashed.`,
     `The application running on an iPad in landscape, attached over Wi-Fi to the same plugin: six
      loudness readouts along the top, a LUFS meter, concentric loudness arcs reading −8.9, a
      per-channel peak meter, a delivery verdict reading NOT READY, a VU meter, a loudness histogram
@@ -128,24 +127,24 @@ const MODULES = [
 const METRICS = [
   [
     'Loudness',
-    'LUFS, weighted the way <strong>ITU-R BS.1770-4</strong> says — the curve that makes a meter agree with your ears about what is loud instead of counting energy: low end counts for less, presence for more. Worked out for whatever sample rate your material is at, not for 48 kHz and hoped.',
+    'LUFS, weighted the way <strong>ITU-R BS.1770-4</strong> says: low end counts for less, presence for more, so the meter agrees with your ears about what is loud instead of counting energy. Worked out at your material’s own sample rate, not at 48 kHz and hoped.',
   ],
   [
     'Integrated',
-    'The whole programme as one number, gated to <strong>EBU R 128</strong>: passages far below the rest are left out of it, so the silence between phrases and the fade at the top do not drag the number down below what the track sounds like.',
+    'The whole programme as one number, gated to <strong>EBU R 128</strong>: passages far below the rest are left out, so the silence between phrases and the fade at the top do not drag it below what the track sounds like.',
   ],
   ['Momentary / Short-term', '400 milliseconds and 3 seconds. One is what a transient does to your loudness; the other is what a section does.'],
   [
     'LRA',
-    'Loudness range: how far the loud parts of the programme sit above the quiet ones, measured across the gated short-term readings from the 10th to the 95th percentile. It is the number a broadcaster asks for and the one that says whether a master has been flattened.',
+    'Loudness range: how far the loud parts of the programme sit above the quiet ones. It is the number a broadcaster asks for, and the one that says whether a master has been flattened.',
   ],
   [
     'True peak',
-    'The peak <em>between</em> samples as well as on them, found by oversampling four times as <strong>BS.1770-4</strong> requires. It is the number a delivery ceiling means, and it sits above the sample peak your DAW shows — by as much as a dB and a half on heavily limited material.',
+    'The peak <em>between</em> samples as well as on them, oversampled four times as <strong>BS.1770-4</strong> requires. It is the number a delivery ceiling means, and it sits above the sample peak your DAW shows — by as much as a dB and a half on heavily limited material.',
   ],
   [
     'Spectrum',
-    '512 bands, spaced the way you hear rather than the way an FFT arrives. Each band shows the <strong>loudest</strong> content inside it rather than the average, so a narrow resonance stands at its real height instead of being smoothed into the noise beside it.',
+    '512 bands, spaced the way you hear rather than the way the arithmetic falls out. Each band shows the loudest thing in it rather than the average, so a narrow resonance stands at its real height instead of being smoothed into the noise beside it.',
   ],
   ['Correlation', 'How alike the two channels are: +1 is mono, 0 is uncorrelated, −1 is one channel inverted against the other.'],
   [
@@ -154,34 +153,7 @@ const METRICS = [
   ],
   [
     'Clip',
-    'The longest run of samples sitting at full scale since you last reset, per channel — and it is latched, so a clip three samples long is still there when you come back to look for it.',
-  ],
-];
-
-const GAPS = [
-  [
-    'Loudness is measured continuously, and that is the only mode.',
-    'There is no Elapsed mode that runs from where you pressed play, and no Timecode mode that measures a region you mark out. <strong>Continuous is what every module shows today</strong> — and it is the mode you can honour without a playhead at all, which is what a delivery target asks for anyway.',
-  ],
-  [
-    'The plugin draws nothing, and there is no Pro Tools version.',
-    'It measures your DAW’s audio and sends it across; the app is what draws it, so the app has to be running beside your session. It ships as <strong>VST3 and Audio Unit</strong>, which between them reach every other DAW people master in — AAX needs Avid’s SDK and a registered developer account, and neither is something a free project can promise you.',
-  ],
-  [
-    'Metering your computer’s own output takes all of it.',
-    'There is no per-application selection on any platform — you get everything going to your speakers, so mute what you are not measuring. On macOS the first attempt asks permission, and <strong>a refusal is silent</strong>: the meters read digital black rather than saying no. If they sit at the floor with something obviously playing, look in Privacy &amp; Security.',
-  ],
-  [
-    'Offline analysis does not read Ogg Vorbis, Opus, AAC or ALAC.',
-    'WAV, AIFF, RF64, Wave64, FLAC and MP3 cover what a master is delivered <em>as</em>, which is what a delivery check is for. The rest is what a master is distributed as after somebody else transcodes it. Nothing is quietly half-measured in the meantime: a file it cannot read is refused.',
-  ],
-  [
-    'A file is measured whole, from the start.',
-    'There is no region selection and no seeking while a file is analysed, because an integrated loudness taken over a file somebody skipped through is a measurement of a programme nobody played.',
-  ],
-  [
-    'The tablet link has no password.',
-    'Anyone who can reach the port can read your meters and your layout — not your audio, which never goes on the wire, and nothing on the tablet can change anything on the desktop. Publishing is off at every launch on purpose and is switched on from the menu bar, where you can see that it is on. <strong>Do not switch it on at a venue whose Wi-Fi you do not control.</strong>',
+    'The longest run of samples pinned at full scale since you last reset, per channel. It stays on screen, so a clip three samples long is still there when you come back to look for it.',
   ],
 ];
 
@@ -396,13 +368,20 @@ const PLATFORMS = [
     <div class="section-head">
       <div>
         <p class="label">How it works</p>
-        <h2 class="section-title">One stream of audio,<br />measured once</h2>
+        <h2 class="section-title">Insert one plugin,<br />read it across the room</h2>
       </div>
     </div>
 
+    <p class="prose">
+      Insert the plugin on your master bus and open the app on the desktop beside you: that is the
+      setup. If you would rather read the meters from where you are standing than from where the
+      computer is, a tablet across the room attaches to the same session and draws them too. You are
+      not routing audio anywhere or matching one meter against another.
+    </p>
+
     <p class="prose flow-intro">
       Nothing along this path measures anything twice. The plugin takes the readings, the desktop
-      draws them, and a tablet across the room draws the same ones — one engine, one set of
+      draws them, and the tablet across the room draws the same ones — one engine, one set of
       numbers, three places to read them. So the meter you glance at from the far side of the studio
       cannot quietly disagree with the one under your hand.
     </p>
@@ -446,12 +425,10 @@ const PLATFORMS = [
     </div>
 
     <p class="prose mod-intro">
-      Fourteen of them, and you choose which ones are on screen. Drag a meter onto the canvas, size
-      it, put it where you want it: loudness and a delivery verdict when you are finishing a master,
-      a spectrum and a phase scope while you mix, a VU and a waveform while you track. They are all
-      reading the same audio at the same instant, so two meters showing the same thing never
-      disagree with each other — and the arrangement you settle on is saved as a preset, for the
-      desktop and for the tablet beside it.
+      You choose which of them are on screen. Drag a meter onto the canvas, size it, put it where
+      you want it: loudness and a delivery verdict when you are finishing a master, a spectrum and a
+      phase scope while you mix, a VU and a waveform while you track. The arrangement you settle on
+      saves as a preset, for the desktop and for the tablet beside it.
     </p>
 
     <ul class="cat">
@@ -535,11 +512,10 @@ const PLATFORMS = [
             </li>
           </ul>
           <p class="gate-note">
-            These run on all three desktop platforms before any change is accepted, and the full
-            official EBU and ITU vector sets are run by hand on top of them. <strong>A loudness
-            meter nobody has held against the reference cases is a number generator</strong> — the
-            EBU publishes them for exactly this, and a delivery decision is made from what comes
-            out.
+            Every change to the meters is held against these before it ships, and against the full
+            EBU and ITU vector sets on top of them. A loudness meter nobody has checked against the
+            reference cases is a number generator, and you are making a delivery decision with what
+            comes out of this one.
           </p>
         </div>
       </aside>
@@ -565,10 +541,9 @@ const PLATFORMS = [
       </p>
       <div class="stack-24">
         <p class="prose">
-          <code>PSR</code> and <code>PLR</code> are those same two numbers under the names you will
-          have met elsewhere, and both are shown — <strong>four names for two numbers</strong>, each
-          worked out once so they cannot end up disagreeing, and printed once in a report rather
-          than twice under different headings.
+          <code>PSR</code> and <code>PLR</code> are the same two numbers under the names you have
+          probably met elsewhere, so whichever pair you are used to reading is the pair on the
+          meter.
         </p>
         <p>
           <a class="link" href={`${DOCS}/metrics`}>Read the metrics document</a>
@@ -599,9 +574,10 @@ const PLATFORMS = [
       <article class="stack-16">
         <h3>On a tablet</h3>
         <p class="prose reach-p">
-          It finds the host by itself, or reads a pairing code off the desktop’s screen with its
-          camera, or takes an address typed by hand — <strong>three routes, because the first one is
-          what a venue’s Wi-Fi blocks.</strong>
+          It finds the desktop by itself, or reads a pairing code off its screen with the camera, or
+          takes an address you type — three ways in, because the first one is what a venue’s Wi-Fi
+          blocks. Publishing stays off until you switch it on, and there is no password on the link:
+          <strong>switch it on at home, not on a network you do not control.</strong>
         </p>
       </article>
 
@@ -609,10 +585,9 @@ const PLATFORMS = [
         <h3>On the command line</h3>
         <p class="prose reach-p">
           <code>oaa</code> measures a file without opening anything — one track, or every file in an
-          album folder in one go — and prints a report you can read, or a CSV you can open in a
-          spreadsheet. It runs the <em>same</em> analysis the app runs on live audio, down to the
-          last decimal, and nothing is resampled or remixed on the way in: a converter in front of a
-          meter changes what the meter says.
+          album folder in one go — and prints a report you can read or a CSV for a spreadsheet. It is
+          the <em>same</em> analysis the app runs on live audio, down to the last decimal, with
+          nothing resampled or remixed on the way in.
         </p>
       </article>
     </div>
@@ -641,29 +616,26 @@ const PLATFORMS = [
     <div class="cfg">
       <div class="stack-24">
         <p class="prose">
-          Everything you set up is yours to keep. Save an arrangement of meters as a preset and it
-          opens that way next time — the same modules in the same places, on a 32-inch monitor or on
-          the tablet beside it. Presets, delivery targets and colour schemes are small text files in
-          a folder you can open, so you can carry your setup to the studio machine, put it somewhere
-          the whole room reads it from, or send it to somebody who works the way you do.
+          Save an arrangement of meters as a preset and it opens that way next time: the same modules
+          in the same places, on a 32-inch monitor or on the tablet beside it. Presets, delivery
+          targets and colour schemes are small text files in a folder you can open, so your setup
+          travels to the studio machine, or to somebody who works the way you do.
         </p>
         <p class="prose">
-          A <strong>delivery target</strong> is simply the numbers you have to hit: a loudness, how
-          far either side of it you are allowed to land, a true-peak ceiling, and a limit on how much
-          the loudness may move across the track. The streaming and broadcast ones come with the app.
-          If your label, your client or your own ears say something else, write your own — and if you
-          give it the same name as one that ships, <strong>yours replaces it everywhere</strong>: in
-          presets that already ask for it, and in the pass or fail the command-line analyser reports.
-          Delete your file and the original is back.
+          A <strong>delivery target</strong> is the numbers you have to hit: a loudness, how far
+          either side of it you may land, a true-peak ceiling, and a limit on how much the loudness
+          may move across the track. The streaming and broadcast ones come with the app. If your
+          label, your client or your own ears say otherwise, write your own — give it the name of one
+          that ships and yours takes over everywhere, including the pass or fail the command-line
+          analyser reports, and deleting your file brings the original back.
         </p>
         <p class="prose">
           Colour works the same way. Thirteen things on screen have a colour of their own — the
-          meter track, the readout, the colour that means <em>over the limit</em> — and a scheme
-          names as many of them as it likes and takes the rest as they were, so changing one colour
-          is a three-line file. There is a picker for each of them: the canvas repaints while you
-          drag, any tablet mirroring the session repaints with it, and each colour tells you how well
-          it reads against the panel behind it — so you find out that your meter track is nearly
-          invisible before you are on a dark stage looking for it.
+          meter track, the readout, the colour that means <em>over the limit</em> — and there is a
+          picker for each: the canvas repaints while you drag, and any tablet mirroring the session
+          repaints with it. Each colour tells you how well it reads against the panel behind it, so
+          you find out that your meter track is nearly invisible before you are on a dark stage
+          looking for it.
         </p>
       </div>
 
@@ -682,39 +654,6 @@ const PLATFORMS = [
 &rbrace;</code></pre>
       </div>
     </div>
-  </section>
-
-  <!-- ===================== known gaps ===================== -->
-  <section class="section shell" id="gaps">
-    <div class="section-head">
-      <div>
-        <p class="label">Known gaps</p>
-        <h2 class="section-title">What is not built</h2>
-      </div>
-    </div>
-
-    <p class="prose gaps-intro">
-      Six things you are likely to meet, said plainly rather than left for you to find. There are
-      twelve in all — the other six are in the README, and most of them only mean something to
-      somebody working on the code.
-    </p>
-
-    <ul class="gaps">
-      {
-        GAPS.map(([head, body]) => (
-          <li class="gap">
-            <h3 class="gap-h">{head}</h3>
-            <p class="prose gap-b" set:html={body} />
-          </li>
-        ))
-      }
-    </ul>
-
-    <p class="gaps-more">
-      <a class="link" href={`${REPO}#-known-gaps-stated-plainly`} rel="noopener">
-        All twelve, in the README
-      </a>
-    </p>
   </section>
 
   <!-- ===================== download ===================== -->
@@ -751,13 +690,6 @@ const PLATFORMS = [
         </tbody>
       </table>
       </div>
-
-      <p class="prose dl-note">
-        <strong>The first three install the plugin as well, and the checkbox starts ticked.</strong>
-        Metering your own system’s output needs nothing installed on Windows, on macOS 14.2 and
-        later, or on Linux — no driver on any platform, and on macOS the audio still reaches your
-        speakers while it is measured.
-      </p>
 
       <div class="cta">
         <a class="btn btn-primary" href={RELEASES} rel="noopener">Download {VERSION}</a>
@@ -1617,59 +1549,12 @@ const PLATFORMS = [
     align-items: start;
   }
 
-  /* ---------- gaps ---------- */
-
-  .gaps-intro {
-    margin-bottom: var(--s48);
-    color: var(--text);
-  }
-
-  .gaps {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: var(--s48) var(--s48);
-  }
-
-  .gap {
-    border-top: 1px solid var(--hair-strong);
-    padding-top: var(--s16);
-  }
-
-  .gap-h {
-    font-family: var(--display);
-    font-size: 1rem;
-    font-weight: 650;
-    font-variation-settings: 'wdth' 98;
-    line-height: 1.3;
-    color: var(--text);
-    max-width: 40ch;
-  }
-
-  .gap-b {
-    margin-top: var(--s12);
-    font-size: 0.9375rem;
-    max-width: none;
-  }
-
-  .gaps-more {
-    margin-top: var(--s48);
-    font-size: 0.875rem;
-  }
-
   /* ---------- download ---------- */
 
   .dl-plug {
     font-size: 0.75rem;
     color: var(--signal);
     white-space: nowrap;
-  }
-
-  .dl-note {
-    margin-top: var(--s32);
-    max-width: 72ch;
   }
 
   .dl .cta {
@@ -1721,11 +1606,6 @@ const PLATFORMS = [
       grid-template-columns: minmax(0, 1fr);
       gap: var(--s32);
     }
-    .gaps {
-      grid-template-columns: minmax(0, 1fr);
-      gap: var(--s32);
-    }
-
     /* Stacked, the connector cannot stay on the plate: it would have to cross
        the previous step's description and its own step's heading to get there.
        It moves to the top of the step instead, standing in the grid gap between

@@ -9,6 +9,54 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### ⚡ Changed
+- **The front page says what you do before it says what that buys you.** Its How
+  it works section opens with the setup — the plugin on your master bus, the app
+  on the desktop beside you, a tablet attached to the same session — and makes
+  the claim about one engine and one set of numbers after it, which is what it
+  used to open with.
+- **The Known gaps section is off the front page**, along with its entry in the
+  site navigation. All twelve are in `README.md` and in the documentation, which
+  is where the section already pointed for the other six. The one gap a reader
+  has to act on rather than know about stayed on the page: the tablet link has no
+  password, so publish on a network you control. It is now a sentence in the
+  paragraph that describes the tablet.
+- **The website says less about how a number is arrived at and more about what it
+  tells you.** The percentiles behind LRA, the FFT behind the spectrum's band
+  spacing, how a colour scheme file inherits and what a layout is stored as have
+  come off the front page; every one of them is still in `docs/METRICS.md` or the
+  README. Nothing a reader acts on was removed.
+- The documentation's overview page is trimmed the same way: the window length
+  behind the spectrum's bands, the filter order behind the VU needle, how the
+  oscilloscope derives a column's colour and why the official vector files cannot
+  be a build step have come off it. Every control a module offers is still
+  documented there, and every claim about a measurement is unchanged; the
+  mechanism is in `docs/METRICS.md`, `README.md` and the engine's own headers.
+- The Android test page says what staying opted in is for: Google wants twelve
+  testers opted in for fourteen unbroken days before the app can leave closed
+  testing. The site footer reads a little shorter, with no change to what it
+  says.
+- The install page and the documentation's overview stop explaining the parts of
+  themselves that only a contributor reads: why an AppImage is built on an old
+  distribution, what the Mac App Store sandbox would do to a container, how Apple
+  makes a refused system-audio tap undetectable, how Play generates a download
+  from an app bundle. Every instruction, path, permission and warning on those
+  pages is unchanged.
+- The note under the front page's download table is gone. Which installers carry
+  the plugin is a column in the table above it, and what metering your computer's
+  own output needs is on the install page.
+
+### 🐛 Fixed
+- **The privacy policy said the Android build never asks for the microphone,
+  because it was "a remote display only".** It has metered a live input since
+  0.12.1 and declares `RECORD_AUDIO`, so the policy described a permission the
+  application does ask for as one it could not. It now says what both tablets do:
+  the microphone is asked for the first time you choose an input, on Android as on
+  iPadOS, and a tablet that only draws another machine's meters is never asked.
+- The documentation contents and the install page called the iPad and Android
+  builds "tablet displays". They run the whole application, with the engine
+  compiled in, and can additionally draw a remote host's meters.
+
 ## [0.13.0] — 2026-08-27
 
 ### ✨ Added

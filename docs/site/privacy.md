@@ -41,11 +41,11 @@ Last updated 24 August 2026, for version 0.11.0.
 
 ## The microphone, and the audio it measures
 
-The application measures a signal — that is what it is for. On iPadOS it asks
-for the microphone permission; on the desktop it opens the input device you
-choose. **The Android build never asks**, because it is a remote display only
-and does not meter anything itself: it declares no `RECORD_AUDIO` permission at
-all, so the question cannot arise.
+The application measures a signal — that is what it is for. On iPadOS and on
+Android it asks for the microphone permission the first time you choose an
+input; on the desktop it opens the input device you choose. A tablet that only
+ever draws another machine's meters is never asked, because the question is
+raised by choosing an input and not by launching the app.
 
 **Audio is measured and discarded.** Samples are pushed into the measurement
 engine, which reduces them to numbers — loudness, peak level, a spectrum, a
@@ -54,9 +54,9 @@ is written to disk, nothing is kept in memory beyond the moment, and nothing
 is transmitted anywhere by this. There is no recording feature, and adding one
 would be a change to this page as much as to the application.
 
-The permission is asked for once, when you first start metering, and iPadOS
-lets you withdraw it at any time in Settings. Withdrawing it stops the live
-meters; nothing else in the application depends on it.
+The permission is asked for once, when you first start metering, and both iPadOS
+and Android let you withdraw it at any time in Settings. Withdrawing it stops the
+live meters; nothing else in the application depends on it.
 
 ## The camera
 

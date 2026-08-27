@@ -42,7 +42,7 @@ here without anything continuing to publish it.
 | `src/lib/schema.mjs` | What each page claims to be, in JSON-LD: the front page is the application, a documentation page is a `TechArticle` with a breadcrumb, `/privacy` is a `WebPage` and `/404` is nothing. One `SoftwareApplication` object used to be emitted on all ten, so the privacy policy and every manual page declared that they *were* the product. Nodes are shared by `@id` rather than repeated, and everything is derived from `app.mjs` and `docs.mjs`. **No `aggregateRating`** — that is what draws stars in a search result and there is no rating behind it. The `WebSite` node is also where the **site name** is set: the line above the URL in a Google result, which is not the page title below it. Google builds it from the home page, weighing this node most and `og:site_name`, `<title>` and the `h1` after it, so all four say `Open Audio Analyzer` and have to keep saying it. `alternateName` carries `OAA` as the fallback for when the system is not confident enough to use the full name — deliberately **not** the domain, which Google offers as a last resort and which is the result this exists to move away from. |
 | `src/layouts/Base.astro` | The shell every page is built from: head, JSON-LD, header, footer. Takes a `schema` for what the page is and a `noindex` for the one page that is not a page — `/404`, which `not_found_handling` serves at every address that has none, so a canonical there is a thousand URLs all claiming to be `/404`. It preloads two of the five typefaces; the comment beside them says which two and why not the third. |
 | `src/layouts/Docs.astro` | One documentation page: the contents, the document, its sections. What is not ordinary about it is the readout above the title, which names the file in the repository the page was rendered from and links to it — the reader who has just found the mistake can see where the fix goes. |
-| `src/pages/index.astro` | The front page. The analyzer, the module catalogue, the measurement table, the platform table and the honest gaps. Also `METRICS`, `GAPS` and `PLATFORMS` — see the rules below. **Every word of it is addressed to somebody who makes records**, which is the rule the whole page is now held to: the three-tier architecture section is gone, the measurement table says what each reading means rather than how it is computed, and `GAPS` carries the six a musician will actually meet rather than the six that are most complete. |
+| `src/pages/index.astro` | The front page. The analyzer, the signal path, the module catalogue, the measurement table and the platform table. Also `METRICS` and `PLATFORMS` — see the rules below. **Every word of it is addressed to somebody who makes records**, which is the rule the whole page is held to: the three-tier architecture section is gone, the measurement table says what each reading means rather than how it is computed, and the Known gaps section went the same way — the twelve are in `README.md` and the one a reader has to *act* on, that publishing has no password, is a sentence in the tablet paragraph under `#reach`. |
 | `src/pages/docs.astro` | `/docs`: `docs/site/index.md` rendered, with the manual's contents underneath it. A landing page that is only a list of links makes the reader choose before telling them what they are choosing between. |
 | `src/pages/docs/[slug].astro` | Every documentation page but that one. `build.format: 'file'` and no trailing slash, so it writes `dist/docs/install.html` and the address is `/docs/install`. |
 | `src/pages/404.astro` | Three links and no search. |
@@ -208,8 +208,17 @@ either renderer produces anything.
   continuous-integration run asserts and in which units. All of that is true and
   all of it belongs in `README.md`, `docs/METRICS.md` and the `AGENTS.md` files,
   where the reader has asked for it. Here the test is whether a mastering
-  engineer would care: **what a number means, what the app will and will not do,
-  what to download**. Standards keep their names — `BS.1770-4` and `R 128` are
-  what a delivery spec cites, so they are credentials rather than jargon — and
-  the honest gaps stay honest, but they are the gaps somebody will *meet*. The
-  full list is one link away and is not the front page's job.
+  engineer would care: **what a number means, what the app does, what to
+  download**. Standards keep their names — `BS.1770-4` and `R 128` are what a
+  delivery spec cites, so they are credentials rather than jargon — but the
+  mechanism behind a number is not on this page: how a band is spaced, which
+  percentiles an `LRA` is taken across, how a preset file is structured. That is
+  `docs/METRICS.md` and `README.md`, and the reader there has asked for it.
+
+  **The gaps are honest somewhere the reader will look, and that is no longer
+  here.** The front page carried six of the twelve for three releases; the
+  section is gone and the list lives in `README.md` and `/docs`. What survived onto the page is the one gap a reader has to act on
+  rather than know about — the tablet link has no password, so publish on a
+  network you control — because a warning is not documentation and it has to be
+  where the feature is described. Anything else that is not built goes in the
+  README, not back onto this page.
