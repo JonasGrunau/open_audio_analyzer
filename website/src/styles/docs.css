@@ -391,6 +391,19 @@
   color: var(--text);
 }
 
+/* The one inline class the Markdown carries. install.md's download table has a
+   column answering "does this installer bring the plugin with it", which is the
+   point of that table — and the front page sets the same column in --signal, so
+   two pages in two colours would read as two different answers. A span in the
+   Markdown rather than a rule on the third column: `nth-child(3)` moves
+   silently the day the table gains one, and then colours the wrong answer. The
+   rows that carry no plugin stay in the body colour, so the column says which
+   is which by more than its words. */
+.md .plug {
+  color: var(--signal);
+  white-space: nowrap;
+}
+
 /* The first column of one of these tables is a name — a metric, a wire field, a
    file — and an auto-laid-out table sizes a column from how narrow its contents
    will admit they can get. A name that admits it can wrap at its own space gets

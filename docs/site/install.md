@@ -11,9 +11,9 @@ ticked. If you use a DAW, those are the ones to take.
 
 | Platform | Download | Plugin | Notes |
 | --- | --- | --- | --- |
-| macOS 14.2+ | `Open.Audio.Analyzer-<version>-macos.pkg` | ✅ VST3 + AU | Universal — Apple silicon and Intel. |
-| Windows 10 1809+ | `Open.Audio.Analyzer-<version>-windows-x64.exe` | ✅ VST3 | |
-| Linux | `Open.Audio.Analyzer-<version>-linux-<arch>.tar.gz` | ✅ VST3 | Unpack and run `./install.sh`. No root needed. |
+| macOS 14.2+ | `Open.Audio.Analyzer-<version>-macos.pkg` | <span class="plug">VST3 + AU</span> | Universal — Apple silicon and Intel. |
+| Windows 10 1809+ | `Open.Audio.Analyzer-<version>-windows-x64.exe` | <span class="plug">VST3</span> | |
+| Linux | `Open.Audio.Analyzer-<version>-linux-<arch>.tar.gz` | <span class="plug">VST3</span> | Unpack and run `./install.sh`. No root needed. |
 | Linux | `Open.Audio.Analyzer-<version>-<arch>.AppImage` | — | One file, no root. Application only. |
 | Linux | `Open.Audio.Analyzer-<version>-<arch>.flatpak` | — | Sandboxed, updates in place. Application only. |
 | Any | `oaa-cli-<platform>.tar.gz` / `.zip` | — | The command-line analyser. No Flutter runtime. |

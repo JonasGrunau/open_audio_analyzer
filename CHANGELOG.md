@@ -46,6 +46,12 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the plugin is a column in the table above it, and what metering your computer's
   own output needs is on the install page.
 
+- The install page's download table says which installers carry the plugin in
+  the same colour the front page's does, rather than with a tick. The two
+  tables answer the same question and now answer it the same way; the rows that
+  carry no plugin stay in the body colour, so the column reads as an answer
+  rather than as decoration.
+
 ### 🐛 Fixed
 - **The privacy policy said the Android build never asks for the microphone,
   because it was "a remote display only".** It has metered a live input since
