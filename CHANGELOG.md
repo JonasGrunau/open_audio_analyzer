@@ -57,6 +57,15 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   builds "tablet displays". They run the whole application, with the engine
   compiled in, and can additionally draw a remote host's meters.
 
+### 🚧 Internal
+- The Play Store's "What's new" text is chosen from the release's changelog
+  section rather than taken from the top of it until the 500 characters run
+  out. An entry's **bold lead** is now its store note where it has one, those
+  entries are taken before the rest, and the sections are filled a turn at a
+  time — so 0.13.0's note reaches the mono Phase Scope and the machine that
+  could attach to itself, where the old rule spent the whole budget inside
+  Added. The text is en-US and deliberately has no second language.
+
 ## [0.13.0] — 2026-08-27
 
 ### ✨ Added

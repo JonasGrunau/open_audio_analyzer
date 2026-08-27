@@ -251,13 +251,43 @@ echo "==> accepted as version code $version_code"
 # reason to fail an upload Play has already accepted, so every failure here is
 # a warning and the notes are simply left off.
 #
-# It keeps each entry's **first sentence**, which is a decision about this
-# repository's changelog rather than a general one: CHANGELOG.md's own rules
-# say an entry "describes the effect on the user, not the diff", and its
-# entries lead with the phrase that says what changed — so the first sentence
-# already is the store note. Nothing else works here. Every bullet in 0.11.0
-# runs to 650–800 characters on its own, so a keep-whole-entries rule keeps
+# Three rules do the fitting. All three are readings of *this* CHANGELOG.md
+# rather than general ones, and between them they mean nobody writes a store
+# note: the changelog is the store note, and editing it edits the store.
+#
+# **A bold lead is the note.** This repository's entries put the point in bold
+# at the start and the reasoning after it, so a bold lead is at once the
+# shortest form of an entry and the author's own summary of it — "**The
+# smallest supported window is now 960x808**, up from 960x768 (macOS; the only
+# platform that enforces one)" gives up 84 characters of parenthesis for
+# nothing. An entry with no bold lead falls back to its first sentence, which
+# CHANGELOG.md's rules make a fair summary of one: an entry "describes the
+# effect on the user, not the diff". Nothing else works here — every bullet in
+# 0.11.0 runs to 650–800 characters whole, so a keep-whole-entries rule keeps
 # nothing at all and a cut-at-500 rule ships half a sentence.
+#
+# **Bold entries first, then round-robin across the sections.** Straight
+# changelog order is what sent 0.13.0 to the store as four Added bullets, with
+# the mono Phase Scope, the microphone Android had never been asked for and
+# every other fix behind the cut: one long section spends the budget before the
+# next is reached, and what a tester wants to read first is usually what was
+# *fixed*. So a sweep takes the bold entries a section at a time, a second
+# sweep takes the rest, and an entry too long for what is left is stepped over
+# rather than ending the pass — one 140-character bullet costs its own place
+# and nobody else's.
+#
+# **The link is only paid for when something was left behind.** It costs 55 of
+# the 500, which is a whole entry, so a release whose changelog fits entirely
+# says so by linking nowhere.
+#
+# **en-US, and no other language, ever.** `releaseNotes` is an array with one
+# entry per listing language, so the shape invites a second one — and the text
+# for it would have to come from somewhere. CHANGELOG.md is written in English;
+# anything else here is a machine translation nobody in this repository can
+# review, shipped to a store where it is the first thing a tester reads. A
+# language Play is not given falls back to the listing's default, which is this
+# one, so leaving it out costs nothing. Add a language here only when a person
+# is writing that language's changelog.
 #
 # The generator is written out and then run, rather than piped from a heredoc
 # inside `$(...)`. That is not a style preference: a backtick anywhere inside a
@@ -285,79 +315,151 @@ for line in open(path, encoding="utf-8"):
     if inside:
         lines.append(line.rstrip())
 
-# A section heading keeps its name and loses its emoji, matched as `\S+` rather
-# than at a fixed width: an emoji is one code point here and two somewhere
-# else, and counting them is how "### <emoji> Measurement" reaches a store as
-# raw markdown. Bullets are unwrapped, because CHANGELOG.md is hard-wrapped at
-# 80 columns and Play renders this text exactly as it arrives — the breaks
-# would land mid-phrase on a phone.
-items, current = [], None
+# Sections in changelog order, each a (label, [entry, ...]) pair. Bullets are
+# unwrapped first, because CHANGELOG.md is hard-wrapped at 80 columns and Play
+# renders this text exactly as it arrives — the breaks would land mid-phrase on
+# a phone.
+sections, entries, label, current = [], None, None, None
+
+
+def flush_entry():
+    global current
+    if current is not None:
+        entries.append(current)
+        current = None
+
+
+def flush_section():
+    global entries, label
+    flush_entry()
+    if label is not None and entries:
+        sections.append((label, entries))
+    entries, label = None, None
+
+
 for line in lines:
+    # A heading keeps its name and loses its emoji, matched as `\S+` rather than
+    # at a fixed width: an emoji is one code point here and two somewhere else,
+    # and counting them is how "### <emoji> Measurement" reaches a store as raw
+    # markdown.
     heading = re.match(r"^#{3,4}\s+(?:\S+\s+)?(.+)$", line)
     if heading:
-        if current:
-            items.append(current)
-            current = None
-        items.append(heading.group(1).strip() + ":")
-    elif line.startswith("- "):
-        if current:
-            items.append(current)
-        current = line
-    elif line.strip() and current:
-        current += " " + line.strip()
-    elif not line.strip() and current:
-        items.append(current)
-        current = None
-if current:
-    items.append(current)
-
-cleaned = []
-for item in items:
-    item = re.sub(r"\s*\(#\d+\)", "", item)                # issue references
-    item = re.sub(r"\[([^]]+)\]\([^)]+\)", r"\1", item)    # links to their text
-    item = re.sub(r"[*`]", "", item).strip()               # emphasis, code ticks
-    if not item:
+        flush_section()
+        label, entries = heading.group(1).strip(), []
+    elif entries is None:
         continue
-    if item.startswith("- "):
-        # Split on a full stop followed by a capital, so a version number stays
-        # whole: "0.11.0" has a digit after the point rather than a space.
-        body = re.split(r"(?<=[.!?])\s+(?=[A-Z])", item[2:], maxsplit=1)[0]
-        item = "- " + body
-    cleaned.append(item)
+    elif line.startswith("- "):
+        flush_entry()
+        current = line[2:]
+    elif line.strip() and current is not None:
+        current += " " + line.strip()
+    elif not line.strip():
+        flush_entry()
+flush_section()
 
-# The Internal section is refactors, build and CI, and CHANGELOG.md puts it
-# last "because most readers stop before it". A store listing is the one place
-# where that is not a figure of speech: somebody deciding whether to install an
-# app does not want a note about a screenshot script. It is defined to be the
-# final section, so cutting at it drops that and nothing else.
-for index, item in enumerate(cleaned):
-    if item.lower() == "internal:":
-        cleaned = cleaned[:index]
-        break
+# The Internal section is refactors, build and CI, and CHANGELOG.md puts it last
+# "because most readers stop before it". A store listing is the one place where
+# that is not a figure of speech: somebody deciding whether to install an app
+# does not want a note about a screenshot script.
+sections = [s for s in sections if s[0].lower() != "internal"]
 
-budget = LIMIT - len(more) - 2
-kept = []
-for item in cleaned:
-    if len("\n".join(kept + [item])) > budget:
-        break
-    kept.append(item)
-while kept and kept[-1].endswith(":"):   # a heading with nothing left under it
-    kept.pop()
 
-# One sentence longer than the whole budget is the only case left, and an
-# ellipsis beats no notes at all.
-if not kept and cleaned:
-    head = cleaned[0][:budget]
-    kept = [head[: head.rfind(" ")].rstrip(" ,;:") + "…"]
+def shorten(entry):
+    """One line for the store, out of an entry written for a changelog."""
+    entry = re.sub(r"\s*\(#\d+\)", "", entry)                # issue references
+    entry = re.sub(r"\[([^]]+)\]\([^)]+\)", r"\1", entry)    # links to their text
 
-text = "\n".join(kept).strip()
-if text and len(kept) < len(cleaned):
+    # The bold lead, where there is one; the first sentence otherwise. The
+    # header of play_store.sh says why that is a reading of this changelog.
+    lead = re.match(r"\*\*(.+?)\*\*", entry)
+    if lead:
+        entry = lead.group(1)
+    else:
+        # Split on a full stop and the space after it, which is what keeps a
+        # version number whole: "0.11.0" has a digit after the point rather
+        # than a space. Not "a full stop and a capital" — 0.10.1's second
+        # sentence opens on `src/lib/app.mjs`, so that rule found no boundary
+        # at all and sent 300 characters of build reasoning to a store.
+        entry = re.split(r"(?<=[.!?])\s+", entry, maxsplit=1)[0]
+
+    entry = re.sub(r"[*`]", "", entry).strip()               # emphasis, code ticks
+    if entry and entry[-1] not in ".!?":
+        entry += "."
+    return entry, bool(lead)
+
+
+for index, (label, entries) in enumerate(sections):
+    sections[index] = (label, [e for e in map(shorten, entries) if e[0]])
+sections = [s for s in sections if s[1]]
+
+
+def fit(budget):
+    """Fill `budget` characters: bold entries first, round-robin by section.
+
+    See the header of play_store.sh for why both of those, and why an entry
+    that does not fit is stepped over rather than ending the pass. `kept` holds
+    each entry with its position, so a section renders in changelog order
+    however the sweeps reached it.
+    """
+    kept = [[] for _ in sections]
+    length = 0
+    dropped = False
+    for tier in (True, False):
+        depth = 0
+        while any(depth < len(entries) for _, entries in sections):
+            for index, (label, entries) in enumerate(sections):
+                if depth >= len(entries):
+                    continue
+                entry, bold = entries[depth]
+                if bold is not tier:
+                    continue
+                heading = 0 if kept[index] else len(label) + 2   # "Label:\n"
+                cost = heading + len(entry) + 3                  # "- " and "\n"
+                if length + cost > budget:
+                    dropped = True
+                    continue
+                kept[index].append((depth, entry))
+                length += cost
+            depth += 1
+    return [sorted(taken) for taken in kept], dropped
+
+
+# Two passes, because the "More:" line is only worth its 55 characters when
+# there is in fact more. A release whose whole changelog fits says so by not
+# linking anywhere.
+kept, dropped = fit(LIMIT)
+if dropped:
+    kept, _ = fit(LIMIT - len(more) - 2)
+
+rendered = []
+for (label, _), taken in zip(sections, kept):
+    if taken:
+        rendered.append(label + ":")
+        rendered += ["- " + entry for _, entry in taken]
+text = "\n".join(rendered).strip()
+
+# One entry longer than the whole budget is the only case left, and an ellipsis
+# beats no notes at all.
+if not text and sections:
+    head = sections[0][1][0][0][: LIMIT - len(more) - 2]
+    text = head[: head.rfind(" ")].rstrip(" ,;:") + "…"
+    dropped = True
+
+if text and dropped:
     text += "\n\n" + more
 sys.stdout.write(json.dumps(text) if text else "")
 PYTHON
 
 notes=$(python3 "$work/notes.py" "$root/CHANGELOG.md" "$version" "$more" 2>/dev/null || true)
 
+# **en-US, and no other language, ever.** `releaseNotes` is an array with one
+# entry per listing language, so the shape invites a second one — and the text
+# for it would have to come from somewhere. CHANGELOG.md is written in English;
+# anything else here is a machine translation nobody in this repository can
+# review, shipped to a store where it is the first thing a tester reads. A
+# language Play is not given falls back to the listing's default, which is this
+# one, so the cost of leaving it out is nothing. Add a language here only when
+# a person is writing that language's changelog.
 if [ -z "$notes" ]; then
   echo "==> no release notes: CHANGELOG.md has no section for $version."
   release_notes=""
