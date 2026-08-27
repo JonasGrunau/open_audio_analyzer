@@ -2,7 +2,7 @@
  * oaa_device.c — miniaudio, wrapped down to the two things Open Audio Analyzer
  * needs.
  *
- * SPDX-License-Identifier: MIT
+ * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
 /*

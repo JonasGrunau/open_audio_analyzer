@@ -1,7 +1,7 @@
 /*
  * oaa_truepeak.h — inter-sample peak, per ITU-R BS.1770-4 Annex 2.
  *
- * SPDX-License-Identifier: MIT
+ * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * Sample peak and true peak are different measurements, and the difference is
  * the entire reason this file exists. A signal whose highest *sample* sits at

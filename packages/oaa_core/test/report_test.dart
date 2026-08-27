@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: GPL-3.0-or-later
 //
 // The report is the artefact somebody makes a delivery decision from, so the
 // tests here are mostly about what it does with a number nobody measured. A

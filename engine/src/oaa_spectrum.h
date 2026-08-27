@@ -2,7 +2,7 @@
  * oaa_spectrum.h — the short-time Fourier analysis behind the analyser,
  * the spectrogram and the stereo cloud.
  *
- * SPDX-License-Identifier: MIT
+ * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * One transform per channel per hop, mapped onto log-spaced display bands. The
  * three modules that draw frequency content all read the same bands, which is

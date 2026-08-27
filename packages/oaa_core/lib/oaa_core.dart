@@ -1,6 +1,6 @@
 /// The Open Audio Analyzer domain model.
 ///
-/// SPDX-License-Identifier: MIT
+/// SPDX-License-Identifier: GPL-3.0-or-later
 ///
 /// This package deliberately depends on nothing. Not Flutter, not `dart:ffi`,
 /// not even `oaa_engine`. It describes *what* a measurement is, what a delivery

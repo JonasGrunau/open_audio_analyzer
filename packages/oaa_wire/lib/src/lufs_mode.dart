@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: GPL-3.0-or-later
 
 /// `0x0020 SET_LUFS_MODE` — the first frame that travels from consumer to
 /// producer.

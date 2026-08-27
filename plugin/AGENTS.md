@@ -23,20 +23,24 @@ AGPL.
 
 | | |
 |---|---|
-| `engine/` | MIT. The plugin links it; MIT flows in without obligation. |
+| `engine/` | GPL-3.0-or-later. The plugin links it, and GPLv3 §13 is what lets a GPLv3 work be combined with AGPLv3 code. |
 | `lib/` (the app) | GPL-3.0-or-later. **Never links JUCE** — it talks to this plugin over a socket, which is not linking. |
 | `plugin/` | AGPL-3.0-or-later, because it combines with JUCE. |
 | VST3 SDK | MIT. Steinberg relicensed it; JUCE vendors it. No second copyleft dependency. |
 
-GPLv3 §13 expressly permits combining a GPLv3 work with AGPLv3 code, and the
-app being GPL-3.0-**or-later** is what makes that clean rather than merely
-arguable.
+GPLv3 §13 expressly permits combining a GPLv3 work with AGPLv3 code, and
+everything outside this directory being GPL-3.0-**or-later** is what makes that
+clean rather than merely arguable.
 
 The practical consequence of AGPL over GPL is its network clause, and since Open
 Audio Analyzer publishes all its source anyway, that clause asks for nothing
 new. But it does mean **nothing in `plugin/` may be moved into `engine/` or
-`oaa_core/`** without rewriting it, because those are MIT and must stay linkable
-by people who are not writing free software.
+`oaa_core/`** without rewriting it. Those were MIT through 0.13.0 and the reason
+was that they had to stay linkable by people writing non-free software; they are
+GPL-3.0-or-later now and the boundary still holds, for the reason that outlived
+the first one — the app, the CLI and the tablet display all link them with no
+JUCE anywhere near, and AGPL code moved into them would hand JUCE's terms to
+three consumers that never asked for JUCE.
 
 ## Files
 

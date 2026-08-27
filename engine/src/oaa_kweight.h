@@ -1,7 +1,7 @@
 /*
  * oaa_kweight.h — the ITU-R BS.1770-4 K-weighting filter.
  *
- * SPDX-License-Identifier: MIT
+ * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * Two cascaded biquads: a high-frequency shelf that models the acoustic effect
  * of a head in a diffuse field, then an RLB high-pass that discounts the low

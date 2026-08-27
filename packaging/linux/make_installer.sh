@@ -105,9 +105,10 @@ done
 # --- Licences --------------------------------------------------------------
 #
 # Generated rather than held, so it cannot go stale against LICENSE. The
-# tarball carries binaries under three licences and the plug-in's is the
-# strictest of them; a notice naming only the application's would be wrong
-# about the bundle this format exists to install.
+# tarball carries binaries under two licences and the plug-in's is the stricter
+# of them; a notice naming only the application's would be wrong about the
+# bundle this format exists to install. It named three through 0.13.0, when the
+# engine and the domain packages stopped being MIT.
 
 {
   cat <<'NOTICE'
@@ -115,9 +116,8 @@ Open Audio Analyzer
 
 This archive carries binaries under more than one licence:
 
-  The application                    GPL-3.0-or-later
+  The application and its engine     GPL-3.0-or-later
   The VST3 plug-in                   AGPL-3.0-or-later, because it links JUCE
-  The DSP engine and domain packages MIT
   The bundled fonts                  SIL OFL 1.1
 
 Corresponding Source for every binary here is the tagged commit at

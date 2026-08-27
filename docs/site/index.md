@@ -83,8 +83,9 @@ delivery spec fails your pipeline instead of shipping. See
 
 **A tablet.** A second machine on the same network draws the same modules from
 the same measurements, arriving over a socket. The protocol is
-[documented normatively](wire.html) and is MIT, so a third-party display does
-not have to be GPL to speak it.
+[documented normatively](wire.html), which is what lets a display nobody here
+wrote speak it: a specification is not a program, and there are already three
+implementations of this one that were not written against each other.
 
 The two find each other three ways, cheapest first. The tablet lists whatever is
 publishing on the network. Failing that, the sending machine shows a **pairing
@@ -103,10 +104,13 @@ of every meter to drift apart.
 
 ## Licensing
 
-Split on purpose. The engine, the domain model and the wire protocol are
-**MIT**, because a measurement tool needs to be embeddable and auditable. The
-application, the design system and the CLI are **GPL-3.0-or-later**, because a
-free clone of a paid product should not be trivially re-closable. The plugin is
-**AGPL-3.0-or-later**, because it links JUCE.
+**GPL-3.0-or-later**, all of it, because a free clone of a paid product should
+not be re-closable — and that argument covers the engine and the wire protocol
+as much as the application. The plugin is **AGPL-3.0-or-later**, because it
+links JUCE. The engine, the domain model and the wire protocol were MIT through
+0.13.0.
 
-MIT is one-way compatible with GPL, so the combination composes cleanly.
+This is not a licence against commercial use, and no free-software licence is.
+You may sell copies, charge for support, and ship Open Audio Analyzer inside
+something you sell. What copyleft forbids is a proprietary fork: a modified
+version you distribute has to carry its source under the same terms.

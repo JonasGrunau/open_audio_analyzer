@@ -1,7 +1,7 @@
 /*
  * oaa_atomic.h — the two atomic operations the seqlock needs, and nothing else.
  *
- * SPDX-License-Identifier: MIT
+ * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * Why this exists rather than a bare `#include <stdatomic.h>`: MSVC only
  * supports C11 atomics from VS2022 17.5 onwards and only when /std:c11 is

@@ -1,6 +1,6 @@
 /// Decoding for frame type `0x0010`, DAW transport.
 ///
-/// SPDX-License-Identifier: MIT
+/// SPDX-License-Identifier: GPL-3.0-or-later
 ///
 /// `docs/WIRE.md` is normative; this is one implementation of it, and the
 /// plugin's `plugin/src/OaaWire.cpp` is the other. The two are written against

@@ -1,6 +1,6 @@
 /// Reading audio files, for offline analysis.
 ///
-/// SPDX-License-Identifier: MIT
+/// SPDX-License-Identifier: GPL-3.0-or-later
 ///
 /// This is the Dart half of `engine/src/oaa_decode.c`. It hands out blocks of
 /// interleaved float samples and nothing else — there is no analysis here, and

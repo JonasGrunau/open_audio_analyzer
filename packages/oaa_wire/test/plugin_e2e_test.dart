@@ -1,6 +1,6 @@
 /// The whole path, end to end: a file, the plugin, a socket, this decoder.
 ///
-/// SPDX-License-Identifier: MIT
+/// SPDX-License-Identifier: GPL-3.0-or-later
 ///
 /// `plugin_golden_test.dart` proves the two implementations of the protocol
 /// agree about a frame that was written to disk once. It says nothing about

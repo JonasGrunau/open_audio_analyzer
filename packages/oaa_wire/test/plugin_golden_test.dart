@@ -1,6 +1,6 @@
 /// Holds the Dart codec against bytes the C++ plugin actually produced.
 ///
-/// SPDX-License-Identifier: MIT
+/// SPDX-License-Identifier: GPL-3.0-or-later
 ///
 /// The other codec tests in this package round-trip Dart against Dart, which
 /// proves the encoder and decoder agree with each other and nothing at all

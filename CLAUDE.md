@@ -71,10 +71,10 @@ is still not built, and `docs/PLAN.md` for what was planned.
 
 | Directory | Purpose | License |
 |-----------|---------|---------|
-| `engine/` | C11 DSP core. No Dart, no Flutter. | MIT |
-| `packages/oaa_engine/` | FFI bindings and the build hook. | MIT |
-| `packages/oaa_core/` | Domain model. Pure Dart. | MIT |
-| `packages/oaa_wire/` | The remote-display protocol. Pure Dart, no I/O. | MIT |
+| `engine/` | C11 DSP core. No Dart, no Flutter. | GPL-3.0-or-later |
+| `packages/oaa_engine/` | FFI bindings and the build hook. | GPL-3.0-or-later |
+| `packages/oaa_core/` | Domain model. Pure Dart. | GPL-3.0-or-later |
+| `packages/oaa_wire/` | The remote-display protocol. Pure Dart, no I/O. | GPL-3.0-or-later |
 | `packages/oaa_ui/` | Design tokens and shared primitives. | GPL-3.0-or-later |
 | `lib/` | The application. | GPL-3.0-or-later |
 | `cli/` | The `oaa` command-line analyser. No Flutter binding. | GPL-3.0-or-later |
@@ -87,9 +87,19 @@ is still not built, and `docs/PLAN.md` for what was planned.
 
 **`plugin/` is the one AGPL directory**, because JUCE 7 and 8 are
 AGPLv3-or-commercial (only JUCE 6 offered GPLv3, which `docs/PLAN.md` still
-assumes). Nothing there may be moved into `engine/` or `oaa_core/`, which are
-MIT and must stay linkable by people who are not writing free software. The app
-is unaffected: it never links JUCE — it talks to the plugin over a socket.
+assumes). Nothing there may be moved into `engine/` or `oaa_core/`: those are
+GPL-3.0-or-later, and moving AGPL code into them would put JUCE's network clause
+on two packages that the app, the CLI and the tablet display all link with no
+JUCE anywhere in sight. The app is unaffected: it never links JUCE — it talks to
+the plugin over a socket.
+
+**The repository was licensed in two halves through 0.13.0** — MIT for `engine/`,
+`oaa_engine`, `oaa_core` and `oaa_wire`, GPL for everything else — and a good
+deal of prose argued for that line. It is gone: everything but `plugin/` is
+GPL-3.0-or-later. If you find a sentence still claiming a package is MIT or that
+something must "stay linkable by people who are not writing free software", it is
+stale and the fix is to delete the claim, not to soften it. `mobile_scanner`,
+`libebur128` and Steinberg's VST3 SDK are *third-party* MIT and unaffected.
 
 ## For AI Agents
 

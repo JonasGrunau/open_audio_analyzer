@@ -10,6 +10,20 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### ⚡ Changed
+- **The engine, the FFI bindings, the domain model and the wire protocol are
+  GPL-3.0-or-later; they were MIT.** Open Audio Analyzer is copyleft throughout
+  now, apart from `plugin/`, which stays AGPL-3.0-or-later because it links
+  JUCE. Nothing changes for anyone using the application, the CLI, the plugin or
+  a tablet display. What changes is embedding: `engine/`, `oaa_engine`,
+  `oaa_core` and `oaa_wire` could be linked into a closed-source product and now
+  cannot — a derivative you distribute has to carry its source under the same
+  terms. Commercial use is still permitted, as the GPL has always permitted it;
+  the proprietary fork is the part that is not. Releases up to 0.13.0 stay MIT
+  and that grant cannot be withdrawn, so anything already built against those
+  versions keeps working under the terms it was written to. `docs/WIRE.md` is
+  unchanged and still normative: a display implemented from the specification
+  rather than from `packages/oaa_wire` is unaffected, which is the case for two
+  of the three implementations that exist.
 - **The front page says what you do before it says what that buys you.** Its How
   it works section opens with the setup — the plugin on your master bus, the app
   on the desktop beside you, a tablet attached to the same session — and makes
@@ -53,6 +67,11 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   rather than as decoration.
 
 ### 🐛 Fixed
+- **`plugin/` ships a `LICENSE` file.** Every source file there carried the
+  AGPL-3.0-or-later identifier and the directory carried no licence text at all,
+  which is the one thing AGPL section 4 asks of anyone conveying it. The
+  installers were unaffected — they generate their notice from the repository
+  root — so this was missing only for somebody reading the source.
 - **The privacy policy said the Android build never asks for the microphone,
   because it was "a remote display only".** It has metered a live input since
   0.12.1 and declares `RECORD_AUDIO`, so the policy described a permission the

@@ -47,7 +47,7 @@ The repo is currently empty (one commit, no files). Everything below is greenfie
 | | |
 |---|---|
 | **Scope** | All three tiers: standalone app → LAN remote display → headless DAW plugin. Phased so each ships alone. |
-| **License** | Dual. `engine/` + `packages/oaa_core` → **MIT**. App, UI, plugin, CLI → **GPL-3.0-or-later**. Rationale: the DSP engine is worth embedding everywhere and needs outside scrutiny; the finished product should not be re-closable. MIT→GPL is one-way compatible, so this composes cleanly. |
+| **License** | ~~Dual. `engine/` + `packages/oaa_core` → **MIT**. App, UI, plugin, CLI → **GPL-3.0-or-later**.~~ **Superseded after 0.13.0:** everything is **GPL-3.0-or-later** except `plugin/`, which is **AGPL-3.0-or-later** because JUCE 7 and 8 are AGPL-or-commercial. The original rationale was that the DSP engine is worth embedding everywhere and needs outside scrutiny — scrutiny never required MIT, and embedding was the half that let the work be closed again. See `README.md` § Licensing. |
 | **Visual language** | "Precision Instrument" — graphite black `#0B0C0E`, panel `#121417`, 1px hairline `#1F2328`, single accent `#35E0C4`, warn `#F2B01E`, over `#FF4D4D`. Inter + Google Sans Code (tabular figures). No shadows, no gradients, flat. |
 | **State** | Riverpod for UI/config. **Meter data never enters it** — see the performance thesis. |
 | **Flutter** | Pin `3.44.5-stable` in `.tool-versions` (matches `gather-v2-app`). |
@@ -115,7 +115,7 @@ open_audio_analyzer/
 ├── CLAUDE.md                  # agent instructions
 ├── AGENTS.md                  # + one per directory, gather-style
 ├── LICENSE                    # GPL-3.0-or-later (the app)
-├── engine/LICENSE             # MIT
+├── engine/LICENSE             # GPL-3.0-or-later (was MIT through 0.13.0)
 ├── .tool-versions             # flutter 3.44.5-stable
 ├── engine/                    # C11 DSP core — knows nothing about Dart or Flutter
 │   ├── include/oaa/oaa.h      # the entire public C ABI, one header
@@ -269,8 +269,9 @@ Each phase is independently shippable.
   Audio Analyzer takes the GPL-3.0 path, which is available *because* the
   application and plugin are already GPL-3.0-or-later. The combined plugin
   binary is therefore GPL-3.0, and nobody can ship a closed-source fork of it
-  without buying both licences. `engine/` stays MIT and is not touched by this:
-  the plugin links it, it does not link the plugin.
+  without buying both licences. `engine/` was MIT when this was written and is
+  GPL-3.0-or-later since; either way the plugin links it and it does not
+  link the plugin.
 
   CLAP was the earlier choice and is dropped. Its SDK is MIT and technically the nicest
   of the three, but **Ableton Live does not host CLAP**, and a metering plugin that

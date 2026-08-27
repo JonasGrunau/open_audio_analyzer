@@ -133,8 +133,10 @@ on any macOS older than the runner's. Pass
 machine that made it — it halves the compile.
 
 `plugin/` is the one **AGPL-3.0-or-later** directory, because JUCE 7 and 8 are
-AGPL-or-commercial. Nothing there may move into `engine/` or `oaa_core/`, which
-are MIT and must stay linkable by people who are not writing free software.
+AGPL-or-commercial. Everything else is GPL-3.0-or-later, and nothing in
+`plugin/` may move into `engine/` or `oaa_core/` — the app, the CLI and the
+tablet display all link those with no JUCE in sight, and AGPL code moved into
+them would hand JUCE's terms to three consumers that never asked for it.
 
 ## Installers
 

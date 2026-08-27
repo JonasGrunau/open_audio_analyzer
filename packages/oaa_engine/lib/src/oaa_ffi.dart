@@ -1,6 +1,6 @@
 // Hand written FFI declarations, for the one call that runs every frame.
 //
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: GPL-3.0-or-later
 
 import 'dart:ffi';
 

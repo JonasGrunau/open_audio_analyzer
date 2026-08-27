@@ -1,7 +1,7 @@
 /*
  * oaa_kweight.c — designing the BS.1770-4 K-weighting filter.
  *
- * SPDX-License-Identifier: MIT
+ * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
 #include "oaa_kweight.h"

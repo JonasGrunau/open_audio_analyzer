@@ -1,7 +1,7 @@
 /*
  * oaa_decode.c — a file on disk, as blocks of float samples.
  *
- * SPDX-License-Identifier: MIT
+ * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * This is the whole of offline analysis on the C side, and it is deliberately
  * small: open a file, say what is in it, hand out interleaved float frames.

@@ -1,7 +1,7 @@
 /*
  * oaa_device.h — capture from real audio hardware, via miniaudio.
  *
- * SPDX-License-Identifier: MIT
+ * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * ---------------------------------------------------------------------------
  * The engine adopts the device's format; it never converts to its own

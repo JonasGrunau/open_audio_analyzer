@@ -1,7 +1,7 @@
 /*
  * oaa_tap_macos.m — Core Audio process taps. See oaa_tap.h for what and why.
  *
- * SPDX-License-Identifier: MIT
+ * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * ---------------------------------------------------------------------------
  * Objective-C, and only just

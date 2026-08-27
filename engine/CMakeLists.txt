@@ -1,6 +1,6 @@
 # engine/CMakeLists.txt — liboaa for the consumers that are not Dart.
 #
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: GPL-3.0-or-later
 #
 # ---------------------------------------------------------------------------
 # Why this file exists at all, when build.dart already builds the same sources

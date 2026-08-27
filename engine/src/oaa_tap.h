@@ -1,7 +1,7 @@
 /*
  * oaa_tap.h — capturing the system's own output on macOS, with no driver.
  *
- * SPDX-License-Identifier: MIT
+ * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * ---------------------------------------------------------------------------
  * Why this exists

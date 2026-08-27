@@ -5,10 +5,10 @@ than decorative.
 
 | Package | Depends on | License | Why it is separate |
 |---------|-----------|---------|--------------------|
-| `oaa_core` | **nothing** | MIT | Four consumers need the domain vocabulary and three have no engine. The tablet display reads measurements off a socket; the CLI and plugin never draw one. |
-| `oaa_engine` | `engine/`, `oaa_core` | MIT | The native library and its bindings, usable without any UI. It takes `oaa_core` for `MeterSource` and nothing else — the arrow still points *away* from `dart:ffi`. |
-| `oaa_wire` | `oaa_core` | MIT | The remote-display protocol, pure Dart with no I/O. MIT so that a third-party display does not have to be GPL to speak it. |
-| `oaa_ui` | `oaa_core` | GPL | Tokens and primitives. Flutter-only, so it cannot go in `oaa_core`. |
+| `oaa_core` | **nothing** | GPL-3.0-or-later | Four consumers need the domain vocabulary and three have no engine. The tablet display reads measurements off a socket; the CLI and plugin never draw one. |
+| `oaa_engine` | `engine/`, `oaa_core` | GPL-3.0-or-later | The native library and its bindings, usable without any UI. It takes `oaa_core` for `MeterSource` and nothing else — the arrow still points *away* from `dart:ffi`. |
+| `oaa_wire` | `oaa_core` | GPL-3.0-or-later | The remote-display protocol, pure Dart with no I/O. Separate because three of the four consumers need it without a native library behind them, not for a licence reason — that was the argument through 0.13.0, when it stopped being MIT. |
+| `oaa_ui` | `oaa_core` | GPL-3.0-or-later | Tokens and primitives. Flutter-only, so it cannot go in `oaa_core`. |
 
 `oaa_core` importing `oaa_engine` would make every consumer drag in a native
 library most of them never call, and would end `dart test` running without a C

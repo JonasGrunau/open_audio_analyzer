@@ -110,7 +110,7 @@ FREE, AND ACTUALLY FREE
 
 No account, no subscription, no adverts, no analytics and no telemetry. The only network traffic is the meters you ask it to draw from another machine on your own network. Audio is measured and discarded — never recorded, stored or sent anywhere.
 
-Licensed GPL-3.0-or-later; the measurement engine is MIT. Source, documentation and the desktop downloads: open-audio-analyzer.com
+Licensed GPL-3.0-or-later, engine included. Source, documentation and the desktop downloads: open-audio-analyzer.com
 ```
 
 ## What's New — 4000 max

@@ -1,6 +1,6 @@
 # `cli/` — the `oaa` command-line analyser
 
-GPL-3.0-or-later, like the app. The engine it calls is MIT and stays that way.
+GPL-3.0-or-later, like the app and like the engine it calls.
 
 ## Why this exists
 

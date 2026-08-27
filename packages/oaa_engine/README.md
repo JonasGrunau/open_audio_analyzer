@@ -1,8 +1,9 @@
 # oaa_engine
 
 Dart bindings for Open Audio Analyzer's C measurement engine, and the build hook
-that compiles it. **MIT**, like the engine itself, so that anybody can embed and
-audit the measurement code.
+that compiles it. **GPL-3.0-or-later**, like the engine itself. Anybody can read
+and audit the measurement code, and anybody embedding it takes on the same
+licence.
 
 This package is **not publishable**. `hook/build.dart` reaches out to
 `../../engine` with relative paths that no published archive would contain; it

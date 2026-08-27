@@ -1,7 +1,7 @@
 /*
  * oaa_source.c — where blocks of audio come from.
  *
- * SPDX-License-Identifier: MIT
+ * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * Phase 0 has two sources: digital black, and a synthetic tone. Device capture
  * (miniaudio) and file decode arrive in Phases 1 and 5 behind the same

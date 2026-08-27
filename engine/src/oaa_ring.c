@@ -1,7 +1,7 @@
 /*
  * oaa_ring.c — the SPSC ring between the audio callback and the analysis.
  *
- * SPDX-License-Identifier: MIT
+ * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
 #include "oaa_ring.h"

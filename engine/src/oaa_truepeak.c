@@ -1,7 +1,7 @@
 /*
  * oaa_truepeak.c — the 4x polyphase oversampler from BS.1770-4 Annex 2.
  *
- * SPDX-License-Identifier: MIT
+ * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
 #include "oaa_truepeak.h"

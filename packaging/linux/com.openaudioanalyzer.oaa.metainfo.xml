@@ -5,11 +5,13 @@
   AppStream metadata. Required by flatpak (flatpak-builder validates it) and
   read by GNOME Software, KDE Discover and AppImage catalogues.
 
-  `project_license` is the application's licence, not the repository's. Open Audio Analyzer is
-  several licences at once — the engine is MIT, the plugin is AGPL — and what
-  ships in this bundle is the GPL-3.0-or-later application linked against the
-  MIT engine. GPL-3.0-or-later is therefore the correct and honest answer for
-  the binary a user installs from here; see README.md for the full split.
+  `project_license` is the application's licence, not the repository's. The
+  repository is GPL-3.0-or-later except `plugin/`, which is AGPL because it
+  links JUCE — and no plugin ships in this bundle, only the application and the
+  engine it links, both GPL-3.0-or-later. GPL-3.0-or-later is therefore the
+  correct and honest answer for the binary a user installs from here; see
+  README.md. The engine was MIT through 0.13.0, which is why this note used to
+  describe a split.
 -->
 <component type="desktop-application">
   <id>com.openaudioanalyzer.oaa</id>

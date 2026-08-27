@@ -1,13 +1,17 @@
 # packages/oaa_wire/
 
-The remote-display and plugin protocol, as Dart. **MIT**, and pure: no Flutter,
-no `dart:ffi`, no I/O. It turns bytes into a `MeterSource` and back, and it does
-not own a socket — `lib/src/remote/` does that, and the plugin's C++ does it at
-the other end.
+The remote-display and plugin protocol, as Dart. **GPL-3.0-or-later**, and pure:
+no Flutter, no `dart:ffi`, no I/O. It turns bytes into a `MeterSource` and back,
+and it does not own a socket — `lib/src/remote/` does that, and the plugin's C++
+does it at the other end.
 
-MIT rather than GPL on purpose. Somebody writing their own display should be
-able to speak this protocol without their program becoming GPL; the value of a
-published wire format is that things nobody asked for can talk to it.
+This package was MIT through 0.13.0, so that somebody writing their own display
+could speak the protocol without their program becoming GPL. The whole
+repository is copyleft now, which costs that reader the *code* and not the
+protocol: `docs/WIRE.md` is normative, freely implementable, and the reason
+there are already three implementations of it that were not written against each
+other. Keep the document that good and this package stops being the only way
+in.
 
 | File | Contents |
 |------|----------|

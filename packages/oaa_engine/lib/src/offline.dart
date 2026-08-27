@@ -1,6 +1,6 @@
 /// Measuring a whole file.
 ///
-/// SPDX-License-Identifier: MIT
+/// SPDX-License-Identifier: GPL-3.0-or-later
 ///
 /// Decode a block, push it, read the snapshot, repeat. That loop is the whole
 /// of offline analysis, and it lives here rather than in the app or the CLI

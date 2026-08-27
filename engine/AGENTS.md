@@ -1,7 +1,8 @@
 # engine/
 
-The C11 measurement core. **MIT licensed**, and it must stay independently
-usable — this is the part of the project with value outside the app.
+The C11 measurement core. **GPL-3.0-or-later**, and it must stay independently
+usable — this is the part of the project with value outside the app. Independent
+of the app, not of the licence: embedding it obliges you to the same terms.
 
 Three consumers link against it: the Flutter app (through `dart:ffi`), the `oaa`
 CLI, and the headless VST3/AU plugin. None of them may know about the others,

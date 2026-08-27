@@ -1,6 +1,6 @@
 // Offline file decoding, and the claim that rests on it.
 //
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: GPL-3.0-or-later
 //
 // The interesting test in this file is not "can we open a WAV". It is
 // `offline analysis agrees with realtime`: the same samples, once pushed

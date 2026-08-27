@@ -1,7 +1,7 @@
 /*
  * oaa_internal.h — the engine struct and the two OS primitives it needs.
  *
- * SPDX-License-Identifier: MIT
+ * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * Nothing here is part of the ABI. Anything a consumer can see belongs in
  * include/oaa/oaa.h; if you are tempted to expose a field from this file,

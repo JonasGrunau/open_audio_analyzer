@@ -2,7 +2,7 @@
  * oaa_spectrum.c — short-time Fourier analysis. See oaa_spectrum.h for why the
  * window, the hop and the band mapping are what they are.
  *
- * SPDX-License-Identifier: MIT
+ * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
 #include "oaa_spectrum.h"

@@ -1,7 +1,7 @@
 /*
  * oaa_loudness.h — EBU R 128 loudness over the BS.1770-4 K-weighting.
  *
- * SPDX-License-Identifier: MIT
+ * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * Everything is built from one primitive: the mean square of the K-weighted
  * signal over a 10 ms sub-block. Every published quantity is a window of those

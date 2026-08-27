@@ -1,6 +1,6 @@
 /// A DAW's transport position.
 ///
-/// SPDX-License-Identifier: MIT
+/// SPDX-License-Identifier: GPL-3.0-or-later
 ///
 /// This is domain vocabulary, not wire format — `oaa_wire` decodes bytes into
 /// it, the LUFS module renders it, and neither knows about the other. The same

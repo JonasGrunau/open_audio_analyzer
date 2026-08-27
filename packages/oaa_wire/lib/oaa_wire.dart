@@ -1,6 +1,6 @@
 /// The Open Audio Analyzer wire protocol.
 ///
-/// SPDX-License-Identifier: MIT
+/// SPDX-License-Identifier: GPL-3.0-or-later
 ///
 /// `docs/WIRE.md` is the normative specification. This package is one
 /// implementation of it and not the definition — the plugin's C++ sender is

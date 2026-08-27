@@ -2,7 +2,7 @@
  * oaa_snapshot.c — the seqlock that carries measurements from the analysis
  * thread to whoever is about to paint them.
  *
- * SPDX-License-Identifier: MIT
+ * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * A seqlock is the right primitive here for one specific reason: it is
  * wait-free on the writer side. The analysis thread is the thread that must

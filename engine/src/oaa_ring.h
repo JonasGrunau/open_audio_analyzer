@@ -2,7 +2,7 @@
  * oaa_ring.h — the single-producer, single-consumer ring between the audio
  * callback and the analysis thread.
  *
- * SPDX-License-Identifier: MIT
+ * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * This is the one piece of the engine that a real-time audio callback touches,
  * so it is the one piece with a hard constraint: **the producer must never

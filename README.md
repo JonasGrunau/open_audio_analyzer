@@ -621,11 +621,11 @@ eleven.
 ## 📦 Repository layout
 
 ```
-engine/            C11 DSP core. Knows nothing about Dart or Flutter.        MIT
+engine/            C11 DSP core. Knows nothing about Dart or Flutter.        GPL
 packages/
-  oaa_engine/      FFI bindings + the build hook that compiles engine/.      MIT
-  oaa_core/        Domain model. Pure Dart — no Flutter, no dart:ffi.        MIT
-  oaa_wire/        The remote-display protocol. Pure Dart, no I/O.           MIT
+  oaa_engine/      FFI bindings + the build hook that compiles engine/.      GPL
+  oaa_core/        Domain model. Pure Dart — no Flutter, no dart:ffi.        GPL
+  oaa_wire/        The remote-display protocol. Pure Dart, no I/O.           GPL
   oaa_ui/          Design tokens and the primitives modules are built from.  GPL
 lib/               The application.                                          GPL
 assets/fonts/      Inter and Google Sans Code, with their licences.      SIL OFL
@@ -638,9 +638,10 @@ docs/              PLAN.md, METRICS.md, WIRE.md.
 `plugin/` is the one **AGPL** directory. JUCE 7 and 8 are AGPLv3-or-commercial —
 only JUCE 6 offered GPLv3 — and Open Audio Analyzer takes the AGPLv3 option,
 which is available because everything here is free software already. It changes
-the licence of the plugin binary alone: the engine stays MIT, and the app stays
-GPL because it never links JUCE. It talks to the plugin over a socket, which is
-not linking. GPLv3 section 13 expressly permits the combination. Steinberg's
+the licence of the plugin binary alone: the engine and the app are
+GPL-3.0-or-later and stay that way, because neither links JUCE. The app talks to
+the plugin over a socket, which is not linking. GPLv3 section 13 expressly
+permits the combination. Steinberg's
 VST3 SDK, meanwhile, is now MIT and vendored inside JUCE, so there is no second
 copyleft dependency and no SDK to check out.
 
@@ -656,19 +657,31 @@ Two boundaries carry weight:
 
 ### 📜 Licensing
 
-Deliberately split, and set on day one because it is nearly free now and
-expensive once outside contributors arrive:
+Copyleft throughout. Copyright © 2026 Jonas Grunau.
 
-- **`engine/`, `packages/oaa_engine`, `packages/oaa_core`, `packages/oaa_wire`
-  — MIT.** A metering engine's value is that anyone can embed and audit it, and
-  a measurement tool needs that scrutiny more than most software. The wire
-  protocol is on this side of the line for the same reason: a third-party
-  display should not have to be GPL to speak it.
-- **`packages/oaa_ui`, `lib/`, `cli/` — GPL-3.0-or-later.** A free clone of a
-  paid product should not be trivially re-closable.
+- **`engine/`, `packages/oaa_engine`, `packages/oaa_core`, `packages/oaa_wire`,
+  `packages/oaa_ui`, `lib/`, `cli/` — GPL-3.0-or-later.** A free clone of a paid
+  product should not be re-closable, and that argument does not stop at the
+  application: an engine anybody may embed in a closed product is an engine
+  somebody can sell back to you.
 - **`plugin/` — AGPL-3.0-or-later**, because it links JUCE. See above.
 
-MIT is one-way compatible with GPL, so the combination composes cleanly.
+The engine, the domain model and the wire protocol were MIT through 0.13.0,
+on the argument that a measurement engine's value is that anyone can embed and
+audit it. Auditing never needed MIT — the source is published either way — and
+embedding was the half that let the work be closed again. The trade is stated
+plainly rather than glossed: a third-party display now has to be
+GPL-3.0-or-later to reuse `packages/oaa_wire`. What it does *not* have to do is
+use that package at all. The protocol is specified normatively in
+[docs/WIRE.md](docs/WIRE.md), a specification is not a program, and there are
+already three independent implementations of it — so an implementation written
+from the document owes this one nothing.
+
+**This is not a licence against commercial use, and no free-software licence
+is.** GPL permits selling copies, charging for support and shipping Open Audio
+Analyzer inside something you sell. What it forbids is a *proprietary* fork:
+anyone distributing a modified version has to ship its source under the same
+terms, which is the part MIT left open.
 
 ---
 
@@ -1269,8 +1282,9 @@ information, delete it.
 
 ## 📜 License
 
-GPL-3.0-or-later for the application; MIT for the engine and domain model. See
-[Licensing](#-licensing) above and the `LICENSE` file in each tier.
+GPL-3.0-or-later, except `plugin/`, which is AGPL-3.0-or-later because it links
+JUCE. Copyright © 2026 Jonas Grunau. See [Licensing](#-licensing) above and the
+`LICENSE` file in each tier.
 
 ---
 

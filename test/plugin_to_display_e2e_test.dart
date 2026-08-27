@@ -574,8 +574,11 @@ File? _generatedTrack;
 ///
 /// Generated rather than committed or downloaded, for the reasons set out at
 /// length in `packages/oaa_wire/test/plugin_e2e_test.dart` — which has its own
-/// copy of this, because a test fixture is not a reason for the GPL application
-/// suite to reach into an MIT package's test directory.
+/// copy of this, because a test fixture is not a reason for the application's
+/// suite to reach into a package's test directory. That used to be a licence
+/// boundary as well as a packaging one; both are GPL-3.0-or-later since 0.13.0
+/// and only the packaging reason is left, which is the one that always did the
+/// work: `packages/oaa_wire` has to be testable on its own.
 File _track() {
   final override = Platform.environment['OAA_TEST_TRACK'];
   if (override != null && override.isNotEmpty) {

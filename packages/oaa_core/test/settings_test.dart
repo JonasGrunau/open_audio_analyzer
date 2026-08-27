@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: GPL-3.0-or-later
 
 import 'package:oaa_core/oaa_core.dart';
 import 'package:test/test.dart';

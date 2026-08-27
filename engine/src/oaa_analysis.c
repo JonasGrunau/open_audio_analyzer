@@ -1,7 +1,7 @@
 /*
  * oaa_analysis.c — one pass over a block, driving every meter.
  *
- * SPDX-License-Identifier: MIT
+ * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * This file owns the meters that are only a few lines of arithmetic — sample
  * peak with hold, RMS with decay, a VU deflection, clip detection,

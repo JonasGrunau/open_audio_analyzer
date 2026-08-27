@@ -1,6 +1,6 @@
 /// Dart access to the Open Audio Analyzer measurement engine.
 ///
-/// SPDX-License-Identifier: MIT
+/// SPDX-License-Identifier: GPL-3.0-or-later
 ///
 /// The shape of this library is dictated by one constraint: reading
 /// measurements must cost nothing measurable on the frame the UI is about to

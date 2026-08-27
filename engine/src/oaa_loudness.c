@@ -1,7 +1,7 @@
 /*
  * oaa_loudness.c — EBU R 128 gating, integration and loudness range.
  *
- * SPDX-License-Identifier: MIT
+ * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
 #include "oaa_loudness.h"

@@ -1,7 +1,7 @@
 /*
  * oaa_engine.c — lifecycle, the analysis thread, and the OS primitives.
  *
- * SPDX-License-Identifier: MIT
+ * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * The analysis thread is the spine of the whole design. It is the only thread
  * that writes measurements, which is what lets the reader side be a seqlock

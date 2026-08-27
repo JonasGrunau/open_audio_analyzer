@@ -1,7 +1,7 @@
 /*
  * oaa.h — the entire public ABI of the Open Audio Analyzer measurement engine.
  *
- * SPDX-License-Identifier: MIT
+ * SPDX-License-Identifier: GPL-3.0-or-later
  * Copyright (c) 2026 Jonas Grunau
  *
  * This one header is the whole contract. Three very different consumers link
