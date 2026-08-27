@@ -65,6 +65,11 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   time — so 0.13.0's note reaches the mono Phase Scope and the machine that
   could attach to itself, where the old rule spent the whole budget inside
   Added. The text is en-US and deliberately has no second language.
+- TestFlight builds carry a **What to Test** note, and the App Store listing a
+  **What's New**, both generated from the same changelog section as Play's by
+  `packaging/store_notes.py`. Apple allows 4000 characters against Play's 500,
+  so a release usually arrives there with its entries whole. Every build up to
+  0.13.0 went to TestFlight with that field empty.
 
 ## [0.13.0] — 2026-08-27
 

@@ -142,6 +142,52 @@ fi
 
 rm -f "$log"
 
-echo "==> uploaded. App Store Connect processes the build before TestFlight"
-echo "    offers it; that takes minutes to an hour and is not something this"
-echo "    workflow waits on."
+echo "==> uploaded."
+
+# --- The notes -------------------------------------------------------------
+#
+# What a tester reads before installing this build, and what a shopper reads on
+# the listing, both out of the release's own changelog section. `asc_notes.py`
+# holds the two fields and why they are not the same audience; `store_notes.py`
+# holds how the section is fitted, and `play_store.sh` fills Play's 500-
+# character field out of the same one.
+#
+# **The IPA's own Info.plist says which build this is.** Not `OAA_BUILD_NUMBER`
+# — that is set for the job that *builds* and not for this one, and the note
+# has to land on the build in this file rather than on whatever the environment
+# last described. The entry is looked up before it is read, because a pattern
+# that matched twice would concatenate two plists and plutil would refuse the
+# result for a reason naming neither.
+#
+# Nothing below can fail the upload. Apple has the build; the worst case is a
+# blank What to Test, which is where every build up to 0.13.0 already stood.
+
+plist="$keys/Info.plist"
+entry=$(unzip -Z1 "$ipa" 'Payload/*.app/Info.plist' 2>/dev/null | head -1 || true)
+[ -n "$entry" ] && unzip -p "$ipa" "$entry" >"$plist" 2>/dev/null || true
+
+read_plist() { plutil -extract "$1" raw -o - -- "$plist" 2>/dev/null || true; }
+
+build_number=$(read_plist CFBundleVersion)
+short_version=$(read_plist CFBundleShortVersionString)
+bundle_id=$(read_plist CFBundleIdentifier)
+
+if [ -z "$build_number" ] || [ -z "$short_version" ] || [ -z "$bundle_id" ]; then
+  echo "==> notes: no Info.plist could be read out of the IPA; none written."
+elif ! command -v python3 >/dev/null 2>&1; then
+  echo "==> notes: python3 is not on PATH; none written. It comes with the"
+  echo "    command line tools that xcrun already needed."
+else
+  echo "==> notes for $short_version, build $build_number"
+  notes=$(python3 "$root/packaging/store_notes.py" \
+    "$root/CHANGELOG.md" "$short_version" 4000 2>/dev/null || true)
+  python3 "$root/packaging/ios/asc_notes.py" \
+    "$keys/AuthKey_$OAA_ASC_KEY_ID.p8" "$bundle_id" "$build_number" \
+    "$short_version" "$notes" ||
+    echo "    the upload stands; only the notes are missing."
+fi
+
+echo "==> done. App Store Connect processes the build before TestFlight offers"
+echo "    it, which takes minutes to an hour. The only part of that this waits"
+echo "    on is the build appearing, so that What to Test can be written onto"
+echo "    it — OAA_ASC_NOTES_WAIT=0 skips even that."
