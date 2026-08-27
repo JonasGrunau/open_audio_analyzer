@@ -32,7 +32,9 @@
 #   pull request        checks, engine, the website build
 #   push to main        the same, plus the website deploy
 #   workflow_dispatch   the same, plus the plugin, every installer, the ipa
-#                       and the Android bundle
+#                       and the Android bundle — unless `asc_notes_build` names
+#                       a build, which makes it a notes run and skips all of
+#                       those, because the point of that run is to be cheap
 #   tag v*              the same, plus publish, then testflight and play-store
 #
 # The plugin is on the release side of that line with the installers: three
@@ -75,6 +77,14 @@ on:
     tags: ['v*']
   pull_request:
   workflow_dispatch:
+    inputs:
+      asc_notes_build:
+        description: >-
+          App Store Connect build number to write the store notes onto, and
+          nothing else. For checking that path without spending an upload —
+          see the asc-notes job. Empty runs the ordinary manual build.
+        required: false
+        default: ''
 
 # Pinned to the same version as .tool-versions. Keep the two in step; a CI that
 # passes on a different Flutter than everybody develops against is worse than
@@ -256,7 +266,9 @@ jobs:
   plugin:
     name: Plugin (${{ matrix.os }})
     needs: checks
-    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    if: >-
+      startsWith(github.ref, 'refs/tags/v') ||
+      (github.event_name == 'workflow_dispatch' && inputs.asc_notes_build == '')
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -576,7 +588,9 @@ jobs:
   macos-pkg:
     name: macOS pkg
     needs: [checks, plugin]
-    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    if: >-
+      startsWith(github.ref, 'refs/tags/v') ||
+      (github.event_name == 'workflow_dispatch' && inputs.asc_notes_build == '')
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -635,7 +649,9 @@ jobs:
   windows-installer:
     name: Windows installer
     needs: [checks, plugin]
-    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    if: >-
+      startsWith(github.ref, 'refs/tags/v') ||
+      (github.event_name == 'workflow_dispatch' && inputs.asc_notes_build == '')
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -674,7 +690,9 @@ jobs:
   linux-tarball:
     name: Linux tarball
     needs: [checks, plugin]
-    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    if: >-
+      startsWith(github.ref, 'refs/tags/v') ||
+      (github.event_name == 'workflow_dispatch' && inputs.asc_notes_build == '')
     # The same pin as the AppImage job and now as the plugin job. All three
     # ship binaries that have to start on the oldest distribution this
     # supports, and this one ships two of them in the same file.
@@ -717,7 +735,9 @@ jobs:
   linux-appimage:
     name: Linux AppImage
     needs: checks
-    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    if: >-
+      startsWith(github.ref, 'refs/tags/v') ||
+      (github.event_name == 'workflow_dispatch' && inputs.asc_notes_build == '')
     # Pinned, and not to latest. See the header.
     runs-on: ubuntu-22.04
     steps:
@@ -750,7 +770,9 @@ jobs:
   linux-flatpak:
     name: Linux flatpak
     needs: checks
-    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    if: >-
+      startsWith(github.ref, 'refs/tags/v') ||
+      (github.event_name == 'workflow_dispatch' && inputs.asc_notes_build == '')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -838,7 +860,9 @@ jobs:
   cli:
     name: oaa CLI
     needs: checks
-    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    if: >-
+      startsWith(github.ref, 'refs/tags/v') ||
+      (github.event_name == 'workflow_dispatch' && inputs.asc_notes_build == '')
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -917,7 +941,9 @@ jobs:
   ipa:
     name: iPad IPA
     needs: checks
-    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    if: >-
+      startsWith(github.ref, 'refs/tags/v') ||
+      (github.event_name == 'workflow_dispatch' && inputs.asc_notes_build == '')
     runs-on: macos-latest
     outputs:
       built: ${{ steps.built.outputs.built }}
@@ -1002,7 +1028,9 @@ jobs:
   android-aab:
     name: Android bundle
     needs: checks
-    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    if: >-
+      startsWith(github.ref, 'refs/tags/v') ||
+      (github.event_name == 'workflow_dispatch' && inputs.asc_notes_build == '')
     runs-on: ubuntu-latest
     outputs:
       built: ${{ steps.built.outputs.built }}
@@ -1247,3 +1275,59 @@ jobs:
           OAA_PLAY_TRACK: ${{ vars.OAA_PLAY_TRACK }}
           OAA_PLAY_STATUS: ${{ vars.OAA_PLAY_STATUS }}
         run: sh packaging/android/play_store.sh
+
+  # -------------------------------------------------------------------------
+  # The store notes, written onto a build that already exists
+  #
+  # `testflight.sh` writes What to Test and What's New after every upload, and
+  # until this job the only way to find out whether that worked was to upload:
+  # a tag, a build number spent, and a refusal arriving after the release was
+  # already published. This is the same two code paths with the upload taken
+  # out — it names a build App Store Connect already has and writes onto it.
+  #
+  # `OAA_ASC_NOTES_WAIT` is 0 because there is nothing to wait for. That wait
+  # exists for the minutes after an upload, while Apple turns bytes into a
+  # build resource; a build named by hand was processed long ago.
+  #
+  # **ubuntu, not macOS.** This needs python3, openssl and the network, and
+  # none of altool, xcrun or a Mac — it is the only thing in this file that
+  # reaches App Store Connect without one, and the cheapest runner there is.
+  #
+  # It **fails the run** when Apple refuses something, which is the whole
+  # point. The same refusal inside `testflight.sh` is a warning, because there
+  # a note is not worth failing an upload Apple has already accepted; here the
+  # answer *is* the product.
+  # -------------------------------------------------------------------------
+
+  asc-notes:
+    name: Store notes
+    if: github.event_name == 'workflow_dispatch' && inputs.asc_notes_build != ''
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Write
+        env:
+          OAA_ASC_KEY_ID: ${{ secrets.OAA_ASC_KEY_ID }}
+          OAA_ASC_ISSUER_ID: ${{ secrets.OAA_ASC_ISSUER_ID }}
+          OAA_ASC_KEY: ${{ secrets.OAA_ASC_KEY }}
+          OAA_ASC_NOTES_WAIT: '0'
+          BUILD: ${{ inputs.asc_notes_build }}
+        run: |
+          set -eu
+          if [ -z "${OAA_ASC_KEY:-}" ]; then
+            echo "==> no App Store Connect key; nothing to write."
+            exit 0
+          fi
+          keys="$RUNNER_TEMP/private_keys"
+          mkdir -p "$keys"
+          chmod 700 "$keys"
+          printf '%s' "$OAA_ASC_KEY" | base64 --decode \
+            >"$keys/AuthKey_$OAA_ASC_KEY_ID.p8"
+          version=$(grep '^version:' pubspec.yaml | head -1 |
+            cut -d' ' -f2 | cut -d'+' -f1)
+          echo "==> notes for $version onto build $BUILD"
+          notes=$(python3 packaging/store_notes.py CHANGELOG.md "$version" 4000)
+          python3 packaging/ios/asc_notes.py \
+            "$keys/AuthKey_$OAA_ASC_KEY_ID.p8" com.openaudioanalyzer.oaa \
+            "$BUILD" "$version" "$notes"

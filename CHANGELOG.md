@@ -76,6 +76,17 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `packaging/store_notes.py`. Apple allows 4000 characters against Play's 500,
   so a release usually arrives there with its entries whole. Every build up to
   0.13.0 went to TestFlight with that field empty.
+- A manual run of the workflow can write those notes onto a build App Store
+  Connect already holds, without uploading anything — which is the only way to
+  exercise that path that does not cost a tag and a build number. Naming a
+  build also turns the plugin, the installers, the IPA and the app bundle off
+  for that run.
+- The end-to-end test that carries a DAW's audio through the plugin, the app
+  and out to a display no longer fails when the frame it freezes for comparison
+  carries no oscilloscope audio. A relayed scope run holds what was measured
+  between two sends and is legitimately empty when a publish lands between two
+  of the engine's generations; the test indexed it regardless and died on the
+  arithmetic. It failed the 0.13.0 release with every other job green.
 
 ## [0.13.0] — 2026-08-27
 

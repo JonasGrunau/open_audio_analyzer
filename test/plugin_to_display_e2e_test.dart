@@ -283,6 +283,20 @@ void main() {
           reason: 'the playhead on the display is not advancing',
         );
 
+        // The oscilloscope reaches the display at all. Asserted here, while
+        // frames are still arriving, rather than after the freeze below: the
+        // frozen frame may carry an empty run for a reason that is the
+        // protocol working, and without this that exception could hide a scope
+        // that never relays anything.
+        final scopeArrived = await _waitUntil(
+          () => client.snapshot.scopeFrames > 0,
+        );
+        expect(
+          scopeArrived,
+          isTrue,
+          reason: 'no frame the display decoded carried any scope audio',
+        );
+
         // --- What the display is showing is what the app received ------------
         //
         // Frozen deliberately, and the freeze is the whole trick. Both sides
@@ -333,6 +347,14 @@ void main() {
               isTrue,
               reason: '$field is unmeasured here and $theirs on the display',
             );
+          } else if (theirs.isNaN && field.startsWith('scope[')) {
+            // The one absence on the display that is not a relay failure. The
+            // app's scope is a fixed block and always full; the display's is
+            // the run measured between two sends, and `publishNow` here can
+            // land between two of the engine's generations — so the frame that
+            // is frozen for this comparison legitimately carries no audio to
+            // compare. That the scope relays at all is asserted above, while
+            // frames are still arriving.
           } else {
             // Exact, not close. Both sides hold what a float32 decoded to, so
             // a re-encode is lossless and anything but equality is a field
@@ -440,10 +462,27 @@ Map<String, double> _readings(MeterSource source) => <String, double>{
   // `scope[0]` is older audio than the app's — by design, and the whole reason
   // a remote oscilloscope can draw a contiguous trace at all. What must match
   // is the leading edge, which is the same moment on both sides.
-  'scope[newest].l': source.scope[(source.scopeFrames - 1) * 2],
-  'scope[newest].r': source.scope[(source.scopeFrames - 1) * 2 + 1],
+  'scope[newest].l': _newestScope(source, 0),
+  'scope[newest].r': _newestScope(source, 1),
   'histogram[0]': source.histogram[0],
 };
+
+/// The leading edge of the scope, or absence where there is no scope to lead.
+///
+/// `scopeFrames` is a *count*, and on a display it counts what the app measured
+/// between two sends rather than the fixed block an engine always has. It is
+/// legitimately **zero**: `DisplayHost` clears the run on every send and grows
+/// it only when the engine's generation moves, so a publish that lands between
+/// two generations carries an empty one, which is the gap that file documents.
+///
+/// Indexing it regardless is `scope[-2]`, and that RangeError failed the
+/// v0.13.0 tag run with all sixteen other jobs green — on Linux only, and never
+/// twice in a row, because it is a race between a 5 ms pump and a 21 ms engine.
+double _newestScope(MeterSource source, int channel) {
+  final frames = source.scopeFrames;
+  if (frames <= 0) return double.nan;
+  return source.scope[(frames - 1) * 2 + channel];
+}
 
 /// The non-numeric half of a snapshot. A relay that carried every number and
 /// dropped `hasLoudness` would show a screen of dashes over perfect data.
