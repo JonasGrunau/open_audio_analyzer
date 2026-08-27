@@ -190,4 +190,4 @@ fi
 echo "==> done. App Store Connect processes the build before TestFlight offers"
 echo "    it, which takes minutes to an hour. The only part of that this waits"
 echo "    on is the build appearing, so that What to Test can be written onto"
-echo "    it — OAA_ASC_NOTES_WAIT=0 skips even that."
+echo "    it — OAA_ASC_NOTES_WAIT bounds that wait, and 0 makes it one look."

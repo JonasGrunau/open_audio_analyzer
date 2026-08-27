@@ -35,10 +35,12 @@ set What to Test is to wait for the build to appear and then write to it.
 
 That is why this polls, and why the wait is bounded and can be turned off:
 
-  OAA_ASC_NOTES_WAIT   seconds to wait for the build, 900 by default. `0` skips
-                       the TestFlight note entirely and goes straight to the
-                       listing, which is what a run that must not hold a runner
-                       open wants.
+  OAA_ASC_NOTES_WAIT   seconds to wait for the build, 900 by default. `0` means
+                       look once and carry on — which is what a build named by
+                       hand wants, because it processed long ago and either is
+                       there or is not. It does not mean skip: a run that asks
+                       for notes and silently writes none is the one outcome
+                       this is not allowed to have.
 
 A timeout is not an error. The build is uploaded and will process; only its
 note is missing, and the next release writes its own.
@@ -341,16 +343,18 @@ def main():
     if app is None:
         return 1
 
-    wait = int(os.environ.get("OAA_ASC_NOTES_WAIT", "900"))
-    if wait <= 0:
-        say("OAA_ASC_NOTES_WAIT is 0; What to Test skipped")
+    # `max(0, ...)` rather than a skip branch: zero is one look, which is what
+    # `wait_for_build` does with a deadline already past. A branch here that
+    # skipped instead is what made the job built to prove this path report
+    # success without exercising any of it.
+    wait = max(0, int(os.environ.get("OAA_ASC_NOTES_WAIT", "900")))
+    build = wait_for_build(bearer, app, build_number, wait)
+    if build is None:
+        warn("App Store Connect has no build %s for this app%s"
+             % (build_number,
+                "" if wait else " (looked once; OAA_ASC_NOTES_WAIT is 0)"))
     else:
-        build = wait_for_build(bearer, app, build_number, wait)
-        if build is None:
-            say("build %s has not finished processing; What to Test left unset"
-                % build_number)
-        else:
-            set_what_to_test(bearer, build, text)
+        set_what_to_test(bearer, build, text)
 
     set_whats_new(bearer, app, version, text)
     return 1 if problems else 0

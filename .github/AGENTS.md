@@ -10,7 +10,7 @@ in:
 | pull request | `checks`, `engine`, `website` |
 | push to `main` | the same, and `website` deploys as well as builds |
 | `workflow_dispatch` | the same, plus `plugin`, every installer, `ipa` and `android-aab` |
-| `workflow_dispatch` with `asc_notes_build` | `checks`, `engine`, `website` and `asc-notes` alone — the nine expensive jobs are gated off, because a notes run exists to be cheap |
+| `workflow_dispatch` + `asc_notes_build` | the same, plus `asc-notes` and **not** the nine expensive jobs |
 
 Three of the installer jobs — `macos-pkg`, `windows-installer` and
 `linux-tarball` — additionally `needs: plugin`, because each of them carries
@@ -150,12 +150,12 @@ The jobs are split by what they need, and that split is deliberate:
   Three things about it are deliberate. It runs on **ubuntu**, because the App
   Store Connect API needs python3, openssl and the network and none of altool,
   xcrun or a Mac — it is the only job here that reaches Apple without one. Its
-  wait is **zero**, because `asc_notes.py` polls only for the minutes after an
-  upload while Apple turns bytes into a build resource, and a build named by
-  hand was processed long ago. And it **fails on a refusal**, where the same
-  refusal inside `testflight.sh` is a warning: there a note is not worth
-  failing an upload Apple has already accepted, and here the answer is the
-  entire product of the run.
+  wait is **zero**, which is one look rather than none — `asc_notes.py` polls
+  only for the minutes after an upload while Apple turns bytes into a build
+  resource, and a build named by hand was processed long ago. And it **fails
+  on a refusal**, where the same refusal inside `testflight.sh` is a warning:
+  there a note is not worth failing an upload Apple has already accepted, and
+  here the answer is the entire product of the run.
 
 - **`android-aab` and `play-store`** are the same path for the same reason, and
   Play is the stricter store. A version code it has accepted can never be
