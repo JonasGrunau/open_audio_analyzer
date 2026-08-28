@@ -84,19 +84,19 @@ approximating.
 
 | | What ships today |
 |:-:|---|
-| 🎚️ | **All fourteen modules exist and measure something.** Open Audio Analyzer opens on a working meter bridge — loudness, super, digital, VU, validator, histogram, alert — with the analyser, oscilloscope, spectrogram, phase scope and stereo cloud on a second tab. |
+| 🎚️ | **All fourteen modules measure something.** The app opens on a working meter bridge — loudness, super, digital, VU, validator, histogram, alert — with the analyser, oscilloscope, spectrogram, phase scope and stereo cloud on a second tab. |
 | 🧩 | **The canvas is arrangeable**: add, move, resize, duplicate, delete, tabs, undo. |
-| 📐 | **Loudness and true peak are verified** against the EBU Tech 3341/3342 cases, and the spectrum against a sine of known amplitude on a bin centre, on Linux, macOS and Windows on every push. |
-| 💾 | **What you set up is remembered** — the layout, the delivery target, the skin and the capture device — and reopens with the window. Settings, presets, your own delivery targets and your own skins are plain JSON files in a documented directory; see [Configuration](#-configuration). |
+| 📐 | **Loudness and true peak are verified** against the EBU Tech 3341/3342 cases, and the spectrum against a sine of known amplitude, on Linux, macOS and Windows on every push. |
+| 💾 | **What you set up is remembered** — layout, delivery target, skin and capture device — as plain JSON in a documented directory. See [Configuration](#-configuration). |
 | 🔍 | **Files are analysed offline** by the app and by the [`oaa` CLI](#-analysing-files). |
-| 📱 | **A tablet [mirrors the canvas](#-roadmap)** over Wi-Fi. Flip **PUBLISH** in the desktop's menu bar; the tablet finds it by itself, or reads a **pairing code** off its screen, or takes an address typed by hand — three routes, because the first one is what a venue's Wi-Fi blocks. |
+| 📱 | **A tablet mirrors the canvas** over Wi-Fi. Flip **PUBLISH** in the menu bar; the tablet finds it by itself, reads a pairing code off the screen, or takes an address typed by hand. Three routes, because the first one is what a venue's Wi-Fi blocks. |
 | 🎛️ | **A headless [VST3 / AU plugin](#-in-a-daw)** meters what your DAW is playing. |
 | 🔊 | **Your system's own output is metered with nothing to install** — WASAPI loopback on Windows, a Core Audio process tap on macOS 14.2+, a monitor source on Linux. No driver, and on macOS the audio still reaches your speakers while it is measured. |
-| 📦 | **The installers carry the plugin and install it for you**, behind a checkbox that starts ticked — a macOS pkg, a Windows installer and a Linux tarball, plus an AppImage and a flatpak for the application alone. See [Installing](#-installing), and the [documentation site](https://open-audio-analyzer.com/docs). |
-| 🚧 | **What is *not* built** is listed under [Known gaps](#-known-gaps-stated-plainly), and the list is honest rather than short. |
+| 📦 | **The installers carry the plugin**, behind a checkbox that starts ticked: a macOS pkg, a Windows installer and a Linux tarball, plus an AppImage and a flatpak for the app alone. See [Installing](#-installing). |
+| 🚧 | **What is *not* built** is under [Known gaps](#-known-gaps-stated-plainly), and the list is honest rather than short. |
 
-See [Roadmap](#-roadmap), and [docs/PLAN.md](docs/PLAN.md) for the plan as it
-was approved.
+See [Roadmap](#-roadmap), and [docs/PLAN.md](docs/PLAN.md) for the plan as it was
+approved.
 
 ---
 
@@ -104,6 +104,8 @@ was approved.
 
 Every one of them is [`ModuleFrame`](packages/oaa_ui/lib/src/module_frame.dart)
 plus a painter, reads the same `MeterSource`, and repaints from the same clock.
+A module that also owned its border and title treatment would drift from the
+other thirteen.
 
 | Module | What it shows |
 |---|---|
@@ -115,31 +117,28 @@ plus a painter, reads the same `MeterSource`, and repaints from the same clock.
 | **Alert Meter** | One measurement, watched, with the worst it has been latched. |
 | **Validator** | The delivery decision, as a table. |
 | **Histogram** | Loudness against time: how the programme moved, and when it was over target. Both bands averaged over a window its menu names. |
-| **Loudness Distribution** | How much of the programme was spent at each loudness, bracketed between the two percentiles LRA is the distance between, with the reading on the bracket. The axis fits itself to the programme — a distribution that occupies eight of the sixty published decibels is drawn across the module rather than into a fifth of it — and `Scale` in its menu gives the whole −60 to 0 range back. |
+| **Loudness Distribution** | How much of the programme was spent at each loudness, bracketed between the two percentiles LRA is the distance between. The axis fits the programme, so a distribution occupying eight decibels is drawn across the module instead of into a fifth of it; `Scale` gives the whole −60 to 0 range back. |
 | **Spectrum Analyzer** | Level against frequency, log-spaced, tilted so a mix reads roughly flat, with a peak hold. |
-| **Spectrogram** | Frequency against time, with level as colour. `Colour` chooses the ramp: the skin's own, whose brightness rises monotonically through the accent hue, or `Full RGB` — the spectrogram rainbow, indigo through green and yellow to red and white, which separates far more steps of level than one hue can. The skin ramp is what it opens on. |
-| **Oscilloscope** | The waveform itself, one lane per channel or both overlaid: triggered at scope speeds, rolling from half a second up, locked to the DAW's bar grid when a plugin is attached, or swept from a transient at a level you set. Height and trigger threshold are sliders on the module, because both are chosen by watching the picture move; `AUTO` beside the threshold takes it from the loudest transient instead, six decibels under so the sweep starts inside the attack rather than on top of it. `Colour: Full RGB` draws each column in the colour of its own balance of bass, mids and highs — red, green and blue as the three channels, so a kick is red, a hat is blue and a full-spectrum hit is white — taken from the spectrum measured for the block that column's samples came from and kept with the column, so the history holds still. It opens on the accent hue it always had. |
-| **Phase Scope** | A goniometer: left against right, rotated so mono stands upright. Needs two channels; on a one-channel source it says **MONO SOURCE** rather than drawing the straight line one produces. |
+| **Spectrogram** | Frequency against time, level as colour. `Colour` picks the ramp: the skin's own, rising monotonically in brightness through the accent hue, or `Full RGB`, the spectrogram rainbow, which separates far more steps of level than one hue can. |
+| **Oscilloscope** | The waveform, one lane per channel or both overlaid: triggered at scope speeds, rolling from half a second up, locked to the DAW's bar grid when a plugin is attached, or swept from a transient. Height and threshold are sliders on the module, because both are chosen by watching the picture move; `AUTO` takes the threshold six decibels under the loudest transient, so the sweep starts inside the attack rather than on top of it. `Colour: Full RGB` draws each column in its own balance of bass, mids and highs, so a kick is red, a hat is blue and a full-spectrum hit is white. |
+| **Phase Scope** | A goniometer: left against right, rotated so mono stands upright. Needs two channels; on a mono source it says **MONO SOURCE** rather than drawing the straight line one produces. |
 | **Stereo Cloud** | Where each frequency sits in the stereo image, accumulated over time. |
 
-Every one of these that draws a bar, an arc or an area against the delivery
-target splits it at the target and draws the part above in `over` — the LUFS
-Meter's two bars, the Super Meter's three arcs, the Histogram and the Loudness
-Distribution. The split is a clip at the target, not a verdict on the whole
-shape: what carries the meaning is how much of the reading is over. `over` is
-the one mark for "past the number you set", wherever it is drawn.
+Every module that draws against the delivery target splits its bar, arc or area
+at the target and draws the part above in `over`. The split is a clip rather
+than a verdict on the whole shape: what carries the meaning is how much of the
+reading is over.
 
 ---
 
 ## ⚡ Why it is built this way
 
-A meter that stutters is not a meter. Everything below follows from one rule:
+Everything below follows from one rule, because a meter that stutters is not a
+meter:
 
 > [!IMPORTANT]
 > **Measurements never cross an isolate boundary, never allocate per frame, and
 > never rebuild a widget.**
-
-Three tiers, and the boundary between each is deliberate:
 
 | Tier | Thread | Job |
 |---|---|---|
@@ -151,35 +150,30 @@ Three tiers, and the boundary between each is deliberate:
 
 Once per frame, [`MeterClock`](lib/src/clock/meter_clock.dart) makes a single
 `@Native(isLeaf: true)` call to `oaa_snapshot_acquire` — an atomic load, a
-memcpy, and a second atomic load, with no VM state transition. Then every
-painter reads `Float32List` views that were **built once at startup** over
-native memory that never moves.
+memcpy, and a second atomic load, with no VM state transition. Painters then
+read `Float32List` views built once at startup over native memory that never
+moves, and are constructed with `CustomPainter(repaint: clock)`, which re-rasters
+them *without rebuilding the widget*. A frame costs one FFI call plus N `paint()`
+calls, and allocates nothing.
 
-The widget tree is not involved at any point. Painters are constructed with
-`CustomPainter(repaint: clock)`, which re-rasters them *without rebuilding the
-widget*. A frame costs one FFI call plus N `paint()` calls, and allocates
-nothing.
-
-Three consequences worth naming, because they are what usually goes wrong:
+Four consequences worth naming, because they are what usually goes wrong:
 
 - **One clock, not fourteen.** Independent tickers drift, and two meters showing
   the same quantity could then disagree within a single frame. On a measurement
   tool that is a correctness bug, not a cosmetic one.
 - **Measurements are consumed at the rate they are published; pixels are drawn
-  at the rate you asked for.** The two are separate channels on that one clock.
-  Dropping to 30 fps halves the rasterising and changes nothing about what the
-  meters have seen — which matters because the engine's snapshot has one slot,
-  so a measurement nobody reads in time is gone, and a display whose axis is
-  time would have holes in it rather than a coarser picture.
+  at the rate you asked for.** Dropping to 30 fps halves the rasterising and
+  changes nothing about what the meters have seen. The engine's snapshot has one
+  slot, so a measurement nobody reads in time is gone, and a display whose axis
+  is time would have holes rather than a coarser picture.
 - **Text is cached by formatted string.** A value changes continuously; the
-  string rounded to one decimal changes about ten times a second. Laying out a
-  `ui.Paragraph` on the other fifty frames is pure waste, so
-  [`ReadoutPainter`](packages/oaa_ui/lib/src/readout.dart) rebuilds only when
-  the string actually differs.
-- **The reader retries, never the writer.** The snapshot is a seqlock precisely
-  because it is wait-free for the analysis thread. A mutex would let a
-  descheduled UI thread stall the thread that must never stall — and when that
-  thread falls behind, the ring overruns and signal is lost for good.
+  string rounded to one decimal changes about ten times a second, so
+  [`ReadoutPainter`](packages/oaa_ui/lib/src/readout.dart) lays out a
+  `ui.Paragraph` only when the string actually differs.
+- **The reader retries, never the writer.** A seqlock is wait-free for the
+  analysis thread. A mutex would let a descheduled UI thread stall the thread
+  that must never stall, and when that thread falls behind the ring overruns and
+  signal is lost for good.
 
 ### 🖌️ Rendering, per module
 
@@ -187,20 +181,20 @@ Three consequences worth naming, because they are what usually goes wrong:
 |---|---|
 | Number box, LUFS, Alert, Validator | Cached `ui.Paragraph`, rebuilt on string change only |
 | Digital meter | Batched `drawRect`, one reused `Paint` |
-| VU meter | The whole face redrawn each frame — four `drawArc`s and eleven `drawLine`s, cheaper to draw than to cache and keep in step with a resize. The needle is one `Path`, reset and refilled rather than reallocated; the scale labels are cached paragraphs, each placed only where it clears the boxes already placed |
-| Spectrum analyzer | `drawRawPoints` over the native `Float32List` — C writes screen-space x,y directly. The drawn level is a one-pole average of the published bands, at the time constant its `Response` menu names, plus the fixed per-band offset its `Tilt` menu names; the line above it is the envelope of that curve and follows the same pole |
-| Phase scope | The last forty frames of samples in a ring, one `drawRawPoints` each at its age's brightness — the trail is the frames, not a faded picture |
+| VU meter | The whole face redrawn each frame — four `drawArc`s and eleven `drawLine`s, cheaper than caching it and keeping it in step with a resize. The needle is one `Path`, reset and refilled; the scale labels are cached paragraphs, each placed where it clears the boxes already placed |
+| Spectrum analyzer | `drawRawPoints` over the native `Float32List` — C writes screen-space x,y directly. The drawn level is a one-pole average at the time constant `Response` names, plus the offset `Tilt` names; the line above it is that curve's envelope on the same pole |
+| Phase scope | The last forty frames of samples in a ring, one `drawRawPoints` each at its age's brightness. The trail is the frames, not a faded picture |
 | Stereo cloud | A decayed accumulator per two-pixel cell, emitted as points sorted into brightness buckets |
-| Spectrogram | One byte of palette step per cell as the record, one RGBA buffer beside it shifted a column per published frame and uploaded as a pixel-backed `ui.Image` that paint draws with a single `drawImageRect`. Bounded by the module's area and independent of what the signal does. A skin or a `Colour` change rebuilds the 48-step palette and re-renders the buffer from the record, moving no cell |
-| Histogram | Ten columns a second into a fixed ring of loudness values, redrawn whole every frame as three `drawRawPoints`. Kept as measurements, not pixels, so it survives a resize — and raw, with `Smoothing` applied by one running-sum pass on the way out, so the setting redraws the whole programme rather than taking effect from where it was chosen |
-| Loudness distribution | The engine's 120 published bins as one-pixel columns that tile exactly, over an axis fitted to what is drawn on it — every occupied bin, the gated range and the target — rounded out to whole ticks and left alone until the distribution grows past it, so the scale never slides while it is being read — one `drawRawPoints` for the fill and one for the silhouette's top edge, each clipped twice so either side of the target takes its own colour. One stroke per bin, half a pixel oversized against seams, composited every overlap twice and drew a fence |
+| Spectrogram | One byte of palette step per cell as the record, plus an RGBA buffer shifted a column per published frame and uploaded as a pixel-backed `ui.Image` for a single `drawImageRect`. Bounded by the module's area, whatever the signal does. A skin or `Colour` change re-renders the buffer from the record, moving no cell |
+| Histogram | Ten columns a second into a fixed ring of loudness values, redrawn whole as three `drawRawPoints`. Kept as measurements rather than pixels, so it survives a resize, and raw, with `Smoothing` applied on the way out, so the setting redraws the whole programme |
+| Loudness distribution | The engine's 120 bins as one-pixel columns that tile exactly, over an axis fitted to every occupied bin, the gated range and the target, rounded to whole ticks and left alone until the distribution outgrows it, so the scale never slides while it is being read. One `drawRawPoints` for the fill and one for the top edge, each clipped twice so either side of the target takes its own colour |
 
 ---
 
 ## 📐 Measurement
 
-Correctness is the entire product, so every metric is pinned to a published
-spec rather than to intuition.
+Correctness is the entire product, so every metric is pinned to a published spec
+rather than to intuition.
 
 | Quantity | Definition |
 |---|---|
@@ -211,73 +205,63 @@ spec rather than to intuition.
 | **True peak** | BS.1770-4 Annex 2, 4× oversampling with the specified 48-tap polyphase FIR, at every sample rate |
 | **Spectrum** | 4096-point Hann window at a 1024-sample hop, zero-padded to a 16384-point transform and mapped onto 512 log-spaced bands with **peak-per-bin** so narrow peaks survive; bands too narrow to hold a bin read between two. Window-compensated: a full-scale sine reads 0.0 dBFS on a bin centre and within 0.3 dB off it |
 | **Correlation** | Running Pearson over a sliding window |
-| **Crest** | Sample peak minus RMS over the same block — the block's own values, not the held peak and smoothed RMS the meters draw, which settle at different rates and whose difference drifts on its own. Exactly 3.0103 dB for a sine, 0 for DC |
+| **Crest** | Sample peak minus RMS over the same block — the block's own values, not the held peak and smoothed RMS the meters draw, which settle at different rates. Exactly 3.0103 dB for a sine, 0 for DC |
 | **Clip** | Longest run of consecutive samples at or above 0.999 since the reset, per channel. Latched, so a clip that lasted three samples is still visible when you look back |
 
-Every one of these is measured today and checked in CI, the spectrum included:
-a full-scale sine on a bin centre reads 0.0 dBFS on every push.
-`OAA_FLAG_SPECTRUM_UNAVAILABLE` stays in the ABI and consumers must keep
-checking it, and this build does set it: every reset raises the flag and it
-clears once a full window has been transformed, about 85 ms in. Until then the
-bands sit at the floor, which is indistinguishable from digital silence. A
-future source that cannot produce a spectrum at all would say so the same way.
+All of these are measured today and checked in CI, the spectrum included.
+`OAA_FLAG_SPECTRUM_UNAVAILABLE` stays in the ABI and consumers must keep checking
+it: every reset raises the flag and it clears once a full window has been
+transformed, about 85 ms in.
 
 ### 🎯 On dynamics, and on honesty
 
 Decibel reports a dynamics figure called *TrueDyn*. It is proprietary and
 undocumented, so any claim to match it would be a guess presented as a
-measurement. Open Audio Analyzer does not implement it.
+measurement, and Open Audio Analyzer does not implement it.
 
-Instead Open Audio Analyzer reports `DR-S` and `DR-I`, defined as `TruePeak −
-LUFS-S` and `TruePeakMax − LUFS-I`, published in
-[docs/METRICS.md](docs/METRICS.md) and reproducible from the definition by
-anybody who wants to check. `PSR` and `PLR` are the same two quantities under
-the names in wider use, and are offered as well — four names for two numbers,
-each computed once so the pair cannot drift, and printed once in a report rather
-than twice under different headings.
+Instead it reports `DR-S` and `DR-I`, defined as `TruePeak − LUFS-S` and
+`TruePeakMax − LUFS-I`, published in [docs/METRICS.md](docs/METRICS.md) and
+reproducible by anybody who wants to check. `PSR` and `PLR` are the same two
+quantities under the names in wider use: four names for two numbers, each
+computed once so the pair cannot drift.
 
-The same principle runs through the code. A quantity this build does not
-measure is **NaN**, never zero — zero is a legitimate reading for correlation,
-balance and several dB quantities, so it cannot double as "no data" — and the
-UI renders it as an em dash. No quantity in the spec table above is unmeasured
-in this build, so in practice a dash means a reading that is not yet *defined*:
-momentary loudness needs 400 ms of signal, short-term needs 3 s, and integrated
-needs one gating block above the absolute gate. Each shows a dash until it
-means something. A remote display that has lost its host shows them too — a
-frozen meter is indistinguishable from a quiet passage.
+A quantity this build does not measure is **NaN**, never zero — zero is a
+legitimate reading for correlation, balance and several dB quantities, so it
+cannot double as "no data" — and the UI renders it as an em dash. Nothing in the
+table above is unmeasured, so in practice a dash means a reading that is not yet
+*defined*: momentary loudness needs 400 ms of signal, short-term 3 s, integrated
+one gating block above the absolute gate. A remote display that has lost its host
+shows dashes too, since a frozen meter is indistinguishable from a quiet passage.
 
 ### ✅ The correctness gate
 
-CI runs the **EBU Tech 3341 and 3342** cases on Linux, macOS and Windows on
-every push, and fails the build if any reading is outside the standard's stated
+CI runs the **EBU Tech 3341 and 3342** cases on Linux, macOS and Windows on every
+push, and fails the build if any reading is outside the standard's stated
 tolerance. A loudness meter that has never been run against the reference cases
 is a number generator.
 
 The signals are **generated, not downloaded** — every case is a sine at a stated
-level or a sequence of them, so the suite needs no fixtures, no network and no
+level, or a sequence of them — so the suite needs no fixtures, no network and no
 WAV decoder, and each expected value is derived from the standard in a comment
-rather than copied from somebody's output. Two extra properties are asserted
+instead of copied from somebody's output. Three further properties are asserted
 that the standard does not state but no correct implementation can violate:
 
-- **Sample rate independence** — the same tone reads the same at 44.1, 48, 88.2,
-  96 and 192 kHz. This catches the tempting shortcut of using the 48 kHz
+- **Sample rate independence.** The same tone reads the same at 44.1, 48, 88.2,
+  96 and 192 kHz. This catches the tempting shortcut of reusing the 48 kHz
   coefficient table BS.1770-4 prints instead of designing the filter at the
   stream's rate: it passes every 48 kHz test there is, and is wrong by a
   fraction of a dB on the most common delivery rate in music.
-- **Block size independence** — ten seconds pushed in one call, in 512-frame
+- **Block size independence.** Ten seconds pushed in one call, in 512-frame
   device blocks, and in 377-frame chunks agree to 0.001 LU.
-
-A third property is asserted now that there is a decoder: **decoding does not
-change a reading.** A generated signal analysed directly, and the same signal
-written to a WAV, decoded and analysed again, produce identical numbers to the
-bit. That is the property offline analysis rests on, so it is asserted rather
-than assumed.
+- **Decoding does not change a reading.** A generated signal analysed directly,
+  and the same signal written to a WAV, decoded and analysed again, agree to the
+  bit. Offline analysis rests on that, so it is asserted rather than assumed.
 
 **The official vectors are run too, and they are not a gate.** Neither the EBU
-nor the ITU licenses its test material for redistribution here, and fetching
-811 MB in CI would put a network dependency in front of the one suite that must
-never be flaky — so `packages/oaa_engine/test/vectors_test.dart` skips unless it
-is told where an unzipped copy is:
+nor the ITU licenses its material for redistribution here, and fetching 811 MB
+in CI would put a network dependency in front of the one suite that must never
+be flaky, so `packages/oaa_engine/test/vectors_test.dart` skips unless told
+where an unzipped copy is:
 
 ```sh
 cd packages/oaa_engine
@@ -286,101 +270,101 @@ OAA_VECTORS=~/ebu-loudness-test-set OAA_VECTORS_ITU=~/bs2217 \
 ```
 
 **All 112 cases pass** — Table 1 of EBU Tech 3341 entire, Table 1 of Tech 3342,
-and the compliance material of Report ITU-R BS.2217, each against its own stated
-tolerance.
+and the compliance material of Report ITU-R BS.2217.
 
 > [!NOTE]
 > Running them found two real defects, which is the argument for material
-> somebody else made. Tech 3341's tests 13 and 14 slide a 400 ms tone — exactly
-> one momentary window — through twenty files in 20 ms steps, and momentary
-> loudness advanced only every 100 ms, so sixteen of the twenty read up to
-> 0.45 LU low. And the ITU's two 7.1 files read 0.35 LU high, because the
-> +1.5 dB surround weight was reaching the rear pair as well as the side pair.
-> Both are fixed; neither is expressible as a signal a generated suite would
-> think to write. See [CHANGELOG.md](CHANGELOG.md) for what moved and by how
-> much, and [docs/METRICS.md](docs/METRICS.md#conformance) for the whole run.
+> somebody else made. Tech 3341's tests 13 and 14 slide a 400 ms tone through
+> twenty files in 20 ms steps; momentary loudness advanced only every 100 ms, so
+> sixteen of the twenty read up to 0.45 LU low. And the ITU's two 7.1 files read
+> 0.35 LU high, because the +1.5 dB surround weight was reaching the rear pair as
+> well as the side pair. Both are fixed, and neither is expressible as a signal a
+> generated suite would think to write. See [CHANGELOG.md](CHANGELOG.md) for what
+> moved and by how much.
 
 ---
 
 ## 🧩 Layout
 
-**The window is two bars and a canvas.** Across the top is the **menu bar**:
-the File menu at the far left where a platform draws one, ANALYSE FILE beside
-it, the open preset's name centred in the row, and the pairing code, PUBLISH,
-ATTACH, settings, restart and `?` packed against the right edge. Across the
-bottom is the **status bar**: what is being measured and in what format on the
-left, and the DAW's playhead, the elapsed clock and the delivery target on the
-right. Everything you *read* is in one row and everything you *press* is in the
-other, and on macOS the top row is the window's title bar as well — which is why
-the document's name is centred in it.
+**The window is two bars and a canvas.** Across the top: the File menu where a
+platform draws one, ANALYSE FILE, the open preset's name centred in the row, and
+the pairing code, PUBLISH, ATTACH, settings, restart and `?` against the right
+edge. Across the bottom: what is being measured and in what format on the left,
+the DAW's playhead, the elapsed clock and the delivery target on the right.
+Everything you *read* is in one row and everything you *press* is in the other,
+and on macOS the top row is the window's title bar as well, which is why the
+document's name is centred in it. They were one row for eight phases and could
+not hold both jobs — the document's name had the highest width gate in the bar
+and vanished on any window under 1266 px, and PUBLISH, whose absence takes a
+capability away rather than hiding it, was dropped next.
 
-They were one row for eight phases, and it could not hold both jobs: the readings
-and eight commands together left the document's own name with the highest width
-gate in the bar, so it was the first thing to disappear on any window under
-1266 px. Splitting them dropped that to 900, and stopped the row dropping
-PUBLISH — the one control whose absence used to take a capability away rather
-than hide it — at any width at all.
+The canvas is a **24-column snapping grid** rather than Decibel's free pixel
+positioning. 24 divides by 2, 3, 4, 6, 8 and 12, so halves, thirds and quarters
+are all exact; a 12-column grid cannot express thirds and quarters at once,
+which is the first thing anybody wants when arranging meters.
 
-Open Audio Analyzer's canvas is a **24-column snapping grid** rather than
-Decibel's free pixel positioning. 24 divides by 2, 3, 4, 6, 8 and 12, so halves,
-thirds and quarters are all exact — a 12-column grid cannot express thirds and
-quarters at once, which is the first thing anybody wants when arranging meters.
+**The row count is fixed too, at 16.** Square cells and a scrolling canvas keep
+module aspect ratios identical everywhere and are wrong: on a 32" display a cell
+becomes 160 px, a six-row meter becomes 960 px tall, and a layout built on a
+laptop now needs scrolling. So both axes are fixed and cells are whatever shape
+the window makes them, which costs nothing because every painter handles
+arbitrary aspect anyway. A preset therefore stores grid cells and is
+screen-independent by construction: Decibel stores fractions of the window and
+reconstitutes them per display, while Open Audio Analyzer opens the same layout
+on a 32" monitor and an 11" tablet with nobody writing responsive code.
 
-**The row count is fixed too, at 16.** The obvious alternative — square cells
-and a canvas that scrolls — keeps module aspect ratios identical everywhere, and
-is wrong: on a 32" display a cell becomes 160 px, a six-row meter becomes 960 px
-tall, and a layout built on a laptop now needs scrolling. A meter bridge you
-have to scroll is not a meter bridge. So both axes are fixed and cells are
-whatever shape the window makes them, which costs nothing because every painter
-has to handle arbitrary aspect anyway — nothing stops you resizing a phase scope
-to 8×2.
+**Drag a module's title bar** to move it, **drag the corner grip** to resize,
+**alt-drag** to duplicate, **right-click or long-press empty canvas** to add a
+module there, **right-click a module** for its options, and **right-click or
+long-press a tab** to rename, duplicate or delete it. Buttons for add, undo and
+redo sit in the tab strip as well, because tablets have neither a right mouse
+button nor `⌘Z`.
 
-The practical win is that a preset stores grid cells, so it is
-screen-independent by construction. Decibel stores fractions of the window and
-reconstitutes them per display; Open Audio Analyzer opens the same layout on a
-32" monitor and an 11" tablet with nobody writing responsive code.
-
-The interactions: **drag a module's title bar** to move it, **drag the corner
-grip** to resize, **alt-drag** to duplicate, **right-click or long-press empty
-canvas**
-to add a module there, **right-click a module** for its options, and
-**right-click or long-press a tab** to rename, duplicate or delete it. Buttons
-for add, undo and redo sit in the tab strip as well, because tablets have
-neither a right mouse button nor `⌘Z`.
-
-A finger gets a larger target than the one that is drawn. The title bar accepts
-a drag 40 px down from a module's top edge rather than the 24 px it paints, and
-the corner grip accepts one from a 32 px square rather than a 16 px one — both
-invisible, and both admitted to touch and stylus alone, so a mouse still moves
-and resizes exactly what it can see. A cursor has a hotspot one pixel across and
-says what it is over; a fingertip has neither.
+A finger gets a larger target than the one that is drawn: 40 px of title bar
+rather than the 24 px it paints, a 32 px corner grip rather than 16 px. Both are
+invisible and both are admitted to touch and stylus alone, so a mouse still
+moves and resizes exactly what it can see. A cursor has a hotspot one pixel
+across and says what it is over; a fingertip has neither.
 
 Nothing on the canvas is a double click. A double-tap recogniser holds Flutter's
-gesture arena for 300 ms before it gives up, and every button underneath one
-waits that long to fire — which is a third of a second of an application that
-feels broken, in exchange for a gesture a long press does better on both a mouse
-and a tablet.
+gesture arena for 300 ms before giving up, and every button underneath one waits
+that long to fire — a third of a second of an application that feels broken, in
+exchange for a gesture a long press does better on both a mouse and a tablet.
+The one exception is the window's top edge on macOS, where the menu bar *is* the
+title bar: double-clicking it does whatever the Mac's "double-click a window's
+title bar to" setting says, because a window that ignores that gesture ignores
+the system. Flutter recognises nothing but a single click there; AppKit pairs
+them in the runner, which is the only side that knows the interval this user set.
 
-The one double click in the application is the window's own top edge on macOS,
-where the menu bar *is* the title bar: double-clicking it does whatever the
-Mac's "double-click a window's title bar to" setting says, because a window that
-ignores that gesture is a window that ignores the system. Flutter still
-recognises nothing but a single click there — AppKit pairs them, in the runner,
-which is also the only side that knows the interval this user set.
+**Modules do not overlap, and a drop that would overlap is refused.** Allowing
+overlap turns a meter bridge into a stack of half-hidden panels and needs a
+z-order; pushing neighbours aside, as most dashboard grids do, means a drag near
+an edge can irreversibly rearrange a layout you spent ten minutes on. While the
+pointer is down the canvas becomes the placement grid — cells ruled inside a
+border one gutter outside the modules, every other module dimmed, the target
+cells bright when the drop is legal and red when it is not. The meters do not
+stop, because dimming is a wash painted over them rather than a pause, and a
+wash rather than a blur because a full-screen blur would be recomputed every
+frame over exactly the readings that are still arriving.
+
+A module resized below its minimum shows `TOO SMALL` instead of an unreadable
+smear, and a module kind with no painter yet says `NOT BUILT YET` instead of
+showing an empty panel that would read as a broken meter.
 
 ### ⌨️ Keyboard
 
-Press `?` or `F1`, or the `?` at the end of the menu bar. Open Audio Analyzer draws its
-own chrome, so apart from the File menu there is no menu bar to read a shortcut
-off — without that sheet most of them would be undiscoverable by design.
+Press `?` or `F1`, or the `?` at the end of the menu bar. Open Audio Analyzer
+draws its own chrome, so apart from the File menu there is no menu bar to read a
+shortcut off, and without that sheet most of them would be undiscoverable by
+design.
 
 `⌫` deletes the selection, arrow keys nudge it a cell and `⇧`+arrows resize it,
 `⌘Z` / `⌘⇧Z` undo and redo, `⌘D` duplicates, `1`–`9` switch tabs, `⌘R` restarts
 the measurement, `⌘O` opens a preset and `⌘S` saves it, `⌘I` analyses an audio
 file. The full list is on the
-[documentation site](https://open-audio-analyzer.com/docs/keyboard),
-and it is not written twice: the page, the in-app sheet, the bindings themselves
-**and the key equivalents in the macOS File menu** all come from one table in
+[documentation site](https://open-audio-analyzer.com/docs/keyboard), and it is
+not written twice: the page, the in-app sheet, the bindings and the key
+equivalents in the macOS File menu all come from one table in
 `lib/src/app/shortcuts.dart`, and a test fails if the page has drifted from it.
 
 Three details that are decisions rather than defaults:
@@ -394,63 +378,40 @@ Three details that are decisions rather than defaults:
   means the tenth press of `→` moves the module and the eleventh does not, with
   no way to feel where the edge was. It is the same rule a drag follows.
 
-**Modules do not overlap, and a drop that would overlap is refused.** The two
-alternatives are worse: allowing overlap turns a meter bridge into a stack of
-half-hidden panels and needs a z-order, and pushing neighbours aside — what most
-dashboard grids do — means a drag near an edge can rearrange a layout you spent
-ten minutes on, irreversibly. Open Audio Analyzer shows the target cells while
-the pointer is down — bright when the drop is legal, red when it is not — and an
-illegal drop simply does not happen. Nothing moves that you did not move.
+### 🗂️ Presets, targets and skins
 
-While the pointer is down the canvas becomes the placement grid: the cells are
-ruled inside a border that sits one gutter outside the modules, and every module
-except the one being carried is dimmed. A drop target is easy to place against
-ruled cells and hard to find among a dozen meters that are all still moving.
-The meters do not stop — dimming is a wash painted over them, not a pause, and
-it is a wash rather than a blur because a full-screen blur would be re-computed
-every frame over exactly the readings that are still arriving.
-
-A module resized below its minimum shows `TOO SMALL` instead of an unreadable
-smear — a spectrum analyser in two cells is not a small spectrum analyser. A
-module kind that has no painter yet says `NOT BUILT YET` rather than showing an
-empty panel, which would read as a meter that is broken.
-
-**Presets, Calibrations and Skins** are three independent axes, as in Decibel,
-including the `from preset` indirection. Null means *follow the preset*; a
-concrete id means the user pinned that choice and opening a preset must leave it
-alone. Without that distinction, either presets cannot carry a target or an
-explicit choice gets silently overwritten.
+Three independent axes, as in Decibel, including the `from preset` indirection.
+Null means *follow the preset*; a concrete id means the user pinned that choice
+and opening a preset must leave it alone. Without that distinction, either
+presets cannot carry a target or an explicit choice gets silently overwritten.
 
 **A preset is a document, and the File menu treats it like one.** `Open…` picks
 one through the platform's own dialog, starting in the presets folder and
 reaching anywhere else you point it; `Save` writes back to the file it came
 from; `Save as…` places a copy anywhere and takes the preset's name from the
-filename, which is why there is no name field. A layout nobody has saved yet is
-called **Unnamed**, and that is the word the save dialog opens with for you to
-replace. The open preset's name is centred in the menu bar — it is the window's
-title, and on macOS it literally is — with a dot beside it when the canvas
-differs from the file. On macOS the menu is in the system menu bar; on Windows
-and Linux it is the FILE button at the far left of that same row.
+filename, which is why there is no name field. An unsaved layout is called
+**Unnamed**, and that is the word the save dialog opens with. The open preset's
+name is centred in the menu bar, with a dot beside it when the canvas differs
+from the file. On macOS the menu is in the system menu bar; on Windows and Linux
+it is the FILE button at the far left of that same row.
 
 Whether a preset carries the delivery target and the skin is a property of the
-preset — two ticked rows in that menu, each asking whether the preset should
-carry one — rather than two switches beside a Save button. They cannot go in
-the platform's save dialog: `file_selector`'s macOS panel exposes five
-properties and no accessory view, Windows would need a plugin of its own, and
-Linux's `GtkFileChooserNative` has no extra-widget API left at all. As properties of the
-document they also survive a save, which the switches did not — see the
-`Fixed` entry in `CHANGELOG.md`.
+preset, set by two ticked rows in that menu. They cannot go in the platform's
+save dialog — `file_selector`'s macOS panel has no accessory view, Windows would
+need a plugin of its own, and Linux's `GtkFileChooserNative` has no extra-widget
+API left — and as properties of the document they also survive a save, which the
+switches they replaced did not.
 
 Delivery targets ship as **data**, not code, so the set can be corrected and
-extended without a release. Six are built in: **Streaming (−14 LUFS)** — which
-is Spotify, Apple Music, YouTube, Amazon and Tidal, all of which normalise to
-about the same place, so one target with their names in its note beats five
-identical entries — plus **Spotify Loud**, **Podcast (−16 LUFS)**,
-**EBU R 128**, **ATSC A/85** and **CD / no normalisation**. Anything else is a
-JSON file you write; see [Configuration](#-configuration). **Reset**, beside
-Edit in Settings, deletes every target you wrote and puts those six back — which
-is also how a correction to a built-in is undone, since a correction *is* a file
-shadowing it. It asks in a dialog before it does, and says how many files went.
+extended without a release. Six are built in: **Streaming (−14 LUFS)** — Spotify,
+Apple Music, YouTube, Amazon and Tidal all normalise to about the same place, so
+one target with their names in its note beats five identical entries — plus
+**Spotify Loud**, **Podcast (−16 LUFS)**, **EBU R 128**, **ATSC A/85** and
+**CD / no normalisation**. Anything else is a JSON file you write; see
+[Configuration](#-configuration). **Reset**, beside Edit in Settings, deletes
+every target you wrote and puts those six back, which is also how a correction
+to a built-in is undone, since a correction *is* a file shadowing it. It asks
+first, and says how many files went.
 
 ---
 
@@ -467,31 +428,6 @@ between machines or keep in version control.
 | 📱 **iPadOS** | `Library/Application Support/Open Audio Analyzer` inside the app's own container |
 | 🤖 **Android** | `oaa` inside the app's own `files` directory |
 
-The two tablet rows are the ones you cannot open in a file manager, because both
-systems give an app a private directory and no way out of it. Settings → Session
-prints the path; a display persists its layout, its skin and the host it last
-connected to, and nothing else on the device can read them. Android's directory
-comes from `getFilesDir()` over a platform channel — nothing in the environment
-there names a directory the app may write to — and it goes when the app is
-uninstalled, as a tablet's copy of a layout should.
-
-`OAA_CONFIG_DIR` overrides the three desktop rows — for a portable install, or
-for keeping Open Audio Analyzer's configuration alongside your dotfiles — and
-`--config-dir=<path>` on the command line beats the variable in turn, which is
-the one that works on macOS where an environment cannot be handed to an
-application bundle. Settings → Session prints the directory actually in use and
-lets you select it, which beats retyping any of the above.
-
-**The macOS app is deliberately not sandboxed**, and that is what makes the
-first row true. A sandboxed app's `HOME` is redirected into
-`~/Library/Containers/com.openaudioanalyzer.oaa/Data`, which would put your
-presets somewhere you would never find them and stop either override from
-pointing anywhere outside it — defeating the point of keeping configuration in
-files you can edit, mail and version. The trade is that Open Audio Analyzer
-cannot ship on the Mac App Store, which it was never going to; notarisation for
-the installer package does not require the sandbox. See `macos/Runner/Release.entitlements`,
-which says so at the top.
-
 ```
 settings.json          the frame rate, source, target, skin
 session.json           the canvas as you left it, saved as you work
@@ -500,42 +436,57 @@ calibrations/*.json    one file per delivery target you wrote
 skins/*.json           one file per skin
 ```
 
-**One file per preset rather than one library file**, deliberately: it means a
-preset can be sent to somebody or dropped in from a forum post, and that one
-corrupt file costs one preset instead of all of them. `presets/` is where the
-File menu's dialogs open, and it is not a boundary — a preset can be saved
-anywhere and opened from anywhere, which is what makes the sending work without
-the receiver having to find this directory first. It is also the list: there is
-no preset browser in the application, so deleting one is a file manager's job. Every write goes to a
-temporary file and is renamed over the target, so an interrupted save leaves the
-previous version intact rather than a half-written one. A file that fails to
-parse is named in the interface and left alone — Open Audio Analyzer never
-rewrites something it could not read.
+`OAA_CONFIG_DIR` overrides the three desktop rows, and `--config-dir=<path>`
+beats the variable in turn — which is what works on macOS, where an environment
+cannot be handed to an application bundle. Settings → Session prints the
+directory actually in use and lets you select it.
 
-The path this does *not* take is `path_provider`. That function needs a Flutter
-binding, so it throws in the two places Open Audio Analyzer most needs these
-paths — the `oaa` CLI and a unit test — and on macOS it returns a sandbox
-container keyed by bundle identifier, which moves your entire configuration the
-first time a build is signed differently.
+The two tablet rows are the ones you cannot open in a file manager, because both
+systems give an app a private directory and no way out of it. Android's comes
+from `getFilesDir()` over a platform channel, because nothing in the environment
+there names a directory the app may write to, and it goes when the app is
+uninstalled, as a tablet's copy of a layout should.
+
+**The macOS app is deliberately not sandboxed**, which is what makes the first
+row true: a sandboxed app's `HOME` is redirected into `~/Library/Containers`,
+which would put your presets somewhere you would never find them and stop either
+override from pointing outside it. The trade is that Open Audio Analyzer cannot
+ship on the Mac App Store, which it was never going to. See
+`macos/Runner/Release.entitlements`, which says so at the top.
+
+**One file per preset rather than one library file**, deliberately: a preset can
+be sent to somebody or dropped in from a forum post, and one corrupt file costs
+one preset instead of all of them. `presets/` is where the File menu's dialogs
+open, and it is not a boundary — a preset can be saved and opened anywhere,
+which is what makes the sending work. It is also the list, since there is no
+preset browser, so deleting one is a file manager's job. Every write goes to a
+temporary file and is renamed over the target, so an interrupted save leaves the
+previous version intact. A file that fails to parse is named in the interface
+and left alone; Open Audio Analyzer never rewrites something it could not read.
+
+The path this does *not* take is `path_provider`. It needs a Flutter binding, so
+it throws in the two places these paths are most needed — the `oaa` CLI and a
+unit test — and on macOS it returns a sandbox container keyed by bundle
+identifier, which moves your entire configuration the first time a build is
+signed differently.
 
 ### 🎨 Skins
 
 **Settings → Appearance → Edit skin** opens the editor. Every role is a swatch
 that opens a colour picker, the canvas behind the panel follows the pointer as
 you drag — as does any tablet mirroring the session — and each role prints its
-contrast ratio against the surface it has to be read on, with the ones below the
-floor that role is held to marked. Nothing is written until you save.
+contrast ratio against the surface it has to be read on, with the ones below its
+floor marked. Nothing is written until you save.
 
 **Precision Instrument and Daylight cannot be changed or deleted.** They are the
-pair that proves the roles are semantic — Daylight inverts the entire lightness
+pair that proves the roles are semantic: Daylight inverts the entire lightness
 ordering, so a painter that had reached for "the dark one" instead of a role
-would be obvious immediately — and a reference point a file on disk can quietly
-redefine is not one. Editing either previews normally; **Save as new** keeps it,
-and leaves the original there to compare against.
+would be obvious immediately, and a reference point a file on disk can quietly
+redefine is not one. Editing either previews normally; **Save as new** keeps it.
 
-A skin is also a JSON file, and the editor changes nothing about that.
-It names as many of thirteen colour **roles** as it likes and inherits the
-rest, so changing one colour is a three-line file:
+A skin is a JSON file, and the editor changes nothing about that. It names as
+many of thirteen colour **roles** as it likes and inherits the rest, so changing
+one colour is a three-line file:
 
 ```json
 {
@@ -548,15 +499,14 @@ rest, so changing one colour is a three-line file:
 The roles are `background`, `panel`, `panel_raised`, `hairline`,
 `hairline_strong`, `text_primary`, `text_muted`, `text_faint`, `accent`, `warn`,
 `over`, `meter_track` and `meter_fill`. Values take `#RGB`, `#RRGGBB` or
-`#AARRGGBB`. Add `"light": true` for a palette that is dark ink on a light
-ground.
+`#AARRGGBB`. Add `"light": true` for dark ink on a light ground.
 
 They are *semantic* roles rather than literal colours — `over` is "the colour
 that means over a limit", used for nothing else — which is what lets a skin
 apply to a module written after it. A file named after a built-in is ignored
-rather than shadowing it. **New skin** writes the palette you are looking at out
-in full as a starting point, and **Reload from disk** picks up hand edits
-without a restart.
+instead of shadowing it. **New skin** writes the current palette out in full as
+a starting point, and **Reload from disk** picks up hand edits without a
+restart.
 
 A delivery target is the same idea:
 
@@ -573,7 +523,7 @@ A delivery target is the same idea:
 ```
 
 A file whose `id` matches one Open Audio Analyzer ships with **replaces** it
-everywhere, including in presets that already name it — so if you disagree with
+everywhere, including in presets that already name it, so if you disagree with
 our reading of a published spec, your number wins. Delete the file and the
 original comes back.
 
@@ -582,8 +532,8 @@ original comes back.
 ## 🎨 Design
 
 **Precision Instrument.** Graphite black, one signal hue, hairline borders, no
-shadows and no gradients. Depth comes from background steps, because
-measurement gear is machined panels sitting flush, not floating cards.
+shadows and no gradients. Depth comes from background steps, because measurement
+gear is machined panels sitting flush, not floating cards.
 
 ```
 bg      #0B0C0E     accent  #35E0C4   in spec
@@ -595,26 +545,20 @@ text    #E6E8EB / #8A9199 / #565E67
 Two rules are enforced rather than merely encouraged:
 
 1. **Every spatial value comes from `Space`** — `2, 4, 8, 12, 16, 24, 32, 48,
-   64`. No widget writes a raw number for padding, margin or gap. Thirteen
-   modules built over as many weeks drift apart one `EdgeInsets.all(11)` at a
-   time, and the result reads as amateur long before anybody can say which
-   value is wrong.
-2. **Every number is monospaced with tabular figures.** With proportional
-   digits a readout's width changes as its digits change, so it jitters while
-   you watch it. It is the single most obvious tell of a meter written by
-   somebody who does not use meters.
+   64`. No widget writes a raw number for padding, margin or gap. Modules built
+   over many weeks drift apart one `EdgeInsets.all(11)` at a time, and the
+   result reads as amateur long before anybody can say which value is wrong.
+2. **Every number is monospaced with tabular figures.** With proportional digits
+   a readout's width changes as its digits change, so it jitters while you watch
+   it. It is the most obvious tell of a meter written by somebody who does not
+   use meters.
 
 **Inter** (labels and prose) and **Google Sans Code** (every number) are bundled
-rather than requested from the system, in the three and two weights the type
-scale actually names. Falling through to the platform's own faces means digit
-width, tracking and cap height all differ between macOS, Windows and Linux, and
-a layout tuned on one is subtly wrong on the other two. Both are SIL OFL 1.1 and
-their licences ship in `assets/fonts/`.
-
-Every one of the fourteen modules is [`ModuleFrame`](packages/oaa_ui/lib/src/module_frame.dart)
-plus a painter. That is the whole reuse strategy: a module that also owns its
-own border and title treatment is a module that will drift from the other
-eleven.
+rather than requested from the system, in the weights the type scale names.
+Falling through to the platform's own faces means digit width, tracking and cap
+height all differ between macOS, Windows and Linux, and a layout tuned on one is
+subtly wrong on the other two. Both are SIL OFL 1.1 and their licences ship in
+`assets/fonts/`.
 
 ---
 
@@ -635,25 +579,15 @@ plugin/            Headless VST3 + AU plugin.                              AGPL
 docs/              PLAN.md, METRICS.md, WIRE.md.
 ```
 
-`plugin/` is the one **AGPL** directory. JUCE 7 and 8 are AGPLv3-or-commercial —
-only JUCE 6 offered GPLv3 — and Open Audio Analyzer takes the AGPLv3 option,
-which is available because everything here is free software already. It changes
-the licence of the plugin binary alone: the engine and the app are
-GPL-3.0-or-later and stay that way, because neither links JUCE. The app talks to
-the plugin over a socket, which is not linking. GPLv3 section 13 expressly
-permits the combination. Steinberg's
-VST3 SDK, meanwhile, is now MIT and vendored inside JUCE, so there is no second
-copyleft dependency and no SDK to check out.
-
 Two boundaries carry weight:
 
 - **`engine/` knows nothing about Flutter, and `oaa_core` knows nothing about
   `dart:ffi`.** Four things need the domain vocabulary — the app, the tablet
   display, the CLI and the plugin — and three of them have no engine of their
-  own. The tablet reads measurements off a socket. The moment `oaa_core`
-  imports `oaa_engine`, all three drag in a native library they never call.
-- **One `liboaa` serves all three tiers.** That is what makes standalone,
-  remote display and plugin tractable as one project rather than three.
+  own. The tablet reads measurements off a socket. The moment `oaa_core` imports
+  `oaa_engine`, all three drag in a native library they never call.
+- **One `liboaa` serves all three tiers.** That is what makes standalone, remote
+  display and plugin tractable as one project rather than three.
 
 ### 📜 Licensing
 
@@ -664,18 +598,22 @@ Copyleft throughout. Copyright © 2026 Jonas Grunau.
   product should not be re-closable, and that argument does not stop at the
   application: an engine anybody may embed in a closed product is an engine
   somebody can sell back to you.
-- **`plugin/` — AGPL-3.0-or-later**, because it links JUCE. See above.
+- **`plugin/` — AGPL-3.0-or-later**, because it links JUCE. JUCE 7 and 8 are
+  AGPLv3-or-commercial (only JUCE 6 offered GPLv3), and Open Audio Analyzer
+  takes the AGPLv3 option. It changes the licence of the plugin binary alone:
+  the app talks to the plugin over a socket, which is not linking, and GPLv3
+  section 13 expressly permits the combination. Steinberg's VST3 SDK is MIT and
+  vendored inside JUCE, so there is no second copyleft dependency.
 
-The engine, the domain model and the wire protocol were MIT through 0.13.0,
-on the argument that a measurement engine's value is that anyone can embed and
-audit it. Auditing never needed MIT — the source is published either way — and
-embedding was the half that let the work be closed again. The trade is stated
-plainly rather than glossed: a third-party display now has to be
-GPL-3.0-or-later to reuse `packages/oaa_wire`. What it does *not* have to do is
-use that package at all. The protocol is specified normatively in
-[docs/WIRE.md](docs/WIRE.md), a specification is not a program, and there are
-already three independent implementations of it — so an implementation written
-from the document owes this one nothing.
+The engine, the domain model and the wire protocol were MIT through 0.13.0, on
+the argument that a measurement engine's value is that anyone can embed and
+audit it. Auditing never needed MIT, since the source is published either way,
+and embedding was the half that let the work be closed again. The trade, stated
+plainly: a third-party display now has to be GPL-3.0-or-later to reuse
+`packages/oaa_wire`. What it does *not* have to do is use that package at all —
+the protocol is specified normatively in [docs/WIRE.md](docs/WIRE.md), a
+specification is not a program, and three independent implementations of it
+already exist.
 
 **This is not a licence against commercial use, and no free-software licence
 is.** GPL permits selling copies, charging for support and shipping Open Audio
@@ -688,12 +626,9 @@ terms, which is the part MIT left open.
 ## 📥 Installing
 
 Every release publishes five desktop downloads and the CLI on the [releases
-page](https://github.com/JonasGrunau/open_audio_analyzer/releases). The CLI is
-an archive rather than one file — `bin/oaa` beside the engine as a shared
-library — and needs no Flutter runtime either way.
-Full instructions, including how to meter your own system's output on each
-platform, are on the [documentation
-site](https://open-audio-analyzer.com/docs/install).
+page](https://github.com/JonasGrunau/open_audio_analyzer/releases). Full
+instructions, including how to meter your own system's output on each platform,
+are on the [documentation site](https://open-audio-analyzer.com/docs/install).
 
 | | Platform | Artefact | Plugin | |
 |:-:|---|---|:-:|---|
@@ -702,60 +637,46 @@ site](https://open-audio-analyzer.com/docs/install).
 | 🐧 | Linux | `Open.Audio.Analyzer-<version>-linux-<arch>.tar.gz` | VST3 | `./install.sh`, no root. |
 | 🐧 | Linux | `Open.Audio.Analyzer-<version>-<arch>.AppImage` | — | One file, no root, GTK from the host. |
 | 🐧 | Linux | `Open.Audio.Analyzer-<version>-<arch>.flatpak` | — | Sandboxed, carries its own runtime. |
-| ⌨️ | Any | `oaa-cli-<platform>.tar.gz` / `.zip` | — | The analyser. No Flutter runtime. |
+| ⌨️ | Any | `oaa-cli-<platform>.tar.gz` / `.zip` | — | `bin/oaa` beside the engine. No Flutter runtime. |
 
 > [!TIP]
 > **The first three install the plugin as well, and the checkbox starts
 > ticked.** Untick it and you get the application on its own. The AppImage and
-> the flatpak cannot offer the choice at all: an AppImage never installs
-> anything, and a flatpak's plugin would be built against the sandbox's
-> libraries while the DAW that must load it runs against the host's.
+> the flatpak cannot offer the choice: an AppImage never installs anything, and
+> a flatpak's plugin would be built against the sandbox's libraries while the
+> DAW that must load it runs against the host's.
 
 > [!NOTE]
 > **There is no Mac App Store build and there will not be one.** The store
-> requires the app sandbox, and a sandboxed application has its home directory
-> redirected into `~/Library/Containers` — which put every preset, skin and
-> delivery target somewhere no user goes looking and no override could escape.
->
-> Open Audio Analyzer is distributed directly instead. The pkg is signed with a
-> Developer ID **Installer** certificate — a different one from the Developer ID
-> Application certificate that signs the code, and not interchangeable with it —
-> and notarised when a release is built with the credentials for both.
+> requires the app sandbox, which redirects the home directory into
+> `~/Library/Containers` and would put every preset, skin and delivery target
+> somewhere no user goes looking and no override could escape. The pkg is
+> distributed directly instead, signed with a Developer ID **Installer**
+> certificate — a different one from the Developer ID Application certificate
+> that signs the code, and not interchangeable with it — and notarised when a
+> release is built with the credentials for both.
 > `packaging/macos/make_pkg.sh` prints which of its three states it was in,
-> because "signed" and "a user can double-click it" are not the same thing. See
-> `macos/Runner/*.entitlements`, which carries the sandbox reasoning, and that
-> script, which repeats it where somebody signing a build will be standing.
+> because "signed" and "a user can double-click it" are not the same thing.
 
 > [!NOTE]
-> **The iPad build goes to TestFlight, and is not on the releases page.** A
-> tagged release builds it, signs it for the App Store and uploads it — after
-> the release is published, so a TestFlight build always belongs to a release
-> that exists. The IPA is not attached as an asset because an App Store
-> signature provisions no devices: a file you downloaded could not be installed
-> on your iPad, by you or by anyone. Building it yourself is two lines in
-> [Building](#-building) and needs no credentials at all.
+> **The iPad build goes to TestFlight and the Android build to Google Play**,
+> and neither is on the releases page. Both are built and uploaded by a tagged
+> release, after the release is published, so a store build always belongs to a
+> release that exists. Neither is attachable as an asset: an App Store signature
+> provisions no devices, so a downloaded IPA could not be installed by anyone,
+> and an `.aab` is a publishing format from which Play generates and signs each
+> device's download. Play carries it as a **closed test**, which grants access
+> by list rather than by link, so
+> [ask on the repository](https://github.com/JonasGrunau/open_audio_analyzer/issues)
+> before opting in — [Installing](docs/site/install.md#android) has both steps.
+> Play offers it to **tablets** only, via a 600dp shortest-edge filter in the
+> manifest, which is the store's filter and not a runtime one. Building the IPA
+> yourself is two lines in [Building](#-building) and needs no credentials.
 
-> [!NOTE]
-> **The Android build goes to Google Play, and is not on the releases page
-> either.** Same shape, different reason. What a release builds is an `.aab` —
-> an app bundle, a publishing format rather than an installable file: Play
-> generates each device's download from it and signs that download with a key
-> Google holds. There is no file here anybody could install. Every tag uploads
-> to Play, after the release is published, because a version code Play has
-> accepted can never be reused or lowered. It is a **closed test**, which grants
-> access by list rather than by link: the listing does not resolve until your
-> Google account has been added to the tester list, and the opt-in link cannot
-> add it — [ask on the repository](https://github.com/JonasGrunau/open_audio_analyzer/issues)
-> first, then opt in. [Installing](docs/site/install.md#android) has both steps. Play offers it
-> to **tablets** only — the manifest asks for a 600dp shortest edge, which is
-> the store's filter and not a runtime one.
-
-The scripts that build these live in [`packaging/`](packaging/AGENTS.md), one
-per artefact, and `ci.yml`'s packaging jobs run all five installers, the iPad
-build and the Android bundle on a tag and on demand — only the two store
-uploads wait for the release. Each produces an unsigned artefact and says so
-rather than failing when the signing secrets are absent — a fork has none, and
-a build that stopped there would be useless to it.
+The scripts live in [`packaging/`](packaging/AGENTS.md), one per artefact, and
+`ci.yml` runs all five installers, the iPad build and the Android bundle on a
+tag and on demand. Each produces an unsigned artefact and says so rather than
+failing when the signing secrets are absent, since a fork has none.
 
 ---
 
@@ -770,32 +691,30 @@ flutter run -d macos          # or windows, linux
 flutter run -d <ipad>         # the display build; `flutter devices` names it
 ```
 
-On iOS the engine is compiled as **Objective-C**, because miniaudio's Core Audio
-backend is: it configures an `AVAudioSession` there, and iOS offers no C way to
-do that. `hook/build.dart` handles it. This is worth knowing only because of how
-it fails if it is ever undone — several hundred errors inside Apple's own
-`Foundation` headers, not one of which names a file in Open Audio Analyzer.
-
-Four Flutter plugins are pulled in: `desktop_drop` and `file_selector` to get a
-path from a user, `flutter_riverpod` for configuration, and `mobile_scanner`
-(MIT) for the host picker's QR scanner. The last is the one dependency here
-with a native half that is not vendored, and the one that does not ship
-everywhere — Android, iOS and macOS only. It integrates through Swift Package
-Manager, so there is still no `Podfile` in this repository. The QR *encoder* on
-the other side of that feature is written here rather than depended on:
-`packages/oaa_ui/lib/src/qr.dart`, held against ZXing by `test/qr_test.dart`.
-
 The app needs **no podspec, no `build.gradle` and no per-platform
-`CMakeLists.txt`**. `packages/oaa_engine/hook/build.dart` compiles the C
-through `native_toolchain_c` and bundles it as a code asset, which has been the
-recommended way to ship native code with Flutter since 3.38. One build
-description that works on five platforms beats five that each work on one.
+`CMakeLists.txt`**. `packages/oaa_engine/hook/build.dart` compiles the C through
+`native_toolchain_c` and bundles it as a code asset, the recommended way to ship
+native code with Flutter since 3.38. One build description that works on five
+platforms beats five that each work on one. On iOS it compiles the engine as
+**Objective-C**, because miniaudio's Core Audio backend configures an
+`AVAudioSession` and iOS offers no C way to do that; undo it and you get several
+hundred errors inside Apple's own `Foundation` headers, not one of which names a
+file in this repository.
 
 `engine/CMakeLists.txt` describes the *same* compile for consumers that are not
 Dart — the plugin, and a CI runner with no Flutter SDK. Two descriptions of one
 compile is a real cost, paid deliberately: `plugin/test/sources_match.sh` fails
-the build if the source lists drift apart, so **a new file in `engine/src` goes
-in both.**
+the build if the source lists drift, so **a new file in `engine/src` goes in
+both.**
+
+Four Flutter plugins are pulled in: `desktop_drop` and `file_selector` to get a
+path from a user, `flutter_riverpod` for configuration, and `mobile_scanner`
+(MIT) for the host picker's QR scanner. The last is the one dependency with a
+native half that is not vendored, and the one that does not ship everywhere:
+Android, iOS and macOS only. It integrates through Swift Package Manager, so
+there is still no `Podfile` here. The QR *encoder* on the other side of that
+feature is written here rather than depended on, in
+`packages/oaa_ui/lib/src/qr.dart`, held against ZXing by `test/qr_test.dart`.
 
 ### 🧪 Tests
 
@@ -830,43 +749,38 @@ cd website && npm ci && npm run build  # the website still builds
 `dart test packages/oaa_wire` appears twice on purpose. Its end-to-end cases
 spawn the [fake DAW](#-testing-the-plugin-without-a-daw) and decode what the
 plugin sends over a real socket; without a build they skip, so the second run is
-where they actually happen. Nothing there downloads anything — the test writes
-its own signal.
+where they actually happen. The line after it is the same run with the
+application in the middle — plugin ingest, display host, display client — so a
+DAW's meters are shown to reach a second screen field by field rather than each
+half being shown to work on its own. Both want port 47822, so neither runs while
+Open Audio Analyzer is open.
 
 `-DOAA_BUILD_PLUGIN=OFF` is the framework-free configure: no JUCE fetch, no
-plugin, no fake DAW, and five seconds for the C++ tests that need none of them —
-the transport box's delivered-exactly-once test and the wire golden's producing
-half. It runs on every push; the full plugin build does not.
+plugin, no fake DAW, and five seconds for the C++ tests that need none of them.
+It runs on every push; the full plugin build does not.
 
-The line after the second `oaa_wire` run is the same run with the application in
-the middle: the app's
-plugin ingest accepts the plugin, its display host publishes what arrives, and a
-display client reads it back the way a tablet does — so a DAW's meters are shown
-to reach a second screen, field by field, rather than each half being shown to
-work on its own. It skips without a built plugin too, and both want port 47822,
-so neither runs while Open Audio Analyzer is open.
-
-One suite is deliberately not on that list. `packages/oaa_engine/test/vectors_test.dart`
-runs the [official EBU and ITU vectors](#-the-correctness-gate) and skips unless
+One suite is deliberately not on that list.
+`packages/oaa_engine/test/vectors_test.dart` runs the
+[official EBU and ITU vectors](#-the-correctness-gate) and skips unless
 `OAA_VECTORS` and `OAA_VECTORS_ITU` say where they are, because 811 MB of
 material nobody may redistribute cannot be a gate. Run it after touching
-anything in `engine/src/oaa_loudness.*`, `oaa_kweight.*` or `oaa_truepeak.*`.
+`engine/src/oaa_loudness.*`, `oaa_kweight.*` or `oaa_truepeak.*`.
 
 The engine tests are worth a look even if you never touch the C. A sine of
-amplitude *A* has a peak of *A* and an RMS of *A*/√2 — exactly 3.0103 dB lower.
-That is arithmetic, not convention, so the built-in test tone doubles as a
-reference the meters can be held against on a headless CI runner with no sound
+amplitude *A* has a peak of *A* and an RMS of *A*/√2, exactly 3.0103 dB lower.
+That is arithmetic rather than convention, so the built-in test tone doubles as
+a reference the meters can be held against on a headless CI runner with no sound
 hardware anywhere near it.
 
 ---
 
 ## 🔍 Analysing files
 
-Drop a file on the analysis panel, or run the CLI. Both decode the file and push
-the blocks through the *same* `oaa_analyse` a capture device drives — there is
-no second DSP path — so an offline reading and a live reading of the same audio
-are identical rather than merely close. A test asserts exactly that, on the same
-samples analysed both ways.
+Drop a file on the analysis panel, or run the CLI. Both push blocks through the
+*same* `oaa_analyse` a capture device drives — there is no second DSP path — so
+an offline reading and a live reading of the same audio are identical rather
+than merely close, and a test asserts exactly that on the same samples analysed
+both ways.
 
 Nothing resamples or remixes: a file is measured at its own sample rate and
 channel count, because a converter in front of a measurement changes the
@@ -882,12 +796,12 @@ oaa --list-targets                             # what you can measure against
 
 **`--target` reads your own targets too.** A `calibrations/*.json` file in the
 [configuration directory](#-configuration) is available to the CLI exactly as it
-is to the app, and one whose `id` matches a built-in replaces it — so a
+is to the app, and one whose `id` matches a built-in replaces it, so a
 correction to our reading of a published spec reaches the exit code and not only
-the window. `--config-dir` points at somewhere other than the default.
+the window. `--config-dir` points somewhere other than the default.
 
 **The exit code is the point.** With `--target`, a file that misses its delivery
-spec exits `2`, an unreadable file exits `1`, and all-clear exits `0` — so a
+spec exits `2`, an unreadable file exits `1`, and all-clear exits `0`, so a
 release pipeline can fail a build on a master that is 2 LU too loud instead of
 shipping it:
 
@@ -895,38 +809,41 @@ shipping it:
 oaa --target streaming-14 master.wav || exit 1
 ```
 
-Reports export as text, JSON and CSV. A quantity nobody measured is an em dash,
-a `null` and an empty cell respectively — never a zero, which is a legitimate
-reading for correlation and several dB quantities and so cannot double as
-"no data".
-
-The app adds a fourth: **a PNG report card**, for the message where somebody
-asks whether the master is ready. It is drawn as a fixed layout rather than
-captured from the panel, so it does not inherit a scroll position or a window
-width and two people exporting the same report get the same picture. The CLI
-does not render it — a pipeline reads the text, JSON or CSV.
+Reports export as text, JSON and CSV, where an unmeasured quantity is an em
+dash, a `null` and an empty cell respectively, never a zero. The app adds a
+fourth: **a PNG report card**, for the message where somebody asks whether the
+master is ready. It is drawn as a fixed layout rather than captured from the
+panel, so two people exporting the same report get the same picture.
 
 ---
 
 ## 🎹 In a DAW
 
 Open Audio Analyzer installs as a **VST3** and an **Audio Unit** that draws
-nothing.
+nothing. Insert it on a track, a bus or the master, and the desktop app meters
+what your DAW is playing, through the same engine, on the same canvas, with the
+same painters as a live input. The plugin measures and streams; the app
+displays. That split is what stops there being two implementations of every
+meter drifting apart from each other.
 
-Insert it on a track, a bus or the master, and the desktop app meters what your
-DAW is playing — through the same engine, on the same canvas, with the same
-painters as a live input. The plugin measures and streams; the app displays.
-That split is not a compromise around Flutter's inability to be a plugin GUI, it
-is what stops there being two implementations of every meter drifting apart from
-each other.
+The app takes the connection as the choice: a plugin that connects appears on
+the canvas in place of whatever local source was there, the status bar names it,
+and removing the plugin hands the canvas back. Several inserts can be connected
+at once, and the most recently added is the one on screen, because adding it is
+the act of choosing it. It connects on `127.0.0.1:47822` and keeps retrying, so
+it does not matter which of the two you start first. Its window is a status
+panel: a diagram of the three places the path can break — the host's audio, the
+host's playhead, the socket to the app — with each run lit or dark and the
+socket's dashes travelling while frames are actually being sent, and under it
+what the host is handing over, for how long, the integrated loudness, and one
+line saying what to do about whatever is wrong.
 
-The app takes the connection as the choice: a plugin that connects appears on the
-canvas in place of whatever local source was there, the status bar names it, and
-removing the plugin hands the canvas back. **RESET is the one control that
-cannot follow.** Protocol version 3 opened the app → plugin direction, but it
-defines one frame and RESET is not it, so nothing here can restart an
-integration inside the plugin; pressing it while a plugin is on screen says so
-rather than quietly resetting a local engine nobody is looking at.
+**RESET is the one control that cannot follow.** Protocol version 3 opened the
+app → plugin direction, but it defines one frame and RESET is not it, so
+pressing it while a plugin is on screen says so rather than quietly resetting a
+local engine nobody is looking at.
+
+### 🔧 Building and installing it by hand
 
 ```sh
 cmake -B plugin/build -S plugin -G Ninja -DCMAKE_BUILD_TYPE=Release
@@ -934,16 +851,14 @@ cmake --build plugin/build
 ```
 
 Products land in `plugin/build/OaaPlugin_artefacts/Release/`. Nothing is copied
-into a system plugin folder unless you copy it — a build that installed itself
-would mean the DAW you have open is now running a binary you did not knowingly
-install. JUCE is fetched and pinned, not vendored, so a fresh clone builds
-without checking out a framework by hand.
+into a system plugin folder unless you copy it, because a build that installed
+itself would mean the DAW you have open is now running a binary you did not
+knowingly install. JUCE is fetched and pinned, not vendored, so a fresh clone
+builds without checking out a framework by hand.
 
-**Installing it.** This is the manual route, for a plugin you built or an
-archive you unpacked — the macOS pkg, the Windows installer and the Linux
-tarball do all of it for you, behind a checkbox that starts ticked. Copy the
-*bundle*, not the directory holding it, into the folder your DAW scans. On a
-machine that has never had a plugin installed, that folder does not exist yet:
+The installers do the rest of this for you. By hand, copy the *bundle*, not the
+directory holding it, into the folder your DAW scans — on a machine that has
+never had a plugin installed, it does not exist yet:
 
 ```sh
 # macOS
@@ -962,15 +877,13 @@ On Windows the folder is `%CommonProgramFiles%\VST3`. **Ableton Live also has to
 be told to look there** — Preferences → Plug-Ins → *Use VST3 Plug-In System
 Folders*.
 
-**If you unpacked a release archive on macOS, strip the quarantine flag.**
-A browser marks every file it downloads, the mark survives extraction, and
+**If you unpacked a release archive on macOS, strip the quarantine flag.** A
+browser marks every file it downloads, the mark survives extraction, and
 Gatekeeper then refuses the load. On macOS 15 and later that refusal is a modal
-saying the plugin cannot be verified free of malware, or that it will damage
-your computer, **with no way to override it in System Settings** — the "Open
-Anyway" button there is only ever offered for a blocked *launch*, and loading a
-plugin into a DAW is a library load, so nothing appears for you to click. On
-earlier versions it is silent instead, and the plugin is simply absent from the
-DAW's browser with nothing logged anywhere. Either way:
+with no way to override it in System Settings, because "Open Anyway" is only
+ever offered for a blocked *launch* and loading a plugin is a library load; on
+earlier versions it is silent, and the plugin is simply absent from the DAW's
+browser with nothing logged anywhere.
 
 ```sh
 xattr -dr com.apple.quarantine ~/Library/Audio/Plug-Ins/VST3/"Open Audio Analyzer.vst3"
@@ -978,91 +891,59 @@ xattr -dr com.apple.quarantine ~/Library/Audio/Plug-Ins/VST3/"Open Audio Analyze
 
 The build signs each macOS bundle *after* every step that writes into it and
 then verifies the result, so `codesign --verify --strict` and `auval` are both
-clean. Signing is ad-hoc by default, and **ad-hoc is not a Developer ID**: only
-the flag above gets an ad-hoc copy past Gatekeeper. Build it yourself and there
-is no flag to remove. `-DOAA_CODESIGN_IDENTITY=<id>` signs with a real identity,
-and `packaging/macos/notarize.sh` is what then gets a download past Gatekeeper
-without the user doing anything — a signature on its own does not, which is the
-step people skip.
+clean. Signing is ad-hoc by default, and ad-hoc is not a Developer ID: only the
+flag above gets an ad-hoc copy past Gatekeeper, and a bundle you built yourself
+has no flag to remove. `-DOAA_CODESIGN_IDENTITY=<id>` signs with a real
+identity, and `packaging/macos/notarize.sh` is what then gets a *download* past
+Gatekeeper, which is the step people skip.
 
-The bundles are universal and load on **macOS 14.2 and later**, which is the
-application's floor too — so the pkg no longer has a band of versions that can
-run one and not the other, and its plugin rows are gated on the same version the
-whole installer is. The floor is 14.2 because the engine holds a strong
-reference to `CATapDescription`, and a strong reference to a class that does not
-exist is a library dyld cannot load *at all* — see the assertion at the top of
-`engine/src/oaa_tap.h`. Releases up to 0.5.0 were neither universal nor
-portable: CMake defaults both the
-architecture and the deployment target to whatever machine did the build, so
-the runner shipped an arm64-only bundle that no Intel Mac and no older macOS
-could load — and a bundle whose slice does not match is, to a DAW, the same
-event as a bundle that is not there.
+The bundles are universal and load on **macOS 14.2 and later**, the
+application's floor too. 14.2 is where `CATapDescription` arrived, and a strong
+reference to a class that does not exist is a library dyld cannot load at all.
+Releases up to 0.5.0 were neither universal nor portable, because CMake defaults
+both the architecture and the deployment target to the machine that built them —
+and a bundle whose slice does not match is, to a DAW, the same event as a bundle
+that is not there.
 
-The plugin connects to the app on `127.0.0.1:47822` and keeps retrying, so it
-does not matter which of the two you start first. Its window is a status panel
-and nothing else: a diagram of the three places the path can break — the host's
-audio, the host's playhead, the socket to the app — with each run of it lit or
-dark, and the socket's dashes travelling while frames are actually being sent.
-Under it, what the host is handing over, how long it has been handing it over,
-the integrated loudness, and one line saying what to do about whatever is wrong.
-Several inserts can be connected at once; the most recently added is the one on
-screen, because adding it is the act of choosing it.
+### 🎚️ What the DAW adds that a live input cannot
 
-**What the DAW adds that a live input cannot.** The host's transport comes
-across with the audio: play and record state, the playhead in seconds, samples
-and quarter-notes, tempo, time signature, loop points, and SMPTE timecode with
-its frame rate — plus a flag when the playhead *jumps*, because an integrated
-reading taken across a relocate is the average of two passes of the same music
-and looks entirely reasonable.
+The host's transport comes across with the audio: play and record state, the
+playhead in seconds, samples and quarter-notes, tempo, time signature, loop
+points, and SMPTE timecode with its frame rate, plus a flag when the playhead
+*jumps*, because an integrated reading taken across a relocate is the average of
+two passes of the same music and looks entirely reasonable.
 
-The status bar reads it back: the position in the most precise unit the host
-gave — timecode, else bar and beat, else the host's own clock — and the tempo
-and time signature beside it where the window is wide enough to hold them. It is
-drawn brighter while the transport is rolling than while it is parked, because
-two readings of the same frame otherwise print the same string.
-
-**And it reaches a tablet.** The desktop relays the playhead to every attached
-remote display, so an iPad across the room shows the DAW's position beside the
-DAW's meters — which is the point of having
-one there. It is sent when it changes rather than with every measurement, so a
-parked session costs nothing, and a display that attaches to one is given the
-position it is parked at rather than waiting for somebody to press play.
-
-The **Elapsed** and **Timecode** LUFS modes are what that measurement is for,
-and **no module offers them yet**. Tying an integration window to the transport
-means restarting it when the transport moves, which is a command travelling from
-the app back to the plugin — and as of protocol version 3 that command exists.
-The plugin applies the mode against the transport it captures per audio block
-rather than being told when to reset, because the app only sees the playhead at
-the publish rate and a reset arriving a frame late has already let the wrong
-audio into the reading. What is missing is the menu to choose a mode in; see
-[Known gaps](#-known-gaps-stated-plainly).
+The status bar reads it back in the most precise unit the host gave — timecode,
+else bar and beat, else the host's own clock — with tempo and time signature
+beside it where the window is wide enough. It is brighter while the transport is
+rolling than while it is parked, because two readings of the same frame
+otherwise print the same string. The desktop relays the playhead to every
+attached remote display, so an iPad across the room shows the DAW's position
+beside the DAW's meters, sent when it changes rather than with every measurement
+— so a parked session costs nothing, and a display that attaches to one is given
+the position it is parked at instead of waiting for somebody to press play.
 
 Hosts differ enormously in what they actually report, and Open Audio Analyzer
 does not paper over it: every transport value carries a flag saying whether the
-host supplied it, and a value that did not arrive is not drawn at all. A tempo
-that arrives as zero is indistinguishable from a real one, and "bar 1, beat 1,
-00:00:00:00" is a perfectly plausible thing to show somebody while their session
-is parked at bar 57 — so a host that reports no tempo gets no tempo printed, and
-one that reports no position at all gets dashes rather than a plausible zero.
-
-That last case is one **no DAW can actually produce**, and it is worth knowing
-why. Neither VST3 nor the Audio Unit API has a way to say "not saying": JUCE's
-VST3 host sends a zeroed process context with no validity flags, the plugin's
-wrapper reads a position back out of it unconditionally, and the Audio Unit
-scopes a playhead around every render. A host that withholds its transport
-therefore arrives as one *parked at zero with nothing else valid*, which is what
-the plugin reports, because it is the correct reading of what the format
-delivered. The dashes belong to the branch behind that, which the fake DAW
-cannot reach either — so it is held by
+host supplied it, and a value that did not arrive is not drawn. A tempo that
+arrives as zero is indistinguishable from a real one, and "bar 1, beat 1,
+00:00:00:00" is a perfectly plausible thing to show somebody whose session is
+parked at bar 57. A host that reports nothing at all gets dashes rather than a
+plausible zero — a case **no DAW can actually produce**, because neither format
+has a way to say "not saying": JUCE's VST3 host sends a zeroed process context
+and the Audio Unit scopes a playhead around every render, so a host that
+withholds its transport arrives as one *parked at zero with nothing else valid*.
+The dashes belong to the branch behind that, held by
 [`plugin/test/transport_capture_test.cpp`](plugin/test/transport_capture_test.cpp),
-which hosts the processor as the C++ object it is and asserts that both ways of
-saying nothing publish nothing, and that the plugin's own status panel says so.
+which hosts the processor as the C++ object it is.
+
+The **Elapsed** and **Timecode** LUFS modes are what that measurement is for,
+and **no module offers them yet**; see [Known gaps](#-known-gaps-stated-plainly).
 
 ### 🧪 Testing the plugin without a DAW
 
 `plugin/host/` builds a **fake DAW**: a host that plays an audio file through
-the plugin and gives it a transport. It is built by the same CMake run.
+the plugin and gives it a transport, built by the same CMake run.
 
 ```sh
 open plugin/build/host/OaaFakeDaw_artefacts/Release/oaa-fake-daw.app  # macOS
@@ -1071,23 +952,20 @@ plugin/build/host/OaaFakeDaw_artefacts/Release/oaa-fake-daw           # Linux
 
 It finds the VST3 in the build tree beside it, so with the app already running
 the only thing left is to open a track and press space. Tempo, time signature,
-timecode frame rate, a loop region and the record flag are all controllable in
-the window, and the plugin's own status panel opens in a second one.
-
-Three more gestures are command-line switches, because they are the ones that
-have to happen on cue rather than when somebody remembers: `--no-playhead`
-reports no transport at all (the window has a checkbox for it too), and — in
-`--headless` runs — `--parked` renders with the transport stopped, the state a
-session spends most of its time in, while `--relocate-at=<s>` plays, stops,
-jumps back to the start and plays again. That last one is the gesture
-[`docs/WIRE.md`](docs/WIRE.md) names as the reason the discontinuity flag
-exists.
+timecode frame rate, a loop region and the record flag are controllable in the
+window, and the plugin's own status panel opens in a second one. Three gestures
+are command-line switches instead, because they have to happen on cue rather
+than when somebody remembers: `--no-playhead` reports no transport at all, and
+in `--headless` runs `--parked` renders with the transport stopped, while
+`--relocate-at=<s>` plays, stops, jumps back to the start and plays again — the
+gesture [`docs/WIRE.md`](docs/WIRE.md) names as the reason the discontinuity
+flag exists.
 
 `dart run tool/fetch_test_audio.dart` downloads music worth looking at: two
-CC BY 3.0 post-rock tracks, picked by measuring candidates rather than by
-reading titles. The default is a loud master with a real 10.3 LU range, a true
-peak *above* its sample peak, and a stereo field that moves. A sine has none of
-those — correlation pinned at 1.00, one spectrum bin, and an LRA of zero.
+CC BY 3.0 post-rock tracks, picked by measuring candidates rather than by reading
+titles. The default is a loud master with a real 10.3 LU range, a true peak
+*above* its sample peak, and a stereo field that moves. A sine has none of those
+— correlation pinned at 1.00, one spectrum bin, and an LRA of zero.
 
 The same binary runs with `--headless`: no window, no sound card, blocks pushed
 from a background thread. That is what
@@ -1100,14 +978,9 @@ It earned its keep immediately: **six** findings that nothing else could see,
 listed under **What it found** in
 [`plugin/host/AGENTS.md`](plugin/host/AGENTS.md). Five were defects and all five
 are fixed — three in the plugin's transport handling, one that only became
-visible with the fake DAW and the application running as a pair (a check neither
-test suite can be), and one in the fake DAW itself, which was inventing the very
-thing it exists to measure. The sixth is not a defect: the plugin's "host
-supplies no position" branch cannot be reached through *either* plugin format,
-so neither a DAW nor the fake DAW can ask for it. It is held instead by
-[`plugin/test/transport_capture_test.cpp`](plugin/test/transport_capture_test.cpp),
-which hosts the processor with no format wrapper in the way — the only place
-that branch exists.
+visible with the fake DAW and the application running as a pair, and one in the
+fake DAW itself, which was inventing the very thing it exists to measure. The
+sixth is the unreachable "host supplies no position" branch described above.
 
 ---
 
@@ -1133,81 +1006,70 @@ LUFS modes do not** — see below.
 
 ³ All five installers build and are published on a tag. **None of them is signed
 in this repository** — signing needs certificates that are not ours to commit,
-so a release built from a fork is unsigned and every script says so. See
-[Installing](#-installing).
+so a release built from a fork is unsigned and every script says so.
 
 ### 🚧 Known gaps, stated plainly
 
 - 🎛️ **No module offers the Elapsed or Timecode LUFS modes yet.** What used to
-  block them is gone: the protocol needed a frame travelling from the app *to*
-  the plugin, and protocol version 3 defines one — `0x0020 SET_LUFS_MODE`, on
-  the ingest port only, which is loopback where whatever connects is already
-  running as you. The engine's half is built too. What is left is the part you
-  would see: a mode menu on the LUFS modules, and a region editor for Timecode,
-  which is the change that closes this. **Continuous is what every module
-  measures today**, and it is the mode a producer with no playhead can honour
-  anyway.
+  block them is gone: protocol version 3 defines `0x0020 SET_LUFS_MODE` on the
+  ingest port, which is loopback where whatever connects is already running as
+  you, and the engine's half is built. What is left is the part you would see —
+  a mode menu on the LUFS modules and a region editor for Timecode. The plugin
+  applies a mode against the transport it captures per audio block rather than
+  being told when to reset, because the app only sees the playhead at the
+  publish rate and a reset arriving a frame late has already let the wrong audio
+  into the reading. **Continuous is what every module measures today**, and it
+  is the mode a producer with no playhead can honour anyway.
 
-  **RESET still cannot reach a connected plugin**, and that is now a smaller
-  statement than it was: the direction exists, but version 3 defines only the
-  mode frame and no reset frame, so `0x0021`–`0x002F` are still undefined.
-  The remote display neither needs one nor will get one — the display port is on
-  the LAN and stays read-only until somebody designs authentication for it.
-  Silently restarting an integration mid-programme is wrong in a way nothing on
-  screen reveals, which is not a capability to put on an unauthenticated port.
-- 🔊 **Capturing your own system's output takes all of it, and on macOS it
-  takes permission.** There is no driver to install on any platform and no
-  per-application selection on any of them.
-  - **Windows** — nothing to do. WASAPI loopback captures whatever is playing.
-  - **macOS** — nothing to do. **System Output** is the first entry in the
-    source menu, named after the output device it is metering. It is a Core
-    Audio process tap: it reads what is being sent to your speakers without
-    rerouting it, so you keep hearing your audio. The first time you choose it
-    macOS asks for permission to record system audio, and a refusal is silent by
-    Apple's design — the meters read digital black rather than saying no. 14.2
-    is where the tapping API arrived and it is also this application's minimum,
-    so there is no supported version where the entry is missing.
-  - **Linux** — a PulseAudio or PipeWire monitor source already appears in the
-    list.
+  **RESET still cannot reach a connected plugin**: version 3 defines only the
+  mode frame, so `0x0021`–`0x002F` are undefined. The remote display neither
+  needs one nor will get one, since that port is on the LAN and stays read-only
+  until somebody designs authentication for it. Silently restarting an
+  integration mid-programme is wrong in a way nothing on screen reveals.
+- 🔊 **Capturing your own system's output takes all of it, and on macOS it takes
+  permission.** No driver on any platform, and no per-application selection on
+  any of them. Windows needs nothing: WASAPI loopback captures whatever is
+  playing. Linux already lists a PulseAudio or PipeWire monitor source. On
+  macOS, **System Output** is the first entry in the source menu, a Core Audio
+  process tap that reads what is being sent to your speakers without rerouting
+  it, so you keep hearing your audio; the first time you choose it macOS asks
+  for permission, and a refusal is silent by Apple's design, so the meters read
+  digital black rather than saying no. Metering a hardware input needs none of
+  this.
 
-  Metering a hardware input needs none of this — any interface shows up
-  directly.
-
-  Two rough edges on the macOS tap, both stated rather than hidden. It follows
-  the default output device when you change it — headphones in, headphones out —
-  but only when the new device has the same sample rate and channel count. The
-  engine's DSP is sized once and cannot be resized underneath a running
-  measurement, so when the format has moved the tap stops rather than following.
-  The meters say so, and the application opens a new engine at the new device's
-  format a couple of seconds later — which starts the integration again, because
-  it is a different measurement of a different stream. The same applies when an
-  output device changes its *own* rate without ceasing to be the default output,
-  which Bluetooth headsets do whenever something opens their microphone. And if
-  macOS denies the permission, a tap delivers silence rather than an error, which
-  is indistinguishable from genuinely silent audio — if the meters sit at the
-  floor with something obviously playing, check Privacy & Security.
-
-  Worth knowing either way: a tap only receives audio while something is
-  actually playing. An output device with nothing going to it has an idle clock
-  and the tap gets nothing at all, so the meters hold their last reading rather
-  than falling to the floor. That is not a fault and the application does not
-  report it as one — a source that has *stopped* is a different fact, and it is
-  reported.
+  Two rough edges on the tap, both stated rather than hidden. It follows the
+  default output device when you change it, but only when the new device has the
+  same sample rate and channel count: the engine's DSP is sized once and cannot
+  be resized underneath a running measurement, so when the format moves the tap
+  stops, says so, and the application opens a new engine at the new format a
+  couple of seconds later — which starts the integration again, because it is a
+  different measurement of a different stream. Bluetooth headsets trigger this
+  whenever something opens their microphone. And a tap only receives audio while
+  something is actually playing: an output device with nothing going to it has
+  an idle clock, so the meters hold their last reading rather than falling to
+  the floor. That is not a fault, and a source that has *stopped* is a different
+  fact that is reported.
 - 📁 **Offline analysis does not read Ogg Vorbis, Opus, AAC or ALAC.** WAV,
   AIFF, RF64, Wave64, FLAC and MP3 cover the formats a master is delivered *as*,
   which is what a delivery check is for. The missing ones are what a master is
   distributed as after transcoding — worth having eventually, and the decoder is
-  one function per format, but no measurement is silently wrong in the meantime:
-  an unsupported file is refused rather than half-read.
+  one function per format, but nothing is silently wrong in the meantime: an
+  unsupported file is refused rather than half-read.
 - ⏱️ **A file is measured whole, from the start.** There is no region selection
   and no seeking during analysis, because an integrated loudness taken over a
   file that was seeked through is a measurement of a programme nobody played.
 - 🔒 **The remote display has no authentication and no encryption.** Anyone who
-  can reach the port can read the measurements and the layout — not the audio,
-  which never goes on the wire. That is why publishing is **off until you switch
-  it on**, and why the link is one-directional: a display cannot reset, retarget
-  or reconfigure the machine it is watching. Do not switch it on at a venue
-  whose Wi-Fi you do not control.
+  can reach the port can read the measurements and the layout, though not the
+  audio, which never goes on the wire. That is why publishing is **off until you
+  switch it on**, and why the link is one-directional: a display cannot reset,
+  retarget or reconfigure the machine it is watching. Do not switch it on at a
+  venue whose Wi-Fi you do not control.
+- 📡 **Publishing is never remembered, on purpose.** The display's name, port and
+  update rate persist like every other setting; whether to publish does not, and
+  starts off at every launch. The switch is **PUBLISH** in the menu bar rather
+  than in the panel, because an unauthenticated open port needs to be visible
+  without opening anything, and a remembered "yes" means a laptop carried to a
+  café starts advertising itself without anybody deciding to.
 - 🌐 **Neither tablet's discovery can be proved by a test.** All five platforms
   find hosts by themselves now — the desktops and Android over a multicast
   socket Open Audio Analyzer owns, iPadOS through the system's Bonjour
@@ -1218,51 +1080,35 @@ so a release built from a fork is unsigned and every script says so. See
   suite can cover is whether the packets arrive: an Android emulator sits behind
   NAT that does not carry the LAN's multicast, an iOS simulator is exempt from
   the restriction the device enforces, and a `flutter test` on macOS is refused
-  the local network for a reason that has nothing to do with the code. Both
-  tablet paths are checked by hand on hardware, and the unit tests hold only
-  what happens once a packet is in. What each end can do is say when it is not
-  working, which is the whole difference between a feature that is off and one
-  that is broken: the searching half has said so since Phase 8 and the
-  advertising half now does too — a Mac refused local network permission
-  announced nothing, reported nothing, and kept its port open the whole time.
-  Typing an address is supported everywhere
-  and always will be, because multicast is also the first thing a guest network
-  blocks — and so, now, is pointing the tablet's camera at a code on the
-  desktop's screen, which is the same address without the typing. That route
-  needs a camera: Android, iPadOS and macOS have one through `mobile_scanner`,
-  Windows and Linux have no implementation, and the row is absent there rather
-  than present and refusing.
-- 📡 **Publishing is never remembered, on purpose.** The display's name, port
-  and update rate persist like every other setting — they are in Settings under
-  **Publish** — but whether to publish does not, and starts off at every launch.
-  The switch is **PUBLISH** in the menu bar, deliberately not in the panel:
-  an unauthenticated port that is open needs to be visible without opening
-  anything. There is no password on that port, and a
-  remembered "yes" means a laptop carried to a café starts advertising itself
-  without anybody deciding to.
+  the local network for reasons that have nothing to do with the code. Both
+  tablet paths are checked by hand on hardware. What each end can do is say when
+  it is not working, which is the whole difference between a feature that is off
+  and one that is broken. Typing an address is supported everywhere and always
+  will be, because multicast is also the first thing a guest network blocks —
+  and so, now, is pointing the tablet's camera at a code on the desktop's
+  screen. That route needs a camera: Android, iPadOS and macOS have one through
+  `mobile_scanner`, and on Windows and Linux the row is absent rather than
+  present and refusing.
 - 🖥️ **A remote display shows every tab, not a chosen one.** `TabSpec` carries a
-  `displayTargetId` and nothing honours it yet: assigning tabs to a particular
-  screen means the host has to be able to tell two displays apart, and in a
-  protocol where the display says nothing at all, it cannot. Either the display
-  identifies itself — which is a client→host frame, and the display port has
-  none by policy rather than by limitation: the protocol has had one since
-  version 3, on the ingest port, which is loopback — or
-  the host keys assignments by address, which breaks on DHCP. Until then the
-  display shows the whole preset and the viewer picks the tab.
+  `displayTargetId` and nothing honours it yet: assigning tabs to a screen means
+  the host has to tell two displays apart, and in a protocol where the display
+  says nothing at all, it cannot. Either the display identifies itself — a
+  client→host frame, which the display port lacks by policy rather than by
+  limitation — or the host keys assignments by address, which breaks on DHCP.
+  Until then the display shows the whole preset and the viewer picks the tab.
 - 📱 **Tablets are display-first.** FFI works fine on iPadOS and Android, but
   audio *input* selection differs sharply per platform. The tablet build's
   primary role is the remote display.
 - 🔌 **Flutter cannot be a VST3/AU plugin GUI.** The plugin is a headless C++
   wrapper around the same `liboaa`, streaming measurements and DAW transport to
-  the app over a local socket. It ships as **VST3 and Audio Unit** — the two
+  the app over a local socket. It ships as **VST3 and Audio Unit**, the two
   formats that reach every DAW people actually master in. AAX is out of scope:
   it needs Avid's SDK and a registered developer account, neither of which a
   free project can promise.
 - 🪟 **A light skin does not lighten the window frame on Windows or Linux.**
   Everything Open Audio Analyzer paints follows the skin; the window frame
   belongs to the operating system, and Flutter has no supported desktop API for
-  it. macOS no longer has a title bar at all — the menu bar runs to the top
-  edge and the window buttons sit inside it — but that took platform code in the
+  it. macOS no longer has a title bar at all, but that took platform code in the
   runner, and the other two each need their own.
 - 🧪 **Native assets are young.** Recommended since Flutter 3.38, but the
   fallback if a platform misbehaves is the legacy `plugin_ffi` template plus
@@ -1273,8 +1119,8 @@ so a release built from a fork is unsigned and every script says so. See
 ## 🤝 Contributing
 
 Read [CLAUDE.md](CLAUDE.md) first — it is short, and it is where the rules that
-are not obvious from the code live. Each directory has an `AGENTS.md`
-explaining what belongs in it and why.
+are not obvious from the code live. Each directory has an `AGENTS.md` explaining
+what belongs in it and why.
 
 The house style for comments is *why, not what*, usually naming the failure mode
 that forced the design. If a comment could be deleted without losing
