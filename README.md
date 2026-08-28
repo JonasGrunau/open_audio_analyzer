@@ -80,16 +80,6 @@ approximating.
 14. [Contributing](#-contributing)
 15. [License](#-license)
 
-**Elsewhere** — the documentation site carries
-[Install](https://open-audio-analyzer.com/docs/install),
-[Keyboard](https://open-audio-analyzer.com/docs/keyboard),
-[Analysing files](https://open-audio-analyzer.com/docs/analysing-files),
-[Metrics](https://open-audio-analyzer.com/docs/metrics),
-[Wire protocol](https://open-audio-analyzer.com/docs/wire),
-[Changelog](https://open-audio-analyzer.com/docs/changelog),
-[Building](https://open-audio-analyzer.com/docs/building) and
-[Privacy](https://open-audio-analyzer.com/privacy).
-
 ---
 
 ## ✅ Status
