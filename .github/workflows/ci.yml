@@ -474,7 +474,7 @@ jobs:
   #
   # **Every event builds it, and that is the check.** The manual's page list in
   # `website/src/lib/docs.mjs` is written out rather than globbed — a glob
-  # publishes `PLAN.md` to strangers the day somebody moves it — so a renamed
+  # publishes `AGENTS.md` to strangers the day somebody moves it — so a renamed
   # document fails this build instead of quietly vanishing from the site.
   # `astro build` needs Node and nothing else.
   #

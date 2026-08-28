@@ -22,17 +22,15 @@
 </p>
 
 <p>
-  <a href="https://open-audio-analyzer.com/docs"><strong>📖 Documentation</strong></a>
+  <a href="https://open-audio-analyzer.com/docs"><strong>Documentation</strong></a>
   ·
-  <a href="https://github.com/JonasGrunau/open_audio_analyzer/releases">⬇️ Download</a>
+  <a href="https://github.com/JonasGrunau/open_audio_analyzer/releases">Download</a>
   ·
-  <a href="https://open-audio-analyzer.com/docs/keyboard">⌨️ Keyboard</a>
+  <a href="https://open-audio-analyzer.com/docs/keyboard">Keyboard</a>
   ·
-  <a href="https://open-audio-analyzer.com/docs/metrics">📐 Metrics</a>
+  <a href="https://open-audio-analyzer.com/docs/metrics">Metrics</a>
   ·
-  <a href="#-roadmap">🧭 Roadmap</a>
-  ·
-  <a href="#-known-gaps-stated-plainly">🚧 Known gaps</a>
+  <a href="#-known-gaps-stated-plainly">Known gaps</a>
 </p>
 
 </div>
@@ -54,53 +52,79 @@ approximating.
 
 ## 📑 Contents
 
-**📖 Documentation site** —
-[Install](https://open-audio-analyzer.com/docs/install) ·
-[Keyboard](https://open-audio-analyzer.com/docs/keyboard) ·
-[Analysing files](https://open-audio-analyzer.com/docs/analysing-files) ·
-[Metrics](https://open-audio-analyzer.com/docs/metrics) ·
-[Wire protocol](https://open-audio-analyzer.com/docs/wire) ·
-[Changelog](https://open-audio-analyzer.com/docs/changelog) ·
-[Building](https://open-audio-analyzer.com/docs/building) ·
-[Privacy](https://open-audio-analyzer.com/privacy)
+1. [Status](#-status)
+2. [The fourteen modules](#-the-fourteen-modules)
+3. [Why it is built this way](#-why-it-is-built-this-way)
+   - [The per-frame path](#-the-per-frame-path)
+   - [Rendering, per module](#-rendering-per-module)
+4. [Measurement](#-measurement)
+   - [On dynamics, and on honesty](#-on-dynamics-and-on-honesty)
+   - [The correctness gate](#-the-correctness-gate)
+5. [Layout](#-layout)
+   - [Keyboard](#-keyboard)
+   - [Presets, targets and skins](#-presets-targets-and-skins)
+6. [Configuration](#-configuration)
+   - [Skins](#-skins)
+7. [Design](#-design)
+8. [Repository layout](#-repository-layout)
+   - [Licensing](#-licensing)
+9. [Installing](#-installing)
+10. [Building](#-building)
+    - [Tests](#-tests)
+11. [Analysing files](#-analysing-files)
+12. [In a DAW](#-in-a-daw)
+    - [Building and installing it by hand](#-building-and-installing-it-by-hand)
+    - [What the DAW adds that a live input cannot](#-what-the-daw-adds-that-a-live-input-cannot)
+    - [Testing the plugin without a DAW](#-testing-the-plugin-without-a-daw)
+13. [Known gaps, stated plainly](#-known-gaps-stated-plainly)
+14. [Contributing](#-contributing)
+15. [License](#-license)
 
-**📄 This README** —
-[✅ Status](#-status) ·
-[📊 The fourteen modules](#-the-fourteen-modules) ·
-[⚡ Why it is built this way](#-why-it-is-built-this-way) ·
-[📐 Measurement](#-measurement) ·
-[🧩 Layout](#-layout) ·
-[📂 Configuration](#-configuration) ·
-[🎨 Design](#-design) ·
-[📦 Repository layout](#-repository-layout) ·
-[📥 Installing](#-installing) ·
-[🔨 Building](#-building) ·
-[🔍 Analysing files](#-analysing-files) ·
-[🎹 In a DAW](#-in-a-daw) ·
-[🧭 Roadmap](#-roadmap) ·
-[🚧 Known gaps](#-known-gaps-stated-plainly) ·
-[🤝 Contributing](#-contributing) ·
-[📜 License](#-license)
+**Elsewhere** — the documentation site carries
+[Install](https://open-audio-analyzer.com/docs/install),
+[Keyboard](https://open-audio-analyzer.com/docs/keyboard),
+[Analysing files](https://open-audio-analyzer.com/docs/analysing-files),
+[Metrics](https://open-audio-analyzer.com/docs/metrics),
+[Wire protocol](https://open-audio-analyzer.com/docs/wire),
+[Changelog](https://open-audio-analyzer.com/docs/changelog),
+[Building](https://open-audio-analyzer.com/docs/building) and
+[Privacy](https://open-audio-analyzer.com/privacy).
 
 ---
 
 ## ✅ Status
 
-| | What ships today |
-|:-:|---|
-| 🎚️ | **All fourteen modules measure something.** The app opens on a working meter bridge — loudness, super, digital, VU, validator, histogram, alert — with the analyser, oscilloscope, spectrogram, phase scope and stereo cloud on a second tab. |
-| 🧩 | **The canvas is arrangeable**: add, move, resize, duplicate, delete, tabs, undo. |
-| 📐 | **Loudness and true peak are verified** against the EBU Tech 3341/3342 cases, and the spectrum against a sine of known amplitude, on Linux, macOS and Windows on every push. |
-| 💾 | **What you set up is remembered** — layout, delivery target, skin and capture device — as plain JSON in a documented directory. See [Configuration](#-configuration). |
-| 🔍 | **Files are analysed offline** by the app and by the [`oaa` CLI](#-analysing-files). |
-| 📱 | **A tablet mirrors the canvas** over Wi-Fi. Flip **PUBLISH** in the menu bar; the tablet finds it by itself, reads a pairing code off the screen, or takes an address typed by hand. Three routes, because the first one is what a venue's Wi-Fi blocks. |
-| 🎛️ | **A headless [VST3 / AU plugin](#-in-a-daw)** meters what your DAW is playing. |
-| 🔊 | **Your system's own output is metered with nothing to install** — WASAPI loopback on Windows, a Core Audio process tap on macOS 14.2+, a monitor source on Linux. No driver, and on macOS the audio still reaches your speakers while it is measured. |
-| 📦 | **The installers carry the plugin**, behind a checkbox that starts ticked: a macOS pkg, a Windows installer and a Linux tarball, plus an AppImage and a flatpak for the app alone. See [Installing](#-installing). |
-| 🚧 | **What is *not* built** is under [Known gaps](#-known-gaps-stated-plainly), and the list is honest rather than short. |
+What ships today:
 
-See [Roadmap](#-roadmap), and [docs/PLAN.md](docs/PLAN.md) for the plan as it was
-approved.
+- **All fourteen modules measure something.** The app opens on a working meter
+  bridge — loudness, super, digital, VU, validator, histogram, alert — with the
+  analyser, oscilloscope, spectrogram, phase scope and stereo cloud on a second
+  tab.
+- **The canvas is arrangeable**: add, move, resize, duplicate, delete, tabs,
+  undo.
+- **Loudness and true peak are verified** against the EBU Tech 3341/3342 cases,
+  and the spectrum against a sine of known amplitude, on Linux, macOS and
+  Windows on every push.
+- **What you set up is remembered** — layout, delivery target, skin and capture
+  device — as plain JSON in a documented directory. See
+  [Configuration](#-configuration).
+- **Files are analysed offline** by the app and by the
+  [`oaa` CLI](#-analysing-files).
+- **A tablet mirrors the canvas** over Wi-Fi. Flip **PUBLISH** in the menu bar;
+  the tablet finds it by itself, reads a pairing code off the screen, or takes
+  an address typed by hand. Three routes, because the first one is what a
+  venue's Wi-Fi blocks.
+- **A headless [VST3 / AU plugin](#-in-a-daw)** meters what your DAW is playing.
+- **Your system's own output is metered with nothing to install** — WASAPI
+  loopback on Windows, a Core Audio process tap on macOS 14.2+, a monitor source
+  on Linux. No driver, and on macOS the audio still reaches your speakers while
+  it is measured.
+- **The installers carry the plugin**, behind a checkbox that starts ticked: a
+  macOS pkg, a Windows installer and a Linux tarball, plus an AppImage and a
+  flatpak for the app alone. See [Installing](#-installing).
+- **What is *not* built** is under
+  [Known gaps](#-known-gaps-stated-plainly), and the list is honest rather than
+  short.
 
 ---
 
@@ -146,9 +170,9 @@ meter:
 
 | Tier | Thread | Job |
 |---|---|---|
-| 🎙️ **Capture** | audio callback, realtime-safe | Copy input into a lock-free ring. No malloc, no locks, no syscalls. |
-| 🧮 **Analysis** | dedicated, high priority | Run the DSP graph. Publish results into a seqlock-protected snapshot. |
-| 🖥️ **Display** | Flutter UI thread | One FFI call per frame, then paint. |
+| **Capture** | audio callback, realtime-safe | Copy input into a lock-free ring. No malloc, no locks, no syscalls. |
+| **Analysis** | dedicated, high priority | Run the DSP graph. Publish results into a seqlock-protected snapshot. |
+| **Display** | Flutter UI thread | One FFI call per frame, then paint. |
 
 ### ⏩ The per-frame path
 
@@ -426,11 +450,11 @@ between machines or keep in version control.
 
 | Platform | Directory |
 |---|---|
-| 🍎 **macOS** | `~/Library/Application Support/Open Audio Analyzer` |
-| 🪟 **Windows** | `%APPDATA%\Open Audio Analyzer` |
-| 🐧 **Linux** | `$XDG_CONFIG_HOME/oaa`, or `~/.config/oaa` |
-| 📱 **iPadOS** | `Library/Application Support/Open Audio Analyzer` inside the app's own container |
-| 🤖 **Android** | `oaa` inside the app's own `files` directory |
+| **macOS** | `~/Library/Application Support/Open Audio Analyzer` |
+| **Windows** | `%APPDATA%\Open Audio Analyzer` |
+| **Linux** | `$XDG_CONFIG_HOME/oaa`, or `~/.config/oaa` |
+| **iPadOS** | `Library/Application Support/Open Audio Analyzer` inside the app's own container |
+| **Android** | `oaa` inside the app's own `files` directory |
 
 ```
 settings.json          the frame rate, source, target, skin
@@ -580,7 +604,7 @@ assets/fonts/      Inter and Google Sans Code, with their licences.      SIL OFL
 cli/               The `oaa` command-line analyser.                          GPL
 plugin/            Headless VST3 + AU plugin.                              AGPL
   host/            A fake DAW that plays a file through it. Ships nowhere.  AGPL
-docs/              PLAN.md, METRICS.md, WIRE.md.
+docs/              METRICS.md, WIRE.md.
 ```
 
 Two boundaries carry weight:
@@ -634,14 +658,14 @@ page](https://github.com/JonasGrunau/open_audio_analyzer/releases). Full
 instructions, including how to meter your own system's output on each platform,
 are on the [documentation site](https://open-audio-analyzer.com/docs/install).
 
-| | Platform | Artefact | Plugin | |
-|:-:|---|---|:-:|---|
-| 🍎 | macOS 14.2+ | `Open.Audio.Analyzer-<version>-macos.pkg` | VST3 + AU | Universal — Apple silicon and Intel. |
-| 🪟 | Windows 10 1809+ | `Open.Audio.Analyzer-<version>-windows-x64.exe` | VST3 | Uninstaller in Installed apps. |
-| 🐧 | Linux | `Open.Audio.Analyzer-<version>-linux-<arch>.tar.gz` | VST3 | `./install.sh`, no root. |
-| 🐧 | Linux | `Open.Audio.Analyzer-<version>-<arch>.AppImage` | — | One file, no root, GTK from the host. |
-| 🐧 | Linux | `Open.Audio.Analyzer-<version>-<arch>.flatpak` | — | Sandboxed, carries its own runtime. |
-| ⌨️ | Any | `oaa-cli-<platform>.tar.gz` / `.zip` | — | `bin/oaa` beside the engine. No Flutter runtime. |
+| Platform | Artefact | Plugin | |
+|---|---|:-:|---|
+| macOS 14.2+ | `Open.Audio.Analyzer-<version>-macos.pkg` | VST3 + AU | Universal — Apple silicon and Intel. |
+| Windows 10 1809+ | `Open.Audio.Analyzer-<version>-windows-x64.exe` | VST3 | Uninstaller in Installed apps. |
+| Linux | `Open.Audio.Analyzer-<version>-linux-<arch>.tar.gz` | VST3 | `./install.sh`, no root. |
+| Linux | `Open.Audio.Analyzer-<version>-<arch>.AppImage` | — | One file, no root, GTK from the host. |
+| Linux | `Open.Audio.Analyzer-<version>-<arch>.flatpak` | — | Sandboxed, carries its own runtime. |
+| Any | `oaa-cli-<platform>.tar.gz` / `.zip` | — | `bin/oaa` beside the engine. No Flutter runtime. |
 
 > [!TIP]
 > **The first three install the plugin as well, and the checkbox starts
@@ -830,12 +854,20 @@ same painters as a live input. The plugin measures and streams; the app
 displays. That split is what stops there being two implementations of every
 meter drifting apart from each other.
 
-The app takes the connection as the choice: a plugin that connects appears on
-the canvas in place of whatever local source was there, the status bar names it,
-and removing the plugin hands the canvas back. Several inserts can be connected
-at once, and the most recently added is the one on screen, because adding it is
-the act of choosing it. It connects on `127.0.0.1:47822` and keeps retrying, so
-it does not matter which of the two you start first. Its window is a status
+**A connected plugin is a source in the picker**, beside the test tone and the
+machine's own inputs — `DAW plugin — Logic Pro`, with the host it is running in
+— so it is chosen and left the same way an interface is, and the selection is
+remembered between launches. The first plugin to connect selects itself, because
+inserting it is the act of choosing it and nobody who has just put a meter on a
+bus wants to go and find a menu; a second insert does not, so a plugin left in a
+session cannot take the canvas back off somebody who has switched to their
+interface. Several inserts can be connected at once and each is its own row.
+Choosing a DAW releases the capture device — nothing local is being metered, and
+a microphone held open behind a canvas showing a DAW is a recording light with
+nothing behind it — and choosing it with none connected reads as dashes rather
+than as silence, with a line at the top of the window saying so. It connects on
+`127.0.0.1:47822` and keeps retrying, so it does not matter which of the two you
+start first. Its window is a status
 panel: a diagram of the three places the path can break — the host's audio, the
 host's playhead, the socket to the app — with each run lit or dark and the
 socket's dashes travelling while frames are actually being sent, and under it
@@ -988,33 +1020,9 @@ sixth is the unreachable "host supplies no position" branch described above.
 
 ---
 
-## 🧭 Roadmap
+## 🚧 Known gaps, stated plainly
 
-| Phase | | Status |
-|:-:|---|:-:|
-| **0** | Skeleton, engine spike, the render path, design tokens | ✅ done |
-| **1** | K-weighting, M/S/I, LRA, true peak, **EBU conformance in CI**, device capture | ✅ done |
-| **2** | The 24×16 canvas: add, move, resize, duplicate, tabs, undo; bundled type | ✅ done |
-| **3** | The twelve modules, the FFT, the scope and the loudness distribution | ✅ done |
-| **4** | Presets, calibrations, skins, audio settings, persistence | ✅ done |
-| **5** | Offline file analysis, report panel, exports, `oaa` CLI | ✅ done |
-| **6** | Remote display: mDNS discovery, wire protocol, tablet mode | ✅ done² |
-| **7** | VST3 and Audio Unit plugin, DAW transport and timecode | ✅ done¹ |
-| **8** | Keyboard shortcuts, docs site, packaging (installers for all three desktops, AppImage, flatpak) | ✅ done³ |
-
-¹ The plugin, the transport and the timecode ship. The **Elapsed and Timecode
-LUFS modes do not** — see below.
-
-² The display ships, and discovery now works on all five platforms.
-**Tab-per-display targeting is not built** — see below.
-
-³ All five installers build and are published on a tag. **None of them is signed
-in this repository** — signing needs certificates that are not ours to commit,
-so a release built from a fork is unsigned and every script says so.
-
-### 🚧 Known gaps, stated plainly
-
-- 🎛️ **No module offers the Elapsed or Timecode LUFS modes yet.** What used to
+- **No module offers the Elapsed or Timecode LUFS modes yet.** What used to
   block them is gone: protocol version 3 defines `0x0020 SET_LUFS_MODE` on the
   ingest port, which is loopback where whatever connects is already running as
   you, and the engine's half is built. What is left is the part you would see —
@@ -1030,7 +1038,7 @@ so a release built from a fork is unsigned and every script says so.
   needs one nor will get one, since that port is on the LAN and stays read-only
   until somebody designs authentication for it. Silently restarting an
   integration mid-programme is wrong in a way nothing on screen reveals.
-- 🔊 **Capturing your own system's output takes all of it, and on macOS it takes
+- **Capturing your own system's output takes all of it, and on macOS it takes
   permission.** No driver on any platform, and no per-application selection on
   any of them. Windows needs nothing: WASAPI loopback captures whatever is
   playing. Linux already lists a PulseAudio or PipeWire monitor source. On
@@ -1053,7 +1061,7 @@ so a release built from a fork is unsigned and every script says so.
   an idle clock, so the meters hold their last reading rather than falling to
   the floor. That is not a fault, and a source that has *stopped* is a different
   fact that is reported.
-- 📁 **Offline analysis does not read Ogg Vorbis, Opus, AAC or ALAC.** WAV,
+- **Offline analysis does not read Ogg Vorbis, Opus, AAC or ALAC.** WAV,
   AIFF, RF64, Wave64, FLAC and MP3 cover the formats a master is delivered *as*,
   which is what a delivery check is for. The missing ones are what a master is
   distributed as after transcoding — worth having eventually, and the decoder is
@@ -1062,19 +1070,19 @@ so a release built from a fork is unsigned and every script says so.
 - ⏱️ **A file is measured whole, from the start.** There is no region selection
   and no seeking during analysis, because an integrated loudness taken over a
   file that was seeked through is a measurement of a programme nobody played.
-- 🔒 **The remote display has no authentication and no encryption.** Anyone who
+- **The remote display has no authentication and no encryption.** Anyone who
   can reach the port can read the measurements and the layout, though not the
   audio, which never goes on the wire. That is why publishing is **off until you
   switch it on**, and why the link is one-directional: a display cannot reset,
   retarget or reconfigure the machine it is watching. Do not switch it on at a
   venue whose Wi-Fi you do not control.
-- 📡 **Publishing is never remembered, on purpose.** The display's name, port and
+- **Publishing is never remembered, on purpose.** The display's name, port and
   update rate persist like every other setting; whether to publish does not, and
   starts off at every launch. The switch is **PUBLISH** in the menu bar rather
   than in the panel, because an unauthenticated open port needs to be visible
   without opening anything, and a remembered "yes" means a laptop carried to a
   café starts advertising itself without anybody deciding to.
-- 🌐 **Neither tablet's discovery can be proved by a test.** All five platforms
+- **Neither tablet's discovery can be proved by a test.** All five platforms
   find hosts by themselves now — the desktops and Android over a multicast
   socket Open Audio Analyzer owns, iPadOS through the system's Bonjour
   responder, because Apple does not let an app hold that socket without an
@@ -1093,28 +1101,28 @@ so a release built from a fork is unsigned and every script says so.
   screen. That route needs a camera: Android, iPadOS and macOS have one through
   `mobile_scanner`, and on Windows and Linux the row is absent rather than
   present and refusing.
-- 🖥️ **A remote display shows every tab, not a chosen one.** `TabSpec` carries a
+- **A remote display shows every tab, not a chosen one.** `TabSpec` carries a
   `displayTargetId` and nothing honours it yet: assigning tabs to a screen means
   the host has to tell two displays apart, and in a protocol where the display
   says nothing at all, it cannot. Either the display identifies itself — a
   client→host frame, which the display port lacks by policy rather than by
   limitation — or the host keys assignments by address, which breaks on DHCP.
   Until then the display shows the whole preset and the viewer picks the tab.
-- 📱 **Tablets are display-first.** FFI works fine on iPadOS and Android, but
+- **Tablets are display-first.** FFI works fine on iPadOS and Android, but
   audio *input* selection differs sharply per platform. The tablet build's
   primary role is the remote display.
-- 🔌 **Flutter cannot be a VST3/AU plugin GUI.** The plugin is a headless C++
+- **Flutter cannot be a VST3/AU plugin GUI.** The plugin is a headless C++
   wrapper around the same `liboaa`, streaming measurements and DAW transport to
   the app over a local socket. It ships as **VST3 and Audio Unit**, the two
   formats that reach every DAW people actually master in. AAX is out of scope:
   it needs Avid's SDK and a registered developer account, neither of which a
   free project can promise.
-- 🪟 **A light skin does not lighten the window frame on Windows or Linux.**
+- **A light skin does not lighten the window frame on Windows or Linux.**
   Everything Open Audio Analyzer paints follows the skin; the window frame
   belongs to the operating system, and Flutter has no supported desktop API for
   it. macOS no longer has a title bar at all, but that took platform code in the
   runner, and the other two each need their own.
-- 🧪 **Native assets are young.** Recommended since Flutter 3.38, but the
+- **Native assets are young.** Recommended since Flutter 3.38, but the
   fallback if a platform misbehaves is the legacy `plugin_ffi` template plus
   CMake.
 
@@ -1142,6 +1150,6 @@ JUCE. Copyright © 2026 Jonas Grunau. See [Licensing](#-licensing) above and the
 
 <img src="assets/brand/oaa-icon.png" alt="" width="44" height="44">
 
-<p><sub>📖 <a href="https://open-audio-analyzer.com/docs">open-audio-analyzer.com/docs</a></sub></p>
+<p><sub><a href="https://open-audio-analyzer.com/docs">open-audio-analyzer.com/docs</a></sub></p>
 
 </div>

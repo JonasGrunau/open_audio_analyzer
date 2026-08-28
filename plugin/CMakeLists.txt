@@ -17,9 +17,9 @@
 # them is the whole design.
 #
 # ---------------------------------------------------------------------------
-# Licensing — this differs from docs/PLAN.md, deliberately, and it matters
+# Licensing — this directory is not licensed like the rest, and it matters
 #
-# The plan says "Built with JUCE under its GPL-3.0 option". That was true of
+# "Built with JUCE under its GPL-3.0 option" was true of
 # JUCE 6. **JUCE 7 and 8 are AGPLv3 or commercial, not GPLv3.** We take the
 # AGPLv3 option, which is available to us and costs nothing we were not already
 # giving away, but it does change what this directory is licensed as:

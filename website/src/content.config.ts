@@ -8,8 +8,8 @@
  * step in between.
  *
  * The pattern is a list rather than `docs/**\/*.md` on purpose: `docs/` also
- * holds `PLAN.md` and `AGENTS.md`, which are records of intent and instructions
- * to a machine, and neither is documentation. The list here is a superset of
+ * holds `AGENTS.md`, which is instructions to a machine and not documentation.
+ * The list here is a superset of
  * the one in `src/lib/docs.mjs`, which is the manual's manifest and its
  * navigation order: a source that exists there and not on disk fails the
  * build, and one that exists here and not there is published only if some page

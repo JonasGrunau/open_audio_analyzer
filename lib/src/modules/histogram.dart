@@ -15,7 +15,7 @@ import '../clock/meter_clock.dart';
 /// Decibel's name, which is a misnomer in both products and is kept anyway —
 /// `ModuleKind.histogram` is written into every saved preset, and a module that
 /// renames itself is a layout that stops loading. What it actually draws is a
-/// time series, which is what `docs/PLAN.md` specified from the start.
+/// time series, which is what it was specified as from the start.
 ///
 /// Two stacked bands share one axis:
 ///
@@ -115,8 +115,8 @@ class HistogramModule extends StatefulWidget {
   State<HistogramModule> createState() => _HistogramModuleState();
 }
 
-/// One column per 100 ms of measured signal — the 10 Hz `docs/PLAN.md` asked
-/// for. Fast enough that a short-term line looks continuous, slow enough that
+/// One column per 100 ms of measured signal, or 10 Hz.
+/// Fast enough that a short-term line looks continuous, slow enough that
 /// a wide module holds minutes rather than seconds.
 const double _secondsPerColumn = 0.1;
 

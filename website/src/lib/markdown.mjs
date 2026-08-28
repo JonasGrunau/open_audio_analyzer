@@ -3,7 +3,7 @@
  * These documents were written to be published as flat `.html` files next to
  * one another, and they link to each other that way: `install.html#in-a-daw`.
  * They also link sideways into the repository — `docs/METRICS.md`,
- * `README.md#roadmap` — which resolves when you are reading them on GitHub and
+ * `README.md#-in-a-daw` — which resolves when you are reading them on GitHub and
  * resolves nowhere when you are reading them here.
  *
  * Both are fixed here rather than by editing eight documents. The documents are

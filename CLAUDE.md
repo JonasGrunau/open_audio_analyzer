@@ -11,9 +11,12 @@ skins. A free reimplementation of the ideas in
 
 `README.md` is the real design document: the architecture, the DSP spec table,
 the licensing split and the honest list of gaps. Read it before changing
-anything non-trivial. `docs/PLAN.md` is the full phased plan.
+anything non-trivial. There is no plan document: `docs/PLAN.md` held the phased
+plan and was deleted once every phase in it had shipped. The code and the
+`AGENTS.md` files are the source of truth for what exists, and `CHANGELOG.md`
+for how it got here.
 
-**Currently Phase 8 complete — every phase in `docs/PLAN.md` has shipped.**
+**Every phase that was planned has shipped.**
 All fourteen modules measure something. Loudness and true peak are held against
 the EBU conformance cases in CI, and the spectrum against a sine of known
 amplitude. Layouts, settings, delivery targets and skins persist as JSON under
@@ -23,9 +26,8 @@ headless VST3 / AU plugin streams the DAW's audio and transport to the app. The
 canvas is driven from the keyboard, the macOS, Windows and Linux installers
 carry the plugin and install it behind a checkbox, there is also an AppImage and
 a flatpak for the application alone, and the documentation site is generated
-from this repository. See the
-Roadmap in `README.md` for what each phase covered, its **Known gaps** for what
-is still not built, and `docs/PLAN.md` for what was planned.
+from this repository. See **Known gaps** in `README.md` for what is still not
+built, and `CHANGELOG.md` for what shipped when.
 
 ## Key Files
 
@@ -79,16 +81,15 @@ is still not built, and `docs/PLAN.md` for what was planned.
 | `lib/` | The application. | GPL-3.0-or-later |
 | `cli/` | The `oaa` command-line analyser. No Flutter binding. | GPL-3.0-or-later |
 | `plugin/` | Headless VST3 / AU. Measures the DAW's audio, streams it to the app. Contains `host/`, the fake DAW that drives it. | **AGPL-3.0-or-later** |
-| `docs/` | `PLAN.md`, `METRICS.md`, `WIRE.md`, and `site/`. Everything but `PLAN.md` and `AGENTS.md` is published, unaltered and in place, at `open-audio-analyzer.com/docs`. | |
+| `docs/` | `METRICS.md`, `WIRE.md`, and `site/`. Everything but `AGENTS.md` is published, unaltered and in place, at `open-audio-analyzer.com/docs`. | |
 | `tool/` | Repository scripts. Nothing here ships. | GPL-3.0-or-later |
 | `packaging/` | pkg, Windows installer, Linux tarball, AppImage, flatpak, the iPad IPA, the Android app bundle, and the app icon they all need. The first three carry the VST3 (and on macOS the AU) and so are built from the plugin job's artefacts, not from the app alone. The last two are the ones nobody downloads: an App Store IPA provisions no devices and an `.aab` is a publishing format, so both exist to be uploaded and `ci.yml` keeps them off the release. | GPL-3.0-or-later |
 | `assets/` | The fonts the application bundles, and the logo the repository publishes. `brand/oaa-logo.svg` is the one drawing everything else is generated from. Three files here are also compiled into the plugin — two faces and the mark — so renaming one breaks that build; see `assets/AGENTS.md`. | GPL-3.0-or-later; fonts SIL OFL 1.1 |
 | `website/` | `open-audio-analyzer.com` — a static Astro site that is also where the documentation is published, rendered from this repository's own Markdown in place. Two Flutter web targets give it its pictures — one photographs a module at a time, the other is a live canvas of eight — and both replay one recording rather than a mock: a Dart CLI measures a real track through the engine, and the `ReplaySource` they share plays it back, so a still and the live demo cannot disagree about what the material did. Built by the `website` job in `ci.yml` on every event and deployed by it on a push to `main`; it was deployed by hand until 0.11.0. | GPL-3.0-or-later; fonts SIL OFL 1.1 |
 
 **`plugin/` is the one AGPL directory**, because JUCE 7 and 8 are
-AGPLv3-or-commercial (only JUCE 6 offered GPLv3, which `docs/PLAN.md` still
-assumes). Nothing there may be moved into `engine/` or `oaa_core/`: those are
-GPL-3.0-or-later, and moving AGPL code into them would put JUCE's network clause
+AGPLv3-or-commercial (only JUCE 6 offered GPLv3). Nothing there may be moved
+into `engine/` or `oaa_core/`: those are GPL-3.0-or-later, and moving AGPL code into them would put JUCE's network clause
 on two packages that the app, the CLI and the tablet display all link with no
 JUCE anywhere in sight. The app is unaffected: it never links JUCE — it talks to
 the plugin over a socket.
@@ -497,10 +498,9 @@ claim something about it:
 | **When** the plugin sets a transport flag, without any byte moving | `docs/WIRE.md`'s prose for that bit, `CHANGELOG.md` 🐛, and a case in `packages/oaa_wire/test/plugin_e2e_test.dart`. The row above covers the wire's *layout*; this is the other half. A consumer depends on when a producer sets a bit as much as on where the bit lives, and none of that is visible in a byte table — the discontinuity bit was being set every block while the transport sat parked, and delivered on almost none of the blocks where it mattered, with the layout perfectly correct throughout |
 | The iOS build, its signing, or the TestFlight upload | `packaging/AGENTS.md`, `docs/site/building.md`'s credential table, `.github/AGENTS.md`, and `docs/site/install.md`'s iPadOS section. The IPA is **not** a release asset — if you make it one, `README.md`'s note and the publish step's exclusion both become wrong |
 | A switch on the fake DAW | `plugin/host/AGENTS.md`, and `README.md` if it is one of the gestures a person cannot perform on cue. `--help` in `FakeDawOptions.h` is the exhaustive list and the only one that has to be; the other two name the interesting ones and are prose |
-| A page the documentation site publishes, or its filename | **Two lists that have to agree**: the manifest in `website/src/lib/docs.mjs` and the pattern in `website/src/content.config.ts`. Neither is a recursive glob over `docs/` — that publishes `PLAN.md` to strangers the day somebody moves it. `docs.mjs` is written out page by page; `content.config.ts` is a scoped list (`docs/site/*.md` plus the three documents named individually), so it loads a superset and `docs.mjs` decides what is published. A renamed document therefore fails the website build instead of silently vanishing from it. The `website` job in `ci.yml` is what runs that build on every event |
+| A page the documentation site publishes, or its filename | **Two lists that have to agree**: the manifest in `website/src/lib/docs.mjs` and the pattern in `website/src/content.config.ts`. Neither is a recursive glob over `docs/` — that publishes `AGENTS.md` to strangers the day somebody moves it. `docs.mjs` is written out page by page; `content.config.ts` is a scoped list (`docs/site/*.md` plus the three documents named individually), so it loads a superset and `docs.mjs` decides what is published. A renamed document therefore fails the website build instead of silently vanishing from it. The `website` job in `ci.yml` is what runs that build on every event |
 | The mark, the logo or the app icon | Nothing by hand — redraw `assets/brand/oaa-logo.svg` and run `dart run packaging/icon/make_icons.dart`, which writes every icon, every vector twin and the README's image. Then `assets/AGENTS.md` if a file appeared or went, `CHANGELOG.md` ⚡, and `npm run og` in `website/` because the card carries the mark. **`packaging/icon/oaa.svg`, `website/public/`'s icons and everything in `assets/brand/` except `oaa-logo.svg` itself are generated: editing one by hand is a change the next run silently reverts.** The one exception is `website/public/favicon.svg`, which a browser tab shows at 16 px where the tile does not read — it is drawn by hand, the generator no longer writes it, and it is the file that taught this rule its exception by being reverted. |
 | A version, a stated requirement, an artefact filename, or how a module looks | Not the version: `website/src/lib/app.mjs` reads it out of `pubspec.yaml` at build time, because three typed literals were a release behind within the hour after a tag. The rest is typed and nothing regenerates it — `PLATFORMS` in `website/src/pages/index.astro` carries the minimum macOS and what each installer holds, and the macOS floor moved to 14.2 in the same change that added `website/` while the page still said 11 Big Sur. `npm run modules -- --only <id>` for the photograph. See `website/AGENTS.md` |
-| A phase reaching done | `README.md` Roadmap, `CLAUDE.md`'s status line, `docs/PLAN.md` |
 | Anything a user sees or configures | `README.md`, and `CHANGELOG.md` under ✨ or ⚡ |
 
 Two rules that are not obvious:

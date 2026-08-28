@@ -24,7 +24,7 @@ energy sums** — 8000 bins over the useful range — rather than a growing sort
 list. That is O(1) per update in constant memory, which is what makes an
 integration that runs for hours cost the same as one that runs for seconds, and
 the bin is an order of magnitude finer than the ±0.1 LU the standard asks the
-answer to be within. `docs/PLAN.md` says 0.1 LU; the implementation went finer.
+answer to be within.
 
 The 120-bin histogram published in the snapshot is a **different, coarser
 thing** — it is for drawing, spans −60 to 0 LUFS at 0.5 LU, and is finer than a
@@ -215,10 +215,10 @@ one continuous curve, taken four to a main lobe, and a straight line between two
 of them is within about a tenth of a decibel of it. Frequency **resolution** is
 unchanged by any of this; only the sampling of it is finer.
 
-A/C/Z weighting and selectable FFT sizes are named in `docs/PLAN.md` and are
-**not built**: the window is 4096 points, unweighted (Z). One set of
-transforms feeds the analyser, the spectrogram and the stereo cloud, so three
-modules cannot disagree about where a peak is.
+A/C/Z weighting and selectable FFT sizes are **not built**: the window is 4096
+points, unweighted (Z). One set of transforms feeds the analyser, the
+spectrogram and the stereo cloud, so three modules cannot disagree about where a
+peak is.
 
 ## Conventions
 

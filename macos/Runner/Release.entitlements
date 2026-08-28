@@ -12,9 +12,10 @@
 	from pointing anywhere outside itself, and the denial surfaces as "could not
 	read <file>", which reads like a corrupt file rather than a permission.
 
-	The cost is Mac App Store eligibility, which Open Audio Analyzer does not want: docs/PLAN.md
-	ships dmg, msix, AppImage and flatpak. Notarisation and the hardened runtime,
-	which dmg distribution does need, do not require the sandbox.
+	The cost is Mac App Store eligibility, which Open Audio Analyzer does not
+	want: it is distributed as a pkg, a Windows installer, a tarball, an AppImage
+	and a flatpak. Notarisation and the hardened runtime, which direct
+	distribution does need, do not require the sandbox.
 
 	The entitlements below are kept because they are correct declarations of what
 	Open Audio Analyzer does, and because they are what the sandbox would need if it ever comes

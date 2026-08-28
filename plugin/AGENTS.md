@@ -16,10 +16,9 @@ be wrong in a way nobody noticed for months.
 
 **This directory is AGPL-3.0-or-later. The rest of the repository is not.**
 
-JUCE 7 and 8 are AGPLv3-or-commercial (JUCE 6 was GPLv3; `docs/PLAN.md` was
-written against the older terms and is out of date on this point). Open Audio
-Analyzer takes the AGPLv3 option, so anything linked into the plugin binary is
-AGPL.
+JUCE 7 and 8 are AGPLv3-or-commercial (JUCE 6 was GPLv3, which is what the
+project's early prose assumed). Open Audio Analyzer takes the AGPLv3 option, so
+anything linked into the plugin binary is AGPL.
 
 | | |
 |---|---|
