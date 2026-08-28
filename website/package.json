@@ -12,7 +12,7 @@
     "check": "node scripts/check-layout.mjs",
     "audit": "node scripts/audit.mjs",
     "deploy": "npm run analyzer && npm run build && wrangler deploy",
-    "og": "'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' --headless=new --disable-gpu --hide-scrollbars --window-size=1200,630 --virtual-time-budget=6000 --screenshot=public/og.png \"file://$PWD/scripts/og.html\"",
+    "og": "'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' --headless=new --disable-gpu --hide-scrollbars --window-size=1280,640 --virtual-time-budget=6000 --screenshot=public/og.png \"file://$PWD/scripts/og.html\"",
     "fonts": "node scripts/fetch-fonts.mjs",
     "modules": "node scripts/render-modules.mjs",
     "record": "node scripts/record.mjs",
