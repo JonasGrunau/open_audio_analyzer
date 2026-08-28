@@ -77,8 +77,17 @@ Uint8List _u32(int value) =>
 Uint8List _u16(int value) =>
     Uint8List(2)..buffer.asByteData().setUint16(0, value, Endian.little);
 
-ProcessResult _run(List<String> args) =>
-    Process.runSync(Platform.resolvedExecutable, ['run', _entryPoint, ...args]);
+// The output is decoded as UTF-8 because that is what the CLI writes.
+// Process.run's default is systemEncoding, which on Windows is the ANSI code
+// page — every non-ASCII character then reads back as mojibake, and an
+// assertion on a target line's '≥' fails on exactly one platform while the
+// tool itself is fine.
+ProcessResult _run(List<String> args) => Process.runSync(
+  Platform.resolvedExecutable,
+  ['run', _entryPoint, ...args],
+  stdoutEncoding: utf8,
+  stderrEncoding: utf8,
+);
 
 void main() {
   setUpAll(() {

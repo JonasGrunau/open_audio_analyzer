@@ -113,6 +113,10 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   both carry the one value, as every producer already wrote them.
 
 ### 🚧 Internal
+- The CLI suite decodes the tool's output as UTF-8, which is what the tool
+  writes. It was decoded with the system encoding — on Windows the ANSI code
+  page — so the two dynamics-floor tests, the first to assert a line carrying
+  `≥`, failed on that platform alone while the CLI itself was fine.
 - `OAA_GATE_ABSOLUTE` lives in `oaa_loudness.h` rather than in the loudness
   source, so the analysis layer gates the dynamics readings on the same
   constant the integrated measurement is gated on.
