@@ -350,7 +350,7 @@ class _SettingsPanelState extends ConsumerState<SettingsPanel> {
       title: 'Reset delivery targets',
       message:
           'This deletes every delivery target you have saved and puts the '
-          'built-in six back. Targets you wrote by hand, and corrections you '
+          'built-in seven back. Targets you wrote by hand, and corrections you '
           'made to a built-in, are removed from the configuration directory. '
           'It cannot be undone.',
       confirmLabel: 'Reset',

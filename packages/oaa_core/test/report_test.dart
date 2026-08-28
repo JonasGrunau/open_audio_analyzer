@@ -311,6 +311,26 @@ void main() {
       final text = exportReportText(buildReport());
       expect(text, contains('10th–95th percentile'));
     });
+
+    test('gives ODR-I its Annex A band word, in the text alone', () {
+      // The default report reads 12.8 LU. The bands are half-open at the top,
+      // so exactly 13.0 is dynamic's, not balanced's.
+      expect(exportReportText(buildReport()), contains('(balanced)'));
+      expect(
+        exportReportText(buildReport(truePeakMax: -1.0, lufsIntegrated: -14.0)),
+        contains('(dynamic)'),
+      );
+      expect(exportReportJson(buildReport()), isNot(contains('balanced')));
+    });
+
+    test('an undefined ODR-I gets no band word', () {
+      final text = exportReportText(buildReport(lufsIntegrated: double.nan));
+      final line = text
+          .split('\n')
+          .firstWhere((l) => l.trimLeft().startsWith('ODR-I'));
+      expect(line, contains('—'));
+      expect(line, isNot(contains('(')));
+    });
   });
 
   group('CSV export', () {

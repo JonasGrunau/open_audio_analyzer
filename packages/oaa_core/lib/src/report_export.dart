@@ -57,6 +57,21 @@ String exportReport(AnalysisReport report, ReportFormat format) =>
 /// scanned down rather than read across — the same reason every readout in the
 /// app is monospaced with tabular figures. This is the artefact somebody
 /// attaches to a delivery email, so it states what measured it and when.
+/// The band a finite ODR-I falls in, per ODR Annex A.2.
+///
+/// Editorial by design, which is why it appears in the text report — the
+/// artefact a person reads — and never in the JSON, which a script gates on
+/// numbers. The names and their edges are the annex's, informative, and they
+/// move with it rather than with the specification's version.
+String _odrBand(double odrIntegrated) {
+  if (odrIntegrated < 5) return 'flat';
+  if (odrIntegrated < 8) return 'crushed';
+  if (odrIntegrated < 10) return 'loud';
+  if (odrIntegrated < 13) return 'balanced';
+  if (odrIntegrated < 16) return 'dynamic';
+  return 'wide';
+}
+
 String exportReportText(AnalysisReport report) {
   final out = StringBuffer();
 
@@ -88,9 +103,12 @@ String exportReportText(AnalysisReport report) {
 
   for (final (metric, value) in report.summary) {
     final unit = metric.unit.isEmpty ? '' : ' ${metric.unit}';
+    final band = metric == Metric.odrIntegrated && value.isFinite
+        ? '  (${_odrBand(value)})'
+        : '';
     out.writeln(
       '  ${metric.label.padRight(14)}'
-      '${metric.format(value).padLeft(9)}$unit',
+      '${metric.format(value).padLeft(9)}$unit$band',
     );
   }
 

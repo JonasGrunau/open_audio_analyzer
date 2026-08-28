@@ -163,6 +163,13 @@ class Calibration {
 /// convention is used and said so in the note, because lossy transcoding
 /// downstream of delivery routinely adds a few tenths of a dB and a file
 /// mastered to 0 dBTP will clip after it.
+///
+/// One target is the exception and says so in its name and note:
+/// [dynamicMaster] is a person's published recommendation, not a platform's
+/// requirement. It exists because a floor on dynamics is the check the
+/// platform targets cannot make — no platform publishes one — and the one
+/// citable number (ODR Annex A.3) deserves to be one click away rather than
+/// a JSON file everybody writes for themselves.
 abstract final class BuiltInCalibrations {
   static const streaming = Calibration(
     id: 'streaming-14',
@@ -236,6 +243,21 @@ abstract final class BuiltInCalibrations {
         'spec — watch true peak, not LUFS.',
   );
 
+  static const dynamicMaster = Calibration(
+    id: 'dynamic-master',
+    name: 'Dynamic master',
+    lufsTarget: -14.0,
+    lufsTolerance: 0.5,
+    truePeakMax: -1.0,
+    loudnessRangeMax: 20.0,
+    odrShortFloor: 8.0,
+    note:
+        'The one built-in that is a recommendation rather than a platform. '
+        'The loudness and peak lines are the −14 streaming target\'s; the '
+        'floor is Ian Shepherd\'s published 8 LU (as PSR) for the loudest '
+        'passage, in any genre.',
+  );
+
   static const List<Calibration> all = [
     streaming,
     spotifyLoud,
@@ -243,6 +265,7 @@ abstract final class BuiltInCalibrations {
     ebuR128,
     atscA85,
     cd,
+    dynamicMaster,
   ];
 
   static const Calibration fallback = streaming;

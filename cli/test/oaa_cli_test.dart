@@ -117,6 +117,9 @@ void main() {
       expect(result.exitCode, 0);
       expect(result.stdout, contains('streaming-14'));
       expect(result.stdout, contains('ebu-r128'));
+      // The one built-in with a dynamics floor, listed like any other limit.
+      expect(result.stdout, contains('dynamic-master'));
+      expect(result.stdout, contains('ODR-S ≥ 8.0 LU'));
     });
 
     // --- The user's own delivery targets ---------------------------------
@@ -269,9 +272,9 @@ void main() {
     test('a dynamics floor is a fourth check, and it can fail the build', () {
       // A steady 1 kHz sine has an ODR-I of exactly 0 LU — its true peak and its
       // loudness are the same number (see the engine's conformance suite), so
-      // it is the most compressed programme there is. A floor the built-ins do
-      // not set is what makes this a fourth line rather than a third one
-      // moving: the same file passes the same numbers without it.
+      // it is the most compressed programme there is. A floor the platform
+      // built-ins do not set is what makes this a fourth line rather than a
+      // third one moving: the same file passes the same numbers without it.
       final root = Directory('${_temp.path}/config-floor')
         ..createSync(recursive: true);
       Directory('${root.path}/calibrations').createSync();
@@ -299,6 +302,9 @@ void main() {
       ]);
       expect(result.exitCode, 2);
       expect(result.stdout, contains('ODR-I'));
+      // The Annex A band word, printed after the reading in the text report:
+      // 0 LU is the flattest band there is.
+      expect(result.stdout, contains('(flat)'));
       expect(result.stdout, contains('VERDICT: FAIL'));
     });
 

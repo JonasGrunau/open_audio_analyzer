@@ -242,8 +242,86 @@ Notes to the cases:
 | **LRA** (EBU Tech 3342) | How far the programme's short-term loudness *moves*, between its 10th and 95th percentiles. It says nothing about limiting: a programme can be crushed flat with a wide LRA, or breathe with a narrow one. |
 | **Crest factor** | Sample peak minus RMS over one block, unweighted. A property of a waveform, not of a programme. |
 
+## Annex A — Reading the numbers (informative)
+
+This annex is guidance, not definition. Nothing in it changes what an
+implementation computes, and it may be revised without a version bump. It
+exists because a reading without a sense of scale is a number, not a
+measurement: somebody watching `ODR-I 6.2` needs to know whether that is a
+choice, a casualty or a delivery problem.
+
+### A.1 What ODR-I predicts
+
+Loudness normalisation is one gain: `target − LUFS-I`. Apply it and the
+programme's true peak lands at `TP Max + target − LUFS-I`, which is
+
+    target + ODR-I
+
+exactly. That makes ODR-I a prediction, not a score. A platform that
+normalises to −14 LUFS under a −1 dBTP ceiling plays a programme at its
+target only while `ODR-I ≤ 13 LU`. Below 13, the master was limited harder
+than the platform asks: it is turned down to target, and nothing on playback
+restores the transients. Above 13, the platform cannot raise the programme to
+target without clipping, so on a platform that will not limit — which is most
+of them — it plays quieter by the excess, with its dynamics intact.
+
+### A.2 Bands
+
+The anchors below are arithmetic on published delivery levels, and anyone can
+recompute them. The descriptions are editorial, and genre-dependent in a way
+no number can be: 7 LU is a choice in a techno track and a casualty in a
+string quartet.
+
+| ODR-I | Reads as | Anchor |
+|---|---|---|
+| 0 – 5 LU | Flat. The limiter's ceiling is the loudness. | 0.0 LU is a full-scale stereo sine (§ 7, case 1) |
+| 5 – 8 LU | Crushed. The late loudness war. | −6 LUFS at −0.1 dBTP → 5.9 LU |
+| 8 – 10 LU | Loud. | −9 LUFS at −0.3 dBTP, a loud CD → 8.7 LU |
+| 10 – 13 LU | Balanced. Nothing is lost at −14 LUFS. | −14 LUFS at −1 dBTP → 13.0 LU, the most a −14 platform can play at its target |
+| 13 – 16 LU | Dynamic. Plays below target on −14 platforms, transients intact. | −16 LUFS at −1 dBTP → 15.0 LU |
+| over 16 LU | Wide. Ordinary for classical, jazz, film and broadcast. | −23 LUFS at −1 dBTP (EBU R 128) → 22.0 LU |
+
+How far the loudness itself moves is LRA's question, not this document's
+(§ 8): a programme can sit in one band for an hour or visit three of them.
+
+The reference implementation prints the band's name after ODR-I in its text
+report — the word for the person reading a delivery email, beside the number
+a script gates on, which its JSON carries bare.
+
+### A.3 The minimum ODR-S
+
+ODR-I describes the whole programme; the minimum ODR-S (§ 4.5) describes its
+most limited three seconds, which is where overcompression lives (§ 5.3). One
+published threshold exists for this arithmetic: Ian Shepherd, whose Dynameter
+displays the same subtraction as `PSR`, recommends going no lower than 8 LU in
+the loudest passage, in any genre — less than that "will often sound crushed".
+This document still recommends no floor (§ 6.3); a delivery specification that
+wants one has a citable number. The reference implementation ships it as a
+built-in delivery target, *Dynamic master* — the one built-in that is a
+recommendation rather than a platform's published numbers, and labelled as
+such.
+
+The gap between the two readings is a diagnosis of its own. A minimum ODR-S
+well below ODR-I means either that the loudest section is limited far harder
+than the rest, or that a single transient is holding ODR-I up (§ 5.3). Either
+way, the minimum is the honest figure for how hard the master was pushed.
+
+### A.4 Scales that look like this one
+
+The Dynamic Range Database (dr.loudness-war.info) colours its `DR` badges as
+a gradient from red at DR7 to green at DR14. Those thresholds do not
+transfer: `DR` is a different measurement (§ 8) that reads lower than ODR-I
+on the same master, usually by a few LU and by more the more dynamic the
+material, and the offset is not a constant. What does transfer is the idea —
+one number, coloured between two named endpoints — and the reference
+implementation colours a reading against the floor in the user's delivery
+target rather than against a fixed opinion of what music should be.
+
 ## 9 Revision history
+
+An annex marked *informative* is guidance, not definition, and may be
+revised without a version bump; §§ 1–7 change only with one.
 
 | Version | Date | Change |
 |---|---|---|
-| 1.0 | 2026-08-28 | First publication. The readings were published by Open Audio Analyzer as `PSR` / `PLR` and `DR-S` / `DR-I` through 0.14.0 with the same arithmetic; § 4.4 (the gate) and § 4.5 (the minimum) are new with this version. |
+| 1.0 | 2026-08-28 | First publication. The readings were published by Open Audio Analyzer as `PSR` / `PLR` and `DR-S` / `DR-I` through 0.14.0 with the same arithmetic; § 4.4 (the gate) and § 4.5 (the minimum) are new with this version. Annex A (informative) was added the day of publication. |

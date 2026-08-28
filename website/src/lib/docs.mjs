@@ -71,7 +71,8 @@ export const PAGES = [
     nav: 'Open Dynamic Range',
     blurb:
       'The ODR specification: two dynamics readings defined to the operand, ' +
-      'with the conformance cases that hold an implementation to it.',
+      'the conformance cases that hold an implementation to it, and an ' +
+      'annex on what the values mean.',
     section: 'Reference',
   },
   {

@@ -73,10 +73,13 @@ A target that names an `odr_i_min` or an `odr_s_min` adds a line to the verdict
 for each: the integrated Open Dynamic Range, which falls as a master is limited
 harder, checked against a floor — and the lowest short-term one the programme
 reached, its most squeezed three seconds, checked against another.
-None of the built-ins sets one, because no platform publishes one; a house
-standard that does writes it into its file and the build fails on it like on
-any other line. The report states the lowest `ODR-S` whether or not a target
-asks about it.
+No platform publishes one, so of the built-ins only **Dynamic master** sets
+one — 8 LU on the lowest `ODR-S`, a published recommendation rather than a
+platform's requirement, and its note says whose. A house standard writes its
+own into its file and the build fails on it like on any other line. The report
+states the lowest `ODR-S` whether or not a target asks about it, and prints
+the band word of ODR Annex A after `ODR-I` — `(balanced)` — in the text
+format alone; the JSON stays numbers.
 
 **Reset**, beside Edit in Settings → Meters, deletes every one of those files
 and leaves the built-ins. `--target` naming one it removed exits with
