@@ -13,7 +13,7 @@ The application. GPL-3.0-or-later.
 | `src/panels/` | Settings, presets, the delivery-target editor, the skin editor, the report. See its own `AGENTS.md`. |
 | `src/storage/` | Where configuration lives and how it is read and written. See its own `AGENTS.md`. |
 | `src/remote/` | Both ends of the remote display — the desktop host and the tablet client — plus mDNS. See its own `AGENTS.md`. |
-| `src/plugin/` | The listener the VST3 / AU plugin connects to, and the transport it sends. Loopback only. |
+| `src/plugin/` | The listener the VST3 / AU plugin connects to, the transport it sends, and the scope that carries the link to the two controls offering it as a source. Loopback only. |
 
 ## Rules
 

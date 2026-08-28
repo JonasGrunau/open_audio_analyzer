@@ -9,6 +9,7 @@ import 'dart:ui' show AppExitResponse;
 import 'package:oaa_core/oaa_core.dart';
 import 'package:oaa_engine/oaa_engine.dart';
 import 'package:oaa_ui/oaa_ui.dart';
+import 'package:oaa_wire/oaa_wire.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -26,6 +27,7 @@ import '../panels/settings_panel.dart';
 import '../panels/theme_editor.dart';
 import '../panels/shortcuts_sheet.dart';
 import '../plugin/plugin_link.dart';
+import '../plugin/plugin_scope.dart';
 import '../remote/display_screen.dart';
 import '../remote/remote_control.dart';
 import '../remote/remote_display_service.dart';
@@ -216,17 +218,45 @@ class _WorkspaceState extends ConsumerState<_Workspace>
   int _healthyPolls = 0;
   int _reopens = 0;
 
-  /// What the meters are reading: the active plugin session if one is
-  /// connected, and this machine's own engine otherwise.
+  /// The canvas while the DAW plugin is the chosen source and none is
+  /// connected.
   ///
-  /// Inserting a plugin *is* the act of choosing it, so a connection takes the
-  /// canvas without anybody having to find a menu — which is what the README
-  /// describes and what `PluginLink.active` already decides. Removing it hands
-  /// the canvas back.
-  MeterSource? get _activeSource => _plugins.active?.snapshot ?? _engine;
+  /// A `WireSnapshot` no frame is ever decoded into starts stale and stays
+  /// stale, so every quantity in it is NaN and every module draws the em dash
+  /// it draws for something nobody measured. That is the honest picture, and
+  /// the alternative was the dishonest one: the local engine is opened on
+  /// silence while a DAW is chosen — see [_resolve] — so handing the canvas
+  /// *that* would put a full screen of steady digital black under a status bar
+  /// naming a plugin.
+  final WireSnapshot _noPlugin = WireSnapshot();
 
-  /// Whether the canvas is showing a plugin rather than the local engine.
-  bool get _onPlugin => _plugins.active != null;
+  /// Whether a plugin was connected the last time membership changed.
+  ///
+  /// The whole of the auto-selection rule — see [_onPluginsChanged].
+  bool _hadPlugin = false;
+
+  /// What the meters are reading: the chosen plugin session, or this machine's
+  /// own engine.
+  ///
+  /// **A lookup of what was chosen, not a rule about what wins.** Through
+  /// 0.14.0 a connected plugin took the canvas from whatever local source was
+  /// there and there was no way back while it stayed connected, which is one
+  /// decision too many for a link that a DAW opens and closes on its own
+  /// schedule: a plugin left in a session made the machine's own inputs
+  /// unreachable. The plugin is a source in the picker now, beside the test
+  /// tone and the interfaces, and inserting one still chooses it — but only
+  /// when there was nothing to displace. See [_onPluginsChanged].
+  MeterSource? get _activeSource =>
+      _onPlugin ? (_plugins.active?.snapshot ?? _noPlugin) : _engine;
+
+  /// Whether the DAW plugin is the chosen source.
+  ///
+  /// True whether or not one is connected: the selection is the user's and does
+  /// not move on its own, so a DAW that is closed for the afternoon leaves the
+  /// meters reading dashes with a notice saying why, and the plugin that comes
+  /// back at four o'clock lands on a canvas that is already waiting for it.
+  bool get _onPlugin =>
+      ref.read(settingsProvider).sourceKind == AudioSourceKind.plugin;
 
   @override
   void initState() {
@@ -247,7 +277,9 @@ class _WorkspaceState extends ConsumerState<_Workspace>
     // three. Nothing on the paint path is behind this; the canvas reads the
     // active session's transport when it paints.
     _plugins.onTransport = (session, transport) {
-      if (identical(session, _plugins.active)) _remote.transport = transport;
+      if (_onPlugin && identical(session, _plugins.active)) {
+        _remote.transport = transport;
+      }
     };
 
     unawaited(_plugins.start());
@@ -405,7 +437,11 @@ class _WorkspaceState extends ConsumerState<_Workspace>
   /// nobody is looking at, which is what a button wired straight to it would
   /// do, this says so.
   void _reset() {
-    final session = _plugins.active;
+    // **Gated on what is on the canvas, not on what is connected.** A plugin
+    // left in a DAW session while somebody meters their own interface is the
+    // ordinary state now, and refusing RESET there would refuse it for a local
+    // engine that RESET reaches perfectly well.
+    final session = _onPlugin ? _plugins.active : null;
     if (session != null) {
       ref
           .read(canvasNoticeProvider.notifier)
@@ -422,6 +458,25 @@ class _WorkspaceState extends ConsumerState<_Workspace>
   /// A plugin connected, disconnected, or became the active one.
   void _onPluginsChanged() {
     if (!mounted) return;
+
+    // **The first plugin to arrive still chooses itself; a later one does
+    // not.** Inserting the plugin is the act of choosing it — nobody who has
+    // just put a meter on a bus wants to go and find a menu — but that argument
+    // is about an application with no DAW on the canvas yet. Once one is
+    // connected the source is whatever the user last said it was: a second
+    // insert, or the same one re-instantiated by a bypass or a track rename,
+    // must not take the canvas back off somebody who has deliberately switched
+    // to their interface. Which of several sessions is shown stays
+    // `PluginLink.active`'s decision, and the picker's.
+    final connected = _plugins.sessions.isNotEmpty;
+    if (connected && !_hadPlugin) {
+      // Synchronous: the settings listener installed in `initState` runs from
+      // inside this call and reopens the local engine on silence, so by the
+      // time `_activeSource` is read below the selection has already moved.
+      ref.read(settingsProvider.notifier).setSource(AudioSourceKind.plugin);
+    }
+    _hadPlugin = connected;
+
     final source = _activeSource;
     if (source != null) {
       // The clock is retargeted rather than rebuilt: every painter holds it as
@@ -430,13 +485,30 @@ class _WorkspaceState extends ConsumerState<_Workspace>
       _clock?.engine = source;
       _remote.source = source;
     }
-    // The playhead belongs to the session, so it goes when the session does. A
-    // display told nothing would hold the removed plugin's position until the
-    // link itself went stale, and a tablet showing bar 57 of a DAW that has
-    // been closed is a tablet showing a measurement of nothing.
-    _remote.transport = _plugins.active?.transport ?? Transport.none;
+    // The playhead belongs to the session, so it goes when the session does —
+    // and when the session stops being what is on the canvas, which is the
+    // second way it can go now that a plugin can be connected without being
+    // chosen. A display told nothing would hold the removed plugin's position
+    // until the link itself went stale, and a tablet showing bar 57 of a DAW
+    // that has been closed is a tablet showing a measurement of nothing.
+    _remote.transport = _onPlugin
+        ? (_plugins.active?.transport ?? Transport.none)
+        : Transport.none;
     setState(() {});
   }
+
+  /// A context *below* the scopes this widget installs.
+  ///
+  /// **`--open-panel` cannot use this State's own context and never could.**
+  /// `RemoteDisplayScope`, `PluginLinkScope` and the `Material` are all built
+  /// in [build], so they are descendants of this element — and
+  /// `dependOnInheritedWidgetOfExactType` only ever looks *up*. Opening the
+  /// settings panel from here asserted "No RemoteDisplayScope in scope" and
+  /// took the panel with it, in the one debug build whose whole purpose is to
+  /// put that panel on screen for somebody to look at. The key hangs on the
+  /// `Material`, which is under both scopes and under `OaaTheme`, which is
+  /// what `showOaaPanel` needs as well.
+  final GlobalKey _belowScopes = GlobalKey();
 
   /// Acts on `--open-panel`, and says so when an argument was not understood.
   void _applyLaunchOptions() {
@@ -453,6 +525,13 @@ class _WorkspaceState extends ConsumerState<_Workspace>
           .read(storageNoticeProvider.notifier)
           .report([?notice, ...options.warnings].join(' '));
     }
+
+    // **Shadows this State's own `context` on purpose**, so that neither this
+    // method nor anything added to it can reach for the one that cannot see
+    // the scopes. Non-null by the time this runs — it is a post-frame callback,
+    // and the `Material` it hangs on is built in both branches of [build].
+    final context = _belowScopes.currentContext;
+    if (context == null) return;
 
     switch (options.openPanel) {
       case null:
@@ -558,18 +637,21 @@ class _WorkspaceState extends ConsumerState<_Workspace>
 
     try {
       final engine = OaaEngine.start(source: source, deviceId: deviceId);
+      // What the canvas reads. Not `_activeSource`: that answers from `_engine`,
+      // which is assigned inside the `setState` below and is still the previous
+      // engine — or null — out here.
+      final metered = _onPlugin
+          ? (_plugins.active?.snapshot ?? _noPlugin)
+          : engine;
       setState(() {
         _engine = engine;
-        _clock = MeterClock(
-          engine: _plugins.active?.snapshot ?? engine,
-          vsync: this,
-        );
+        _clock = MeterClock(engine: metered, vsync: this);
         _sourceLabel = label;
         _failure = null;
       });
       // Before the old engine is destroyed below, so the publish timer never
       // gets a turn holding the freed one.
-      _remote.source = _plugins.active?.snapshot ?? engine;
+      _remote.source = metered;
     } on OaaEngineException catch (error) {
       // Showing the reason beats a blank window. For a device this is usually
       // a microphone permission that was declined or an interface that has
@@ -614,6 +696,16 @@ class _WorkspaceState extends ConsumerState<_Workspace>
         return (OaaSource.testTone, null, 'TEST TONE');
       case AudioSourceKind.silence:
         return (OaaSource.silence, null, 'SILENCE');
+      case AudioSourceKind.plugin:
+        // **Choosing a DAW releases the capture device**, and opening the
+        // engine on silence is the whole of how. Nothing local is being
+        // metered, so a microphone held open in the background is a recording
+        // indicator lit on the machine's own menu bar for a canvas that is
+        // showing a DAW — which is what happened while a connected plugin
+        // simply overrode the local source. The engine itself still has to
+        // exist: it is what the window is built around, and it is what the
+        // source goes back to on the way out.
+        return (OaaSource.silence, null, 'DAW PLUGIN');
       case AudioSourceKind.device:
         break;
     }
@@ -665,10 +757,23 @@ class _WorkspaceState extends ConsumerState<_Workspace>
     final engine = _engine;
     final clock = _clock;
 
-    // What the meters draw: the plugin somebody just inserted, or nothing yet.
-    // Resolved against `engine` at each use below, where it has been promoted
-    // non-null by the failure branch.
-    final plugin = _plugins.active?.snapshot;
+    // **Watched, and narrowed to the one field.** Which source is chosen is
+    // what decides whether the canvas is showing a DAW, and it moves from three
+    // places — the status bar's picker, the settings panel, and a plugin
+    // arriving where there was none. Narrowing keeps a skin or a frame rate
+    // changing from rebuilding the workspace.
+    final sourceKind = ref.watch(settingsProvider.select((s) => s.sourceKind));
+    final onPlugin = sourceKind == AudioSourceKind.plugin;
+
+    // The session on the canvas, or null when a local source is chosen —
+    // *including* while a plugin is connected and somebody is metering their
+    // own interface, which is the state this whole selection exists to allow.
+    final session = onPlugin ? _plugins.active : null;
+
+    // What the meters draw. Resolved against `engine` at each use below, where
+    // it has been promoted non-null by the failure branch; null here means the
+    // local engine is what is being read.
+    final plugin = onPlugin ? (session?.snapshot ?? _noPlugin) : null;
 
     final notice = ref.watch(storageNoticeProvider);
 
@@ -687,195 +792,241 @@ class _WorkspaceState extends ConsumerState<_Workspace>
     return MacFileMenuHost(
       child: RemoteDisplayScope(
         service: _remote,
-        child: Material(
-          color: colors.background,
-          child: SafeArea(
-            child: (engine == null || clock == null)
-                ? _EngineFailure(message: _failure ?? 'unknown error')
-                // Every keyboard binding in the application, installed once and
-                // above everything it acts on. They used to live inside the canvas,
-                // where they stopped working whenever focus did not — see
-                // lib/src/app/shortcuts.dart.
-                : OaaShortcuts(
-                    onReset: _reset,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        // The menu bar is the window's title bar as well on
-                        // macOS — there is no system one left to drag. See
-                        // window_chrome.dart.
-                        WindowDragArea(
-                          child: _MenuBar(remote: _remote, onReset: _reset),
-                        ),
-                        const TabStrip(),
-                        // Rebuilds on the transition only, never on the sixty frames
-                        // a second where nothing changed — see MeterClock.overrun.
-                        //
-                        // **The count comes from whatever is being metered, not from
-                        // the local engine.** The flag behind this notice does: the
-                        // clock watches `plugin ?? engine`, so a plugin that
-                        // overran raised it — and the sentence then read the
-                        // desktop's own engine, which is idle while a plugin is on
-                        // the canvas and had discarded nothing. "Audio was lost — 0
-                        // frames were discarded" is a self-contradicting warning
-                        // about a real loss of audio, and the number a user would
-                        // quote in a bug report.
-                        ValueListenableBuilder<bool>(
-                          valueListenable: clock.overrun,
-                          builder: (context, hasOverrun, _) => hasOverrun
-                              ? _NoticeSlot(
-                                  child: _Notice(
-                                    severity: colors.over,
-                                    text:
-                                        'Audio was lost — '
-                                        '${(plugin ?? engine).droppedFrames} '
-                                        'frames never reached the measurement. '
-                                        'Integrated loudness and '
-                                        'LRA average every block since the reset, so '
-                                        'they are now averages of less than what '
-                                        'played and cannot be trusted. Press RESET '
-                                        'to start a clean measurement.',
+        // The link, for the source picker in the bar below and for the settings
+        // panel — which resolves it at the call site, because a route is built
+        // above `MaterialApp.home` and cannot see anything installed under it.
+        child: PluginLinkScope(
+          link: _plugins,
+          child: Material(
+            key: _belowScopes,
+            color: colors.background,
+            child: SafeArea(
+              child: (engine == null || clock == null)
+                  ? _EngineFailure(message: _failure ?? 'unknown error')
+                  // Every keyboard binding in the application, installed once and
+                  // above everything it acts on. They used to live inside the canvas,
+                  // where they stopped working whenever focus did not — see
+                  // lib/src/app/shortcuts.dart.
+                  : OaaShortcuts(
+                      onReset: _reset,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          // The menu bar is the window's title bar as well on
+                          // macOS — there is no system one left to drag. See
+                          // window_chrome.dart.
+                          WindowDragArea(
+                            child: _MenuBar(remote: _remote, onReset: _reset),
+                          ),
+                          const TabStrip(),
+                          // Rebuilds on the transition only, never on the sixty frames
+                          // a second where nothing changed — see MeterClock.overrun.
+                          //
+                          // **The count comes from whatever is being metered, not from
+                          // the local engine.** The flag behind this notice does: the
+                          // clock watches `plugin ?? engine`, so a plugin that
+                          // overran raised it — and the sentence then read the
+                          // desktop's own engine, which is idle while a plugin is on
+                          // the canvas and had discarded nothing. "Audio was lost — 0
+                          // frames were discarded" is a self-contradicting warning
+                          // about a real loss of audio, and the number a user would
+                          // quote in a bug report.
+                          ValueListenableBuilder<bool>(
+                            valueListenable: clock.overrun,
+                            builder: (context, hasOverrun, _) => hasOverrun
+                                ? _NoticeSlot(
+                                    child: _Notice(
+                                      severity: colors.over,
+                                      text:
+                                          'Audio was lost — '
+                                          '${(plugin ?? engine).droppedFrames} '
+                                          'frames never reached the measurement. '
+                                          'Integrated loudness and '
+                                          'LRA average every block since the reset, so '
+                                          'they are now averages of less than what '
+                                          'played and cannot be trusted. Press RESET '
+                                          'to start a clean measurement.',
+                                    ),
+                                  )
+                                : const SizedBox.shrink(),
+                          ),
+                          // **A source that stopped, which used to be the one
+                          // failure with no symptom at all.** The engine goes on
+                          // publishing an empty ring, so the meters hold their last
+                          // reading and the rest of the application stays perfectly
+                          // alive around them — see `_watchSource`. Local only: a
+                          // plugin's audio arrives over a socket, and a link that
+                          // has gone quiet is a different fact with its own
+                          // reporting.
+                          ValueListenableBuilder<String?>(
+                            valueListenable: _sourceStopped,
+                            builder: (context, stopped, _) => stopped == null
+                                ? const SizedBox.shrink()
+                                : _NoticeSlot(
+                                    child: _Notice(
+                                      severity: colors.over,
+                                      text: stopped,
+                                    ),
                                   ),
-                                )
-                              : const SizedBox.shrink(),
-                        ),
-                        // **A source that stopped, which used to be the one
-                        // failure with no symptom at all.** The engine goes on
-                        // publishing an empty ring, so the meters hold their last
-                        // reading and the rest of the application stays perfectly
-                        // alive around them — see `_watchSource`. Local only: a
-                        // plugin's audio arrives over a socket, and a link that
-                        // has gone quiet is a different fact with its own
-                        // reporting.
-                        ValueListenableBuilder<String?>(
-                          valueListenable: _sourceStopped,
-                          builder: (context, stopped, _) => stopped == null
-                              ? const SizedBox.shrink()
-                              : _NoticeSlot(
-                                  child: _Notice(
-                                    severity: colors.over,
-                                    text: stopped,
+                          ),
+                          // **The DAW plugin is chosen and nothing is on the
+                          // other end.** The canvas is reading a snapshot no
+                          // frame was ever decoded into, so every module is
+                          // drawing a dash — which is the honest picture and, by
+                          // itself, an ambiguous one: dashes are also what a
+                          // plugin whose link has gone quiet looks like, and what
+                          // a machine with no audio subsystem looks like. Say
+                          // which of them it is. It sits above the port failure
+                          // below, because a port that will not bind is the
+                          // commonest reason for this one to be true.
+                          if (onPlugin && session == null)
+                            _NoticeSlot(
+                              child: _Notice(
+                                severity: colors.warn,
+                                text:
+                                    'No plugin is connected, so there is nothing '
+                                    'to measure — the meters are showing dashes '
+                                    'rather than a reading of silence. Insert '
+                                    'Open Audio Analyzer in your DAW and it '
+                                    'connects by itself, or choose another '
+                                    'source.',
+                              ),
+                            ),
+                          // A port that could not be bound is shown for the same
+                          // reason: the plugin retries forever and says nothing, so
+                          // an app that cannot accept it looks exactly like a plugin
+                          // that is not sending. The usual cause is a second copy of
+                          // Open Audio Analyzer already running.
+                          ValueListenableBuilder<String?>(
+                            valueListenable: _plugins.failure,
+                            builder: (context, failure, _) => failure == null
+                                ? const SizedBox.shrink()
+                                : _NoticeSlot(
+                                    child: _Notice(
+                                      severity: colors.warn,
+                                      text:
+                                          'Plugins cannot connect: $failure '
+                                          'Inserting the VST3 or AU in a DAW will '
+                                          'have no effect until this is resolved.',
+                                    ),
                                   ),
-                                ),
-                        ),
-                        // A port that could not be bound is shown for the same
-                        // reason: the plugin retries forever and says nothing, so
-                        // an app that cannot accept it looks exactly like a plugin
-                        // that is not sending. The usual cause is a second copy of
-                        // Open Audio Analyzer already running.
-                        ValueListenableBuilder<String?>(
-                          valueListenable: _plugins.failure,
-                          builder: (context, failure, _) => failure == null
-                              ? const SizedBox.shrink()
-                              : _NoticeSlot(
-                                  child: _Notice(
-                                    severity: colors.warn,
-                                    text:
-                                        'Plugins cannot connect: $failure '
-                                        'Inserting the VST3 or AU in a DAW will '
-                                        'have no effect until this is resolved.',
+                          ),
+                          // **A switch that came back off, and did not say why.**
+                          // `setEnabled(true)` leaves `isPublishing` false when the
+                          // port cannot be bound — the usual cause is a second copy
+                          // of Open Audio Analyzer already running — so the switch
+                          // in the bar flicks on and back off under the pointer with
+                          // the reason written somewhere nobody is looking.
+                          ValueListenableBuilder<String?>(
+                            valueListenable: _remote.failure,
+                            builder: (context, failure, _) => failure == null
+                                ? const SizedBox.shrink()
+                                : _NoticeSlot(
+                                    child: _Notice(
+                                      severity: colors.over,
+                                      text: 'Could not publish: $failure',
+                                    ),
                                   ),
-                                ),
-                        ),
-                        // **A switch that came back off, and did not say why.**
-                        // `setEnabled(true)` leaves `isPublishing` false when the
-                        // port cannot be bound — the usual cause is a second copy
-                        // of Open Audio Analyzer already running — so the switch
-                        // in the bar flicks on and back off under the pointer with
-                        // the reason written somewhere nobody is looking.
-                        ValueListenableBuilder<String?>(
-                          valueListenable: _remote.failure,
-                          builder: (context, failure, _) => failure == null
-                              ? const SizedBox.shrink()
-                              : _NoticeSlot(
-                                  child: _Notice(
-                                    severity: colors.over,
-                                    text: 'Could not publish: $failure',
-                                  ),
-                                ),
-                        ),
-                        // **Publishing to nobody, which is the failure with no
-                        // symptom on this machine.** The port is open, a display
-                        // handed the address by hand connects and draws meters
-                        // perfectly, and only the announcement is gone — so the
-                        // desk looks healthy from the desk and the one screen that
-                        // knows is the tablet, which has no diagnostics on it. It
-                        // used to be written on the pairing panel's own row, where
-                        // it was seen because that panel was the way in to
-                        // everything; with the switch in the bar there is no
-                        // longer a panel anybody has a reason to open. So it is
-                        // said here, beside the other two faults that are true
-                        // right now, and only while publishing is actually on.
-                        ValueListenableBuilder<bool>(
-                          valueListenable: _remote.isPublishing,
-                          builder: (context, publishing, _) => !publishing
-                              ? const SizedBox.shrink()
-                              : ValueListenableBuilder<String?>(
-                                  valueListenable: _remote.advertisementFailure,
-                                  builder: (context, advertisement, _) =>
-                                      advertisement == null
-                                      ? const SizedBox.shrink()
-                                      : _NoticeSlot(
-                                          child: _Notice(
-                                            severity: colors.warn,
-                                            text:
-                                                '$advertisement Publishing is '
-                                                'working — a display given this '
-                                                'machine’s address by hand, or '
-                                                'sent the pairing code, still '
-                                                'connects.',
+                          ),
+                          // **Publishing to nobody, which is the failure with no
+                          // symptom on this machine.** The port is open, a display
+                          // handed the address by hand connects and draws meters
+                          // perfectly, and only the announcement is gone — so the
+                          // desk looks healthy from the desk and the one screen that
+                          // knows is the tablet, which has no diagnostics on it. It
+                          // used to be written on the pairing panel's own row, where
+                          // it was seen because that panel was the way in to
+                          // everything; with the switch in the bar there is no
+                          // longer a panel anybody has a reason to open. So it is
+                          // said here, beside the other two faults that are true
+                          // right now, and only while publishing is actually on.
+                          ValueListenableBuilder<bool>(
+                            valueListenable: _remote.isPublishing,
+                            builder: (context, publishing, _) => !publishing
+                                ? const SizedBox.shrink()
+                                : ValueListenableBuilder<String?>(
+                                    valueListenable:
+                                        _remote.advertisementFailure,
+                                    builder: (context, advertisement, _) =>
+                                        advertisement == null
+                                        ? const SizedBox.shrink()
+                                        : _NoticeSlot(
+                                            child: _Notice(
+                                              severity: colors.warn,
+                                              text:
+                                                  '$advertisement Publishing is '
+                                                  'working — a display given this '
+                                                  'machine’s address by hand, or '
+                                                  'sent the pairing code, still '
+                                                  'connects.',
+                                            ),
                                           ),
-                                        ),
-                                ),
-                        ),
-                        // Persistence failures are shown rather than logged. A meter
-                        // that has quietly stopped saving is a meter that loses a
-                        // day's work at the moment the user finds out.
-                        if (notice != null)
-                          _NoticeSlot(
-                            child: _Notice(
-                              text: notice,
-                              onDismiss: ref
-                                  .read(storageNoticeProvider.notifier)
-                                  .clear,
+                                  ),
+                          ),
+                          // Persistence failures are shown rather than logged. A meter
+                          // that has quietly stopped saving is a meter that loses a
+                          // day's work at the moment the user finds out.
+                          if (notice != null)
+                            _NoticeSlot(
+                              child: _Notice(
+                                text: notice,
+                                onDismiss: ref
+                                    .read(storageNoticeProvider.notifier)
+                                    .clear,
+                              ),
+                            ),
+                          Expanded(
+                            child: GridCanvas(
+                              engine: plugin ?? engine,
+                              clock: clock,
                             ),
                           ),
-                        Expanded(
-                          child: GridCanvas(
-                            engine: plugin ?? engine,
+                          // **Under the canvas, which is what makes it a status
+                          // bar rather than a second menu bar.** Everything in it
+                          // is a reading or the units of one, and a reading
+                          // belongs at the edge of the thing it is about: the
+                          // window's own bottom edge is where a person's eye goes
+                          // for "what is this and how long has it been running",
+                          // and it is not somewhere a pointer travels on its way
+                          // to a command. It is outside `WindowDragArea` on
+                          // purpose — the window is dragged by its title bar, and
+                          // this row is not one.
+                          _StatusBar(
+                            source: plugin ?? engine,
                             clock: clock,
+                            // The session's own name when one is on the canvas,
+                            // and the chosen source's otherwise — which while the
+                            // plugin is chosen and nothing is connected reads DAW
+                            // PLUGIN, because that is what was chosen. The
+                            // notice above says the rest.
+                            sourceLabel: session != null
+                                ? _plugins.labelFor(session).toUpperCase()
+                                : _sourceLabel,
+                            // **Lit means a signal, not a selection.** Everything
+                            // but silence lights the chip; a plugin that is
+                            // chosen with nothing on the other end is the second
+                            // way to be metering nothing at all, and a lit chip
+                            // over a canvas of dashes says the opposite of what
+                            // the canvas does.
+                            sourceLit: onPlugin
+                                ? session != null
+                                : sourceKind != AudioSourceKind.silence,
+                            // Null unless a DAW could be on the other end. The
+                            // readout itself draws nothing when a host has said
+                            // nothing, so this is about the *row*: an item that is
+                            // permanently blank on every machine metering a sound
+                            // card would still be taking 108 px off a row that
+                            // measures its width in tens.
+                            transportOf: session != null
+                                ? () =>
+                                      _plugins.active?.transport ??
+                                      Transport.none
+                                : null,
                           ),
-                        ),
-                        // **Under the canvas, which is what makes it a status
-                        // bar rather than a second menu bar.** Everything in it
-                        // is a reading or the units of one, and a reading
-                        // belongs at the edge of the thing it is about: the
-                        // window's own bottom edge is where a person's eye goes
-                        // for "what is this and how long has it been running",
-                        // and it is not somewhere a pointer travels on its way
-                        // to a command. It is outside `WindowDragArea` on
-                        // purpose — the window is dragged by its title bar, and
-                        // this row is not one.
-                        _StatusBar(
-                          source: plugin ?? engine,
-                          clock: clock,
-                          sourceLabel: _onPlugin
-                              ? _plugins.active!.displayName.toUpperCase()
-                              : _sourceLabel,
-                          // Null unless a DAW could be on the other end. The
-                          // readout itself draws nothing when a host has said
-                          // nothing, so this is about the *row*: an item that is
-                          // permanently blank on every machine metering a sound
-                          // card would still be taking 108 px off a row that
-                          // measures its width in tens.
-                          transportOf: _onPlugin
-                              ? () =>
-                                    _plugins.active?.transport ?? Transport.none
-                              : null,
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
+            ),
           ),
         ),
       ),
@@ -1309,6 +1460,7 @@ class _StatusBar extends ConsumerWidget {
     required this.source,
     required this.clock,
     required this.sourceLabel,
+    required this.sourceLit,
     required this.transportOf,
   });
 
@@ -1319,6 +1471,14 @@ class _StatusBar extends ConsumerWidget {
   final MeterClock clock;
 
   final String sourceLabel;
+
+  /// Whether the chip reads as a source that is delivering something.
+  ///
+  /// Decided by the workspace rather than from the settings here, because since
+  /// the DAW plugin became a source there are two ways to be metering nothing:
+  /// choosing silence, and choosing a plugin that is not connected. See
+  /// [BarChip].
+  final bool sourceLit;
 
   /// The DAW's playhead, read at paint time, or null when nothing being metered
   /// could have one.
@@ -1401,7 +1561,15 @@ class _StatusBar extends ConsumerWidget {
             const withTransport =
                 withFormat + TransportReadout.defaultWidth + Space.md;
 
-            final showFormat = width >= withFormat + BarMetrics.margin;
+            // **And only when there is a format to print.** A source that has
+            // said nothing — the DAW plugin chosen with none connected —
+            // reports a sample rate of zero, and `0.0 kHz · 0 ch` is a
+            // statement about a signal that does not exist, in the one row
+            // whose whole membership rule is that everything in it is a
+            // reading. This row drops items it cannot fill.
+            final showFormat =
+                source.sampleRate > 0 &&
+                width >= withFormat + BarMetrics.margin;
             final showTransport =
                 transportOf != null &&
                 width >= withTransport + BarMetrics.margin;
@@ -1422,6 +1590,7 @@ class _StatusBar extends ConsumerWidget {
                         Flexible(
                           child: _SourcePicker(
                             label: sourceLabel,
+                            lit: sourceLit,
                             settings: settings,
                           ),
                         ),
@@ -1578,15 +1747,29 @@ class _PresetTitle extends ConsumerWidget {
 
 /// What Open Audio Analyzer is listening to, and how to change it.
 class _SourcePicker extends ConsumerWidget {
-  const _SourcePicker({required this.label, required this.settings});
+  const _SourcePicker({
+    required this.label,
+    required this.lit,
+    required this.settings,
+  });
 
   final String label;
+
+  /// See [_StatusBar.sourceLit].
+  final bool lit;
+
   final AppSettings settings;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final colors = OaaTheme.of(context);
     final controller = ref.read(settingsProvider.notifier);
+
+    // **Read, not listened to.** Membership changes a few times an hour and
+    // already rebuilds the workspace above this row, so what the menu is built
+    // from is current every time it opens; a listener here would buy nothing
+    // and put a rebuild on the path of a socket callback.
+    final plugins = PluginLinkScope.of(context);
 
     return PopupMenuButton<void>(
       tooltip: 'Signal source',
@@ -1603,7 +1786,45 @@ class _SourcePicker extends ConsumerWidget {
           devices = const [];
         }
 
+        // The same argument, and the reason this is not a `ListenableBuilder`:
+        // the sessions are read when the menu is built, which is when it opens.
+        final sessions = plugins.sessions;
+
         return <PopupMenuEntry<void>>[
+          // **First, because it is the source with something to say.** A DAW
+          // that is running is what somebody with a DAW running is metering,
+          // and it is the one entry here that is not a permanent fixture of the
+          // machine. The disabled row when there is none is deliberate too: it
+          // is where the answer to "why is nothing connected" goes, and it is
+          // how anybody finds out the plugin is an input at all.
+          if (sessions.isEmpty)
+            PopupMenuItem<void>(
+              enabled: false,
+              height: OaaMenuRow.height,
+              child: Text(
+                'No DAW plugin connected',
+                style: OaaType.caption.copyWith(color: colors.textFaint),
+              ),
+            )
+          else
+            for (final session in sessions)
+              _item(
+                context,
+                plugins.labelFor(session),
+                selected:
+                    settings.sourceKind == AudioSourceKind.plugin &&
+                    identical(plugins.active, session),
+                onTap: () {
+                  // Two settings in two places, and both are the selection:
+                  // *which* session is on the canvas is the link's, because it
+                  // is a live object that does not outlive the connection, and
+                  // *that* a plugin is the source is the settings', because it
+                  // is what the next launch reopens.
+                  plugins.active = session;
+                  controller.setSource(AudioSourceKind.plugin);
+                },
+              ),
+          const PopupMenuDivider(),
           _item(
             context,
             'Test tone',
@@ -1658,10 +1879,7 @@ class _SourcePicker extends ConsumerWidget {
       // with no slack — see `BarChip`.
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 220),
-        child: BarChip(
-          text: label,
-          lit: settings.sourceKind != AudioSourceKind.silence,
-        ),
+        child: BarChip(text: label, lit: lit),
       ),
     );
   }

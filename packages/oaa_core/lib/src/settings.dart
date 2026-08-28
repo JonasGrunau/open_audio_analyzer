@@ -13,10 +13,18 @@ library;
 /// `oaa_core` may not import `dart:ffi`, and the remote display persists a
 /// source selection it will never open, so the vocabulary has to exist on this
 /// side of the boundary too. The app maps between them in one place.
+///
+/// **[plugin] is the one with no `OaaSource` behind it at all**, which is the
+/// clearest argument this enum is not the engine's. A DAW plugin's
+/// measurements arrive already made, over a socket — nothing local captures
+/// them and there is no device to open — so it is a source in the only sense
+/// that matters to a person choosing one, and not a source the engine has ever
+/// heard of.
 enum AudioSourceKind {
   testTone('test_tone', 'Test tone'),
   silence('silence', 'Silence'),
-  device('device', 'Device');
+  device('device', 'Device'),
+  plugin('plugin', 'DAW plugin');
 
   const AudioSourceKind(this.id, this.label);
 

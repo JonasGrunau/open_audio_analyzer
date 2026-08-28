@@ -422,9 +422,13 @@ travelling down it and dark when nothing is, and the socket's dashes move while
 frames are being sent, so a link that has quietly stopped does not look like one
 that is working. Under it, the sample rate and channel count the host is giving
 it, how long it has been measuring, the integrated loudness, and one line naming
-whatever is wrong. Several inserts can be connected at once and the most
-recently added is the one on screen, because adding it is the act of choosing
-it.
+whatever is wrong. Several inserts can be connected at once, and each is a row in
+the app's source picker — `DAW plugin — Logic Pro`, beside the test tone and the
+machine's own inputs. The first one to connect selects itself, because inserting
+it is the act of choosing it; after that the source is whatever you last chose,
+so a plugin left in a session no longer stands between you and your interface.
+Choosing a DAW releases the capture device, and the selection is remembered
+between launches.
 
 The host's transport comes across with the audio, so the app's status bar reads
 back the DAW's position, tempo and time signature, and relays them to an

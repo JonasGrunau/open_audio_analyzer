@@ -78,7 +78,29 @@ class PluginSession {
 
   DateTime lastFrameAt = DateTime.now();
 
-  String get displayName => producerName ?? 'Plugin $id';
+  /// What this application calls the session, in its own interface.
+  ///
+  /// **Not [producerName], and the difference is the product's own name.** A
+  /// producer names itself in full on the wire — "Open Audio Analyzer plugin —
+  /// Logic Pro" — because HELLO is read by things that are not this
+  /// application and a bare host name would say nothing about who sent it.
+  /// Inside this application the first half is a constant: a source menu that
+  /// offers "Open Audio Analyzer plugin — Logic Pro" between "Test tone" and
+  /// "Scarlett 2i2" is naming the product in the one list where every other row
+  /// names the thing being metered — and it is the longest row in a chip that
+  /// ellipsises at 220 px, so what a narrow window actually shows is the half
+  /// that is the same on every machine.
+  ///
+  /// So the prefix comes off and the DAW is what is left. A producer that is
+  /// not ours keeps whatever it called itself, unaltered.
+  String get displayName {
+    final name = producerName;
+    if (name == null) return 'DAW plugin';
+    const prefix = 'Open Audio Analyzer plugin — ';
+    if (!name.startsWith(prefix)) return name;
+    final host = name.substring(prefix.length).trim();
+    return host.isEmpty ? 'DAW plugin' : 'DAW plugin — $host';
+  }
 
   Future<void> _close() async {
     _socket.destroy();
@@ -131,6 +153,25 @@ class PluginLink extends ChangeNotifier {
 
   /// Every connected plugin, in the order they arrived.
   List<PluginSession> get sessions => List.unmodifiable(_sessions);
+
+  /// [PluginSession.displayName], with the connection's own number added when
+  /// the name alone cannot tell two sessions apart.
+  ///
+  /// Two inserts in one host are two sessions with identical names — the wire
+  /// carries the host and nothing else, so the track a plugin sits on, which is
+  /// what a person would actually name it by, is not available to say. A menu
+  /// offering "DAW plugin — Logic Pro" twice is a menu with no answer in it.
+  ///
+  /// The id rather than a position in the list, because a selection has to
+  /// survive the list changing: positions renumber when a session ahead of one
+  /// drops, and the row somebody chose would then name a different insert.
+  String labelFor(PluginSession session) {
+    final name = session.displayName;
+    final ambiguous = _sessions.any(
+      (other) => !identical(other, session) && other.displayName == name,
+    );
+    return ambiguous ? '$name #${session.id}' : name;
+  }
 
   /// Which session the meters are showing.
   ///

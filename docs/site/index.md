@@ -100,7 +100,10 @@ display that scans one can still only watch.
 **A DAW.** A headless VST3 and Audio Unit plugin measures what your host is
 playing and streams it, with the transport, to the application. The plugin
 measures and the app draws, which is what stops there being two implementations
-of every meter to drift apart.
+of every meter to drift apart. A connected plugin is an entry in the app's
+source picker, named after the host it is running in, so it is chosen and left
+the way an audio interface is — and the first one to connect chooses itself,
+because inserting it is what choosing it means.
 
 ## Licensing
 

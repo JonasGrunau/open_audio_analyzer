@@ -10,10 +10,19 @@
 // like the config being ignored rather than like an argument being dropped.
 
 import 'package:oaa/src/app/launch_options.dart';
+import 'package:oaa/src/app/oaa_app.dart';
+import 'package:oaa/src/data/providers.dart';
+import 'package:oaa/src/panels/settings_panel.dart';
+import 'package:oaa/src/storage/config_store.dart';
+import 'package:oaa/src/storage/startup_config.dart';
 import 'package:oaa_core/oaa_core.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  _panelOpens();
+
   group('parseLaunchOptions', () {
     test('an empty command line asks for nothing', () {
       final options = parseLaunchOptions(const []);
@@ -151,5 +160,49 @@ void main() {
         r'C:\Users\someone\AppData\Roaming\Open Audio Analyzer',
       );
     });
+  });
+}
+
+// The other half: the flag has to open the panel it parsed.
+//
+// `--open-panel=settings` is how the settings panel gets looked at at all — a
+// screenshot needs the app running, and `screencapture` returns a black frame
+// without screen-recording permission — so a flag that parses and then throws
+// is the tooling for reviewing a panel, silently gone.
+void _panelOpens() {
+  testWidgets('--open-panel=settings opens the settings panel', (tester) async {
+    tester.view.physicalSize = const Size(1400, 1000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    final store = ConfigStore.disabled();
+    addTearDown(store.dispose);
+
+    final container = ProviderContainer(
+      overrides: [
+        configStoreProvider.overrideWithValue(store),
+        startupConfigProvider.overrideWithValue(
+          StartupConfig(notice: store.lastError),
+        ),
+        launchOptionsProvider.overrideWithValue(
+          parseLaunchOptions(const ['--open-panel=settings']),
+        ),
+        // A free port would be better; nothing here connects, and a port that
+        // is already taken only sets the link's failure notice.
+        pluginLinkPortProvider.overrideWithValue(0),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(container: container, child: const OaaApp()),
+    );
+    // One frame to build, one for the post-frame callback that reads the flag,
+    // and one for the route it pushes.
+    await tester.pump();
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.byType(SettingsPanel), findsOneWidget);
   });
 }

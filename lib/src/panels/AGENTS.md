@@ -4,7 +4,7 @@ The panels that sit over the canvas. GPL-3.0-or-later.
 
 | File | Purpose |
 |------|---------|
-| `settings_panel.dart` | Signal and capture device, refresh rate and delivery target, publishing, skins, session. The hub the others open from. Its Publish section is `PublishSection`, composed from `lib/src/remote/` because it reads a live socket. |
+| `settings_panel.dart` | Signal — the source, the capture device and the connected DAW plugin — refresh rate and delivery target, publishing, skins, session. The hub the others open from. Its Publish section is `PublishSection`, composed from `lib/src/remote/` because it reads a live socket. |
 | `calibration_editor.dart` | The six numbers a delivery target is. |
 | `theme_editor.dart` | The thirteen colours a skin is. Previews by *being* the skin — every change goes into `skinDraftProvider`, which `skinProvider` answers with — and prints each role's contrast ratio against the surface it has to be read on. The two built-ins are fixed and it says so before anything is dragged. |
 | `report_panel.dart` | Offline analysis: drop a file, watch it run, cancel it, export the result. |
@@ -94,6 +94,14 @@ structure differs from the panels in this directory.
   when a human does something; the no-allocation-in-`paint` rule that governs
   `lib/src/modules/` does not apply. Do not import a meter or read a
   measurement — a panel that showed a live number would rebuild at meter rate.
+
+  **A row whose *contents* are somebody else's to change is the exception, and
+  it listens.** Settings › Signal offers the connected DAW plugins, and those
+  arrive and leave on a DAW's schedule — very possibly because the row itself
+  just said nothing was connected — so it is a `ListenableBuilder` over
+  `PluginLink`, which notifies on membership and on nothing else. That is the
+  line: session *membership* is a human doing something in another application;
+  a session's *measurements* are the frame path and never come through here.
 
 ## Testing
 

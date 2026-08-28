@@ -9,6 +9,51 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### ✨ Added
+- **A connected DAW plugin is an entry in the source picker**, named after the
+  host it is running in — `DAW plugin — Logic Pro` — in the status bar's menu
+  and in Settings › Signal. Several inserts are several rows. The selection is
+  remembered between launches, so a machine that meters a DAW every day opens
+  ready for one.
+
+### ⚡ Changed
+- **A source can be changed while a plugin is connected.** A plugin used to take
+  the canvas for as long as it was connected, which left every input on the
+  machine unreachable until it was removed from the DAW — the app asked the link
+  what it was showing rather than asking the selection. The first plugin to
+  connect still selects itself, because inserting it is the act of choosing it;
+  a second insert no longer takes the canvas off a source somebody has chosen,
+  and neither does re-instantiating one.
+- **Choosing a DAW releases the capture device.** Nothing local is being metered
+  while a plugin is on the canvas, and the microphone stayed open behind it —
+  a recording indicator lit on the machine's own menu bar for a window showing
+  a DAW.
+- The DAW plugin chosen with none connected reads as dashes rather than as a
+  measured silence, with a line at the top of the window saying so. That is the
+  state a remembered selection opens in when the app is started before the DAW.
+- The status bar names a plugin session `DAW PLUGIN — LOGIC PRO` rather than
+  `OPEN AUDIO ANALYZER PLUGIN — LOGIC PRO`. The wire is unchanged and a producer
+  still names itself in full; what was dropped is this application's own name,
+  inside this application, where it was the half of the row that survived the
+  chip's 220 px ellipsis.
+- The status bar prints no sample rate and channel count when nothing has
+  reported one, instead of `0.0 kHz · 0 ch`.
+
+### 🐛 Fixed
+- `--open-panel=settings` opens the settings panel again. It asserted "No
+  RemoteDisplayScope in scope" and opened nothing, because the flag is acted on
+  from a context above the scopes the panel needs — which is the debug build's
+  only way to put a panel on screen for review.
+- The link preview card no longer says the project is part MIT. 0.14.0 made
+  everything but the plugin GPL-3.0-or-later and the card was the one place that
+  still carried the old split; it now reads GPL-3.0 · AGPL-3.0, as the site's
+  footer does.
+
+### 🚧 Internal
+- The Open Graph card is rendered at 1280×640 rather than 1200×630, which is the
+  size GitHub asks a repository's social preview for, so the same image serves
+  the link unfurl and the repository page without being cropped.
+
 ## [0.14.0] — 2026-08-27
 
 ### ⚡ Changed

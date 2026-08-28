@@ -13,6 +13,34 @@ void main() {
     });
   });
 
+  group('the DAW plugin as a source', () {
+    test('survives a launch, with the device it was chosen over', () {
+      // The selection is the thing that reopens on a DAW machine every morning,
+      // and it has to keep the interface underneath it: choosing the plugin is
+      // not a reason to forget which input the user goes back to, and going
+      // back must not be a two-step return through a device menu.
+      const settings = AppSettings(
+        sourceKind: AudioSourceKind.plugin,
+        deviceId: 'usb:1234',
+        deviceName: 'Scarlett 2i2',
+      );
+
+      final parsed = AppSettings.fromJson(settings.toJson());
+
+      expect(parsed.sourceKind, AudioSourceKind.plugin);
+      expect(parsed.deviceName, 'Scarlett 2i2');
+    });
+
+    test('a file written before it existed still opens', () {
+      // Every settings file in the field names one of the three kinds this
+      // enum had through 0.14.0. An unknown id falls back rather than throwing,
+      // and that is what makes the *reverse* safe too — a file written by a
+      // build that knows the plugin, opened by one that does not.
+      final parsed = AppSettings.fromJson(const {'source': 'device'});
+      expect(parsed.sourceKind, AudioSourceKind.device);
+    });
+  });
+
   group('AppSettings', () {
     test('round-trips through JSON', () {
       const settings = AppSettings(

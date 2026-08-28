@@ -54,8 +54,11 @@ import 'package:oaa/src/canvas/workspace.dart';
 import 'package:oaa/src/clock/meter_clock.dart';
 import 'package:oaa/src/data/providers.dart';
 import 'package:oaa/src/modules/number_box.dart';
+import 'package:oaa/src/panels/settings_panel.dart';
 import 'package:oaa/src/panels/shortcuts_sheet.dart';
+import 'package:oaa/src/plugin/plugin_link.dart';
 import 'package:oaa/src/remote/remote_control.dart';
+import 'package:oaa/src/remote/remote_display_service.dart';
 import 'package:oaa/src/storage/config_store.dart';
 import 'package:oaa/src/storage/startup_config.dart';
 import 'package:oaa_core/oaa_core.dart';
@@ -349,7 +352,7 @@ Future<void> _pumpAppWithPlugin(
   // wait for, and a helper that insisted on one would fail at every width where
   // the bar is correctly dropping it.
   final deadline = DateTime.now().add(const Duration(seconds: 10));
-  while (find.text('OPEN AUDIO ANALYZER PLUGIN — FIXTURE').evaluate().isEmpty) {
+  while (find.text('DAW PLUGIN — FIXTURE').evaluate().isEmpty) {
     if (DateTime.now().isAfter(deadline)) {
       fail('The plugin never reached the canvas, so the bar swept without it.');
     }
@@ -1101,6 +1104,90 @@ void main() {
       }
     });
   });
+
+  group('the settings panel keeps its rows', () {
+    // The settings panel's widest row, at the same window.
+    //
+    // **A `PanelRow` gives its control whatever it asks for and its label the
+    // rest**, so a segmented control that outgrows the row does not overflow —
+    // the label is `Expanded` and simply gets less, and `Source` is one word
+    // that cannot give any back. It clips in release with nothing said, which
+    // is the same silence a keycap in a column too narrow for it is caught for
+    // above. Four segments is where the row started being worth measuring.
+    testWidgets('the source row keeps its label at the supported minimum', (
+      tester,
+    ) async {
+      await _pumpSettings(tester, kMinimumWindow);
+
+      final label = find.text('Source');
+      final needed = tester
+          .renderObject<RenderBox>(label)
+          .getMaxIntrinsicWidth(double.infinity);
+
+      expect(
+        tester.getSize(label).width,
+        greaterThanOrEqualTo(needed - precisionErrorTolerance),
+        reason:
+            'The Source row gives its label '
+            '${tester.getSize(label).width.toStringAsFixed(1)} px where the '
+            'word needs ${needed.toStringAsFixed(1)}, so it is clipped. The '
+            'segmented control beside it has grown — a segment added, or one '
+            'given a longer word — and a `PanelRow` takes that out of the '
+            'label rather than overflowing.',
+      );
+    });
+  });
+}
+
+/// The settings panel, open, over nothing else — the same shape as
+/// [_pumpSheet] and for the same reason.
+///
+/// The service and the link are constructed and never started: this is a
+/// question about widths, and a case that bound two sockets to ask it would be
+/// testing the network.
+Future<void> _pumpSettings(WidgetTester tester, Size window) async {
+  tester.view.physicalSize = window * 3;
+  tester.view.devicePixelRatio = 3;
+  addTearDown(tester.view.reset);
+
+  final store = ConfigStore.disabled();
+  addTearDown(store.dispose);
+  final container = ProviderContainer(
+    overrides: [
+      configStoreProvider.overrideWithValue(store),
+      startupConfigProvider.overrideWithValue(const StartupConfig()),
+    ],
+  );
+  addTearDown(container.dispose);
+
+  final remote = RemoteDisplayService(null, abiVersion: 1);
+  addTearDown(remote.dispose);
+  final plugins = PluginLink(port: 0);
+  addTearDown(plugins.dispose);
+
+  await tester.pumpWidget(
+    UncontrolledProviderScope(
+      container: container,
+      child: MaterialApp(
+        debugShowCheckedModeBanner: false,
+        theme: oaaThemeData(OaaColors.precisionInstrument),
+        builder: (context, child) =>
+            OaaTheme(colors: OaaColors.precisionInstrument, child: child!),
+        home: Builder(
+          builder: (context) => TextButton(
+            onPressed: () => showOaaPanel<void>(
+              context: context,
+              builder: (_) => SettingsPanel(remote: remote, plugins: plugins),
+            ),
+            child: const Text('open'),
+          ),
+        ),
+      ),
+    ),
+  );
+
+  await tester.tap(find.text('open'));
+  await tester.pumpAndSettle();
 }
 
 /// The keyboard sheet, open, over nothing else.

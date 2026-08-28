@@ -10,6 +10,8 @@ import '../app/preset_file.dart';
 import '../app/shortcuts.dart';
 import '../clock/meter_clock.dart';
 import '../data/providers.dart';
+import '../plugin/plugin_link.dart';
+import '../plugin/plugin_scope.dart';
 import '../remote/publish_settings.dart';
 import '../remote/remote_control.dart';
 import '../remote/remote_display_service.dart';
@@ -19,16 +21,19 @@ import 'theme_editor.dart';
 
 /// Opens the settings panel.
 ///
-/// **The service is resolved here, before the route is pushed.** A panel is
+/// **Both scopes are resolved here, before the route is pushed.** A panel is
 /// built by the `Navigator`, which sits above `MaterialApp.home`, so a
-/// `RemoteDisplayScope` installed under `home` is invisible from inside one —
-/// the same boundary that made every panel unable to follow a skin change for
-/// eight phases. Reading it at the call site is what `showOaaPanel` does with
-/// the palette, and it keeps this function's signature the one three callers
-/// already use.
+/// `RemoteDisplayScope` or a `PluginLinkScope` installed under `home` is
+/// invisible from inside one — the same boundary that made every panel unable
+/// to follow a skin change for eight phases. Reading them at the call site is
+/// what `showOaaPanel` does with the palette, and it keeps this function's
+/// signature the one three callers already use.
 Future<void> showSettingsPanel(BuildContext context) => showOaaPanel<void>(
   context: context,
-  builder: (_) => SettingsPanel(remote: RemoteDisplayScope.of(context)),
+  builder: (_) => SettingsPanel(
+    remote: RemoteDisplayScope.of(context),
+    plugins: PluginLinkScope.of(context),
+  ),
 );
 
 /// Everything Open Audio Analyzer remembers, in the order somebody sets it up.
@@ -42,7 +47,7 @@ Future<void> showSettingsPanel(BuildContext context) => showOaaPanel<void>(
 /// and port, which are committed together by an Apply button; `PublishSection`
 /// says why.
 class SettingsPanel extends ConsumerStatefulWidget {
-  const SettingsPanel({required this.remote, super.key});
+  const SettingsPanel({required this.remote, required this.plugins, super.key});
 
   /// Publishing, for the section that configures it.
   ///
@@ -50,6 +55,9 @@ class SettingsPanel extends ConsumerStatefulWidget {
   /// drop the whole Publish section with nothing anywhere saying it had, which
   /// is the class of silence this application is written against.
   final RemoteDisplayService remote;
+
+  /// The plugin link, for the source it offers. Required for the same reason.
+  final PluginLink plugins;
 
   @override
   ConsumerState<SettingsPanel> createState() => _SettingsPanelState();
@@ -135,10 +143,18 @@ class _SettingsPanelState extends ConsumerState<SettingsPanel> {
           child: SegmentedControl<AudioSourceKind>(
             value: settings.sourceKind,
             onChanged: controller.setSource,
+            // **Worth measuring before a fifth is added.** A segmented control
+            // that outgrows its row does not wrap: the `Expanded` label beside
+            // it is what gives way, and `Source` is one word that cannot. These
+            // four come to 328 px in a 572 px row — the panel is capped at 620
+            // and the smallest window the application supports is 960, so that
+            // row is the same width everywhere — against the 45 px the label
+            // needs. `test/scaling_test.dart` holds the margin.
             segments: const [
               (value: AudioSourceKind.testTone, label: 'Test tone'),
               (value: AudioSourceKind.silence, label: 'Silence'),
               (value: AudioSourceKind.device, label: 'Device'),
+              (value: AudioSourceKind.plugin, label: 'DAW plugin'),
             ],
           ),
         ),
@@ -181,6 +197,63 @@ class _SettingsPanelState extends ConsumerState<SettingsPanel> {
               ),
             ],
           ),
+        ),
+        // **Live, because this is the one row whose contents are somebody
+        // else's to change.** Every other control in this panel reports a
+        // setting, and a setting only moves when this panel moves it. A DAW
+        // plugin arrives and leaves on the DAW's schedule — very possibly
+        // *because* this row said nothing was connected — and a list built when
+        // the panel opened would still be saying so. `PluginLink` notifies on
+        // membership and on nothing else; a session's measurements never come
+        // through here, which is the rule that keeps meter data out of the
+        // widget tree.
+        ListenableBuilder(
+          listenable: widget.plugins,
+          builder: (context, _) {
+            final sessions = widget.plugins.sessions;
+            final active = widget.plugins.active;
+
+            return PanelRow(
+              label: 'DAW plugin',
+              note: sessions.isEmpty
+                  ? 'Nothing connected. Insert Open Audio Analyzer in your DAW '
+                        'and it dials this machine on port $kPluginLinkPort by '
+                        'itself, retrying until it answers — so it does not '
+                        'matter which of the two you start first.'
+                  : null,
+              child: PanelMenu<int>(
+                semanticLabel: 'DAW plugin',
+                // The session that *would* be metered, whether or not it is the
+                // chosen source — the same thing the capture-device menu above
+                // shows while the test tone is playing.
+                label: active == null
+                    ? 'None connected'
+                    : widget.plugins.labelFor(active),
+                selected: settings.sourceKind == AudioSourceKind.plugin
+                    ? active?.id
+                    : null,
+                options: [
+                  for (final session in sessions)
+                    (
+                      value: session.id,
+                      label: widget.plugins.labelFor(session),
+                    ),
+                ],
+                onSelected: (id) {
+                  // Two halves of one selection, in two places on purpose:
+                  // *which* session is metered belongs to the link, because a
+                  // session does not outlive its connection and there is
+                  // nothing to persist; *that* a plugin is the source belongs
+                  // to the settings, because it is what the next launch
+                  // reopens.
+                  final session = sessions.where((s) => s.id == id).firstOrNull;
+                  if (session == null) return;
+                  widget.plugins.active = session;
+                  controller.setSource(AudioSourceKind.plugin);
+                },
+              ),
+            );
+          },
         ),
         // **Was written before the tap existed and then contradicted it.** The
         // note said "input devices only" and named BlackHole, sitting directly

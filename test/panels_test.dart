@@ -17,6 +17,7 @@ import 'package:oaa/src/app/bar_controls.dart';
 import 'package:oaa/src/data/providers.dart';
 import 'package:oaa/src/panels/calibration_editor.dart';
 import 'package:oaa/src/panels/settings_panel.dart';
+import 'package:oaa/src/plugin/plugin_link.dart';
 import 'package:oaa/src/remote/host_picker.dart';
 import 'package:oaa/src/remote/mdns/host_discovery.dart';
 import 'package:oaa/src/remote/pair_link.dart';
@@ -218,13 +219,24 @@ RemoteDisplayService _remoteService() {
   return service;
 }
 
+/// A plugin link for the panel's DAW plugin row, for the same reason.
+///
+/// Constructing one binds nothing — `start()` is what opens the port — so a
+/// case that wants an empty list of sessions gets one for free, and no case
+/// here goes near a socket.
+PluginLink _pluginLink() {
+  final link = PluginLink(port: 0);
+  addTearDown(link.dispose);
+  return link;
+}
+
 void main() {
   group('the settings panel', () {
     testWidgets('opens with its five sections', (tester) async {
       await _open(
         tester,
         await _container(tester),
-        SettingsPanel(remote: _remoteService()),
+        SettingsPanel(remote: _remoteService(), plugins: _pluginLink()),
       );
 
       // Signal in, then the meters, then where those meters go, then how they
@@ -247,7 +259,7 @@ void main() {
       await _open(
         tester,
         await _container(tester),
-        SettingsPanel(remote: service),
+        SettingsPanel(remote: service, plugins: _pluginLink()),
       );
 
       expect(
@@ -264,7 +276,11 @@ void main() {
 
     testWidgets('choosing a skin changes the palette', (tester) async {
       final container = await _container(tester);
-      await _open(tester, container, SettingsPanel(remote: _remoteService()));
+      await _open(
+        tester,
+        container,
+        SettingsPanel(remote: _remoteService(), plugins: _pluginLink()),
+      );
 
       await _tap(tester, find.text('Daylight'));
 
@@ -276,7 +292,11 @@ void main() {
       tester,
     ) async {
       final container = await _container(tester);
-      await _open(tester, container, SettingsPanel(remote: _remoteService()));
+      await _open(
+        tester,
+        container,
+        SettingsPanel(remote: _remoteService(), plugins: _pluginLink()),
+      );
 
       final before = _panelPalette(tester);
       await _tap(tester, find.text('Daylight'));
@@ -315,7 +335,7 @@ void main() {
       await _open(
         tester,
         await _container(tester),
-        SettingsPanel(remote: _remoteService()),
+        SettingsPanel(remote: _remoteService(), plugins: _pluginLink()),
       );
       expect(find.byType(PanelScaffold), findsOneWidget);
 
@@ -331,7 +351,11 @@ void main() {
 
     testWidgets('choosing a frame rate changes it', (tester) async {
       final container = await _container(tester);
-      await _open(tester, container, SettingsPanel(remote: _remoteService()));
+      await _open(
+        tester,
+        container,
+        SettingsPanel(remote: _remoteService(), plugins: _pluginLink()),
+      );
 
       // Uppercase: a segment sets its own label the way a button does.
       await _tap(tester, find.text('30 FPS'));
@@ -365,7 +389,11 @@ void main() {
             _houseTarget.toJson(),
           ),
         );
-        await _open(tester, container, SettingsPanel(remote: _remoteService()));
+        await _open(
+          tester,
+          container,
+          SettingsPanel(remote: _remoteService(), plugins: _pluginLink()),
+        );
         return (container, store);
       }
 
@@ -436,7 +464,11 @@ void main() {
 
     testWidgets('the restore toggle writes through', (tester) async {
       final container = await _container(tester);
-      await _open(tester, container, SettingsPanel(remote: _remoteService()));
+      await _open(
+        tester,
+        container,
+        SettingsPanel(remote: _remoteService(), plugins: _pluginLink()),
+      );
 
       expect(container.read(settingsProvider).restoreSession, isTrue);
       await _tap(tester, find.byType(OaaToggle));
@@ -450,7 +482,7 @@ void main() {
       await _open(
         tester,
         _containerWithoutStorage(),
-        SettingsPanel(remote: _remoteService()),
+        SettingsPanel(remote: _remoteService(), plugins: _pluginLink()),
       );
       expect(find.textContaining('Nothing is being saved'), findsOneWidget);
     });
@@ -647,7 +679,7 @@ void main() {
           await _open(
             tester,
             await _container(tester),
-            SettingsPanel(remote: _remoteService()),
+            SettingsPanel(remote: _remoteService(), plugins: _pluginLink()),
           );
 
           // The panel's own viewport, which is the outermost of several: every
@@ -1020,7 +1052,11 @@ void main() {
           'local network. Allow it under System Settings › Privacy & Security '
           '› Local Network.';
 
-      await _open(tester, container, SettingsPanel(remote: service));
+      await _open(
+        tester,
+        container,
+        SettingsPanel(remote: service, plugins: _pluginLink()),
+      );
 
       expect(find.textContaining('Privacy & Security'), findsOneWidget);
       // Not "could not publish": publishing is exactly what did work.
@@ -1035,7 +1071,11 @@ void main() {
     ) async {
       final container = await _container(tester);
       final service = _remoteService();
-      await _open(tester, container, SettingsPanel(remote: service));
+      await _open(
+        tester,
+        container,
+        SettingsPanel(remote: service, plugins: _pluginLink()),
+      );
 
       for (final fps in kRemoteFpsOptions) {
         expect(find.text('$fps'), findsOneWidget);
@@ -1128,7 +1168,11 @@ void main() {
     ) async {
       final container = await _container(tester);
       final service = _remoteService();
-      await _open(tester, container, SettingsPanel(remote: service));
+      await _open(
+        tester,
+        container,
+        SettingsPanel(remote: service, plugins: _pluginLink()),
+      );
 
       // The row is there whether or not this machine has an address; what it
       // does depends on whether it has one.

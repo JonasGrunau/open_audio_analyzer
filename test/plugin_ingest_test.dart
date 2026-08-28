@@ -11,19 +11,23 @@
 //
 // That is the class of defect a unit test cannot see: every part worked and
 // none of them was wired to another. So this test starts at the top — the real
-// `OaaApp`, the real engine, a real socket — and asserts the two things a user
-// would notice: the port is open, and connecting to it puts the plugin on
-// screen in place of the local source.
+// `OaaApp`, the real engine, a real socket — and asserts the things a user
+// would notice: the port is open, connecting to it puts the plugin on screen in
+// place of the local source, and — since 0.14.1 — the local sources are still
+// reachable while it stays connected. That last one was the other half of the
+// same wiring: a plugin left in a DAW session made every input on the machine
+// unselectable, because the canvas asked the link rather than the settings what
+// it was showing.
 
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:oaa/src/app/oaa_app.dart';
 import 'package:oaa/src/app/transport_readout.dart';
 import 'package:oaa/src/data/providers.dart';
 import 'package:oaa/src/storage/config_store.dart';
 import 'package:oaa/src/storage/startup_config.dart';
-import 'package:flutter/material.dart';
+import 'package:oaa_core/oaa_core.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -127,14 +131,14 @@ void main() {
       await socket.flush();
     });
 
-    // Inserting a plugin is the act of choosing it, so the canvas follows
-    // without anybody opening a menu.
+    // Inserting the first plugin is the act of choosing it, so the canvas
+    // follows without anybody opening a menu. The name is the app's own short
+    // form of what the producer called itself — the wire carries "Open Audio
+    // Analyzer plugin — Fixture", and the half of that which is this
+    // application's own name is not what a source list is for.
     await _pumpUntil(
       tester,
-      () => find
-          .text('OPEN AUDIO ANALYZER PLUGIN — FIXTURE')
-          .evaluate()
-          .isNotEmpty,
+      () => find.text('DAW PLUGIN — FIXTURE').evaluate().isNotEmpty,
     );
 
     expect(find.text('TEST TONE'), findsNothing);
@@ -167,5 +171,105 @@ void main() {
       findsOneWidget,
       reason: 'the notice is counting something other than what is metered',
     );
+
+    // **And the machine's own inputs are still reachable.** This is the whole
+    // of what the plugin being a *source* rather than an override buys: the
+    // socket is still open and the session is still connected, and the canvas
+    // is the local engine's again because that is what was chosen.
+    final controller = container.read(settingsProvider.notifier);
+    controller.setSource(AudioSourceKind.testTone);
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('TEST TONE'), findsOneWidget);
+    expect(find.text('DAW PLUGIN — FIXTURE'), findsNothing);
+
+    // The playhead goes with it. A DAW's position under a meter reading a sound
+    // card is a reading of two different things in one row.
+    expect(find.byType(TransportReadout), findsNothing);
+
+    // **And RESET reaches the local engine while that plugin stays
+    // connected.** It refuses only for what is on the canvas — the link
+    // carries no reset frame — and a gate on what is *connected* would refuse
+    // it for an engine it resets perfectly well, which is the same
+    // ask-the-link-not-the-selection mistake one control further along.
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.meta);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyR);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.meta);
+    await tester.pump();
+
+    expect(find.textContaining('RESET cannot reach'), findsNothing);
+
+    // The link never dropped: choosing it again puts the same session back,
+    // with no reconnection and nothing sent.
+    controller.setSource(AudioSourceKind.plugin);
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('DAW PLUGIN — FIXTURE'), findsOneWidget);
+    expect(find.text('48.0 kHz · 2 ch'), findsOneWidget);
+    expect(find.byType(TransportReadout), findsOneWidget);
+
+    // And now the same chord *is* refused, which is what makes its silence
+    // above worth asserting: a shortcut that never fired would have passed that
+    // expectation for the wrong reason.
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.meta);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyR);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.meta);
+    await tester.pump();
+
+    expect(find.textContaining('RESET cannot reach'), findsOneWidget);
+
+    // The notice takes itself off screen on a timer, and a timer still pending
+    // when the tree goes away fails the test on its own.
+    await tester.pump(const Duration(seconds: 5));
+  });
+
+  testWidgets('choosing the plugin with none connected measures nothing', (
+    tester,
+  ) async {
+    // The state a persisted selection lands in every morning: the app opens
+    // before the DAW does. It must not read as a measurement — the local engine
+    // is on silence at that point, and a canvas of digital black under a status
+    // bar naming a plugin is a screen of numbers nobody took.
+    tester.view.physicalSize = const Size(1600, 1000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    final port = (await tester.runAsync(_freePort))!;
+
+    final store = ConfigStore.disabled();
+    addTearDown(store.dispose);
+
+    final container = ProviderContainer(
+      overrides: [
+        configStoreProvider.overrideWithValue(store),
+        startupConfigProvider.overrideWithValue(
+          StartupConfig(notice: store.lastError),
+        ),
+        pluginLinkPortProvider.overrideWithValue(port),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(container: container, child: const OaaApp()),
+    );
+    await tester.pump();
+
+    container.read(settingsProvider.notifier).setSource(AudioSourceKind.plugin);
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('DAW PLUGIN'), findsOneWidget);
+    expect(
+      find.textContaining('No plugin is connected'),
+      findsOneWidget,
+      reason: 'a canvas of dashes with nothing saying why',
+    );
+
+    // No format either: nothing has reported one, and `0.0 kHz · 0 ch` is a
+    // statement about a signal that does not exist.
+    expect(find.textContaining('kHz'), findsNothing);
   });
 }

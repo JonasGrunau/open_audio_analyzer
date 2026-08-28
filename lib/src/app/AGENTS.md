@@ -4,7 +4,7 @@ The shell everything else is mounted in. GPL-3.0-or-later.
 
 | File | Purpose |
 |------|---------|
-| `oaa_app.dart` | `MaterialApp`, the widget that owns the engine and the clock, **both bars**, and the notices. `_MenuBar` is the row across the top — the commands, and the open document's name centred in the window — and `_StatusBar` is the row across the bottom, which is every reading and the two menus that say what a reading is. |
+| `oaa_app.dart` | `MaterialApp`, the widget that owns the engine, the clock and the plugin link, **both bars**, and the notices. `_MenuBar` is the row across the top — the commands, and the open document's name centred in the window — and `_StatusBar` is the row across the bottom, which is every reading and the two menus that say what a reading is. |
 | `bar_controls.dart` | `BarButton`, `BarChip` and `BarSwitch` — the three shapes both bars are built from — **and `BarMetrics`, the width of every control in them.** Public because neither row is assembled in one file: `PublishSwitch`, `PairingCodeButton` and `AttachButton` own a socket between them and live in `lib/src/remote/`, and because the widths are held against the widgets by `test/scaling_test.dart`. |
 | `shortcuts.dart` | **Every keyboard shortcut Open Audio Analyzer has, as one table**, plus the widget that installs it and the generator for `docs/site/keyboard.md`. |
 | `transport_readout.dart` | The DAW's playhead, painted: position, tempo and meter, and the rules about which of the three a host has actually earned the right to have drawn. Built by the status bar and by the tablet's link bar, which is why it lives here rather than in `lib/src/remote/`. |
@@ -241,6 +241,35 @@ The shell everything else is mounted in. GPL-3.0-or-later.
   one to accept is how a Mac driving an external PC keyboard ends up with no
   undo. Only the *printed* label is platform-specific, and that is a question
   about the keyboard in front of the user rather than about the OS.
+
+- **What is on the canvas is a lookup of the chosen source, not a rule about
+  what wins.** `_activeSource` reads `settings.sourceKind`: the DAW plugin is a
+  source like the test tone and the interfaces, and `PluginLink.active` only
+  decides *which* session that source means. Through 0.14.0 a connected plugin
+  simply overrode whatever was chosen, so a plugin left in a DAW session made
+  every input on the machine unreachable — and nothing on screen said the picker
+  had stopped meaning anything. `_onPluginsChanged` still selects the plugin
+  when one arrives and none was connected, because inserting it is the act of
+  choosing it, and deliberately does not when one already was: a bypass toggle
+  re-instantiates a plugin, and that must not take the canvas off a source
+  somebody chose.
+
+  Two consequences worth keeping. Choosing the plugin opens the local engine on
+  **silence** — see `_resolve` — because a capture device held open behind a DAW
+  is a recording indicator with nothing behind it. And choosing it with none
+  connected draws `_noPlugin`, a `WireSnapshot` no frame is ever decoded into,
+  which starts stale and reads as dashes; handing the canvas the silence engine
+  instead would put a screenful of steady digital black under a status bar
+  naming a plugin.
+
+- **`--open-panel` opens its panel from `_belowScopes`, not from this State's
+  own context.** `RemoteDisplayScope`, `PluginLinkScope` and the `Material` are
+  all built in `build`, so they are *descendants* of this element and
+  `dependOnInheritedWidgetOfExactType` never looks down. Opening the settings
+  panel from `context` asserted "No RemoteDisplayScope in scope" and opened
+  nothing — in the one build whose whole purpose is to put a panel on screen for
+  somebody to look at, which is why it went unnoticed: the flag parses, and
+  every test of it stopped at the parse.
 
 - **The engine's lifetime belongs to `_WorkspaceState`, not to a provider.** It
   owns a native thread that must be stopped when the widget goes away, and the
