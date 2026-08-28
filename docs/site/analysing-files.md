@@ -69,6 +69,15 @@ directory](install.html#where-open-audio-analyzer-keeps-your-configuration), and
 the same library the application does — so a target you defined once in the
 interface is available to a build script by name.
 
+A target that names an `odr_i_min` or an `odr_s_min` adds a line to the verdict
+for each: the integrated Open Dynamic Range, which falls as a master is limited
+harder, checked against a floor — and the lowest short-term one the programme
+reached, its most squeezed three seconds, checked against another.
+None of the built-ins sets one, because no platform publishes one; a house
+standard that does writes it into its file and the build fails on it like on
+any other line. The report states the lowest `ODR-S` whether or not a target
+asks about it.
+
 **Reset**, beside Edit in Settings → Meters, deletes every one of those files
 and leaves the built-ins. `--target` naming one it removed exits with
 `unknown target`, so a pipeline that names a target of your own stops rather

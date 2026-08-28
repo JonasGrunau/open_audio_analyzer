@@ -257,6 +257,89 @@ void main() {
       expect(result.stdout, contains('VERDICT: FAIL'));
     });
 
+    test('a dynamics floor is a fourth check, and it can fail the build', () {
+      // A steady 1 kHz sine has an ODR-I of exactly 0 LU — its true peak and its
+      // loudness are the same number (see the engine's conformance suite), so
+      // it is the most compressed programme there is. A floor the built-ins do
+      // not set is what makes this a fourth line rather than a third one
+      // moving: the same file passes the same numbers without it.
+      final root = Directory('${_temp.path}/config-floor')
+        ..createSync(recursive: true);
+      Directory('${root.path}/calibrations').createSync();
+      File('${root.path}/calibrations/house.json').writeAsStringSync(
+        jsonEncode({
+          'id': 'house-dynamic',
+          'name': 'House, dynamic',
+          'lufs_target': -14.0,
+          'true_peak_max': -1.0,
+          'odr_i_min': 8.0,
+        }),
+      );
+      final file = _writeWav('squashed.wav', 0.1993, 8.0);
+
+      final listed = _run(['--config-dir', root.path, '--list-targets']);
+      expect(listed.stdout, contains('ODR-I ≥ 8.0 LU'));
+
+      final result = _run([
+        '-q',
+        '--config-dir',
+        root.path,
+        '--target',
+        'house-dynamic',
+        file.path,
+      ]);
+      expect(result.exitCode, 2);
+      expect(result.stdout, contains('ODR-I'));
+      expect(result.stdout, contains('VERDICT: FAIL'));
+    });
+
+    test(
+      'the lowest ODR-S is reported, and an ODR-S floor is checked against it',
+      () {
+        // The same steady sine: its ODR-S is 0 LU for every one of its three
+        // seconds, so the minimum is 0 and a floor of 6 fails it. In the JSON it
+        // is `odr_s_min`, and it is a number rather than null — the tone clears
+        // the absolute gate, so the ratio was defined throughout.
+        final root = Directory('${_temp.path}/config-psr')
+          ..createSync(recursive: true);
+        Directory('${root.path}/calibrations').createSync();
+        File('${root.path}/calibrations/strict.json').writeAsStringSync(
+          jsonEncode({
+            'id': 'house-strict',
+            'name': 'House, strict',
+            'lufs_target': -14.0,
+            'true_peak_max': -1.0,
+            'odr_s_min': 6.0,
+          }),
+        );
+        final file = _writeWav('steady.wav', 0.1993, 8.0);
+
+        final listed = _run(['--config-dir', root.path, '--list-targets']);
+        expect(listed.stdout, contains('ODR-S ≥ 6.0 LU'));
+
+        final json = _run(['-q', '--format', 'json', file.path]);
+        final decoded =
+            jsonDecode(json.stdout as String) as Map<String, Object?>;
+        final measurements = decoded['measurements'] as Map<String, Object?>;
+        expect(
+          (measurements['odr_s_min'] as num).toDouble(),
+          closeTo(0.0, 0.1),
+        );
+
+        final result = _run([
+          '-q',
+          '--config-dir',
+          root.path,
+          '--target',
+          'house-strict',
+          file.path,
+        ]);
+        expect(result.exitCode, 2);
+        expect(result.stdout, contains('ODR-S'));
+        expect(result.stdout, contains('VERDICT: FAIL'));
+      },
+    );
+
     test('without a target there is no verdict and it exits 0', () {
       final file = _writeWav('tone.wav', 0.1993, 4.0);
       final result = _run(['-q', file.path]);

@@ -220,6 +220,7 @@ AnalysisReport _toReport(
     momentaryMax: result.momentaryMax,
     shortTermMax: result.shortTermMax,
     shortTermMin: result.shortTermMin,
+    odrShortMin: result.odrShortMin,
     correlationMin: result.correlationMin,
     correlationMax: result.correlationMax,
     correlationMean: result.correlationMean,
@@ -319,12 +320,16 @@ void _listTargets(List<Calibration> targets) {
   stdout.writeln();
   for (final target in targets) {
     stdout.writeln('  ${target.id.padRight(14)}${target.name}');
+    final integratedFloor = target.odrIntegratedFloor;
+    final shortFloor = target.odrShortFloor;
     stdout.writeln(
       '  ${' '.padRight(14)}'
       '${target.lufsTarget.toStringAsFixed(1)} '
       '±${target.lufsTolerance.toStringAsFixed(1)} LUFS, '
       '≤ ${target.truePeakMax.toStringAsFixed(1)} dBTP, '
-      'LRA ≤ ${target.loudnessRangeMax.toStringAsFixed(1)} LU',
+      'LRA ≤ ${target.loudnessRangeMax.toStringAsFixed(1)} LU'
+      '${integratedFloor == null ? '' : ', ODR-I ≥ ${integratedFloor.toStringAsFixed(1)} LU'}'
+      '${shortFloor == null ? '' : ', ODR-S ≥ ${shortFloor.toStringAsFixed(1)} LU'}',
     );
     stdout.writeln();
   }

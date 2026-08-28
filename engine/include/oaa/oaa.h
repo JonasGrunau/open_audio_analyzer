@@ -287,10 +287,23 @@ typedef struct oaa_snapshot {
   float reserved1;
 
   /* --- Dynamics -------------------------------------------------------- */
-  /* Open Audio Analyzer does not implement Decibel's "TrueDyn": it is proprietary and
-   * undocumented, so any claim of parity would be a guess dressed as a
-   * measurement. These are defined in docs/METRICS.md and reproducible from
-   * the definition. */
+  /* Open Dynamic Range — ODR-S and ODR-I in the application: true peak over a
+   * window minus the loudness of the same window, in LU. Defined in
+   * docs/METRICS.md and reproducible from the definition; the same arithmetic
+   * as the PSR and PLR of AES TD1004, with the operands that note leaves open
+   * pinned down. Decibel's "TrueDyn" is, by process.audio's own description,
+   * most probably the same pair; it is not documented as one, so these are
+   * published under their own name and claim no parity. The field names below
+   * predate the name and stay, because the layout is what a consumer links.
+   *
+   * dr_short is NaN while short-term loudness is at or below the absolute
+   * gate (-70 LUFS): silence and noise floor have no dynamics to report, and
+   * the dB floor would otherwise make them read 0 LU. dr_integrated is NaN
+   * for as long as lufs_integrated is, which is the same line — but its peak
+   * is gated by nothing: true_peak_max counts a transient in a block the
+   * loudness gate excluded, because a converter will see it. The engine
+   * publishes no minimum of dr_short; a file report and the Validator each
+   * take their own over what they read. */
   float dr_short;       /* true_peak - lufs_short,      LU */
   float dr_integrated;  /* true_peak_max - lufs_integrated, LU */
 

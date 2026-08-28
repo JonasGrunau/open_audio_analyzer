@@ -137,13 +137,13 @@ double _paint(Canvas canvas, AnalysisReport report, OaaColors colors) {
     Metric.lufsIntegrated,
     Metric.loudnessRange,
     Metric.truePeakMax,
-    Metric.peakToLoudnessRatio,
+    Metric.odrIntegrated,
   ];
   final values = [
     report.lufsIntegrated,
     report.loudnessRange,
     report.truePeakMax,
-    report.peakToLoudnessRatio,
+    report.odrIntegrated,
   ];
 
   const columnWidth = (right - left) / 4;

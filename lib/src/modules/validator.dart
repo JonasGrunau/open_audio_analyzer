@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:oaa_core/oaa_core.dart';
@@ -14,8 +15,9 @@ import '../data/metric_reader.dart';
 /// Every other module here shows a measurement. This one shows a **conclusion**,
 /// and that is a different job: the question at the end of a session is not
 /// "what is my integrated loudness" but "can I send this", and answering it
-/// means checking three numbers against the target and knowing which way each
-/// comparison runs.
+/// means checking three numbers against the target — plus one for each
+/// dynamics floor the target sets — and knowing which way each comparison
+/// runs.
 ///
 /// The verdict is deliberately conservative. A row whose measurement is not yet
 /// defined does not pass and does not fail — it reads as a dash, and the
@@ -40,35 +42,91 @@ class ValidatorModule extends StatefulWidget {
 
 /// One line of the table: what it measures, and what it is measured against.
 class _Check {
-  const _Check(this.metric, this.limit);
+  const _Check(this.metric, this.limit, {this.name});
 
   final Metric metric;
 
   /// What the target says, formatted for the "against" column.
   final String Function(Calibration calibration) limit;
+
+  /// The row's name where it is not the metric's own label — the ODR-S row
+  /// judges the lowest reading since reset, not the live one, and says so.
+  final String? name;
 }
 
-const _checks = [
-  _Check(Metric.lufsIntegrated, _loudnessLimit),
-  _Check(Metric.truePeakMax, _truePeakLimit),
-  _Check(Metric.loudnessRange, _rangeLimit),
+/// The rows a target asks for, in the order the report prints them.
+///
+/// The dynamics floors are the rows that come and go with the target. A
+/// target without one makes no statement about dynamics, and a row that read
+/// "ODR-I 9.8 — PASS" under it would be read as a statement — see
+/// [Calibration.odrIntegratedFloor]. The same rule builds [AnalysisReport.checks].
+List<_Check> _checksFor(Calibration calibration) => [
+  const _Check(Metric.lufsIntegrated, _loudnessLimit),
+  const _Check(Metric.truePeakMax, _truePeakLimit),
+  const _Check(Metric.loudnessRange, _rangeLimit),
+  if (calibration.odrIntegratedFloor != null)
+    const _Check(Metric.odrIntegrated, _floorLimit),
+  if (calibration.odrShortFloor != null)
+    const _Check(Metric.odrShort, _shortFloorLimit, name: 'ODR-S MIN'),
 ];
+
+/// The most rows [_checksFor] returns, which is how many paragraphs to hold.
+const _mostChecks = 5;
 
 String _loudnessLimit(Calibration c) =>
     '${c.lufsTarget.toStringAsFixed(1)} ±${c.lufsTolerance.toStringAsFixed(1)}';
 String _truePeakLimit(Calibration c) => '≤ ${c.truePeakMax.toStringAsFixed(1)}';
 String _rangeLimit(Calibration c) =>
     '≤ ${c.loudnessRangeMax.toStringAsFixed(1)}';
+String _floorLimit(Calibration c) =>
+    '≥ ${c.odrIntegratedFloor!.toStringAsFixed(1)}';
+String _shortFloorLimit(Calibration c) =>
+    '≥ ${c.odrShortFloor!.toStringAsFixed(1)}';
 
 class _ValidatorModuleState extends State<ValidatorModule> {
-  final _values = [for (final _ in _checks) ValueParagraph()];
+  // Allocated for the longest table once, rather than per target: the frame
+  // path may not allocate, and a target change is not a frame.
+  final _values = [for (var i = 0; i < _mostChecks; i++) ValueParagraph()];
   final _verdict = ValueParagraph();
 
+  List<_Check> _checks = const [];
   List<ui.Paragraph> _names = const [];
   List<ui.Paragraph> _limits = const [];
   List<ui.Paragraph> _passLabels = const [];
   Calibration? _builtFor;
   Color? _builtColor;
+
+  /// The lowest ODR-S since the engine's last reset — what an ODR-S floor is
+  /// checked against, because "never more squeezed than this" is a statement
+  /// about the worst three seconds and not about the current ones. Kept here
+  /// because the engine publishes no minimum: a file report takes the same
+  /// minimum over every 10 ms sub-block, and this one is taken over what the
+  /// clock showed the module, which is every published block while the window
+  /// is on screen.
+  ///
+  /// Folded on a change of generation, never on a paint, and cleared by the
+  /// elapsed clock running backwards, which is what a reset is — the same
+  /// two rules the Alert Meter's latch follows, for the same reasons.
+  double _psrMin = double.nan;
+  int _seenGeneration = -1;
+  double _lastElapsed = 0;
+
+  void _observe(MeterSource engine) {
+    if (engine.generation == _seenGeneration) return;
+    _seenGeneration = engine.generation;
+
+    final elapsed = engine.elapsedSeconds;
+    // A quiet link reports NaN seconds and is not a reset; see the Alert
+    // Meter for why the NaN must not be stored either.
+    if (!elapsed.isNaN) {
+      if (elapsed < _lastElapsed) _psrMin = double.nan;
+      _lastElapsed = elapsed;
+    }
+
+    final psr = engine.odrShort;
+    if (psr.isNaN) return;
+    _psrMin = _psrMin.isNaN ? psr : math.min(_psrMin, psr);
+  }
 
   @override
   void dispose() {
@@ -90,9 +148,13 @@ class _ValidatorModuleState extends State<ValidatorModule> {
       final label = OaaType.label.copyWith(color: colors.textFaint);
       final tick = OaaType.tick.copyWith(color: colors.textFaint);
 
+      _checks = _checksFor(widget.calibration);
       _names = [
         for (final check in _checks)
-          layoutParagraph(check.metric.label.toUpperCase(), label),
+          layoutParagraph(
+            (check.name ?? check.metric.label).toUpperCase(),
+            label,
+          ),
       ];
       _limits = [
         for (final check in _checks)
@@ -154,8 +216,11 @@ class _ValidatorPainter extends MeterPainter {
     // visibly run out before the box did. The ceiling still exists, because a
     // twelve-row-tall Validator with three checks should not have rows the
     // height of a fist; past it the block is simply centred in the space.
+    state._observe(engine);
+
+    final checks = state._checks;
     final available = size.height - _verdictHeight;
-    final rowHeight = (available / _checks.length).clamp(14.0, 44.0);
+    final rowHeight = (available / checks.length).clamp(14.0, 44.0);
     final valueRight = size.width * 0.62;
 
     // The measured column scales with the row; the name, the limit and the
@@ -165,13 +230,16 @@ class _ValidatorPainter extends MeterPainter {
     final readingSize = (rowHeight * 0.42).clamp(13.0, 28.0).toDouble();
 
     var worst = _Outcome.pass;
-    var top = _verdictHeight + (available - rowHeight * _checks.length) / 2;
+    var top = _verdictHeight + (available - rowHeight * checks.length) / 2;
 
-    for (var i = 0; i < _checks.length; i++) {
+    for (var i = 0; i < checks.length; i++) {
       if (top + rowHeight > size.height + 1) break;
 
-      final check = _checks[i];
-      final value = readMetric(engine, check.metric);
+      final check = checks[i];
+      // The ODR-S row is the one reading that is not the live one.
+      final value = check.metric == Metric.odrShort
+          ? state._psrMin
+          : readMetric(engine, check.metric);
       final outcome = _judge(check.metric, value);
       if (outcome == _Outcome.fail) {
         worst = _Outcome.fail;
@@ -217,7 +285,7 @@ class _ValidatorPainter extends MeterPainter {
         ),
       );
 
-      if (i < _checks.length - 1) {
+      if (i < checks.length - 1) {
         canvas.drawLine(
           Offset(0, top + rowHeight),
           Offset(size.width, top + rowHeight),
@@ -255,6 +323,12 @@ class _ValidatorPainter extends MeterPainter {
         calibration.exceedsTruePeak(value) ? _Outcome.fail : _Outcome.pass,
       Metric.loudnessRange =>
         calibration.exceedsLoudnessRange(value) ? _Outcome.fail : _Outcome.pass,
+      Metric.odrIntegrated =>
+        calibration.undercutsOdrIntegrated(value)
+            ? _Outcome.fail
+            : _Outcome.pass,
+      Metric.odrShort =>
+        calibration.undercutsOdrShort(value) ? _Outcome.fail : _Outcome.pass,
       _ => _Outcome.undecided,
     };
   }

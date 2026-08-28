@@ -367,17 +367,37 @@ void oaa_analyse(oaa_engine *engine, const float *interleaved,
   /* Differences of the above, so undefined whenever either operand is. The
    * arithmetic propagates NaN on its own; the point of writing it out is that
    * nobody later "fixes" a dash by clamping one of these to zero. See
-   * docs/METRICS.md for the definitions — none of these is Decibel's TrueDyn,
-   * and none of them pretends to be.
+   * docs/METRICS.md for the definitions — Open Dynamic Range, ODR-S and ODR-I
+   * in the application. The arithmetic is that of AES TD1004's PSR and PLR,
+   * and by process.audio's own description of it very probably that of
+   * Decibel's TrueDyn too — but the latter is an inference from a product
+   * page, not a specification, so nothing here claims parity.
    *
-   * **Two of these four are the same number twice, deliberately.** DR-S and PSR
-   * are both true peak minus short-term loudness; DR-I and PLR are both true
+   * **The short-term reading is gated on the absolute gate, and has to be.**
+   * Every dB quantity above floors at OAA_DB_FLOOR rather than at -inf, so
+   * that crest — a per-block statistic where peak equalling RMS is a true
+   * thing to say about a block of silence — stays a number. That floor turns
+   * this subtraction into a lie: in digital silence true peak and short-term
+   * loudness both sit at -144, and -144 minus -144 is a ODR-S of 0.0 LU — a
+   * dynamics reading of "completely squashed" for a passage nobody can hear,
+   * and a noise floor at -90 dBFS reads about 8 LU of "dynamics" the same way.
+   * Neither is a measurement of music. BS.1770-4 already draws the line: a
+   * block below -70 LUFS is not programme and is never filed into the
+   * integrated reading, so ODR-I is undefined until something clears that gate.
+   * ODR-S is undefined below the same line, so the two dynamics readings agree
+   * about when there is something to measure. Silence reads as a dash, which
+   * is what a quantity nobody measured reads as everywhere else in the app.
+   *
+   * **Two of these four are the same number twice, deliberately.** DR-S and ODR-S
+   * are both true peak minus short-term loudness; DR-I and ODR-I are both true
    * peak max minus integrated loudness. Both names are in common use and
    * neither is ours to retire, so both are carried — but they are carried as
    * one expression each rather than as two, so they cannot drift apart, and a
    * report prints each value once. Anything that offers all four as a menu of
    * distinct measurements is offering two of them twice. */
-  out->dr_short = out->true_peak - out->lufs_short;
+  out->dr_short = out->lufs_short > (float)OAA_GATE_ABSOLUTE
+                      ? out->true_peak - out->lufs_short
+                      : NAN;
   out->dr_integrated = out->true_peak_max - out->lufs_integrated;
   out->plr = out->dr_integrated; /* the same quantity under its other name */
   out->psr = out->dr_short;      /* likewise */

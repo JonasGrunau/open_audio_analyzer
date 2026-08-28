@@ -103,8 +103,8 @@ enum Scalar {
   dynamicRangeShort,
   dynamicRangeIntegrated,
   crestFactor,
-  peakToLoudnessRatio,
-  peakToShortTermRatio,
+  odrIntegrated,
+  odrShort,
   correlation,
   balance;
 

@@ -23,7 +23,11 @@ on Linux, macOS and Windows before any change ships, and against the official
 EBU and ITU vector files by hand, where all 112 cases pass. Running that set
 found two defects that generated signals could not express.
 
-[The metrics reference](metrics.html) gives the definition, the standard and
+Dynamics are **Open Dynamic Range** — `ODR-S` over the last three seconds and
+`ODR-I` over the programme, true peak against loudness — a measure this
+project defines itself, to the operand, because no standard body defines one.
+[The ODR specification](odr.html) is the definition and its conformance cases;
+[the metrics reference](metrics.html) gives the definition, the standard and
 the current availability of every quantity Open Audio Analyzer reports.
 
 ## What it will not do
@@ -45,10 +49,10 @@ tabs as you like.
 | **Number Box** | One quantity, large. Any metric. |
 | **LUFS Meter** | Momentary, short-term and integrated against a target band. |
 | **Digital Meter** | Per-channel peak and RMS with a clip indicator. |
-| **Super Meter** | The loudness family as concentric arcs. |
+| **Super Meter** | The loudness family as concentric arcs, with LRA and ODR-I under the reading. |
 | **VU Meter** | A needle, with the ballistics of the real thing. |
 | **Alert Meter** | One quantity, its worst case, and whether it passed. |
-| **Validator** | Every delivery criterion and a verdict per line. |
+| **Validator** | Every delivery criterion and a verdict per line — three, plus one for each dynamics floor the target sets. The ODR-S line judges the lowest reading since the last reset. |
 | **Histogram** | Short-term loudness over time, banded up to momentary, against the delivery target. `Smoothing` averages both bands over a centred window of 0.5, 1 or 2 seconds, or draws every 100 ms column as measured. |
 | **Loudness Distribution** | How often the programme sat at each loudness, bracketed between the two percentiles LRA is the distance between, with LRA printed on the bracket. `Scale` fits the loudness axis to the programme — every occupied bin, the gated range and the target, rounded out to whole ticks — so a distribution that lives in eight decibels is drawn across the module instead of into a fifth of it; `Full range` draws all sixty published decibels, which is the axis to pick when two of these are being compared side by side. |
 | **Spectrum Analyzer** | 512 bands, spaced the way you hear. Drawn tilted — 0 to 6 dB per octave about 1 kHz, 4.5 by default — so a mix reads as roughly flat and what is left to see is the deviation. |

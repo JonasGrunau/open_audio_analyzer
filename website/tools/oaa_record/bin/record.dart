@@ -306,11 +306,14 @@ class _Recorded {
         source.truePeak,
         source.truePeakMax,
         source.samplePeakMax,
-        source.dynamicRangeShort,
-        source.dynamicRangeIntegrated,
+        // The format keeps two series per dynamics reading from when the
+        // application had two names for each; committed recordings are laid
+        // out that way, so both series carry the one reading.
+        source.odrShort,
+        source.odrIntegrated,
         source.crestFactor,
-        source.peakToLoudnessRatio,
-        source.peakToShortTermRatio,
+        source.odrIntegrated,
+        source.odrShort,
         source.correlation,
         source.balance,
       ]),

@@ -17,12 +17,16 @@ Future<void> showCalibrationEditor(BuildContext context, {Calibration? base}) =>
       builder: (context) => CalibrationEditor(base: base),
     );
 
-/// A form over the six numbers that decide whether a master passes.
+/// A form over the eight numbers that decide whether a master passes.
 ///
 /// Every field is a number somebody publishes, so every field is editable and
 /// nothing here is computed. The point of the panel is that a delivery spec
 /// nobody anticipated — a label's house standard, a game platform's submission
 /// requirement — is twenty seconds of typing rather than a feature request.
+///
+/// Two of the eight may be left empty. The dynamics floors are the limits no
+/// platform publishes, so an empty field means "this target sets none" rather
+/// than a mistake — see [Calibration.odrIntegratedFloor].
 class CalibrationEditor extends ConsumerStatefulWidget {
   const CalibrationEditor({this.base, super.key});
 
@@ -41,12 +45,17 @@ class _CalibrationEditorState extends ConsumerState<CalibrationEditor> {
   late final _tolerance = _field(_base.lufsTolerance);
   late final _truePeak = _field(_base.truePeakMax);
   late final _range = _field(_base.loudnessRangeMax);
+  late final _odrIntegratedFloor = _optionalField(_base.odrIntegratedFloor);
+  late final _odrShortFloor = _optionalField(_base.odrShortFloor);
   late final _vu = _field(_base.vuReference);
 
   String? _error;
 
   TextEditingController _field(double value) =>
       TextEditingController(text: _format(value));
+
+  TextEditingController _optionalField(double? value) =>
+      TextEditingController(text: value == null ? '' : _format(value));
 
   @override
   void dispose() {
@@ -57,6 +66,8 @@ class _CalibrationEditorState extends ConsumerState<CalibrationEditor> {
       _tolerance,
       _truePeak,
       _range,
+      _odrIntegratedFloor,
+      _odrShortFloor,
       _vu,
     ]) {
       controller.dispose();
@@ -169,6 +180,28 @@ class _CalibrationEditorState extends ConsumerState<CalibrationEditor> {
             ],
           ),
           PanelSection(
+            title: 'Dynamics',
+            note:
+                'True peak over loudness, which falls as a limiter is pushed. '
+                'No platform publishes a floor, so an empty field sets none.',
+            children: [
+              PanelRow(
+                label: 'ODR-I floor',
+                note:
+                    'The highest true peak over the integrated loudness. '
+                    'Below this, the programme is flagged as too compressed.',
+                child: _number(_odrIntegratedFloor, 'LU'),
+              ),
+              PanelRow(
+                label: 'ODR-S floor',
+                note:
+                    'Checked against the most squeezed three seconds, which '
+                    'one quiet intro cannot rescue.',
+                child: _number(_odrShortFloor, 'LU'),
+              ),
+            ],
+          ),
+          PanelSection(
             title: 'Analogue',
             children: [
               PanelRow(
@@ -235,6 +268,13 @@ class _CalibrationEditorState extends ConsumerState<CalibrationEditor> {
       }
     }
 
+    // The two fields that may be empty. Empty is "no floor"; anything else
+    // has to be a number, the same as the rest.
+    final integratedFloor = _parseFloor(_odrIntegratedFloor, 'ODR-I floor');
+    if (!integratedFloor.ok) return;
+    final shortFloor = _parseFloor(_odrShortFloor, 'ODR-S floor');
+    if (!shortFloor.ok) return;
+
     final id = keepId ? _base.id : _uniqueId(name);
     final calibration = Calibration(
       id: id,
@@ -243,6 +283,8 @@ class _CalibrationEditorState extends ConsumerState<CalibrationEditor> {
       lufsTolerance: values['tolerance']!,
       truePeakMax: values['true peak ceiling']!,
       loudnessRangeMax: values['loudness range ceiling']!,
+      odrIntegratedFloor: integratedFloor.value,
+      odrShortFloor: shortFloor.value,
       vuReference: values['VU reference']!,
       note: _note.text.trim(),
     );
@@ -263,6 +305,26 @@ class _CalibrationEditorState extends ConsumerState<CalibrationEditor> {
     // Selecting it is the obvious next thing and saves a trip to the menu.
     ref.read(settingsProvider.notifier).setCalibrationId(id);
     Navigator.of(context).pop();
+  }
+
+  /// An optional floor: null for an empty field, the number otherwise, and
+  /// `ok: false` with [_error] set when the text is neither.
+  ({bool ok, double? value}) _parseFloor(
+    TextEditingController field,
+    String name,
+  ) {
+    final text = field.text.trim();
+    if (text.isEmpty) return (ok: true, value: null);
+    final value = _parse(text, min: 0, max: 40);
+    if (value == null) {
+      setState(
+        () => _error =
+            'The $name is not a number in the range this field accepts. '
+            'Leave it empty for no floor.',
+      );
+      return (ok: false, value: null);
+    }
+    return (ok: true, value: value);
   }
 
   Future<void> _delete() async {

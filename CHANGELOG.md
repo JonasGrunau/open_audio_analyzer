@@ -9,7 +9,57 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### 📐 Measurement
+- **The two dynamics readings are Open Dynamic Range: `ODR-S` and `ODR-I`.**
+  They were `PSR` and `PLR`, and also `DR-S` and `DR-I` — four names for two
+  numbers. The arithmetic is unchanged and every reading that was defined
+  before reads the same number now; what is new is the name and the written
+  standard behind it, in `docs/METRICS.md` and the README, which pins every
+  operand the AES note leaves open. A preset with a Number Box or an Alert
+  Meter on any of the four old ids opens on the same reading under its current
+  name; the JSON report carries `odr_i` where it carried `plr`.
+- **`ODR-S` is undefined in silence and below the −70 LUFS absolute gate, rather
+  than a number.** It read 0.0 LU for digital silence — true peak and
+  short-term loudness both floor at −144 dB, and a subtraction of two floors is
+  zero — and about 8 LU for a noise floor at −90 dBFS: a dynamics figure for a
+  passage with no programme in it. It now reads as a dash there, on the same
+  line below which `LUFS-I` is not defined, and is unchanged by any amount
+  above the gate — a reading that was defined before reads the same number
+  now. No re-measure is warranted; a Number Box or Alert Meter watching `ODR-S`
+  through a silent gap shows a dash where it showed `0.0`, and nothing else
+  changes. `ODR-I` is unaffected, having always been undefined for as long as
+  `LUFS-I` is.
+- The two dynamics readings are held in CI. A stereo 1 kHz sine reads an
+  `ODR-S` and an `ODR-I` of 0.0 LU and the same tone in mono reads 3.01; the
+  numerator is
+  asserted to be true peak, against a signal whose every sample sits 3 dB under
+  its own waveform; and silence and a −80 dBFS tone read as undefined. The
+  definition, operand by operand, is now in `docs/METRICS.md` and the README.
+
 ### ✨ Added
+- **A delivery target can set a `ODR-I` floor and a `ODR-S` floor.** `odr_i_min` and
+  `odr_s_min` in the target's file, or the two rows of the editor's new Dynamics
+  section — the limits that run the other way, and the ones no platform
+  publishes, so none of the six built-in targets carries either. Each floor
+  the target sets adds a line to the Validator, the report, the report card
+  and the `oaa` verdict, and a master limited past one fails a build the way
+  one over its peak ceiling does. The `ODR-S` line is judged against the
+  **lowest** `ODR-S` of the programme — the most squeezed three seconds — which
+  is the check `ODR-I` cannot make, because one transient in a quiet intro
+  rescues a flattened chorus. The Validator keeps that minimum since the last
+  reset.
+- **The Open Dynamic Range specification**, `docs/ODR.md`, published at
+  `open-audio-analyzer.com/docs/odr`: the two readings defined to the operand
+  — the peak, the window, the gate, the minimum, the display — with seven
+  conformance cases, every one a generated signal with a stated tolerance, and
+  a table of what ODR is and is not beside the AES ratios, TrueDyn, DR, LRA and
+  crest. Normative and versioned; its text is CC BY 4.0 so another product's
+  documentation may reproduce it.
+- **A file report states the lowest `ODR-S` reached**, where it was defined, as
+  its `ODR-S` line and as `odr_s_min` in the JSON — beside `ODR-I`, which is one
+  peak against the whole programme.
+- The Super Meter prints `ODR-I` under its LRA readout, in the verdict's colour
+  when the target has a floor.
 - **A connected DAW plugin is an entry in the source picker**, named after the
   host it is running in — `DAW plugin — Logic Pro` — in the status bar's menu
   and in Settings › Signal. Several inserts are several rows. The selection is
@@ -40,6 +90,10 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   reported one, instead of `0.0 kHz · 0 ch`.
 
 ### 🐛 Fixed
+- An Alert Meter watching `ODR-S` or `ODR-I` latches the **lowest** reading under
+  WORST. It latched the highest — the most open moment of the session — because
+  every metric but correlation was taken to be worse when higher, and a ratio a
+  floor is set under is the other way round.
 - `--open-panel=settings` opens the settings panel again. It asserted "No
   RemoteDisplayScope in scope" and opened nothing, because the flag is acted on
   from a context above the scopes the panel needs — which is the debug build's
@@ -49,7 +103,19 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   still carried the old split; it now reads GPL-3.0 · AGPL-3.0, as the site's
   footer does.
 
+### 🔥 Removed
+- **`PSR`, `PLR`, `DR-S` and `DR-I` as names**, and `plr` and `dr_i` as keys of
+  the JSON report. They were the two Open Dynamic Range readings under other
+  spellings, and "DR" in particular is what the TT Dynamic Range Meter calls
+  its number — a different measurement with a different algorithm — so it was
+  the one spelling this pair could not keep. Every old preset id still opens
+  on the reading it meant. The wire is unchanged: its two slots per reading
+  both carry the one value, as every producer already wrote them.
+
 ### 🚧 Internal
+- `OAA_GATE_ABSOLUTE` lives in `oaa_loudness.h` rather than in the loudness
+  source, so the analysis layer gates the dynamics readings on the same
+  constant the integrated measurement is gated on.
 - The Open Graph card is rendered at 1280×640 rather than 1200×630, which is the
   size GitHub asks a repository's social preview for, so the same image serves
   the link unfurl and the repository page without being cropped.

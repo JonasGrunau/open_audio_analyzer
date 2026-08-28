@@ -30,6 +30,8 @@
   ·
   <a href="https://open-audio-analyzer.com/docs/metrics">Metrics</a>
   ·
+  <a href="https://open-audio-analyzer.com/docs/odr">Open Dynamic Range</a>
+  ·
   <a href="#-known-gaps-stated-plainly">Known gaps</a>
 </p>
 
@@ -58,7 +60,7 @@ approximating.
    - [The per-frame path](#-the-per-frame-path)
    - [Rendering, per module](#-rendering-per-module)
 4. [Measurement](#-measurement)
-   - [On dynamics, and on honesty](#-on-dynamics-and-on-honesty)
+   - [Open Dynamic Range](#-open-dynamic-range)
    - [The correctness gate](#-the-correctness-gate)
 5. [Layout](#-layout)
    - [Keyboard](#-keyboard)
@@ -129,7 +131,7 @@ other thirteen.
 |---|---|
 | **Number Box** | Any single measurement, as a number. |
 | **LUFS Meter** | Momentary and short-term loudness as bars, integrated loudness as a line. |
-| **Super Meter** | Momentary, short-term and integrated loudness as three concentric arcs. |
+| **Super Meter** | Momentary, short-term and integrated loudness as three concentric arcs, with LRA and ODR-I under the reading. |
 | **Digital Meter** | Sample peak and RMS, per channel, up to 7.1. |
 | **VU Meter** | A needle, on the movement the engine models. |
 | **Alert Meter** | One measurement, watched, with the worst it has been latched. |
@@ -212,7 +214,10 @@ Four consequences worth naming, because they are what usually goes wrong:
 ## 📐 Measurement
 
 Correctness is the entire product, so every metric is pinned to a published spec
-rather than to intuition.
+rather than to intuition — and where no standards body has published one, as
+for dynamics, the project publishes its own: **Open Dynamic Range**,
+[docs/ODR.md](docs/ODR.md), with conformance cases held to in CI like the EBU
+ones.
 
 | Quantity | Definition |
 |---|---|
@@ -224,6 +229,7 @@ rather than to intuition.
 | **Spectrum** | 4096-point Hann window at a 1024-sample hop, zero-padded to a 16384-point transform and mapped onto 512 log-spaced bands with **peak-per-bin** so narrow peaks survive; bands too narrow to hold a bin read between two. Window-compensated: a full-scale sine reads 0.0 dBFS on a bin centre and within 0.3 dB off it |
 | **Correlation** | Running Pearson over a sliding window |
 | **Crest** | Sample peak minus RMS over the same block — the block's own values, not the held peak and smoothed RMS the meters draw, which settle at different rates. Exactly 3.0103 dB for a sine, 0 for DC |
+| **ODR-S / ODR-I** | Open Dynamic Range: true peak minus loudness over the same window, the last 3 s for ODR-S and the programme for ODR-I. Defined [below](#-open-dynamic-range). A stereo 1 kHz sine reads exactly 0 LU on both, in mono 3.01 |
 | **Clip** | Longest run of consecutive samples at or above 0.999 since the reset, per channel. Latched, so a clip that lasted three samples is still visible when you look back |
 
 All of these are measured today and checked in CI, the spectrum included.
@@ -231,17 +237,71 @@ All of these are measured today and checked in CI, the spectrum included.
 it: every reset raises the flag and it clears once a full window has been
 transformed, about 85 ms in.
 
-### 🎯 On dynamics, and on honesty
+### 🎯 Open Dynamic Range
 
-Decibel reports a dynamics figure called *TrueDyn*. It is proprietary and
-undocumented, so any claim to match it would be a guess presented as a
-measurement, and Open Audio Analyzer does not implement it.
+There is no standard that says what "dynamic range" is, so Open Audio Analyzer
+defines one — **Open Dynamic Range**, `ODR-S` and `ODR-I` — says exactly which
+subtraction it means, and holds it in CI the way it holds loudness. The
+arithmetic is that of the peak-to-loudness ratios in AES TD1004; what the
+standard adds is every operand that note leaves open, so that two
+implementations of it cannot disagree. **The specification is
+[docs/ODR.md](docs/ODR.md)** — normative, versioned, CC BY 4.0 so it can be
+reproduced, with the conformance cases an implementation is held to. What
+follows is the summary; nothing is tuned, weighted or smoothed on top of it.
 
-Instead it reports `DR-S` and `DR-I`, defined as `TruePeak − LUFS-S` and
-`TruePeakMax − LUFS-I`, published in [docs/METRICS.md](docs/METRICS.md) and
-reproducible by anybody who wants to check. `PSR` and `PLR` are the same two
-quantities under the names in wider use: four names for two numbers, each
-computed once so the pair cannot drift.
+| | Is | Over | Undefined while |
+|---|---|---|---|
+| **ODR-S** | `TruePeak − LUFS-S` | the last 3 s | `LUFS-S` is at or below −70 LUFS |
+| **ODR-I** | `TruePeakMax − LUFS-I` | the programme since Reset | `LUFS-I` is |
+
+- **The peak is true peak** — BS.1770-4 Annex 2, 4× oversampled — never sample
+  peak, which understates a limited master by up to 3 dB and is precisely the
+  error a dynamics reading exists to catch. It is the loudest channel's peak;
+  the loudness is the standard's channel-weighted sum. So a stereo 1 kHz sine
+  reads exactly **0.0 LU** on both — its 3.01 dB crest, the second channel's
+  +3.01 and the K filter's +0.691 against the −0.691 offset cancel to nothing —
+  and the same tone in mono reads **3.01**.
+- **Both operands cover the same window.** ODR-S's peak is the highest true peak
+  in the *same* three seconds `LUFS-S` averages, not the meter's held reading;
+  ODR-I's is the highest since Reset, against the gated integrated loudness that
+  BS.1770 defines for the programme. The unit is LU and the resolution 0.1,
+  like every loudness reading.
+- **Silence has no dynamics.** Every dB quantity floors at −144 rather than
+  −∞, and a subtraction of two floors is 0.0 — which read as "completely
+  squashed" for a passage nobody could hear, and about 8 LU of "dynamics" for a
+  noise floor at −90 dBFS. ODR-S is therefore undefined below the −70 LUFS
+  absolute gate, which is the line BS.1770 already draws for what counts as
+  programme, and ODR-I is undefined for exactly as long as `LUFS-I` is. Both
+  read as a dash.
+- **Neither moves when a platform turns the track down.** Peak and loudness
+  shift together, so ODR-S and ODR-I describe the master and not the playback
+  level — which is what makes them the dynamics numbers for the normalised
+  era, and what LRA is not: LRA is how far the programme *moves*, and a track
+  can be crushed flat with a wide LRA or breathe with a narrow one.
+- **ODR-I is the delivery number, and its peak is gated by nothing.** `TP Max`
+  is the highest true peak since Reset wherever it fell, including in a block
+  the loudness gate threw out — a transient in a quiet intro is a peak a
+  converter will see. The consequence is that one such transient rescues a
+  flattened chorus, so ODR-I alone cannot say how hard a master was limited.
+- **The lowest ODR-S can.** ODR-S is the live one — watch it fall in the chorus
+  as a limiter is pushed and you are watching the squeeze happen — and a file
+  report keeps its minimum over the programme, taken where it was defined: the
+  most squeezed three seconds. A target may set a floor on either (`odr_i_min`,
+  `odr_s_min`), and each floor is a line of the Validator, the report and the
+  `oaa` verdict; the ODR-S line is judged against the minimum, which the
+  Validator keeps since the last Reset.
+
+What it is not: the `DR` of the TT Dynamic Range Meter — a different statistic
+with a different algorithm, sample peak over the loudest fifth of the
+programme's 3 s RMS blocks, rounded to an integer — which Open Audio Analyzer
+does not report under any name, and the reason the pair is not called `DR-S`
+and `DR-I`, which it was through 0.14.0 alongside `PSR` and `PLR`. Nor is it
+*TrueDyn*: Decibel's dynamics figure is "the equivalent of peak over average,
+but in the LUFS world", shown beside `LUFS-S` and true peak on one rim of its
+Super Meter and beside `LUFS-I` and true peak max on the other, which is, by
+process.audio's own description, this pair. It is not documented as one, so
+nothing here claims to match its ballistics or its rounding; the numbers are
+published under their own name and checked against arithmetic instead.
 
 A quantity this build does not measure is **NaN**, never zero — zero is a
 legitimate reading for correlation, balance and several dB quantities, so it
@@ -255,8 +315,10 @@ shows dashes too, since a frozen meter is indistinguishable from a quiet passage
 
 CI runs the **EBU Tech 3341 and 3342** cases on Linux, macOS and Windows on every
 push, and fails the build if any reading is outside the standard's stated
-tolerance. A loudness meter that has never been run against the reference cases
-is a number generator.
+tolerance. The **ODR § 7** cases run beside them, the same way: seven generated
+signals with stated tolerances, because the dynamics readings have no reference
+cases from anybody else. A loudness meter that has never been run against the
+reference cases is a number generator.
 
 The signals are **generated, not downloaded** — every case is a sine at a stated
 level, or a sequence of them — so the suite needs no fixtures, no network and no
@@ -426,7 +488,12 @@ Apple Music, YouTube, Amazon and Tidal all normalise to about the same place, so
 one target with their names in its note beats five identical entries — plus
 **Spotify Loud**, **Podcast (−16 LUFS)**, **EBU R 128**, **ATSC A/85** and
 **CD / no normalisation**. Anything else is a JSON file you write; see
-[Configuration](#-configuration). **Reset**, beside Edit in Settings, deletes
+[Configuration](#-configuration). A target names a loudness with a tolerance,
+a true peak ceiling and an LRA ceiling, and may name a **ODR-I floor** and a
+**ODR-S floor** — the two limits that run the other way, and the ones no platform
+publishes, so none of the six carries either and a house standard that wants
+one writes `odr_i_min` or `odr_s_min` into its file. **Reset**, beside Edit in
+Settings, deletes
 every target you wrote and puts those six back, which is also how a correction
 to a built-in is undone, since a correction *is* a file shadowing it. It asks
 first, and says how many files went.
@@ -536,9 +603,16 @@ A delivery target is the same idea:
   "lufs_tolerance": 0.5,
   "true_peak_max": -1.0,
   "lra_max": 14.0,
+  "odr_i_min": 8.0,
+  "odr_s_min": 6.0,
   "vu_reference": -18.0
 }
 ```
+
+`odr_i_min` and `odr_s_min` are the two lines that may be left out: a target
+without them sets no dynamics floor, and its Validator has three rows rather
+than five. The second is judged against the lowest ODR-S of the programme, not
+the current one.
 
 A file whose `id` matches one Open Audio Analyzer ships with **replaces** it
 everywhere, including in presets that already name it, so if you disagree with
@@ -594,7 +668,7 @@ assets/fonts/      Inter and Google Sans Code, with their licences.      SIL OFL
 cli/               The `oaa` command-line analyser.                          GPL
 plugin/            Headless VST3 + AU plugin.                              AGPL
   host/            A fake DAW that plays a file through it. Ships nowhere.  AGPL
-docs/              METRICS.md, WIRE.md.
+docs/              METRICS.md, ODR.md, WIRE.md.
 ```
 
 Two boundaries carry weight:
@@ -622,6 +696,10 @@ Copyleft throughout. Copyright © 2026 Jonas Grunau.
   the app talks to the plugin over a socket, which is not linking, and GPLv3
   section 13 expressly permits the combination. Steinberg's VST3 SDK is MIT and
   vendored inside JUCE, so there is no second copyleft dependency.
+- **`docs/ODR.md` — CC BY 4.0.** The one document that is not GPL, because a
+  specification is only open if another product's manual may reproduce it.
+  The reference implementation stays GPL; the licence binds the code and not
+  the measurement, which anybody may implement without asking.
 
 The engine, the domain model and the wire protocol were MIT through 0.13.0, on
 the argument that a measurement engine's value is that anyone can embed and

@@ -22,6 +22,13 @@ import '../data/metric_reader.dart';
 /// delivered — and it is the one the centre readout repeats. Outward from it is
 /// increasingly short-term, which is increasingly volatile, which is what a
 /// glance should skip past.
+///
+/// Under the reading sit the two other numbers that survive to delivery: LRA,
+/// how far the programme moves, and ODR-I, how hard it was squeezed. Decibel's
+/// Super Meter carries its dynamics figure on the rings, one ring per quantity;
+/// here every ring is loudness and the dynamics are a readout, because a ratio
+/// in LU has no place on a scale in LUFS and a ring that is not on the scale
+/// beside it is a ring that cannot be compared with it.
 class SuperMeterModule extends StatefulWidget {
   const SuperMeterModule({
     required this.engine,
@@ -189,8 +196,10 @@ class _SuperMeterModuleState extends State<SuperMeterModule> {
 
   final _integrated = ValueParagraph();
   final _range = ValueParagraph();
+  final _ratio = ValueParagraph();
   ui.Paragraph? _unit;
   ui.Paragraph? _rangeLabel;
+  ui.Paragraph? _ratioLabel;
   List<ui.Paragraph> _arcLabels = const [];
   double _arcLabelHeight = 0;
   Color? _labelColor;
@@ -199,6 +208,7 @@ class _SuperMeterModuleState extends State<SuperMeterModule> {
   void dispose() {
     _integrated.dispose();
     _range.dispose();
+    _ratio.dispose();
     super.dispose();
   }
 
@@ -211,6 +221,7 @@ class _SuperMeterModuleState extends State<SuperMeterModule> {
       final style = OaaType.label.copyWith(color: colors.textFaint);
       _unit = layoutParagraph('LUFS', style);
       _rangeLabel = layoutParagraph('LRA', style);
+      _ratioLabel = layoutParagraph('ODR-I', style);
       _arcLabels = [
         layoutParagraph('M', style),
         layoutParagraph('S', style),
@@ -593,27 +604,73 @@ class _SuperMeterPainter extends MeterPainter {
     );
 
     // LRA underneath, because "how far does it move" is the second question
-    // asked of an integrated reading and the only other one that survives to
-    // delivery.
+    // asked of an integrated reading, and ODR-I under that, because "how hard
+    // was it squeezed" is the third. They are the two numbers besides the
+    // reading itself that survive to delivery, and they are the two a target
+    // can put a limit on, so each takes its verdict's colour the way the
+    // reading does.
+    //
+    // Stacked rather than side by side, and it matters: the gauge is open at
+    // the bottom, so a row straight below the centre clears the rings for as
+    // long as it stays inside the open sector, and a narrow row does at any
+    // module size. Two readouts on one line did not — at the smallest size the
+    // ends of the line ran under the innermost arc. The second row asks for a
+    // little more height than the first, so the LRA a smaller module already
+    // showed is never the one that gives way.
     if (size.height > 140) {
-      final range = state._range.of(
-        Metric.loudnessRange.format(engine.loudnessRange),
-        OaaType.readingSmall.copyWith(
-          color: colorForState(
-            classify(Metric.loudnessRange, engine.loudnessRange, calibration),
-            colors,
+      var top = centre.dy + value.height * 0.32 + unit.height + Space.xs;
+      top += _row(
+        canvas,
+        centre.dx,
+        top,
+        state._rangeLabel!,
+        state._range.of(
+          Metric.loudnessRange.format(engine.loudnessRange),
+          OaaType.readingSmall.copyWith(
+            color: colorForState(
+              classify(Metric.loudnessRange, engine.loudnessRange, calibration),
+              colors,
+            ),
           ),
         ),
       );
-      final label = state._rangeLabel!;
-      final total = label.longestLine + Space.xs + range.longestLine;
-      final top = centre.dy + value.height * 0.32 + unit.height + Space.xs;
-      canvas.drawParagraph(label, Offset(centre.dx - total / 2, top));
-      canvas.drawParagraph(
-        range,
-        Offset(centre.dx - total / 2 + label.longestLine + Space.xs, top - 1),
-      );
+      if (size.height > 180) {
+        final ratio = engine.odrIntegrated;
+        _row(
+          canvas,
+          centre.dx,
+          top + Space.xxs,
+          state._ratioLabel!,
+          state._ratio.of(
+            Metric.odrIntegrated.format(ratio),
+            OaaType.readingSmall.copyWith(
+              color: colorForState(
+                classify(Metric.odrIntegrated, ratio, calibration),
+                colors,
+              ),
+            ),
+          ),
+        );
+      }
     }
+  }
+
+  /// One label-and-value row, centred on [cx] with its top at [top]. Returns
+  /// the height it used.
+  double _row(
+    Canvas canvas,
+    double cx,
+    double top,
+    ui.Paragraph label,
+    ui.Paragraph value,
+  ) {
+    final total = label.longestLine + Space.xs + value.longestLine;
+    canvas.drawParagraph(label, Offset(cx - total / 2, top));
+    canvas.drawParagraph(
+      value,
+      Offset(cx - total / 2 + label.longestLine + Space.xs, top - 1),
+    );
+    return value.height;
   }
 
   @override

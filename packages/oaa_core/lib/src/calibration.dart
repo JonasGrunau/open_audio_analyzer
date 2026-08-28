@@ -21,6 +21,8 @@ class Calibration {
     required this.lufsTolerance,
     required this.truePeakMax,
     required this.loudnessRangeMax,
+    this.odrIntegratedFloor,
+    this.odrShortFloor,
     this.vuReference = -18.0,
     this.note = '',
   });
@@ -48,6 +50,39 @@ class Calibration {
   /// the target, LU.
   final double loudnessRangeMax;
 
+  /// ODR-I — true peak max over integrated loudness — below which the
+  /// programme is flagged as too compressed for the target, LU; or null, when
+  /// the target sets no floor.
+  ///
+  /// The one limit here that runs the other way: everything else is a ceiling,
+  /// and this is what stops a master being *squashed* to hit the ceiling. It is
+  /// also the one limit no platform publishes. Every streaming service states a
+  /// normalisation level and most state a peak ceiling; none states how much
+  /// dynamic range it wants, so none of the built-in targets carries a floor
+  /// and a file that omits `odr_i_min` gets none. It exists for the specs that do
+  /// say — a label's house standard, a mastering engineer's own line, the
+  /// "ODR-I of 8 or better" that circulates as advice — and for those it is a
+  /// number in a file rather than a feature request.
+  ///
+  /// Nullable where the others are not, deliberately. A floor of zero would
+  /// pass everything and read as a real requirement in every place the target
+  /// is printed; "none" is a different statement from "at least nothing".
+  final double? odrIntegratedFloor;
+
+  /// ODR-S — true peak over short-term loudness — below which any three
+  /// seconds of the programme count as too compressed, LU; or null for no
+  /// floor.
+  ///
+  /// The stricter of the two floors, and the one a "too loud" rule actually
+  /// means. [odrIntegratedFloor] is one peak against the whole programme's
+  /// loudness, and a quiet intro with a single transient in it rescues a
+  /// chorus that has been flattened; this is checked against the *lowest* ODR-S
+  /// the programme reached, which is the chorus after the limiter. In a
+  /// report that is the ODR-S minimum; on the canvas the Validator keeps its own
+  /// since the last reset, and a Number Box on ODR-S turns red the moment the
+  /// live reading dips under.
+  final double? odrShortFloor;
+
   /// The dBFS level that reads as 0 VU. Only the VU meter uses it.
   final double vuReference;
 
@@ -74,6 +109,24 @@ class Calibration {
     return lra > loudnessRangeMax;
   }
 
+  /// Whether an ODR-I reading falls short of this target's floor.
+  ///
+  /// False when the target sets none, and false for NaN — the same
+  /// conservative shape as the other three: an unmeasured reading is neither a
+  /// pass nor a fail, and a target with no floor has nothing to fail.
+  bool undercutsOdrIntegrated(double odrI) {
+    final floor = odrIntegratedFloor;
+    if (floor == null || odrI.isNaN) return false;
+    return odrI < floor;
+  }
+
+  /// The same question of an ODR-S — live, or the programme's lowest.
+  bool undercutsOdrShort(double odrS) {
+    final floor = odrShortFloor;
+    if (floor == null || odrS.isNaN) return false;
+    return odrS < floor;
+  }
+
   Map<String, Object?> toJson() => {
     'id': id,
     'name': name,
@@ -81,6 +134,10 @@ class Calibration {
     'lufs_tolerance': lufsTolerance,
     'true_peak_max': truePeakMax,
     'lra_max': loudnessRangeMax,
+    // Absent rather than null, so a file written by the editor reads the same
+    // as one written by hand that never mentioned it.
+    if (odrIntegratedFloor != null) 'odr_i_min': odrIntegratedFloor,
+    if (odrShortFloor != null) 'odr_s_min': odrShortFloor,
     'vu_reference': vuReference,
     if (note.isNotEmpty) 'note': note,
   };
@@ -92,6 +149,8 @@ class Calibration {
     lufsTolerance: (json['lufs_tolerance'] as num?)?.toDouble() ?? 0.5,
     truePeakMax: (json['true_peak_max']! as num).toDouble(),
     loudnessRangeMax: (json['lra_max'] as num?)?.toDouble() ?? 20.0,
+    odrIntegratedFloor: (json['odr_i_min'] as num?)?.toDouble(),
+    odrShortFloor: (json['odr_s_min'] as num?)?.toDouble(),
     vuReference: (json['vu_reference'] as num?)?.toDouble() ?? -18.0,
     note: json['note'] as String? ?? '',
   );

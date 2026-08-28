@@ -17,6 +17,7 @@ AnalysisReport buildReport({
   double momentaryMax = -9.1,
   double shortTermMax = -11.0,
   double shortTermMin = -22.5,
+  double odrShortMin = 6.3,
   double correlationMin = -0.2,
   double correlationMax = 0.98,
   double correlationMean = 0.61,
@@ -41,6 +42,7 @@ AnalysisReport buildReport({
   momentaryMax: momentaryMax,
   shortTermMax: shortTermMax,
   shortTermMin: shortTermMin,
+  odrShortMin: odrShortMin,
   correlationMin: correlationMin,
   correlationMax: correlationMax,
   correlationMean: correlationMean,
@@ -52,10 +54,9 @@ AnalysisReport buildReport({
 
 void main() {
   group('derived values', () {
-    test('PLR is true peak max minus integrated loudness', () {
+    test('ODR-I is true peak max minus integrated loudness', () {
       final report = buildReport(truePeakMax: -1.0, lufsIntegrated: -14.0);
-      expect(report.peakToLoudnessRatio, closeTo(13.0, 1e-9));
-      expect(report.dynamicRangeIntegrated, closeTo(13.0, 1e-9));
+      expect(report.odrIntegrated, closeTo(13.0, 1e-9));
     });
 
     test('source description names container, depth, rate and layout', () {
@@ -145,6 +146,107 @@ void main() {
         report.isCompliant,
         isFalse,
         reason: 'nothing was checked, so nothing passed',
+      );
+    });
+
+    // --- The dynamics floor ------------------------------------------------
+
+    const dynamic = Calibration(
+      id: 'house-dynamic',
+      name: 'House, dynamic',
+      lufsTarget: -14,
+      lufsTolerance: 0.5,
+      truePeakMax: -1,
+      loudnessRangeMax: 20,
+      odrIntegratedFloor: 8,
+    );
+
+    test('a target without a floor makes three checks, with one four', () {
+      expect(
+        buildReport(calibration: BuiltInCalibrations.streaming).checks,
+        hasLength(3),
+        reason: 'a row that always passed would read as a statement',
+      );
+      final checks = buildReport(calibration: dynamic).checks;
+      expect(checks, hasLength(4));
+      expect(checks.last.metric, Metric.odrIntegrated);
+      expect(checks.last.limitLabel, '≥ 8.0 LU');
+    });
+
+    test('under the floor fails by the shortfall, over it passes', () {
+      // −1.4 dBTP over −14.2 LUFS is an ODR-I of 12.8: comfortably dynamic.
+      final open = buildReport(calibration: dynamic);
+      expect(open.checks.last.verdict, ComplianceVerdict.pass);
+      expect(open.checks.last.deviation.isNaN, isTrue);
+      expect(open.isCompliant, isTrue);
+
+      // −1.4 dBTP over −7.0 LUFS is an ODR-I of 5.6: squashed 2.4 LU past the
+      // line. The deviation is positive, like every other check's — how far
+      // onto the wrong side, whichever side that is.
+      final squashed = buildReport(lufsIntegrated: -7.0, calibration: dynamic);
+      final check = squashed.checks.last;
+      expect(check.verdict, ComplianceVerdict.fail);
+      expect(check.deviation, closeTo(2.4, 1e-9));
+      expect(squashed.isCompliant, isFalse);
+    });
+
+    test('a floor with no integrated loudness is NOT MEASURED', () {
+      final report = buildReport(
+        lufsIntegrated: double.nan,
+        calibration: dynamic,
+      );
+      expect(report.checks.last.verdict, ComplianceVerdict.notMeasured);
+      expect(report.isCompliant, isFalse);
+    });
+
+    test(
+      'an ODR-S floor is checked against the lowest ODR-S, and is a fifth line',
+      () {
+        // ODR-I of 12.8 and an ODR-S minimum of 6.3: the programme as a whole has
+        // plenty of room, and its most squeezed three seconds have not. That is
+        // the case the second floor exists for — one quiet intro rescues the
+        // first number and nothing rescues the second.
+        const strict = Calibration(
+          id: 'house-strict',
+          name: 'House, strict',
+          lufsTarget: -14,
+          lufsTolerance: 0.5,
+          truePeakMax: -1,
+          loudnessRangeMax: 20,
+          odrIntegratedFloor: 8,
+          odrShortFloor: 8,
+        );
+        final report = buildReport(calibration: strict);
+        expect(report.checks, hasLength(5));
+
+        final plr = report.checks[3];
+        expect(plr.metric, Metric.odrIntegrated);
+        expect(plr.verdict, ComplianceVerdict.pass);
+
+        final psr = report.checks[4];
+        expect(psr.metric, Metric.odrShort);
+        expect(psr.value, 6.3);
+        expect(psr.verdict, ComplianceVerdict.fail);
+        expect(psr.deviation, closeTo(1.7, 1e-9));
+        expect(report.isCompliant, isFalse);
+
+        expect(
+          buildReport(
+            odrShortMin: double.nan,
+            calibration: strict,
+          ).checks.last.verdict,
+          ComplianceVerdict.notMeasured,
+        );
+      },
+    );
+
+    test('the summary carries the lowest ODR-S under the ODR-S label', () {
+      final summary = buildReport(odrShortMin: 5.5).summary;
+      final row = summary.firstWhere((entry) => entry.$1 == Metric.odrShort);
+      expect(row.$2, 5.5);
+      expect(
+        exportReportJson(buildReport(odrShortMin: 5.5)),
+        contains('"odr_s_min": 5.5'),
       );
     });
   });

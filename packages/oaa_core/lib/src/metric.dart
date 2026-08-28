@@ -20,10 +20,17 @@ enum Metric {
   rms('rms', 'RMS', 'dBFS', 1),
 
   crestFactor('crest', 'Crest', 'dB', 1),
-  dynamicRangeShort('dr_s', 'DR-S', 'LU', 1),
-  dynamicRangeIntegrated('dr_i', 'DR-I', 'LU', 1),
-  peakToLoudnessRatio('plr', 'PLR', 'LU', 1),
-  peakToShortTermRatio('psr', 'PSR', 'LU', 1),
+
+  // Open Dynamic Range, the two dynamics readings of this project's own
+  // standard — defined in docs/METRICS.md, and the same arithmetic as the PSR
+  // and PLR of AES TD1004 with the operands the AES leaves open pinned down.
+  // They were offered as `PSR` / `PLR` and as `DR-S` / `DR-I` before the name
+  // was chosen; "DR" is the TT Dynamic Range Meter's number, a different
+  // measurement, which is the one spelling this pair must not have. Every old
+  // id still resolves, in [fromId], so a preset that saved a Number Box on any
+  // of them opens on the same reading under its current name.
+  odrShort('odr_s', 'ODR-S', 'LU', 1),
+  odrIntegrated('odr_i', 'ODR-I', 'LU', 1),
 
   correlation('corr', 'Correlation', '', 2),
   balance('balance', 'Balance', '', 2);
@@ -51,7 +58,13 @@ enum Metric {
     for (final metric in Metric.values) {
       if (metric.id == id) return metric;
     }
-    return null;
+    return switch (id) {
+      // Retired spellings of the two dynamics readings. Never reuse any of
+      // these ids for anything else: a preset written under one means this.
+      'psr' || 'dr_s' => Metric.odrShort,
+      'plr' || 'dr_i' => Metric.odrIntegrated,
+      _ => null,
+    };
   }
 
   /// Format [value] for display.

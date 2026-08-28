@@ -14,8 +14,8 @@
  * filter's +0.691 dB at 1 kHz cancels it. */
 #define OAA_LOUDNESS_OFFSET (-0.691)
 
-/* Absolute gate, LUFS. */
-#define OAA_GATE_ABSOLUTE (-70.0)
+/* The absolute gate, OAA_GATE_ABSOLUTE, lives in the header: the dynamics
+ * readings in oaa_analysis.c are gated on the same line. */
 
 /* Relative gate below the ungated mean, in LU. Integrated loudness uses 10;
  * loudness range uses 20. */

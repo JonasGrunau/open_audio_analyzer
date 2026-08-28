@@ -123,6 +123,7 @@ class OfflineResult {
     required this.momentaryMax,
     required this.shortTermMax,
     required this.shortTermMin,
+    required this.odrShortMin,
     required this.correlationMin,
     required this.correlationMax,
     required this.correlationMean,
@@ -164,6 +165,14 @@ class OfflineResult {
   /// single quiet moment moves it and LRA is the number to quote.
   final double shortTermMin;
 
+  /// Lowest ODR-S seen — the most squeezed three seconds of the programme —
+  /// taken only where ODR-S was defined, so silence and noise floor do not set
+  /// it. NaN for a programme that never cleared the absolute gate. This is the
+  /// dynamics figure a "too loud" check wants: [odrIntegrated] is one
+  /// peak against the whole programme's loudness, and a quiet intro with one
+  /// transient rescues it, while this is the chorus after the limiter.
+  final double odrShortMin;
+
   final double correlationMin;
   final double correlationMax;
 
@@ -178,15 +187,10 @@ class OfflineResult {
 
   final List<OfflineTimelinePoint> timeline;
 
-  /// Peak to loudness ratio: how much headroom the programme has above its own
+  /// ODR-I: how much headroom the programme has above its own
   /// integrated loudness. Derived rather than stored, because it is exactly
   /// this subtraction and a stored copy could disagree with it.
-  double get peakToLoudnessRatio => truePeakMax - lufsIntegrated;
-
-  /// `DR-I` as Open Audio Analyzer defines it in docs/METRICS.md — true peak
-  /// max minus integrated loudness. Not Decibel's proprietary "TrueDyn", and
-  /// not claimed to match it.
-  double get dynamicRangeIntegrated => truePeakMax - lufsIntegrated;
+  double get odrIntegrated => truePeakMax - lufsIntegrated;
 }
 
 /// Progress during a run: [seconds] of [totalSeconds] analysed.
@@ -286,6 +290,7 @@ OfflineResult _run(
   var momentaryMax = double.nan;
   var shortTermMax = double.nan;
   var shortTermMin = double.nan;
+  var odrShortMin = double.nan;
   var correlationMin = double.nan;
   var correlationMax = double.nan;
   var correlationSum = 0.0;
@@ -337,6 +342,9 @@ OfflineResult _run(
       momentaryMax = runningMax(momentaryMax, engine.lufsMomentary);
       shortTermMax = runningMax(shortTermMax, engine.lufsShort);
       shortTermMin = runningMin(shortTermMin, engine.lufsShort);
+      // NaN below the absolute gate, which `runningMin` skips: the minimum
+      // is over the programme, not over the silence around it.
+      odrShortMin = runningMin(odrShortMin, engine.odrShort);
     }
 
     framesDone += framesInBlock;
@@ -397,6 +405,7 @@ OfflineResult _run(
     momentaryMax: momentaryMax,
     shortTermMax: shortTermMax,
     shortTermMin: shortTermMin,
+    odrShortMin: odrShortMin,
     correlationMin: correlationMin,
     correlationMax: correlationMax,
     correlationMean: correlationCount == 0

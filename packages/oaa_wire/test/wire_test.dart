@@ -113,11 +113,9 @@ void main() {
         ..truePeak = -1.25
         ..truePeakMax = -0.5
         ..samplePeakMax = -0.75
-        ..dynamicRangeShort = 12.0
-        ..dynamicRangeIntegrated = 13.5
         ..crestFactor = 9.25
-        ..peakToLoudnessRatio = 13.0
-        ..peakToShortTermRatio = 11.5
+        ..odrIntegrated = 13.0
+        ..odrShort = 11.5
         ..correlation = -0.5
         ..balance = 0.25;
 
@@ -138,11 +136,9 @@ void main() {
       expect(decoded.truePeak, -1.25);
       expect(decoded.truePeakMax, -0.5);
       expect(decoded.samplePeakMax, -0.75);
-      expect(decoded.dynamicRangeShort, 12.0);
-      expect(decoded.dynamicRangeIntegrated, 13.5);
       expect(decoded.crestFactor, 9.25);
-      expect(decoded.peakToLoudnessRatio, 13.0);
-      expect(decoded.peakToShortTermRatio, 11.5);
+      expect(decoded.odrIntegrated, 13.0);
+      expect(decoded.odrShort, 11.5);
       expect(decoded.correlation, -0.5);
       expect(decoded.balance, 0.25);
     });
@@ -704,19 +700,13 @@ class _FakeSource implements MeterSource {
   double samplePeakMax = double.nan;
 
   @override
-  double dynamicRangeShort = double.nan;
-
-  @override
-  double dynamicRangeIntegrated = double.nan;
-
-  @override
   double crestFactor = double.nan;
 
   @override
-  double peakToLoudnessRatio = double.nan;
+  double odrIntegrated = double.nan;
 
   @override
-  double peakToShortTermRatio = double.nan;
+  double odrShort = double.nan;
 
   @override
   double correlation = double.nan;

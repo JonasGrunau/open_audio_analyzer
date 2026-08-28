@@ -13,6 +13,16 @@ void main() {
       expect(ids.toSet().length, ids.length);
     });
 
+    test('the retired dynamics names still open on the same reading', () {
+      // `DR-S` and `DR-I` were the two dynamics readings under a second name.
+      // A preset that saved a Number Box on either has to open on the reading
+      // it meant, under the name it has now.
+      expect(Metric.fromId('dr_s'), Metric.odrShort);
+      expect(Metric.fromId('dr_i'), Metric.odrIntegrated);
+      expect(Metric.values.map((m) => m.label), isNot(contains('DR-S')));
+      expect(Metric.values.map((m) => m.label), isNot(contains('DR-I')));
+    });
+
     test('every id round-trips', () {
       for (final metric in Metric.values) {
         expect(Metric.fromId(metric.id), metric);
@@ -79,8 +89,47 @@ void main() {
         expect(restored.lufsTolerance, original.lufsTolerance);
         expect(restored.truePeakMax, original.truePeakMax);
         expect(restored.loudnessRangeMax, original.loudnessRangeMax);
+        expect(restored.odrIntegratedFloor, original.odrIntegratedFloor);
         expect(restored.vuReference, original.vuReference);
       }
+    });
+
+    test('no built-in sets a dynamics floor, because no platform does', () {
+      for (final calibration in BuiltInCalibrations.all) {
+        expect(calibration.odrIntegratedFloor, isNull, reason: calibration.id);
+        expect(calibration.undercutsOdrIntegrated(0.0), isFalse);
+      }
+    });
+
+    test('a dynamics floor is absent from the file, not null in it', () {
+      const house = Calibration(
+        id: 'house',
+        name: 'House',
+        lufsTarget: -14,
+        lufsTolerance: 0.5,
+        truePeakMax: -1,
+        loudnessRangeMax: 20,
+        odrIntegratedFloor: 8,
+      );
+      final json = house.toJson();
+      expect(json['odr_i_min'], 8.0);
+      expect(Calibration.fromJson(json).odrIntegratedFloor, 8.0);
+
+      final none = BuiltInCalibrations.streaming.toJson();
+      expect(none.containsKey('odr_i_min'), isFalse);
+
+      // The floor runs the other way from every other limit: under is out.
+      expect(house.undercutsOdrIntegrated(7.9), isTrue);
+      expect(house.undercutsOdrIntegrated(8.0), isFalse);
+      expect(house.undercutsOdrIntegrated(double.nan), isFalse);
+
+      // The second floor is independent of the first: this target has none.
+      expect(house.odrShortFloor, isNull);
+      expect(house.undercutsOdrShort(0.0), isFalse);
+      final strict = Calibration.fromJson({...json, 'odr_s_min': 6});
+      expect(strict.odrShortFloor, 6.0);
+      expect(strict.undercutsOdrShort(5.9), isTrue);
+      expect(strict.toJson()['odr_s_min'], 6.0);
     });
   });
 

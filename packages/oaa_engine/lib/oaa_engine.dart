@@ -633,16 +633,11 @@ class OaaEngine implements MeterSource {
       _disposed ? double.nan : _snapshot.sample_peak_max;
 
   @override
-  double get dynamicRangeShort => _disposed ? double.nan : _snapshot.dr_short;
-  @override
-  double get dynamicRangeIntegrated =>
-      _disposed ? double.nan : _snapshot.dr_integrated;
-  @override
   double get crestFactor => _disposed ? double.nan : _snapshot.crest;
   @override
-  double get peakToLoudnessRatio => _disposed ? double.nan : _snapshot.plr;
+  double get odrIntegrated => _disposed ? double.nan : _snapshot.plr;
   @override
-  double get peakToShortTermRatio => _disposed ? double.nan : _snapshot.psr;
+  double get odrShort => _disposed ? double.nan : _snapshot.psr;
 
   /// −1 fully out of phase, +1 mono.
   @override

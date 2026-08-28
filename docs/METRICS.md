@@ -104,28 +104,50 @@ accurate — only more work, and not enough of it to notice.
 
 ## Dynamics
 
-Analysers in this class often report one proprietary "dynamics" figure, defined
-nowhere anybody outside can read it. Any claim to reproduce such a number would
-be a guess presented as a measurement, so Open Audio Analyzer implements none of
-them and approximates none of them. These are defined here instead, and anyone
-can check them.
+There is no standard that says what "dynamic range" is. Analysers in this class
+each report a figure of their own, and the one this project is modelled on
+calls its *TrueDyn* and defines it nowhere anybody outside can read. Open Audio
+Analyzer defines **Open Dynamic Range** instead — `ODR-S` over the last three
+seconds and `ODR-I` over the programme — and the definition is a document of
+its own: **[`ODR.md`](ODR.md)**, normative and versioned, with the conformance
+cases that hold an implementation to it. This section is the product's view of
+it; where the two differ, the specification is right.
 
 | Metric | Unit | Definition | Availability |
 |---|---|---|---|
 | `Crest` | dB | Sample peak minus RMS, both over the same block — the block's own values, *not* the held peak and smoothed RMS the meters draw. For a sine this is exactly 3.0103 dB and for DC it is 0. Multichannel reports the peakiest channel rather than the loudest peak minus the loudest RMS, which could describe no channel at all. | **now** |
-| `DR-S` | LU | `TruePeak − LUFS-S`. Short-term dynamic headroom. | **now** |
-| `DR-I` | LU | `TruePeakMax − LUFS-I`. Programme dynamic headroom. | **now** |
-| `PLR` | LU | Peak to loudness ratio: `TruePeakMax − LUFS-I`. **Identical to `DR-I`** — both names are in common use, so both are offered. | **now** |
-| `PSR` | LU | Peak to short-term ratio: `TruePeak − LUFS-S` over the same 3 s window. **Identical to `DR-S`**, for the same reason. | **now** |
+| `ODR-S` | LU | Open Dynamic Range, short-term: `TruePeak − LUFS-S`, both over the same sliding 3 s window. **Undefined** — NaN, drawn as a dash — while `LUFS-S` is at or below the −70 LUFS absolute gate. ODR § 4. | **now** |
+| `ODR-I` | LU | Open Dynamic Range, integrated: `TruePeakMax − LUFS-I`, both since the last reset. Undefined for as long as `LUFS-I` is; the peak is gated by nothing. ODR § 5. | **now** |
 
-Those are four names for two numbers, and the engine computes each pair once so
-they cannot drift apart. A report prints each value once — under `PLR`, the
-spelling in wider use outside this project — rather than listing the same
-measurement twice under two headings with nothing saying they are the same.
+In one paragraph, so that this table can be read without the specification:
+the peak is true peak, the loudest channel's, never sample peak; the loudness
+is BS.1770-4's, ungated for `LUFS-S` and gated for `LUFS-I`; both operands of
+ODR-S cover the same three seconds; both readings are undefined rather than
+zero where there is no programme; the unit is LU at 0.1; and neither reading
+moves when a platform turns the master down. A stereo 1 kHz sine reads exactly
+0.0 LU on both, in mono 3.01 — the crest of a sine, the second channel and the
+K filter's gain at 1 kHz cancel to nothing — and
+`packages/oaa_engine/test/conformance_test.dart` asserts every case in ODR § 7.
 
-None of these is the "DR" of the offline TT Dynamic Range meter, which is a
-different measurement with a different algorithm. Open Audio Analyzer does not
-report that number under any name.
+**Where the product shows them.** ODR-S and ODR-I are Number Box and Alert
+Meter metrics; the Super Meter prints ODR-I under its LRA readout; a file
+report states ODR-I and the **minimum ODR-S** of the programme (ODR § 4.5), the
+most squeezed three seconds; and a delivery target may set a floor on either,
+`odr_i_min` and `odr_s_min`, each of which is a line of the Validator, the
+report and the `oaa` verdict — the ODR-S line judged against the minimum,
+which the Validator keeps since the last reset. Through 0.14.0 ODR-S read a
+number in silence; see the changelog.
+
+**The name.** Through 0.14.0 the pair was published as `PSR` / `PLR` and again
+as `DR-S` / `DR-I` — four names for two numbers. It has one now. Not the AES
+one, because that note names the arithmetic and not the operands, and this
+standard is the operands; not `DR`, because that is what the offline TT
+Dynamic Range meter calls its number, a different measurement with a different
+algorithm, and a reader who knows that meter would take `DR-I` for it. Open
+Audio Analyzer does not report the TT figure under any name. A Number Box
+saved on `psr`, `plr`, `dr_s` or `dr_i` opens on ODR-S or ODR-I. What ODR is
+and is not, measure by measure — the AES pair, TrueDyn, DR, LRA, crest — is
+ODR § 8.
 
 ## Stereo field
 
@@ -337,11 +359,13 @@ A report watches them across the whole programme instead:
 |---|---|
 | `LUFS-M` | the **highest** momentary loudness reached |
 | `LUFS-S` | the **highest** short-term loudness reached |
+| `ODR-S` | the **lowest** short-term ratio reached, where it was defined — the most squeezed three seconds. `odr_s_min` in the JSON |
 | Correlation | the **mean** across the file; the panel also shows the range |
 | Peak per channel | the **highest** on each channel |
 
-`PLR` and `DR-I` are derived — `TP Max` minus `LUFS-I` — rather than stored, so
-they cannot disagree with the numbers they are computed from.
+`ODR-I` is derived — `TP Max` minus `LUFS-I` — rather than stored, so it cannot
+disagree with the numbers it is computed from. A target that sets a floor on
+it, or on the lowest `ODR-S`, adds a line to the verdict for each.
 
 A file is analysed in blocks of the same size the realtime path uses. The gated
 loudness measurements are sample-accurate and genuinely independent of block

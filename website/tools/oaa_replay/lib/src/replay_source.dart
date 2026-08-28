@@ -250,15 +250,11 @@ class ReplaySource implements MeterSource {
   @override
   double get samplePeakMax => _at(Scalar.samplePeakMax);
   @override
-  double get dynamicRangeShort => _at(Scalar.dynamicRangeShort);
-  @override
-  double get dynamicRangeIntegrated => _at(Scalar.dynamicRangeIntegrated);
-  @override
   double get crestFactor => _at(Scalar.crestFactor);
   @override
-  double get peakToLoudnessRatio => _at(Scalar.peakToLoudnessRatio);
+  double get odrIntegrated => _at(Scalar.odrIntegrated);
   @override
-  double get peakToShortTermRatio => _at(Scalar.peakToShortTermRatio);
+  double get odrShort => _at(Scalar.odrShort);
   @override
   double get correlation => _at(Scalar.correlation);
   @override

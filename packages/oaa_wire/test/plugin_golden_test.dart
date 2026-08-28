@@ -258,7 +258,8 @@ void main() {
       expect(snapshot.lufsIntegrated, closeTo(-14.0, 1e-5));
       expect(snapshot.loudnessRange, closeTo(7.25, 1e-5));
       expect(snapshot.truePeakMax, closeTo(-0.5, 1e-5));
-      expect(snapshot.dynamicRangeShort, closeTo(12.5, 1e-5));
+      expect(snapshot.odrShort, closeTo(16.0, 1e-5));
+      expect(snapshot.odrIntegrated, closeTo(15.0, 1e-5));
       expect(snapshot.loudnessRangeLow, closeTo(-20.0, 1e-5));
       expect(snapshot.loudnessRangeHigh, closeTo(-12.0, 1e-5));
       expect(snapshot.loudnessRangeGate, closeTo(-34.0, 1e-5));

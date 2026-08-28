@@ -532,4 +532,138 @@ void main() {
       expect(engine.lufsMomentary, lessThan(-70.0));
     });
   });
+
+  // ODR-S and ODR-I as docs/METRICS.md defines them: true peak over a window minus
+  // the loudness of the same window. Every expected value below follows from
+  // the arithmetic in the header comment — a sine's true peak is its peak, and
+  // its loudness is set by the channel count and nothing else — so the pair is
+  // pinned by hand the way the loudness cases are, rather than by a number read
+  // off somebody's meter.
+  group('dynamics — ODR-S and ODR-I', () {
+    test(
+      'a stereo 1 kHz sine at -23 dBFS has an ODR-I and an ODR-S of 0.0 LU',
+      () {
+        // True peak -23.0 dBTP, integrated loudness -23.0 LUFS (case 1 above),
+        // short-term loudness the same. Both ratios are zero: for a steady
+        // stereo sine at 1 kHz the 3.01 dB crest, the +3.01 dB of a second
+        // channel, and the K filter's +0.691 against the -0.691 offset all cancel
+        // exactly. A number here other than zero is one of those four terms
+        // applied twice or not at all.
+        final engine = _pushEngine();
+        addTearDown(engine.dispose);
+
+        _pushSegments(engine, const [_Segment(5, -23.0)]);
+
+        expect(engine.odrIntegrated, closeTo(0.0, _tolerance));
+        expect(engine.odrShort, closeTo(0.0, _tolerance));
+        expect(engine.crestFactor, closeTo(3.0103, 0.05));
+      },
+    );
+
+    test('the same tone in mono reads an ODR-I of 3.01 LU', () {
+      // Mono loses the second channel's 3.01 dB (see channel weighting above)
+      // and keeps its peak, so the ratio is exactly the channel sum. This is
+      // the case that proves the peak is the loudest channel's and the
+      // loudness is the standard's sum, not a per-channel average of either.
+      final engine = _pushEngine(channels: 1);
+      addTearDown(engine.dispose);
+
+      _pushSegments(engine, const [_Segment(5, -23.0)], channels: 1);
+
+      expect(engine.odrIntegrated, closeTo(3.0103, _tolerance));
+      expect(engine.odrShort, closeTo(3.0103, _tolerance));
+    });
+
+    test('the numerator is true peak, never sample peak', () {
+      // The 12 kHz sine from the true peak group: every sample sits at -3.01
+      // dBFS while the waveform reaches full scale between them. A ratio built
+      // on sample peak understates this signal's dynamics by 3 dB, which is
+      // exactly the error the "true" in the name exists to rule out, and
+      // exactly what a limiter's inter-sample overs look like on a master.
+      final engine = _pushEngine();
+      addTearDown(engine.dispose);
+
+      const frames = _sampleRate * 4;
+      final buffer = Float32List(frames * 2);
+      for (var i = 0; i < frames; i++) {
+        final value = math.sin(
+          2 * math.pi * 12000 * i / _sampleRate + math.pi / 4,
+        );
+        buffer[i * 2] = value;
+        buffer[i * 2 + 1] = value;
+      }
+      engine.push(buffer);
+
+      expect(
+        engine.odrIntegrated,
+        closeTo(engine.truePeakMax - engine.lufsIntegrated, 1e-4),
+      );
+      expect(
+        engine.odrIntegrated - (engine.samplePeakMax - engine.lufsIntegrated),
+        closeTo(3.0103, 0.2),
+        reason: 'built on sample peak, the ratio would read 3 dB lower',
+      );
+    });
+
+    test('a peak in a block the gate excluded still counts for ODR-I', () {
+      // A single full-scale sample in ten seconds of -72 dBFS tone, then the
+      // -23 dBFS reference. The click's 400 ms block reads about -43 LUFS:
+      // over the absolute gate, but ten LU under the relative gate the tone
+      // sets, so it contributes nothing to the integrated reading. Its peak
+      // is still the programme's true peak max — ODR-I is TP Max minus LUFS-I,
+      // and TP Max is gated by nothing. That is the AES definition and it is
+      // deliberate: the ratio describes the loudest sample that will reach a
+      // converter against the loudness a listener will hear, and a stray
+      // transient in a quiet intro is exactly the kind of peak a ceiling is
+      // checked against. It is also why ODR-I alone cannot say how hard the
+      // chorus was limited, and why the lowest ODR-S is reported beside it.
+      final engine = _pushEngine();
+      addTearDown(engine.dispose);
+
+      const frames = _sampleRate * 10;
+      final quiet = Float32List(frames * 2);
+      final base = math.pow(10.0, -72.0 / 20.0).toDouble();
+      for (var i = 0; i < frames; i++) {
+        final value = base * math.sin(2 * math.pi * 1000 * i / _sampleRate);
+        quiet[i * 2] = value;
+        quiet[i * 2 + 1] = value;
+      }
+      quiet[frames] = 1.0; // one sample, left channel, five seconds in
+      engine.push(quiet);
+      _pushSegments(engine, const [_Segment(20, -23.0)]);
+
+      expect(engine.lufsIntegrated, closeTo(-23.0, _tolerance));
+      expect(engine.truePeakMax, greaterThan(-1.0));
+      expect(engine.odrIntegrated, closeTo(23.0, 1.0));
+    });
+
+    test('silence and noise floor have no dynamics', () {
+      // Every dB quantity floors at -144 rather than at -inf, so an ungated
+      // subtraction reads 0.0 LU for digital silence — "completely squashed",
+      // for a passage nobody can hear. The reading is undefined instead,
+      // below the same -70 LUFS line the standard itself draws for what counts
+      // as programme: a tone at -80 dBFS is under it, one at -60 is over it.
+      final engine = _pushEngine();
+      addTearDown(engine.dispose);
+
+      _pushSegments(engine, const [_Segment(4, null)]);
+      expect(engine.lufsShort, lessThan(-70.0));
+      expect(engine.odrShort.isNaN, isTrue, reason: 'silence');
+      expect(engine.odrIntegrated.isNaN, isTrue, reason: 'silence');
+
+      _pushSegments(engine, const [_Segment(4, -80.0)]);
+      expect(engine.lufsShort, closeTo(-80.0, _tolerance));
+      expect(engine.odrShort.isNaN, isTrue, reason: 'noise floor');
+
+      _pushSegments(engine, const [_Segment(4, -60.0)]);
+      expect(engine.lufsShort, closeTo(-60.0, _tolerance));
+      expect(engine.odrShort, closeTo(0.0, _tolerance));
+      // Defined now, and near zero rather than at it: the 400 ms blocks that
+      // straddle the step from -80 to -60 land between the two, above the
+      // absolute gate and inside the relative one, and pull the integrated
+      // reading a tenth or two under the tone. That is the gating working as
+      // specified, not the ratio drifting.
+      expect(engine.odrIntegrated, closeTo(0.0, 0.3));
+    });
+  });
 }

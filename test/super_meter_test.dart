@@ -65,6 +65,12 @@ class _Levels implements MeterSource {
   @override
   double get loudnessRange => double.nan;
 
+  /// Unmeasured for the same reason as the range: the readout under it would
+  /// be `textPrimary` against a target with no floor, in the middle of the
+  /// module, and carry the tests that are about the ring.
+  @override
+  double get odrIntegrated => double.nan;
+
   @override
   int get generation => _generation;
   @override

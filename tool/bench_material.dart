@@ -78,11 +78,9 @@ class BenchMaterial {
     s.truePeak = -1.2 + _random.nextDouble();
     s.truePeakMax = -0.3;
     s.samplePeakMax = -0.6;
-    s.dynamicRangeShort = 9.1;
-    s.dynamicRangeIntegrated = 13.9;
     s.crestFactor = 11.2;
-    s.peakToLoudnessRatio = 13.9;
-    s.peakToShortTermRatio = 9.1;
+    s.odrIntegrated = 13.9;
+    s.odrShort = 9.1;
     s.correlation = 0.3 + _random.nextDouble() * 0.4;
     s.balance = -0.05 + _random.nextDouble() * 0.1;
 
@@ -145,15 +143,11 @@ class _Source implements MeterSource {
   @override
   double samplePeakMax = double.nan;
   @override
-  double dynamicRangeShort = double.nan;
-  @override
-  double dynamicRangeIntegrated = double.nan;
-  @override
   double crestFactor = double.nan;
   @override
-  double peakToLoudnessRatio = double.nan;
+  double odrIntegrated = double.nan;
   @override
-  double peakToShortTermRatio = double.nan;
+  double odrShort = double.nan;
   @override
   double correlation = double.nan;
   @override

@@ -131,6 +131,7 @@ class AnalysisReport {
     required this.momentaryMax,
     required this.shortTermMax,
     required this.shortTermMin,
+    required this.odrShortMin,
     required this.correlationMin,
     required this.correlationMax,
     required this.correlationMean,
@@ -169,6 +170,12 @@ class AnalysisReport {
   final double momentaryMax;
   final double shortTermMax;
   final double shortTermMin;
+
+  /// The lowest ODR-S reached, where it was defined: the most squeezed three
+  /// seconds of the programme. The number a dynamics floor is best checked
+  /// against — see [odrIntegrated], which one quiet intro can rescue.
+  final double odrShortMin;
+
   final double correlationMin;
   final double correlationMax;
   final double correlationMean;
@@ -186,12 +193,9 @@ class AnalysisReport {
   /// What produced this report, as `Open Audio Analyzer 0.11.0`.
   final String toolVersion;
 
-  /// Peak to loudness ratio, LU. Derived, so it cannot disagree with its parts.
-  double get peakToLoudnessRatio => truePeakMax - lufsIntegrated;
-
-  /// `DR-I` as docs/METRICS.md defines it: true peak max minus integrated
-  /// loudness. Not Decibel's proprietary TrueDyn and not claimed to match it.
-  double get dynamicRangeIntegrated => truePeakMax - lufsIntegrated;
+  /// ODR-I, LU: true peak max minus integrated loudness. Derived, so it
+  /// cannot disagree with its parts.
+  double get odrIntegrated => truePeakMax - lufsIntegrated;
 
   /// The file's own description: `WAV 24-bit 48000 Hz, stereo`.
   String describeSource() {
@@ -212,6 +216,10 @@ class AnalysisReport {
   /// Empty when there is no [calibration] — a measurement without a target is
   /// still a measurement, and inventing a default target so the report has
   /// something to say would be asserting a delivery spec nobody chose.
+  ///
+  /// Three checks, plus one for each dynamics floor the target sets. A target
+  /// without one makes no statement about dynamics, and a row that always
+  /// passes would be read as one — see [Calibration.odrIntegratedFloor].
   List<ComplianceCheck> get checks {
     final target = calibration;
     if (target == null) return const [];
@@ -220,6 +228,8 @@ class AnalysisReport {
       _loudnessCheck(target),
       _truePeakCheck(target),
       _loudnessRangeCheck(target),
+      if (target.odrIntegratedFloor != null) _odrIntegratedCheck(target),
+      if (target.odrShortFloor != null) _odrShortCheck(target),
     ];
   }
 
@@ -303,18 +313,51 @@ class AnalysisReport {
     );
   }
 
+  /// The checks that are floors. Each is built only when the target has one.
+  ComplianceCheck _odrIntegratedCheck(Calibration target) => _floorCheck(
+    Metric.odrIntegrated,
+    odrIntegrated,
+    target.odrIntegratedFloor!,
+  );
+
+  /// Against the *lowest* ODR-S of the programme, which is what "never more
+  /// squeezed than this" means; the report has no other ODR-S to offer.
+  ComplianceCheck _odrShortCheck(Calibration target) =>
+      _floorCheck(Metric.odrShort, odrShortMin, target.odrShortFloor!);
+
+  ComplianceCheck _floorCheck(Metric metric, double value, double floor) {
+    final limit = '≥ ${floor.toStringAsFixed(1)} LU';
+
+    if (value.isNaN) {
+      return ComplianceCheck(
+        metric: metric,
+        value: value,
+        limitLabel: limit,
+        verdict: ComplianceVerdict.notMeasured,
+      );
+    }
+
+    final under = value < floor;
+    return ComplianceCheck(
+      metric: metric,
+      value: value,
+      limitLabel: limit,
+      verdict: under ? ComplianceVerdict.fail : ComplianceVerdict.pass,
+      // Positive, like every other deviation: how far the reading is on the
+      // wrong side of its limit, whichever side that is.
+      deviation: under ? floor - value : double.nan,
+    );
+  }
+
   /// The programme-wide measurements, in report order, as metric/value pairs.
   ///
   /// Exists so the three exports and the panel iterate one list rather than
   /// each naming the same fields in the same order and drifting apart the first
   /// time one is added.
   ///
-  /// **Each value appears once.** `PLR` and `DR-I` are the same subtraction —
-  /// true peak max minus integrated loudness — and this list used to carry
-  /// both, so a report printed one number twice under two names with nothing
-  /// saying they were the same measurement. `PLR` is the spelling in wider use
-  /// outside this project, so it is the one that stays; `docs/METRICS.md`
-  /// documents the identity for anybody looking for the other.
+  /// **Each value appears once.** This list once carried `ODR-I` and `DR-I`,
+  /// which were the same subtraction under two names, so a report printed one
+  /// number twice with nothing saying so. The second name is gone.
   List<(Metric, double)> get summary => [
     (Metric.lufsIntegrated, lufsIntegrated),
     (Metric.loudnessRange, loudnessRange),
@@ -322,7 +365,11 @@ class AnalysisReport {
     (Metric.samplePeakMax, samplePeakMax),
     (Metric.lufsMomentary, momentaryMax),
     (Metric.lufsShort, shortTermMax),
-    (Metric.peakToLoudnessRatio, peakToLoudnessRatio),
+    (Metric.odrIntegrated, odrIntegrated),
+    // The lowest, where LUFS-S is the highest: an extreme is what a report can
+    // say about an instantaneous reading, and the extreme that matters for a
+    // dynamics ratio is the squeezed end. docs/METRICS.md has the table.
+    (Metric.odrShort, odrShortMin),
     (Metric.correlation, correlationMean),
   ];
 
@@ -348,8 +395,8 @@ class AnalysisReport {
       'lufs_m_max': _json(momentaryMax),
       'lufs_s_max': _json(shortTermMax),
       'lufs_s_min': _json(shortTermMin),
-      'plr': _json(peakToLoudnessRatio),
-      'dr_i': _json(dynamicRangeIntegrated),
+      'odr_i': _json(odrIntegrated),
+      'odr_s_min': _json(odrShortMin),
       'correlation_min': _json(correlationMin),
       'correlation_max': _json(correlationMax),
       'correlation_mean': _json(correlationMean),

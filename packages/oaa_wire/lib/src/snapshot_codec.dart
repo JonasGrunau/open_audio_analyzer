@@ -183,11 +183,16 @@ abstract final class SnapshotWire {
     f32(offsetSamplePeakMax, source.samplePeakMax);
     f32(offsetReserved1, 0);
 
-    f32(offsetDrShort, source.dynamicRangeShort);
-    f32(offsetDrIntegrated, source.dynamicRangeIntegrated);
+    // The layout has two slots for each dynamics reading — `dr_short` beside
+    // `psr`, `dr_integrated` beside `plr` — from when the application offered
+    // the pair under two names. The names are gone; the slots are frozen with
+    // the protocol version and a display built from WIRE.md may read either,
+    // so both carry the one reading.
+    f32(offsetDrShort, source.odrShort);
+    f32(offsetDrIntegrated, source.odrIntegrated);
     f32(offsetCrest, source.crestFactor);
-    f32(offsetPlr, source.peakToLoudnessRatio);
-    f32(offsetPsr, source.peakToShortTermRatio);
+    f32(offsetPlr, source.odrIntegrated);
+    f32(offsetPsr, source.odrShort);
     f32(offsetReserved2, 0);
 
     f32(offsetCorrelation, source.correlation);

@@ -214,6 +214,7 @@ class _ReportPanelState extends ConsumerState<ReportPanel> {
       momentaryMax: result.momentaryMax,
       shortTermMax: result.shortTermMax,
       shortTermMin: result.shortTermMin,
+      odrShortMin: result.odrShortMin,
       correlationMin: result.correlationMin,
       correlationMax: result.correlationMax,
       correlationMean: result.correlationMean,

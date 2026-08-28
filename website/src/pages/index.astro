@@ -98,8 +98,8 @@ const MODULES = [
     'A Number Box reading −14.1 LUFS in green, on target.'],
   ['lufs-meter', 'LUFS Meter', 'Momentary and short-term loudness as bars, integrated loudness as a line.',
     'A LUFS Meter: momentary and short-term bars against a scale, reading −14.1 LUFS integrated over a 7.1 LU range.'],
-  ['super-meter', 'Super Meter', 'Momentary, short-term and integrated loudness as three concentric arcs.',
-    'A Super Meter: three concentric arcs around a −14.1 LUFS readout.'],
+  ['super-meter', 'Super Meter', 'Momentary, short-term and integrated loudness as three concentric arcs, with LRA and ODR-I under the reading.',
+    'A Super Meter: three concentric arcs around a −14.1 LUFS readout, with the loudness range and the integrated Open Dynamic Range printed beneath it.'],
   ['digital-meter', 'Digital Meter', 'Sample peak and RMS, per channel, up to 7.1.',
     'A Digital Meter: left and right bars with peak-hold lines held near the top of the scale.'],
   ['vu-meter', 'VU Meter', 'A needle, with the ballistics of the real thing.',
@@ -141,6 +141,10 @@ const METRICS = [
   [
     'True peak',
     'The peak <em>between</em> samples as well as on them, oversampled four times as <strong>BS.1770-4</strong> requires. It is the number a delivery ceiling means, and it sits above the sample peak your DAW shows — by as much as a dB and a half on heavily limited material.',
+  ],
+  [
+    'Open Dynamic Range',
+    'True peak minus loudness over the same audio: <strong>ODR-S</strong> over the last three seconds, <strong>ODR-I</strong> over the whole programme. How hard the limiter is working, in a number that does not move when a platform turns the track down. Defined in the <a class="link" href="/docs/odr">ODR specification</a>.',
   ],
   [
     'Spectrum',
@@ -499,6 +503,10 @@ const PLATFORMS = [
               <span class="gate-v sig">PASS</span>
             </li>
             <li>
+              <span class="gate-k">ODR 1.0 § 7 — dynamics</span>
+              <span class="gate-v sig">PASS</span>
+            </li>
+            <li>
               <span class="gate-k">A full-scale tone reads</span>
               <span class="gate-v sig">0.0 dBFS</span>
             </li>
@@ -513,9 +521,9 @@ const PLATFORMS = [
           </ul>
           <p class="gate-note">
             Every change to the meters is held against these before it ships, and against the full
-            EBU and ITU vector sets on top of them. A loudness meter nobody has checked against the
-            reference cases is a number generator, and you are making a delivery decision with what
-            comes out of this one.
+            EBU and ITU vector sets on top of them. The dynamics readings have no reference cases
+            from anyone else, so the <a class="link" href="/docs/odr">ODR specification</a> carries
+            its own: seven generated signals with stated tolerances, run the same way.
           </p>
         </div>
       </aside>
@@ -527,27 +535,59 @@ const PLATFORMS = [
     <div class="section-head">
       <div>
         <p class="label">Dynamics</p>
-        <h2 class="section-title">Dynamic range, and<br />which one it means</h2>
+        <h2 class="section-title">Open Dynamic Range,<br />defined to the operand</h2>
       </div>
     </div>
 
     <div class="dyn">
-      <p class="prose">
-        There is no standard that says what “dynamic range” is, so this says exactly which
-        subtraction it means. <code>DR-S</code> is the true peak against the short-term loudness:
-        how much room the loudest moment has over how loud that passage is. <code>DR-I</code> is the
-        same question about the whole track — the highest true peak against the integrated loudness.
-        Watch either one fall as you push a limiter and you are watching the squeeze happen.
-      </p>
       <div class="stack-24">
         <p class="prose">
-          <code>PSR</code> and <code>PLR</code> are the same two numbers under the names you have
-          probably met elsewhere, so whichever pair you are used to reading is the pair on the
-          meter.
+          There is no standard that says what “dynamic range” is, so Open Audio Analyzer publishes
+          one. <strong>ODR-S</strong> is the true peak of the last three seconds against the
+          short-term loudness of the same three seconds: how much room the loudest moment of a
+          passage has over how loud that passage is. <strong>ODR-I</strong> is the same question
+          about the whole programme — the highest true peak against the integrated loudness. Watch
+          either one fall as you push a limiter and you are watching the squeeze happen.
+        </p>
+        <p class="prose">
+          The arithmetic is the AES peak-to-loudness ratio. What the specification adds is every
+          choice that note leaves open: true peak and never sample peak, both operands over the same
+          window, undefined in silence rather than reading zero, the most squeezed three seconds
+          reported beside the whole. It is held in CI against arithmetic — a stereo sine reads
+          exactly 0.0 LU on both — and a delivery target can put a floor under either, so a master
+          limited past it fails the same way one over its peak ceiling does.
         </p>
         <p>
-          <a class="link" href={`${DOCS}/metrics`}>Read the metrics document</a>
+          <a class="link" href={`${DOCS}/odr`}>Read the ODR specification</a>
         </p>
+      </div>
+      <div class="table-scroll" tabindex="0" role="region" aria-label="Open Dynamic Range definitions">
+        <table class="spec">
+          <thead>
+            <tr>
+              <th scope="col">Reading</th>
+              <th scope="col">Is</th>
+              <th scope="col">Undefined while</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="q">ODR-S</td>
+              <td><code>TP(3 s) − LUFS-S</code>, the last three seconds</td>
+              <td>LUFS-S is at or below the −70 LUFS absolute gate</td>
+            </tr>
+            <tr>
+              <td class="q">ODR-I</td>
+              <td><code>TP Max − LUFS-I</code>, the programme since reset</td>
+              <td>LUFS-I is undefined</td>
+            </tr>
+            <tr>
+              <td class="q">min ODR-S</td>
+              <td>The lowest ODR-S the programme reached, where it was defined</td>
+              <td>ODR-S has never been defined</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </div>
   </section>
@@ -650,6 +690,8 @@ const PLATFORMS = [
   <span class="k">"lufs_tolerance"</span>: <span class="n">0.5</span>,
   <span class="k">"true_peak_max"</span>: <span class="n">-1.0</span>,
   <span class="k">"lra_max"</span>: <span class="n">14.0</span>,
+  <span class="k">"odr_i_min"</span>: <span class="n">8.0</span>,
+  <span class="k">"odr_s_min"</span>: <span class="n">6.0</span>,
   <span class="k">"vu_reference"</span>: <span class="n">-18.0</span>
 &rbrace;</code></pre>
       </div>
@@ -1447,6 +1489,12 @@ const PLATFORMS = [
     gap: var(--s12);
     padding: var(--s8) 0;
     border-bottom: 1px solid var(--hair);
+  }
+
+  /* The note below the list draws the rule between them; a last row that
+     also drew one put two hairlines sixteen pixels apart. */
+  .gate-list li:last-child {
+    border-bottom: 0;
   }
 
   .gate-k {

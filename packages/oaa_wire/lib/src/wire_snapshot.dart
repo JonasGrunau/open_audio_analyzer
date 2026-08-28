@@ -94,8 +94,6 @@ class WireSnapshot implements MeterSource {
   double _truePeakMax = double.nan;
   double _samplePeakMax = double.nan;
 
-  double _drShort = double.nan;
-  double _drIntegrated = double.nan;
   double _crest = double.nan;
   double _plr = double.nan;
   double _psr = double.nan;
@@ -180,8 +178,9 @@ class WireSnapshot implements MeterSource {
     _truePeakMax = f32(SnapshotWire.offsetTruePeakMax);
     _samplePeakMax = f32(SnapshotWire.offsetSamplePeakMax);
 
-    _drShort = f32(SnapshotWire.offsetDrShort);
-    _drIntegrated = f32(SnapshotWire.offsetDrIntegrated);
+    // `dr_short` and `dr_integrated` are read from nothing: the layout has two
+    // slots per dynamics reading from when there were two names for each, and
+    // every producer writes the same value to both. See the codec.
     _crest = f32(SnapshotWire.offsetCrest);
     _plr = f32(SnapshotWire.offsetPlr);
     _psr = f32(SnapshotWire.offsetPsr);
@@ -298,8 +297,6 @@ class WireSnapshot implements MeterSource {
     _truePeak = double.nan;
     _truePeakMax = double.nan;
     _samplePeakMax = double.nan;
-    _drShort = double.nan;
-    _drIntegrated = double.nan;
     _crest = double.nan;
     _plr = double.nan;
     _psr = double.nan;
@@ -434,19 +431,13 @@ class WireSnapshot implements MeterSource {
   double get samplePeakMax => _samplePeakMax;
 
   @override
-  double get dynamicRangeShort => _drShort;
-
-  @override
-  double get dynamicRangeIntegrated => _drIntegrated;
-
-  @override
   double get crestFactor => _crest;
 
   @override
-  double get peakToLoudnessRatio => _plr;
+  double get odrIntegrated => _plr;
 
   @override
-  double get peakToShortTermRatio => _psr;
+  double get odrShort => _psr;
 
   @override
   double get correlation => _correlation;

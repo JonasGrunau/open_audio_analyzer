@@ -8,9 +8,9 @@
  *
  * `source` is a path from the *repository* root, not from the website — these
  * documents live beside the code they describe and are edited there.
- * `docs/METRICS.md` and `docs/WIRE.md` are normative and held by tests; nothing
- * here copies them, and a missing one fails the build rather than quietly
- * publishing a site with a hole in it.
+ * `docs/METRICS.md`, `docs/ODR.md` and `docs/WIRE.md` are normative and held
+ * by tests; nothing here copies them, and a missing one fails the build rather
+ * than quietly publishing a site with a hole in it.
  */
 
 export const REPO = 'https://github.com/JonasGrunau/open_audio_analyzer';
@@ -62,6 +62,16 @@ export const PAGES = [
     blurb:
       'What every number means, how it is computed, and whether this build ' +
       'measures it.',
+    section: 'Reference',
+  },
+  {
+    source: 'docs/ODR.md',
+    slug: 'odr',
+    title: 'Open Dynamic Range',
+    nav: 'Open Dynamic Range',
+    blurb:
+      'The ODR specification: two dynamics readings defined to the operand, ' +
+      'with the conformance cases that hold an implementation to it.',
     section: 'Reference',
   },
   {

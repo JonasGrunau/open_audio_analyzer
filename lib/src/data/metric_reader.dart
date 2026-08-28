@@ -24,10 +24,8 @@ double readMetric(MeterSource engine, Metric metric) => switch (metric) {
   Metric.peak => _loudestChannel(engine.peak, engine.channels),
   Metric.rms => _loudestChannel(engine.rms, engine.channels),
   Metric.crestFactor => engine.crestFactor,
-  Metric.dynamicRangeShort => engine.dynamicRangeShort,
-  Metric.dynamicRangeIntegrated => engine.dynamicRangeIntegrated,
-  Metric.peakToLoudnessRatio => engine.peakToLoudnessRatio,
-  Metric.peakToShortTermRatio => engine.peakToShortTermRatio,
+  Metric.odrIntegrated => engine.odrIntegrated,
+  Metric.odrShort => engine.odrShort,
   Metric.correlation => engine.correlation,
   Metric.balance => engine.balance,
 };
@@ -84,11 +82,28 @@ ReadingState classify(Metric metric, double value, Calibration calibration) {
           ? ReadingState.over
           : ReadingState.neutral,
 
+    // The two limits that are floors. Under one is [ReadingState.over] all the
+    // same: the state names the colour, and the colour means "on the wrong
+    // side of the number you set", whichever side that is. A target with no
+    // floor makes no statement, and the reading stays neutral — never green,
+    // because green would say it had been checked against something.
+    Metric.odrIntegrated => _floorKind(value, calibration.odrIntegratedFloor),
+    Metric.odrShort => _floorKind(value, calibration.odrShortFloor),
+
     // Anti-phase content is the thing a correlation meter exists to catch.
     Metric.correlation => value < 0 ? ReadingState.warn : ReadingState.neutral,
 
     _ => ReadingState.neutral,
   };
+}
+
+ReadingState _floorKind(double value, double? floor) {
+  if (floor == null) return ReadingState.neutral;
+  if (value < floor) return ReadingState.over;
+  // Within 1 LU of the floor is where the next pass of the limiter takes it
+  // under — the same margin the peak ceiling warns at.
+  if (value < floor + 1.0) return ReadingState.warn;
+  return ReadingState.inSpec;
 }
 
 ReadingState _peakKind(double value, Calibration calibration) {

@@ -36,6 +36,7 @@ AnalysisReport _report({
   momentaryMax: -9.1,
   shortTermMax: -11.0,
   shortTermMin: -22.5,
+  odrShortMin: 6.3,
   correlationMin: -0.2,
   correlationMax: 0.98,
   correlationMean: 0.61,

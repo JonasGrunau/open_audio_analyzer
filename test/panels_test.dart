@@ -490,7 +490,7 @@ void main() {
 
   group('the calibration editor', () {
     /// Field order in the panel: name, note, target, tolerance, range, true
-    /// peak, VU reference.
+    /// peak, ODR-I floor, ODR-S floor, VU reference.
     Finder field(int index) => find.byType(TextField).at(index);
 
     testWidgets('saves a new target and selects it', (tester) async {
@@ -566,6 +566,53 @@ void main() {
       await _tap(tester, find.text('SAVE AS NEW'));
 
       expect(find.text('A target needs a name.'), findsOneWidget);
+    });
+
+    testWidgets('the ODR-I floor is the one field that may be empty', (
+      tester,
+    ) async {
+      // The editor opens on the streaming target, which sets no floor, so the
+      // field starts empty — and saving with it empty saves no floor rather
+      // than refusing, because "none" is what a target without one means.
+      final container = await _container(tester);
+      await _open(tester, container, const CalibrationEditor());
+
+      await tester.enterText(field(0), 'Open');
+      await _tap(tester, find.text('SAVE AS NEW'));
+      await _untilStored(
+        tester,
+        () => container
+            .read(calibrationLibraryProvider)
+            .any((c) => c.id == 'open'),
+      );
+      expect(
+        container
+            .read(calibrationLibraryProvider)
+            .firstWhere((c) => c.id == 'open')
+            .odrIntegratedFloor,
+        isNull,
+      );
+    });
+
+    testWidgets('a ODR-I floor that is typed is saved', (tester) async {
+      final container = await _container(tester);
+      await _open(tester, container, const CalibrationEditor());
+
+      await tester.enterText(field(0), 'Dynamic');
+      await tester.enterText(field(6), '8');
+      await tester.enterText(field(7), '6');
+      await _tap(tester, find.text('SAVE AS NEW'));
+      await _untilStored(
+        tester,
+        () => container
+            .read(calibrationLibraryProvider)
+            .any((c) => c.id == 'dynamic'),
+      );
+      final saved = container
+          .read(calibrationLibraryProvider)
+          .firstWhere((c) => c.id == 'dynamic');
+      expect(saved.odrIntegratedFloor, 8.0);
+      expect(saved.odrShortFloor, 6.0);
     });
   });
 

@@ -179,11 +179,16 @@ abstract interface class MeterSource {
 
   // --- Dynamics -------------------------------------------------------------
 
-  double get dynamicRangeShort;
-  double get dynamicRangeIntegrated;
   double get crestFactor;
-  double get peakToLoudnessRatio;
-  double get peakToShortTermRatio;
+
+  /// True peak since reset minus integrated loudness, LU. NaN until the
+  /// integrated reading exists.
+  double get odrIntegrated;
+
+  /// True peak over the last 3 s minus short-term loudness, LU. NaN while
+  /// the short-term reading is at or below the absolute gate: silence and
+  /// noise floor have no dynamics to report.
+  double get odrShort;
 
   // --- Stereo field ---------------------------------------------------------
 

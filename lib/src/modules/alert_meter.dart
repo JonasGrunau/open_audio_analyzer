@@ -101,11 +101,16 @@ class _AlertMeterModuleState extends State<AlertMeterModule> {
   };
 
   /// Which direction is "worse" depends on the metric, and getting it backwards
-  /// would latch the *best* moment of the session.
+  /// would latch the *best* moment of the session — which is what this did for
+  /// the two dynamics ratios through 0.14.0: an Alert Meter on ODR-S held the
+  /// most open three seconds of the programme under WORST. Lower is worse for
+  /// a ratio a floor is set under, as it is for correlation.
   static bool _isWorse(Metric metric, double value, double against) {
     if (against.isNaN) return true;
     return switch (metric) {
-      Metric.correlation => value < against,
+      Metric.correlation ||
+      Metric.odrIntegrated ||
+      Metric.odrShort => value < against,
       _ => value > against,
     };
   }

@@ -73,12 +73,20 @@
  * LRA of every programme, for no reason anybody asked for. */
 #define OAA_GATING_STEP_SUBBLOCKS 10
 
+/* The absolute gate of BS.1770-4, LUFS. A block quieter than this is not
+ * programme: it is never filed into the integrated measurement, and the
+ * dynamics readings in oaa_analysis.c are undefined below it for the same
+ * reason — see the note there. Shared rather than repeated, so that the one
+ * threshold that says "there is nothing here to measure" cannot drift into
+ * two. */
+#define OAA_GATE_ABSOLUTE (-70.0)
+
 /* Histogram span, in LUFS. The low edge is the absolute gate: nothing quieter
  * is ever filed. The high edge is far above any real programme — a block that
  * loud is clipping into a wall — and out-of-range values clamp rather than
  * being dropped, because silently discarding the loudest blocks would drag the
  * integrated reading down. */
-#define OAA_HIST_MIN_LUFS (-70.0)
+#define OAA_HIST_MIN_LUFS OAA_GATE_ABSOLUTE
 #define OAA_HIST_MAX_LUFS (10.0)
 #define OAA_HIST_STEP 0.01
 #define OAA_HIST_BINS 8000

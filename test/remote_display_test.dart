@@ -713,19 +713,13 @@ class _FakeSource implements MeterSource {
   double samplePeakMax = double.nan;
 
   @override
-  double dynamicRangeShort = double.nan;
-
-  @override
-  double dynamicRangeIntegrated = double.nan;
-
-  @override
   double crestFactor = double.nan;
 
   @override
-  double peakToLoudnessRatio = double.nan;
+  double odrIntegrated = double.nan;
 
   @override
-  double peakToShortTermRatio = double.nan;
+  double odrShort = double.nan;
 
   @override
   double correlation = double.nan;
