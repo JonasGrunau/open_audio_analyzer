@@ -6,6 +6,10 @@
 
 <p><strong>A free and open-source loudness and spectrum analyzer, for desktop and tablets.</strong></p>
 
+<h3><a href="https://open-audio-analyzer.com">🌐&nbsp; open-audio-analyzer.com</a></h3>
+
+<p><sub>Real meters running in your browser, what each module looks like, and where to download it.</sub></p>
+
 <p>
   <a href="https://github.com/JonasGrunau/open_audio_analyzer/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/JonasGrunau/open_audio_analyzer/ci.yml?branch=main&label=CI&style=flat-square"></a>
   <a href="https://open-audio-analyzer.com/docs"><img alt="Documentation" src="https://img.shields.io/badge/%F0%9F%93%96_docs-open%20audio%20analyzer-1F2328?style=flat-square"></a>
