@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import 'dart:ui' as ui;
+
 import 'package:flutter/widgets.dart';
+
+import 'tokens.dart';
 
 /// A meter's body: one painter, filling whatever room the frame gives it.
 ///
@@ -66,4 +70,62 @@ abstract class MeterPainter extends CustomPainter {
 
   @override
   bool? hitTest(Offset position) => false;
+}
+
+/// The vertical gradient every filled meter body is painted with: brightest at
+/// the reading, the base colour a third of the way down, dimming toward the
+/// floor.
+///
+/// One recipe rather than one per module, because the gradient is doing a job
+/// and not decorating: it keeps a tall fill from reading as a solid block of
+/// paint, so the *top edge* — the measurement — is the brightest thing in the
+/// bar. Modules that invent their own stops end up with two bars side by side
+/// whose fills disagree about how loud "bright" is.
+///
+/// The shader is anchored to the **fill's own top**, not the track's, and that
+/// is the part that costs a save/clip/translate instead of a plain `drawRect`:
+/// a track-anchored gradient leaves a quiet channel entirely in the dim end of
+/// the ramp, so its reading has no bright edge at all and the two channels of
+/// one meter look like different instruments. Anchoring at the tip would
+/// normally mean building a new shader per bar per frame — an allocation on
+/// the frame path — so instead one shader is built per track height and the
+/// canvas is translated under it: the same object, moved, exact, and free.
+class MeterFill {
+  final Paint _paint = Paint();
+
+  ui.Shader? _shader;
+  double? _fadeHeight;
+  Color? _base;
+  Color? _bright;
+
+  /// Rebuilds the cached shader if [fadeHeight] (normally the track height) or
+  /// the palette changed. Call once per paint, before [draw].
+  void prepare(double fadeHeight, OaaColors colors, {Color? color}) {
+    final base = color ?? colors.meterFill;
+    if (_shader != null && _fadeHeight == fadeHeight && _base == base) return;
+    _fadeHeight = fadeHeight;
+    _base = base;
+    _bright = Color.lerp(base, colors.textPrimary, 0.35)!;
+    _shader = ui.Gradient.linear(
+      Offset.zero,
+      Offset(0, fadeHeight),
+      [_bright!, base, Color.lerp(base, colors.background, 0.40)!],
+      const [0.0, 0.35, 1.0],
+    );
+    _paint.shader = _shader;
+  }
+
+  /// The gradient's top colour — for the marks that must match the fill they
+  /// annotate, like a bar's own peak cap.
+  Color get bright => _bright ?? const Color(0x00000000);
+
+  /// Paints [fill] with the gradient anchored at `fill.top`.
+  void draw(Canvas canvas, Rect fill) {
+    if (_shader == null || fill.isEmpty) return;
+    canvas.save();
+    canvas.clipRect(fill);
+    canvas.translate(fill.left, fill.top);
+    canvas.drawRect(Rect.fromLTWH(0, 0, fill.width, _fadeHeight!), _paint);
+    canvas.restore();
+  }
 }

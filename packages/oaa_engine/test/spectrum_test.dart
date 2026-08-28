@@ -264,6 +264,110 @@ void main() {
         reason: 'band $band',
       );
     }
+    // And on each of the four signals a pair can be read as, since each
+    // carries a hold of its own.
+    for (final source in SpectrumSource.values) {
+      final bands = engine.spectrumOf(source);
+      final peaks = engine.spectrumPeakOf(source);
+      for (var band = 0; band < kOaaSpectrumBands; band++) {
+        expect(
+          peaks[band],
+          greaterThanOrEqualTo(bands[band]),
+          reason: '${source.id} band $band',
+        );
+      }
+    }
+  });
+
+  // --- The four signals of a pair --------------------------------------------
+  //
+  // Mid is (L + R) / 2 and side is (L − R) / 2, and both are *transformed as
+  // signals*, so their arithmetic is the arithmetic of the signal: a tone in
+  // one channel only is half as loud — 6.02 dB down — on both, a tone in both
+  // channels is all mid and no side, and an anti-phase tone the reverse. The
+  // per-channel folds read the tone at its own level or not at all. None of
+  // that can be got from per-channel power, which is what these hold against.
+
+  test('a sine in the left channel reads on left, not right, and −6 dB on '
+      'mid and side', () {
+    final engine = _analysed(
+      frequencies: [_binCentreHz(85, 48000)],
+      amplitudes: [0.5],
+      channelGains: const [1.0, 0.0],
+    );
+    addTearDown(engine.dispose);
+    final band = _loudestBand(engine);
+
+    expect(engine.spectrumOf(SpectrumSource.all)[band], closeTo(-6.02, 0.1));
+    expect(engine.spectrumOf(SpectrumSource.left)[band], closeTo(-6.02, 0.1));
+    expect(engine.spectrumOf(SpectrumSource.right)[band], kOaaDbFloor);
+    expect(engine.spectrumOf(SpectrumSource.mid)[band], closeTo(-12.04, 0.1));
+    expect(engine.spectrumOf(SpectrumSource.side)[band], closeTo(-12.04, 0.1));
+  });
+
+  test('a sine in both channels is all mid and no side; anti-phase, the '
+      'reverse', () {
+    final inPhase = _analysed(
+      frequencies: [_binCentreHz(85, 48000)],
+      amplitudes: [0.5],
+    );
+    addTearDown(inPhase.dispose);
+    final band = _loudestBand(inPhase);
+
+    expect(inPhase.spectrumOf(SpectrumSource.all)[band], closeTo(-6.02, 0.1));
+    expect(inPhase.spectrumOf(SpectrumSource.left)[band], closeTo(-6.02, 0.1));
+    expect(inPhase.spectrumOf(SpectrumSource.right)[band], closeTo(-6.02, 0.1));
+    expect(inPhase.spectrumOf(SpectrumSource.mid)[band], closeTo(-6.02, 0.1));
+    expect(inPhase.spectrumOf(SpectrumSource.side)[band], kOaaDbFloor);
+
+    final antiPhase = _analysed(
+      frequencies: [_binCentreHz(85, 48000)],
+      amplitudes: [0.5],
+      channelGains: const [1.0, -1.0],
+    );
+    addTearDown(antiPhase.dispose);
+
+    expect(antiPhase.spectrumOf(SpectrumSource.mid)[band], kOaaDbFloor);
+    expect(
+      antiPhase.spectrumOf(SpectrumSource.side)[band],
+      closeTo(-6.02, 0.1),
+    );
+    // The combined fold takes the loudest channel, so it does not care that
+    // the two cancel; the pan sees equal energy either side.
+    expect(antiPhase.spectrumOf(SpectrumSource.all)[band], closeTo(-6.02, 0.1));
+    expect(antiPhase.spectrumPan[band], closeTo(0.0, 0.01));
+  });
+
+  test('a one-channel engine has a left and nothing else', () {
+    final engine = _analysed(
+      frequencies: [_binCentreHz(85, 48000)],
+      amplitudes: [0.5],
+      channels: 1,
+      channelGains: const [1.0],
+    );
+    addTearDown(engine.dispose);
+
+    // Left is the one channel there is, folded by the same rule as the
+    // combined set — so band for band they are the same numbers.
+    final left = engine.spectrumOf(SpectrumSource.left);
+    for (var band = 0; band < kOaaSpectrumBands; band++) {
+      expect(left[band], engine.spectrum[band], reason: 'band $band');
+    }
+
+    // The other three are not silence — the floor would draw as a measured
+    // nothing — they are unmeasured, which is NaN, in every band.
+    for (final source in [
+      SpectrumSource.right,
+      SpectrumSource.mid,
+      SpectrumSource.side,
+    ]) {
+      final bands = engine.spectrumOf(source);
+      final peaks = engine.spectrumPeakOf(source);
+      for (var band = 0; band < kOaaSpectrumBands; band++) {
+        expect(bands[band].isNaN, isTrue, reason: '${source.id} band $band');
+        expect(peaks[band].isNaN, isTrue, reason: '${source.id} band $band');
+      }
+    }
   });
 
   test('silence reads as the floor, not as zero', () {

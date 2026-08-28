@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-/// How protocol version 4 carries the arrays a module *plots*.
+/// How protocol versions 4 and 5 carry the arrays a module *plots*.
 ///
 /// ---------------------------------------------------------------------------
 /// The rule, which is narrower than "compress the snapshot"
@@ -14,6 +14,8 @@
 ///
 /// What is quantised is the five arrays that exist to be drawn: 14,336 of the
 /// 15,056 bytes, 95 % of the frame, none of it ever displayed as a number.
+/// Version 5's eight per-source spectra take the dB encoding too, for the
+/// same reason: they become the same pixels.
 ///
 /// ---------------------------------------------------------------------------
 /// Why these widths and not fewer bits

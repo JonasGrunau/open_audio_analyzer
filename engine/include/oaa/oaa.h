@@ -63,7 +63,7 @@ extern "C" {
  * side asserts against it at startup, because a stale prebuilt library that
  * silently reads a reordered struct produces plausible-looking wrong numbers,
  * which is the worst failure mode a measurement tool has. */
-#define OAA_ABI_VERSION 5
+#define OAA_ABI_VERSION 6
 
 /* 7.1 is the widest layout the Digital Meter renders, so it is the widest the
  * graph carries. */
@@ -174,14 +174,18 @@ typedef enum {
  * momentary loudness needs 400 ms of signal before it means anything. */
 #define OAA_FLAG_LOUDNESS_UNAVAILABLE (1u << 1)
 
-/* Likewise for the spectrum arrays — but unlike the flag above, **this build
+/* Likewise for the spectrum arrays — all five sets of them, the combined
+ * `spectrum` and the front pair's left, right, mid and side, which one
+ * analysis pass produces together — but unlike the flag above, **this build
  * sets it**. `oaa_clear_measurements` raises it on every reset and the analysis
  * pass clears it only once a full 4096-frame window has been transformed, about
  * 85 ms in. Until then the bands sit at the floor, which is indistinguishable
  * from digital silence: a consumer that skips this check draws a spectrum of
  * nothing and presents it as a measurement. It stays in the ABI for the flag
  * above's reason as well — a source that cannot produce a spectrum at all needs
- * a way to say so. */
+ * a way to say so. A set this flag does not cover is one this engine cannot
+ * make at all — the right, mid and side of a one-channel source — and that is
+ * said per band, with NaN, rather than with a flag. */
 #define OAA_FLAG_SPECTRUM_UNAVAILABLE (1u << 2)
 
 /* Audio has been lost since the last reset — see `dropped_frames`. Sticky
@@ -384,7 +388,46 @@ typedef struct oaa_snapshot {
    * sum to 1 and the UI needs no total. All zero before the first gated block
    * exists. */
   float histogram[OAA_HISTOGRAM_BINS];
+
+  /* --- Appended in ABI 6 ------------------------------------------------- */
+  /* `spectrum` as measured on each of the four signals a stereo pair can be
+   * read as: channels 0 and 1 of the front pair, their mid `(L + R) / 2` and
+   * their side `(L - R) / 2` — each with the peak hold `spectrum_peak`
+   * describes, held per signal because a side band's transient is not the
+   * mix's. Same bands, same rule per band, same floor as `spectrum`, whose
+   * combined fold is what a source setting of OAA_SPECTRUM_ALL reads.
+   *
+   * **NaN throughout for a signal this source cannot make** — the right, mid
+   * and side of a one-channel engine. Not the floor: the floor is silence,
+   * which is a measurement, and these are the absence of one. A consumer
+   * draws them the way it draws a spectrum under OAA_FLAG_SPECTRUM_UNAVAILABLE.
+   *
+   * Left and right are folded from the per-channel transforms the pan already
+   * needed; mid and side are two more transforms per hop, because `|L + R|^2`
+   * carries a cross term that per-channel power has thrown away. */
+  float spectrum_left[OAA_SPECTRUM_BANDS];
+  float spectrum_left_peak[OAA_SPECTRUM_BANDS];
+  float spectrum_right[OAA_SPECTRUM_BANDS];
+  float spectrum_right_peak[OAA_SPECTRUM_BANDS];
+  float spectrum_mid[OAA_SPECTRUM_BANDS];
+  float spectrum_mid_peak[OAA_SPECTRUM_BANDS];
+  float spectrum_side[OAA_SPECTRUM_BANDS];
+  float spectrum_side_peak[OAA_SPECTRUM_BANDS];
 } oaa_snapshot;
+
+/* Which signal a spectrum is read from — the argument to
+ * oaa_snapshot_spectrum_of() and oaa_snapshot_spectrum_peak_of(), carried as
+ * an int32_t the way `oaa_source_kind` is, because the width of an enum is
+ * the compiler's choice and the ABI must not depend on one. ALL is the
+ * combined fold `spectrum` carries; the other four name the arrays appended
+ * in ABI 6, in the order they were appended. */
+typedef enum {
+  OAA_SPECTRUM_ALL = 0,
+  OAA_SPECTRUM_LEFT = 1,
+  OAA_SPECTRUM_RIGHT = 2,
+  OAA_SPECTRUM_MID = 3,
+  OAA_SPECTRUM_SIDE = 4
+} oaa_spectrum_source;
 
 /* ------------------------------------------------------------------------ */
 /* Configuration                                                             */
@@ -556,11 +599,11 @@ OAA_API const oaa_snapshot *oaa_snapshot_buffer(oaa_engine *engine);
  *
  * This is the only function called every frame, so it is the only one whose
  * cost is worth arguing about. It is a seqlock read: an atomic load, a memcpy
- * of the snapshot — about 15 kB, most of it the scope and the spectrum — and a
- * second atomic load to confirm no writer intervened. It never blocks the
- * analysis thread and it never waits on a mutex.
+ * of the snapshot — about 31 kB, most of it the five spectrum sets and the
+ * scope — and a second atomic load to confirm no writer intervened. It never
+ * blocks the analysis thread and it never waits on a mutex.
  *
- * Fifteen kilobytes at 120 fps is under 2 MB/s and roughly a microsecond a
+ * Thirty-one kilobytes at 120 fps is under 4 MB/s and a few microseconds a
  * frame, which is the argument for copying the whole thing rather than growing
  * a second, narrower path for the modules that only want one number. Two ways
  * to read a measurement is two ways for them to disagree.
@@ -622,6 +665,14 @@ OAA_API const float *oaa_snapshot_spectrum_peak(const oaa_snapshot *snapshot);
 OAA_API const float *oaa_snapshot_spectrum_pan(const oaa_snapshot *snapshot);
 OAA_API const float *oaa_snapshot_scope(const oaa_snapshot *snapshot);
 OAA_API const float *oaa_snapshot_histogram(const oaa_snapshot *snapshot);
+
+/* `spectrum` and `spectrum_peak` for one signal — see `spectrum_left` and its
+ * siblings in the struct. OAA_SPECTRUM_ALL returns the combined pair the two
+ * accessors above return; a value outside the enum returns NULL. */
+OAA_API const float *oaa_snapshot_spectrum_of(const oaa_snapshot *snapshot,
+                                              int32_t source);
+OAA_API const float *oaa_snapshot_spectrum_peak_of(const oaa_snapshot *snapshot,
+                                                   int32_t source);
 
 /* ------------------------------------------------------------------------ */
 /* Files                                                                     */

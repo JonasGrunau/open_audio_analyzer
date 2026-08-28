@@ -167,6 +167,12 @@ class _Source implements MeterSource {
   final Float32List spectrumPeak = Float32List(MeterShape.spectrumBands);
   @override
   final Float32List spectrumPan = Float32List(MeterShape.spectrumBands);
+
+  @override
+  Float32List spectrumOf(SpectrumSource source) => spectrum;
+
+  @override
+  Float32List spectrumPeakOf(SpectrumSource source) => spectrumPeak;
   @override
   final Float32List scope = Float32List(MeterShape.scopePoints * 2);
   @override

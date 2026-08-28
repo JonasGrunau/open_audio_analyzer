@@ -14,16 +14,21 @@ import '../clock/meter_clock.dart';
 /// The same bands the analyser draws, one column per published measurement,
 /// scrolling left. Frequency runs up the display because that is the axis the
 /// analyser uses and two modules on one tab disagreeing about which way is up
-/// would be worse than either choice.
+/// would be worse than either choice — and both axes are labelled, because a
+/// spectrogram without a frequency axis is a texture: the labels on the left
+/// are the analyser's own [kHzGrid] series, and the ages along the top say how
+/// far back the record reaches, measured off the engine's clock rather than
+/// assumed from a nominal publish rate.
 ///
-/// Which colours the level is drawn in is [ColorRamp]: the skin's own ground into
-/// `accent` into `warn`, or the spectrogram rainbow — indigo, blue, cyan, green,
-/// yellow, orange, red, white. **Both ramps map the same quantity**, and it is
-/// the level rather than the frequency, because the frequency is already up the
-/// y axis: a hue per row would say nothing a glance at the axis does not, and it
-/// would leave the level with only brightness to be read from. [ColorRamp] owns
-/// the other half of that argument — the oscilloscope, which has no frequency
-/// axis, so colour there is the only thing that can carry one.
+/// Which colours the level is drawn in is [ColorRamp]: the skin's ground
+/// through `accent` to a bright accent tip, or the spectrogram rainbow —
+/// indigo, blue, cyan, green, yellow, orange, red, white. **Both ramps map the
+/// same quantity**, and it is the level rather than the frequency, because the
+/// frequency is already up the y axis: a hue per row would say nothing a
+/// glance at the axis does not, and it would leave the level with only
+/// brightness to be read from. [ColorRamp] owns the other half of that
+/// argument — the oscilloscope, which has no frequency axis, so colour there
+/// is the only thing that can carry one.
 ///
 /// Only [_lut] changes between the two. The record, the floor, the ceiling and
 /// the step recorded per cell are identical at either setting, which is why
@@ -86,12 +91,19 @@ class SpectrogramModule extends StatefulWidget {
   const SpectrogramModule({
     required this.engine,
     required this.clock,
+    this.source = SpectrumSource.all,
     this.ramp = ColorRamp.skin,
     super.key,
   });
 
   final MeterSource engine;
   final MeterClock clock;
+
+  /// Which signal the bands are measured on. See [SpectrumSource]. Changing
+  /// it **clears the record**: a spectrogram whose left half is one signal
+  /// and right half another, under one label, is a picture of a measurement
+  /// nobody took — unlike the ramp, which re-colours the same record.
+  final SpectrumSource source;
 
   /// Which colours the display is drawn in. See [ColorRamp] — [_lut] is sampled
   /// from it, and a change to it re-renders every cell from the record without
@@ -127,11 +139,94 @@ class _SpectrogramModuleState extends State<SpectrogramModule> {
 
   /// What [_lut] was sampled from.
   ///
-  /// The whole palette rather than its accent alone — `panel` and `warn` feed
-  /// the skin ramp too. [OaaColors] has value equality, so this costs a field
-  /// comparison per build and catches a skin whose accent did not move.
+  /// The whole palette rather than its accent alone — `panel` and
+  /// `textPrimary` feed the skin ramp too. [OaaColors] has value equality, so
+  /// this costs a field comparison per build and catches a skin whose accent
+  /// did not move.
   OaaColors? _lutColors;
   ColorRamp? _lutRamp;
+
+  /// The axis text, rebuilt only when the palette moves.
+  ///
+  /// The frequency labels are static paragraphs; the ages along the top are
+  /// [ValueParagraph]s because their strings move as the window fills and as
+  /// the measured column rate settles.
+  Color? _axisColor;
+  List<ui.Paragraph> _hzLabels = const [];
+  double _hzInk = 0;
+
+  /// Which [kHzGrid] values carry a label at the current plot height — solved
+  /// by [fitHzLabels] when the plot resizes, not per frame.
+  List<bool> _hzLabelled = const [];
+  double _hzLabelledFor = -1;
+
+  void solveAxis(double plotHeight) {
+    if (_hzLabelledFor == plotHeight || _hzLabels.isEmpty) return;
+    _hzLabelledFor = plotHeight;
+    final labelHeight = _hzLabels.first.height;
+    _hzLabelled = fitHzLabels(plotHeight, (_) => labelHeight);
+  }
+
+  final List<ValueParagraph> _ageLabels = [];
+
+  /// What a source the signal cannot provide is drawn over — the same words
+  /// the stereo cloud and the phase scope use for the same fact.
+  ui.Paragraph? _mono;
+
+  void _buildAxisText(OaaColors colors) {
+    if (_axisColor == colors.textFaint) return;
+    _axisColor = colors.textFaint;
+    final style = OaaType.tick.copyWith(color: colors.textFaint);
+    _hzLabels = [
+      for (final hz in kHzGrid) layoutParagraph(formatHz(hz), style),
+    ];
+    _hzInk = 0;
+    for (final label in _hzLabels) {
+      if (label.longestLine > _hzInk) _hzInk = label.longestLine;
+    }
+    _mono = layoutParagraph(
+      'MONO SOURCE',
+      OaaType.label.copyWith(color: colors.textMuted),
+    );
+  }
+
+  /// Drops the record and shows the ramp's ground, for a change of source.
+  void clear() {
+    if (_stepOf.isEmpty) return;
+    _stepOf.fillRange(0, _stepOf.length, 0);
+    _fillWithStepZero();
+    _upload();
+  }
+
+  @override
+  void didUpdateWidget(SpectrogramModule oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.source != widget.source) clear();
+  }
+
+  /// Seconds of audio per recorded column, measured off the engine's clock.
+  ///
+  /// The publish rate is *about* 47 Hz, and "about" is not a number to print
+  /// an axis in: a display fed over the wire runs at whatever rate the host
+  /// publishes. So the span is accumulated — elapsed seconds against columns
+  /// appended — and a discontinuity (a reset, a stalled link) is skipped
+  /// rather than folded in, because a 30-second gap divided over one column
+  /// would misdate the whole record.
+  double _lastElapsed = double.nan;
+  double _spanSeconds = 0;
+  int _spanColumns = 0;
+
+  double get secondsPerColumn =>
+      _spanColumns > 0 ? _spanSeconds / _spanColumns : 1 / 47;
+
+  void noteAppend(double elapsed) {
+    final dt = elapsed - _lastElapsed;
+    _lastElapsed = elapsed;
+    if (dt > 0 && dt < 1) {
+      _spanSeconds += dt;
+      _spanColumns++;
+    }
+  }
 
   /// What paint draws. Pixel-backed, at most one predecessor alive while its
   /// replacement is in flight.
@@ -284,6 +379,9 @@ class _SpectrogramModuleState extends State<SpectrogramModule> {
     _disposed = true;
     _image?.dispose();
     _image = null;
+    for (final label in _ageLabels) {
+      label.dispose();
+    }
     super.dispose();
   }
 
@@ -291,6 +389,7 @@ class _SpectrogramModuleState extends State<SpectrogramModule> {
   Widget build(BuildContext context) {
     final colors = OaaTheme.of(context);
 
+    _buildAxisText(colors);
     if (_lutColors != colors || _lutRamp != widget.ramp) {
       _buildLut(colors, widget.ramp);
       if (_stepOf.isNotEmpty) _repaintAll();
@@ -300,6 +399,7 @@ class _SpectrogramModuleState extends State<SpectrogramModule> {
       painter: _SpectrogramPainter(
         engine: widget.engine,
         colors: colors,
+        source: widget.source,
         ramp: widget.ramp,
         state: this,
         repaint: widget.clock,
@@ -312,6 +412,7 @@ class _SpectrogramPainter extends MeterPainter {
   _SpectrogramPainter({
     required this.engine,
     required this.colors,
+    required this.source,
     required this.ramp,
     required this.state,
     required Listenable repaint,
@@ -325,15 +426,25 @@ class _SpectrogramPainter extends MeterPainter {
        _bitmap = (Paint()
          ..filterQuality = FilterQuality.none
          ..isAntiAlias = false),
+       // The graticule is drawn *over* the picture — there is nowhere else —
+       // so it is the hairline let down far enough not to read as signal.
+       _grid = (Paint()
+         ..color = colors.hairline.withValues(alpha: 0.6)
+         ..strokeWidth = OaaStroke.hairline
+         ..isAntiAlias = false),
+       _ageStyle = OaaType.tick.copyWith(color: colors.textFaint),
        super(repaint: repaint);
 
   final MeterSource engine;
   final OaaColors colors;
+  final SpectrumSource source;
   final ColorRamp ramp;
   final _SpectrogramModuleState state;
 
   final Paint _background;
   final Paint _bitmap;
+  final Paint _grid;
+  final TextStyle _ageStyle;
 
   /// One published measurement is one column. At ~47 Hz that is about 21 ms of
   /// audio per column, so a 600 px module holds roughly thirteen seconds.
@@ -347,38 +458,149 @@ class _SpectrogramPainter extends MeterPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final columns = (size.width / columnWidth).floor();
-    final rows = size.height.round();
+    // The axes cost a gutter and a band, and a module at its size floor cannot
+    // spare either — below this the record is the whole body, exactly as it
+    // was before the axes existed. Decided from the size alone, so nothing
+    // about the signal can flip the layout.
+    final axes = size.width >= 140 && size.height >= 80;
+    final gutter = axes ? state._hzInk + Space.xs : 0.0;
+    final band = axes ? OaaType.tick.fontSize! + Space.xs : 0.0;
+    final plot = Rect.fromLTRB(gutter, band, size.width, size.height);
+
+    final columns = (plot.width / columnWidth).floor();
+    final rows = plot.height.round();
     if (columns <= 0 || rows <= 0) return;
 
     state.resize(columns, rows);
 
     if (engine.generation != 0 && engine.generation != state.lastGeneration) {
       state.lastGeneration = engine.generation;
+      state.noteAppend(engine.elapsedSeconds);
       // Silence still scrolls. The display is a record of time, and holding it
       // still while audio runs would misdate everything already on it.
-      state.append(engine.hasSpectrum ? _stepAt : _silence);
+      state.append(_available ? _stepAt : _silence);
     }
 
-    canvas.drawRect(Offset.zero & size, _background);
+    canvas.drawRect(plot, _background);
 
     final image = state._image;
-    if (image == null || image.width != columns || image.height != rows) {
-      return;
+    if (image != null && image.width == columns && image.height == rows) {
+      canvas.drawImageRect(
+        image,
+        Rect.fromLTWH(0, 0, columns.toDouble(), rows.toDouble()),
+        // Anchored to the right edge, where the newest column lands. The
+        // sliver the flooring left over stays background, exactly as it
+        // always has.
+        Rect.fromLTWH(
+          plot.right - columns * columnWidth,
+          plot.top,
+          columns * columnWidth,
+          plot.height,
+        ),
+        _bitmap,
+      );
     }
-    canvas.drawImageRect(
-      image,
-      Rect.fromLTWH(0, 0, columns.toDouble(), rows.toDouble()),
-      // Anchored to the right edge, where the newest column lands. The sliver
-      // the flooring left over stays background, exactly as it always has.
-      Rect.fromLTWH(
-        size.width - columns * columnWidth,
-        0,
-        columns * columnWidth,
-        size.height,
-      ),
-      _bitmap,
-    );
+
+    if (axes) {
+      _paintFrequencyAxis(canvas, plot);
+      _paintTimeAxis(canvas, plot);
+    }
+
+    // The record keeps scrolling under it — see `append` — and the notice
+    // says what the ground it is scrolling is.
+    if (engine.hasSpectrum && !_available) {
+      final mono = state._mono!;
+      canvas.drawParagraph(
+        mono,
+        Offset(
+          plot.left + (plot.width - mono.longestLine) / 2,
+          plot.top + (plot.height - mono.height) / 2,
+        ),
+      );
+    }
+  }
+
+  /// Whether the chosen source is measured on this signal at all. NaN
+  /// throughout when it is not — the right, mid or side of a one-channel
+  /// input — see `MeterSource.spectrumOf`.
+  bool get _available =>
+      engine.hasSpectrum && !engine.spectrumOf(source)[0].isNaN;
+
+  /// The analyser's [kHzGrid] series down the left edge, each label beside a
+  /// hairline drawn over the picture at its band's row — every value that
+  /// fits, by the one rule every frequency axis fits by. See [fitHzLabels].
+  void _paintFrequencyAxis(Canvas canvas, Rect plot) {
+    state.solveAxis(plot.height);
+    final labels = state._hzLabels;
+
+    for (var i = 0; i < kHzGrid.length; i++) {
+      if (i >= state._hzLabelled.length || !state._hzLabelled[i]) continue;
+      final label = labels[i];
+      final y =
+          plot.bottom -
+          bandOfHz(kHzGrid[i]) / MeterShape.spectrumBands * plot.height;
+      if (y < plot.top || y > plot.bottom) continue;
+      canvas.drawLine(Offset(plot.left, y), Offset(plot.right, y), _grid);
+      canvas.drawParagraph(
+        label,
+        Offset(
+          plot.left - Space.xs - label.longestLine,
+          (y - label.height / 2).clamp(plot.top, plot.bottom - label.height),
+        ),
+      );
+    }
+  }
+
+  /// How far back the record reaches, as ages along the top: 0 at the right
+  /// edge where the newest column lands, a label every rung that keeps them
+  /// legibly apart. The rate under it is measured, not assumed — see
+  /// `secondsPerColumn` on the state.
+  void _paintTimeAxis(Canvas canvas, Rect plot) {
+    final secondsPerPixel = state.secondsPerColumn / columnWidth;
+    var interval = 0;
+    for (final rung in _ageRungs) {
+      if (rung / secondsPerPixel >= _agePixels) {
+        interval = rung;
+        break;
+      }
+    }
+    if (interval == 0) return;
+
+    for (var tick = 1; ; tick++) {
+      final x = plot.right - tick * interval / secondsPerPixel;
+      if (x < plot.left + Space.sm) break;
+      canvas.drawLine(Offset(x, plot.top), Offset(x, plot.bottom), _grid);
+
+      while (state._ageLabels.length < tick) {
+        state._ageLabels.add(ValueParagraph());
+      }
+      final label = state._ageLabels[tick - 1].of(
+        _ageText(tick * interval),
+        _ageStyle,
+      );
+      canvas.drawParagraph(
+        label,
+        Offset(
+          (x - label.longestLine / 2).clamp(
+            plot.left,
+            plot.right - label.longestLine,
+          ),
+          plot.top - label.height - Space.xxs,
+        ),
+      );
+    }
+  }
+
+  /// The intervals an age axis may be labelled at, and the room a label must
+  /// have. The finest rung whose labels stay [_agePixels] apart wins.
+  static const List<int> _ageRungs = [1, 2, 5, 10, 15, 30, 60, 120, 300];
+  static const double _agePixels = 60;
+
+  static String _ageText(int seconds) {
+    if (seconds < 60) return '${seconds}s';
+    final minutes = seconds ~/ 60;
+    final rest = seconds % 60;
+    return rest == 0 ? '${minutes}m' : '${minutes}m${rest}s';
   }
 
   int _silence(int row) => 0;
@@ -392,7 +614,7 @@ class _SpectrogramPainter extends MeterPainter {
               .round()
               .clamp(0, MeterShape.spectrumBands - 1)
         : 0;
-    final db = engine.spectrum[band];
+    final db = engine.spectrumOf(source)[band];
     if (db <= _floorDb) return 0;
     final level = ((db - _floorDb) / (_ceilingDb - _floorDb)).clamp(0.0, 1.0);
     return (level * (_steps - 1)).round();
@@ -401,6 +623,7 @@ class _SpectrogramPainter extends MeterPainter {
   @override
   bool shouldRepaint(_SpectrogramPainter oldDelegate) =>
       oldDelegate.colors != colors ||
+      oldDelegate.source != source ||
       oldDelegate.ramp != ramp ||
       !identical(oldDelegate.engine, engine);
 }

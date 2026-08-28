@@ -56,6 +56,15 @@ reach a single list.
 - **No measurement is invented.** A quantity this build does not compute is
   `NaN` with a `OAA_FLAG_*_UNAVAILABLE` flag set — never a zero that looks like
   a reading.
+- **The spectrum is five band sets from one pass, and a set a source cannot
+  make is NaN per band, not the floor.** `spectrum` is the loudest bin across
+  every channel; `spectrum_left` and siblings are the front pair's left, right,
+  mid and side, appended in ABI 6 with a peak hold each and read through
+  `oaa_snapshot_spectrum_of`. A one-channel engine has a left and nothing else,
+  and its right, mid and side read NaN throughout: the floor is silence, which
+  is a measurement, and these are the absence of one. The flag stays one flag
+  because the five sets come from one analysis pass and are unavailable
+  together; what differs per source is said per band.
 
 - **A source that has stopped producing is a state, not a silence.** The
   analysis thread paces itself against a monotonic clock, so an empty ring

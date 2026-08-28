@@ -19,6 +19,12 @@ import '../data/metric_reader.dart';
 /// dynamics floor the target sets — and knowing which way each comparison
 /// runs.
 ///
+/// Each row also states its Δ — the signed distance from the number that
+/// judges it — because "how far off am I" is the question the row exists to
+/// answer, and a table that makes the reader do the subtraction answers it
+/// slower than the fix takes. The Δ is derived beside the verdict from the
+/// same calibration numbers, so the two cannot disagree.
+///
 /// The verdict is deliberately conservative. A row whose measurement is not yet
 /// defined does not pass and does not fail — it reads as a dash, and the
 /// overall verdict stays "measuring". A validator that said READY forty
@@ -87,12 +93,14 @@ class _ValidatorModuleState extends State<ValidatorModule> {
   // Allocated for the longest table once, rather than per target: the frame
   // path may not allocate, and a target change is not a frame.
   final _values = [for (var i = 0; i < _mostChecks; i++) ValueParagraph()];
+  final _deltas = [for (var i = 0; i < _mostChecks; i++) ValueParagraph()];
   final _verdict = ValueParagraph();
 
   List<_Check> _checks = const [];
   List<ui.Paragraph> _names = const [];
   List<ui.Paragraph> _limits = const [];
   List<ui.Paragraph> _passLabels = const [];
+  ui.Paragraph? _deltaGlyph;
   Calibration? _builtFor;
   Color? _builtColor;
 
@@ -133,6 +141,9 @@ class _ValidatorModuleState extends State<ValidatorModule> {
     for (final value in _values) {
       value.dispose();
     }
+    for (final delta in _deltas) {
+      delta.dispose();
+    }
     _verdict.dispose();
     super.dispose();
   }
@@ -160,6 +171,7 @@ class _ValidatorModuleState extends State<ValidatorModule> {
         for (final check in _checks)
           layoutParagraph(check.limit(widget.calibration), tick),
       ];
+      _deltaGlyph = layoutParagraph('Δ', tick);
       _passLabels = [
         layoutParagraph('PASS', OaaType.label.copyWith(color: colors.accent)),
         layoutParagraph('FAIL', OaaType.label.copyWith(color: colors.over)),
@@ -207,6 +219,10 @@ class _ValidatorPainter extends MeterPainter {
 
   static const double _verdictHeight = 26;
 
+  /// Below this width the Δ column is dropped — four columns and a verdict in
+  /// less reads as a collision, not a table.
+  static const double _deltaFrom = 300;
+
   @override
   void paint(Canvas canvas, Size size) {
     // **The rows fill the module, and what is left over is split above and
@@ -221,7 +237,13 @@ class _ValidatorPainter extends MeterPainter {
     final checks = state._checks;
     final available = size.height - _verdictHeight;
     final rowHeight = (available / checks.length).clamp(14.0, 44.0);
-    final valueRight = size.width * 0.62;
+
+    // The Δ column is the first thing a narrow module gives up: the value and
+    // the limit imply it, so it is the one column that is a convenience rather
+    // than a fact the table would be lying without.
+    final showDelta = size.width >= _deltaFrom;
+    final valueRight = size.width * (showDelta ? 0.44 : 0.62);
+    final limitLeft = showDelta ? size.width * 0.68 : valueRight + Space.sm;
 
     // The measured column scales with the row; the name, the limit and the
     // PASS/FAIL do not. Those three are labels — the same size in every module
@@ -270,10 +292,42 @@ class _ValidatorPainter extends MeterPainter {
         ),
       );
 
+      // --- Δ, the signed distance to the limit that judges this row --------
+      // Derived beside the verdict from the same calibration numbers, so the
+      // three columns cannot disagree about where the reading stands. It saves
+      // the reader the subtraction Decibel's validator saves them: "how far
+      // off am I" is the question the row exists to answer.
+      if (showDelta) {
+        final delta = _deltaOf(check.metric, value);
+        final glyph = state._deltaGlyph!;
+        final deltaLeft = valueRight + Space.sm;
+        canvas.drawParagraph(
+          glyph,
+          Offset(deltaLeft, top + (rowHeight - glyph.height) / 2),
+        );
+        final number = state._deltas[i].of(
+          _deltaText(delta),
+          OaaType.readingSmall.copyWith(
+            color: delta.isNaN
+                ? colors.textMuted
+                : outcome == _Outcome.fail
+                ? colors.over
+                : colors.textPrimary,
+          ),
+        );
+        canvas.drawParagraph(
+          number,
+          Offset(
+            deltaLeft + glyph.longestLine + Space.xxs,
+            top + (rowHeight - number.height) / 2,
+          ),
+        );
+      }
+
       final limit = state._limits[i];
       canvas.drawParagraph(
         limit,
-        Offset(valueRight + Space.sm, top + (rowHeight - limit.height) / 2),
+        Offset(limitLeft, top + (rowHeight - limit.height) / 2),
       );
 
       final verdict = state._passLabels[outcome.index];
@@ -310,6 +364,33 @@ class _ValidatorPainter extends MeterPainter {
       Offset(size.width, _verdictHeight - 1),
       _rule,
     );
+  }
+
+  /// The signed distance from the number the row is judged against — the
+  /// target itself for loudness, the ceiling for true peak, the maximum for
+  /// LRA, the floor for the dynamics rows. Positive is always "above the
+  /// line", whichever way the comparison runs; the verdict column says which
+  /// direction is the failing one.
+  double _deltaOf(Metric metric, double value) {
+    if (value.isNaN) return double.nan;
+    return switch (metric) {
+      Metric.lufsIntegrated => value - calibration.lufsTarget,
+      Metric.truePeakMax => value - calibration.truePeakMax,
+      Metric.loudnessRange => value - calibration.loudnessRangeMax,
+      Metric.odrIntegrated => value - (calibration.odrIntegratedFloor ?? 0),
+      Metric.odrShort => value - (calibration.odrShortFloor ?? 0),
+      _ => double.nan,
+    };
+  }
+
+  /// One decimal with its sign spelled out, because a Δ without one is a
+  /// number with half its meaning missing. Negative zero is normalised — a
+  /// reading exactly on the line is not below it.
+  static String _deltaText(double delta) {
+    if (delta.isNaN) return '—';
+    var text = delta.toStringAsFixed(1);
+    if (text == '-0.0') text = '0.0';
+    return delta.isNegative && text != '0.0' ? text : '+$text';
   }
 
   /// Each comparison runs its own way, which is the whole reason this is a

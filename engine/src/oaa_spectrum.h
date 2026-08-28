@@ -97,6 +97,12 @@
 
 #define OAA_FFT_BINS (OAA_FFT_TRANSFORM / 2 + 1)
 
+/* The sources other than the combined fold: left, right, mid and side of the
+ * front pair. `oaa_spectrum_source` in the public header counts the combined
+ * set as 0 and these as 1..4, so an internal index is the public value less
+ * one. */
+#define OAA_SPECTRUM_PAIR_SOURCES 4
+
 /* How long a band's peak stays at its maximum, and how fast it falls after.
  * Slower than the sample-peak meter's 20 dB/s, because a spectrum peak is read
  * as a shape rather than a number and a fast fall makes the shape flicker. */
@@ -132,8 +138,19 @@ typedef struct {
 
   /* Latest per-bin power, per channel. Kept rather than folded straight into
    * bands because the pan calculation needs the two front channels separately
-   * after the band mapping has already happened. */
+   * after the band mapping has already happened — and because the left and
+   * right band sets are folded from exactly these, so a channel's own bands
+   * cost no transform of their own. */
   float *power; /* channels * OAA_FFT_BINS */
+
+  /* The front pair's mid and side, transformed as signals — `(L + R) / 2`
+   * and `(L - R) / 2` windowed and transformed like any channel. They cannot
+   * be derived from the per-channel power above: `|L + R|^2` carries the
+   * cross term `2 Re(L R*)`, and power has thrown the phase away. Two more
+   * transforms per hop is what a mid or a side band costs, and it is the only
+   * way to get one that is a measurement. NULL below two channels. */
+  float *power_mid;  /* OAA_FFT_BINS */
+  float *power_side; /* OAA_FFT_BINS */
 
   /* Which bins each display band covers. `first` is zero for a band above
    * Nyquist — bin 0 is DC and never mapped, so it doubles as "no data" without
@@ -151,6 +168,16 @@ typedef struct {
   float band_pan[OAA_SPECTRUM_BANDS];
   float hold_db[OAA_SPECTRUM_BANDS];
   float hold_left[OAA_SPECTRUM_BANDS];
+
+  /* The same three, for the four sources a stereo pair can be read as —
+   * indexed by `oaa_spectrum_source - 1`, so [0] is left and [3] is side.
+   * Each carries its own hold, because a hold is a property of the signal
+   * it holds and a side band's transient is not the mix's. NaN throughout
+   * for a source this signal cannot make: the right, mid and side of a
+   * one-channel engine, which are not silence and must not read as it. */
+  float source_db[OAA_SPECTRUM_PAIR_SOURCES][OAA_SPECTRUM_BANDS];
+  float source_hold_db[OAA_SPECTRUM_PAIR_SOURCES][OAA_SPECTRUM_BANDS];
+  float source_hold_left[OAA_SPECTRUM_PAIR_SOURCES][OAA_SPECTRUM_BANDS];
 
   int ready; /* a transform has run since the last reset */
 } oaa_spectrum;
@@ -170,5 +197,10 @@ void oaa_spectrum_process(oaa_spectrum *s, const float *interleaved,
 /* Copies the current bands out. `pan` may be NULL. */
 void oaa_spectrum_read(const oaa_spectrum *s, float *bands, float *peaks,
                        float *pan);
+
+/* Copies one source's bands out — `source` is a public `oaa_spectrum_source`
+ * other than OAA_SPECTRUM_ALL, which oaa_spectrum_read() is for. */
+void oaa_spectrum_read_source(const oaa_spectrum *s, int32_t source,
+                              float *bands, float *peaks);
 
 #endif /* OAA_SPECTRUM_H */

@@ -21,8 +21,10 @@ abstract final class WireFrame {
   ///
   /// Version 3 adds `0x0020 SET_LUFS_MODE` and changes no existing table, which
   /// is what makes [isKnownVersion] able to accept a version-2 peer instead of
-  /// refusing it.
-  static const int protocolVersion = 4;
+  /// refusing it. Version 4 moved the snapshot table and version 5 grew it;
+  /// both older tables are still decoded, by the frame's version — see
+  /// `WireSnapshot.decode`.
+  static const int protocolVersion = 5;
 
   /// The oldest version whose tables this build can still decode.
   ///
@@ -46,9 +48,9 @@ abstract final class WireFrame {
   ///
   /// A length field is an instruction to allocate, and one that has been
   /// corrupted in transit or written by something hostile must not be obeyed.
-  /// The largest legitimate frame is a snapshot at a little over 15 kB, so this
-  /// is three orders of magnitude of headroom and still refuses to turn four
-  /// bad bytes into a four-gigabyte allocation.
+  /// The largest legitimate frame is a snapshot at a little over 28 kB, so this
+  /// is more than an order of magnitude of headroom and still refuses to turn
+  /// four bad bytes into a four-gigabyte allocation.
   static const int maxPayloadBytes = 1 << 20;
 
   static const int _offsetMagic = 0;

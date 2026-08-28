@@ -18,22 +18,23 @@ import 'package:test/test.dart';
 void main() {
   _lufsModeTests();
 
-  group('the frozen shape of protocol version 4', () {
-    test('a snapshot payload is 7,652 bytes for one analysis block', () {
+  group('the frozen shape of protocol version 5', () {
+    test('a snapshot payload is 15,844 bytes for one analysis block', () {
       // Frozen for as long as the protocol version is. `docs/WIRE.md` publishes
       // this number, the plugin's C++ sender asserts it, and HELLO refuses a
-      // producer that announces neither this nor the legacy size. If a change
-      // to MeterShape moved it, every remote display in the field would refuse
-      // every host that had not been updated in lockstep — which is the correct
-      // behaviour, and this test is where you find that out.
-      expect(SnapshotWire.payloadBytes, 7652);
-      expect(SnapshotWire.baseBytes, 3556);
-      expect(SnapshotWire.maxPayloadBytes, 3556 + 4096 * 4);
+      // producer that announces none of this, the version 4 size or the legacy
+      // one. If a change to MeterShape moved it, every remote display in the
+      // field would refuse every host that had not been updated in lockstep —
+      // which is the correct behaviour, and this test is where you find that
+      // out.
+      expect(SnapshotWire.payloadBytes, 15844);
+      expect(SnapshotWire.baseBytes, 11748);
+      expect(SnapshotWire.maxPayloadBytes, 11748 + 4096 * 4);
     });
 
     test('field offsets match the published table', () {
-      // Identical to versions 1-3 up to the end of `clip`; everything after it
-      // moved, because the five plotted arrays are two bytes an element now.
+      // Identical to version 4 up to and including `histogram`; the eight
+      // per-source arrays sit after it, and only the scope count and run moved.
       expect(SnapshotWire.offsetGeneration, 0);
       expect(SnapshotWire.offsetElapsedSeconds, 8);
       expect(SnapshotWire.offsetSampleRate, 16);
@@ -51,8 +52,26 @@ void main() {
       expect(SnapshotWire.offsetLraLow, 2272);
       expect(SnapshotWire.offsetSpectrumPan, 2288);
       expect(SnapshotWire.offsetHistogram, 3312);
-      expect(SnapshotWire.offsetScopeFrames, 3552);
-      expect(SnapshotWire.offsetScope, 3556);
+      expect(SnapshotWire.offsetSpectrumLeft, 3552);
+      expect(SnapshotWire.offsetSpectrumLeftPeak, 4576);
+      expect(SnapshotWire.offsetSpectrumRight, 5600);
+      expect(SnapshotWire.offsetSpectrumRightPeak, 6624);
+      expect(SnapshotWire.offsetSpectrumMid, 7648);
+      expect(SnapshotWire.offsetSpectrumMidPeak, 8672);
+      expect(SnapshotWire.offsetSpectrumSide, 9696);
+      expect(SnapshotWire.offsetSpectrumSidePeak, 10720);
+      expect(SnapshotWire.offsetScopeFrames, 11744);
+      expect(SnapshotWire.offsetScope, 11748);
+    });
+
+    test('the frozen version 4 table is still described exactly', () {
+      // Decode-only, like the version 1-3 one below and for the same reason:
+      // a version 4 plugin outlives the app upgrade that brought version 5.
+      expect(SnapshotWireV4.payloadBytes, 7652);
+      expect(SnapshotWireV4.baseBytes, 3556);
+      expect(SnapshotWireV4.offsetScopeFrames, 3552);
+      expect(SnapshotWireV4.offsetScope, 3556);
+      expect(SnapshotWireV4.maxPayloadBytes, 3556 + 4096 * 4);
     });
 
     test('every 16-bit array starts on an even offset', () {
@@ -65,6 +84,14 @@ void main() {
         SnapshotWire.offsetSpectrumPan,
         SnapshotWire.offsetScope,
         SnapshotWire.offsetHistogram,
+        SnapshotWire.offsetSpectrumLeft,
+        SnapshotWire.offsetSpectrumLeftPeak,
+        SnapshotWire.offsetSpectrumRight,
+        SnapshotWire.offsetSpectrumRightPeak,
+        SnapshotWire.offsetSpectrumMid,
+        SnapshotWire.offsetSpectrumMidPeak,
+        SnapshotWire.offsetSpectrumSide,
+        SnapshotWire.offsetSpectrumSidePeak,
       ]) {
         expect(offset.isEven, isTrue, reason: 'offset $offset is odd');
       }
@@ -155,6 +182,13 @@ void main() {
         source.spectrum[i] = -i.toDouble() / 4;
         source.spectrumPeak[i] = -i.toDouble() / 8;
         source.spectrumPan[i] = (i % 5 - 2) / 2;
+        // A distinct slope per source and per hold, so an array written into
+        // its neighbour's slot is caught rather than merely the right length.
+        for (final entry in source.sources.entries) {
+          final n = entry.key.index;
+          entry.value.spectrum[i] = -i.toDouble() / (4 + n);
+          entry.value.peak[i] = -i.toDouble() / (8 + n) + n;
+        }
       }
       for (var i = 0; i < source.scope.length; i++) {
         source.scope[i] = (i % 512 - 256) / 256;
@@ -182,6 +216,22 @@ void main() {
         0.5 / Quantise.dbStep,
       );
       _expectClose(decoded.spectrumPan, source.spectrumPan, 0.5 / 32767);
+      for (final entry in source.sources.entries) {
+        _expectClose(
+          decoded.spectrumOf(entry.key),
+          entry.value.spectrum,
+          0.5 / Quantise.dbStep,
+        );
+        _expectClose(
+          decoded.spectrumPeakOf(entry.key),
+          entry.value.peak,
+          0.5 / Quantise.dbStep,
+        );
+      }
+      expect(
+        identical(decoded.spectrumOf(SpectrumSource.all), decoded.spectrum),
+        isTrue,
+      );
       // Only the part this measurement filled — over a wire the list is
       // allocated at the protocol's maximum. See `MeterSource.scopeFrames`.
       expect(decoded.scopeFrames, source.scopeFrames);
@@ -226,6 +276,106 @@ void main() {
 
       expect(decoded.histogram[0].isNaN, isTrue);
       expect(decoded.histogram[1], 0);
+    });
+
+    test('a source the producer cannot measure arrives as NaN throughout', () {
+      // A one-channel signal has a left and nothing else; the engine
+      // publishes right, mid and side as NaN band for band, and the wire must
+      // carry that as "not measured" — the floor would be "measured, silent".
+      final source = _FakeSource()..channels = 1;
+      for (final entry in source.sources.entries) {
+        final unavailable = entry.key != SpectrumSource.left;
+        for (var i = 0; i < MeterShape.spectrumBands; i++) {
+          entry.value.spectrum[i] = unavailable ? double.nan : -i / 4;
+          entry.value.peak[i] = unavailable ? double.nan : -i / 8;
+        }
+      }
+
+      final decoded = _roundTrip(source);
+
+      expect(
+        decoded.spectrumOf(SpectrumSource.left).every((v) => !v.isNaN),
+        isTrue,
+      );
+      for (final other in [
+        SpectrumSource.right,
+        SpectrumSource.mid,
+        SpectrumSource.side,
+      ]) {
+        expect(decoded.spectrumOf(other).every((v) => v.isNaN), isTrue);
+        expect(decoded.spectrumPeakOf(other).every((v) => v.isNaN), isTrue);
+      }
+    });
+
+    test('a version 4 frame is read by its own table, sources unmeasured', () {
+      // A version 4 plugin behind a version 5 app: the scope count and run sit
+      // 8,192 bytes earlier, and the four sources it never measured are NaN
+      // rather than a copy of the combined bands under the wrong name.
+      final payload = ByteData(SnapshotWireV4.payloadBytes);
+      payload.setUint32(SnapshotWire.offsetChannels, 2, Endian.little);
+      payload.setFloat32(SnapshotWire.offsetLufsShort, -18.5, Endian.little);
+      payload.setUint16(
+        SnapshotWire.offsetSpectrum + 10 * 2,
+        Quantise.db(-30),
+        Endian.little,
+      );
+      payload.setUint32(
+        SnapshotWireV4.offsetScopeFrames,
+        MeterShape.scopePoints,
+        Endian.little,
+      );
+      payload.setInt16(
+        SnapshotWireV4.offsetScope,
+        Quantise.sample(0.5),
+        Endian.little,
+      );
+
+      // Every one of these sources is measured, and after a version 4 frame
+      // none may be: the frame overwrites what the previous one left.
+      final decoded = _roundTrip(_FakeSource())..decode(payload, version: 4);
+
+      expect(decoded.lufsShort, closeTo(-18.5, 1e-6));
+      expect(decoded.spectrum[10], closeTo(-30, 0.5 / Quantise.dbStep));
+      expect(decoded.scopeFrames, MeterShape.scopePoints);
+      expect(decoded.scope[0], closeTo(0.5, 0.5 / Quantise.sampleScale));
+      for (final other in [
+        SpectrumSource.left,
+        SpectrumSource.right,
+        SpectrumSource.mid,
+        SpectrumSource.side,
+      ]) {
+        expect(decoded.spectrumOf(other).every((v) => v.isNaN), isTrue);
+        expect(decoded.spectrumPeakOf(other).every((v) => v.isNaN), isTrue);
+      }
+    });
+
+    test('the table is chosen by the version, never by the length', () {
+      // A version 4 relay frame carrying 3,072 pairs is exactly the length of
+      // a one-block version 5 frame. Sized alike, they mean different things,
+      // and only the version says which.
+      const pairs = 3072;
+      expect(SnapshotWireV4.payloadBytesFor(pairs), SnapshotWire.payloadBytes);
+
+      final payload = ByteData(SnapshotWireV4.payloadBytesFor(pairs));
+      payload.setUint32(SnapshotWireV4.offsetScopeFrames, pairs, Endian.little);
+
+      final asV4 = WireSnapshot()..decode(payload, version: 4);
+      expect(asV4.scopeFrames, pairs);
+
+      // Read as version 5, the same bytes say the scope count is zero, which
+      // is not the length — so it is refused rather than misread.
+      expect(
+        () => WireSnapshot().decode(payload, version: 5),
+        throwsArgumentError,
+      );
+    });
+
+    test('a version this build does not speak is refused', () {
+      final payload = ByteData(SnapshotWire.payloadBytes);
+      expect(
+        () => WireSnapshot().decode(payload, version: 6),
+        throwsArgumentError,
+      );
     });
 
     test('a sample past full scale is carried, not folded to the rim', () {
@@ -579,10 +729,10 @@ void main() {
           producerName: 'appended a field',
         ),
       );
-      expect(decoded.incompatibility, contains('7652'));
+      expect(decoded.incompatibility, contains('15844'));
     });
 
-    test('the legacy snapshot size is accepted, and only that one', () {
+    test('the two older snapshot sizes are accepted, and only those', () {
       WireHello sized(int bytes) => _decodeHello(
         WireHello(
           snapshotPayloadBytes: bytes,
@@ -596,8 +746,10 @@ void main() {
       );
 
       // The promise `WireFrame.minimumVersion` makes: a plugin installed before
-      // the app was upgraded still draws. It announces the version 1-3 size.
+      // the app was upgraded still draws. It announces the version 1-3 size,
+      // or version 4's.
       expect(sized(SnapshotWireLegacy.payloadBytes).incompatibility, isNull);
+      expect(sized(SnapshotWireV4.payloadBytes).incompatibility, isNull);
       expect(sized(SnapshotWire.payloadBytes).incompatibility, isNull);
 
       // Anything between them is a table nobody here has ever written, and
@@ -734,6 +886,25 @@ class _FakeSource implements MeterSource {
 
   @override
   final Float32List spectrumPan = Float32List(MeterShape.spectrumBands);
+
+  /// The four per-source spectra, each with its hold.
+  final Map<SpectrumSource, ({Float32List spectrum, Float32List peak})>
+  sources = {
+    for (final source in SpectrumSource.values)
+      if (source != SpectrumSource.all)
+        source: (
+          spectrum: Float32List(MeterShape.spectrumBands),
+          peak: Float32List(MeterShape.spectrumBands),
+        ),
+  };
+
+  @override
+  Float32List spectrumOf(SpectrumSource source) =>
+      source == SpectrumSource.all ? spectrum : sources[source]!.spectrum;
+
+  @override
+  Float32List spectrumPeakOf(SpectrumSource source) =>
+      source == SpectrumSource.all ? spectrumPeak : sources[source]!.peak;
 
   @override
   final Float32List scope = Float32List(MeterShape.scopePoints * 2);

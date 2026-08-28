@@ -340,7 +340,7 @@ class PluginLink extends ChangeNotifier {
             onTransport?.call(session, transport);
 
           case WireFrameType.snapshot:
-            session.snapshot.decode(reader.payload);
+            session.snapshot.decode(reader.payload, version: reader.version);
             session.lastFrameAt = DateTime.now();
 
           default:

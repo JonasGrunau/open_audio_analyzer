@@ -455,6 +455,14 @@ Map<String, double> _readings(MeterSource source) => <String, double>{
   'spectrum[256]': source.spectrum[256],
   'spectrumPeak[256]': source.spectrumPeak[256],
   'spectrumPan[256]': source.spectrumPan[256],
+  // Version 5's per-source spectra, one band of each and one hold, so a relay
+  // that carried the combined bands under every source's name would fail
+  // here on a stereo file whose channels differ.
+  'spectrumOf(left)[256]': source.spectrumOf(SpectrumSource.left)[256],
+  'spectrumOf(right)[256]': source.spectrumOf(SpectrumSource.right)[256],
+  'spectrumOf(mid)[256]': source.spectrumOf(SpectrumSource.mid)[256],
+  'spectrumOf(side)[256]': source.spectrumOf(SpectrumSource.side)[256],
+  'spectrumPeakOf(side)[256]': source.spectrumPeakOf(SpectrumSource.side)[256],
   // The **newest** pair, not the oldest. The app relays a scope run that
   // accumulates every block it measured between two sends, so the display's
   // `scope[0]` is older audio than the app's — by design, and the whole reason

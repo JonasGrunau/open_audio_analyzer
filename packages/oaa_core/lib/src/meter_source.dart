@@ -3,6 +3,7 @@
 import 'dart:math' as math;
 import 'dart:typed_data';
 
+import 'spectrum_source.dart';
 import 'transport.dart';
 
 /// The shape of one published measurement, as counts rather than bytes.
@@ -229,6 +230,22 @@ abstract interface class MeterSource {
   /// no energy in it — read [spectrum] first and skip bands at
   /// [MeterShape.dbFloor], because the pan of silence is not a direction.
   Float32List get spectrumPan;
+
+  /// [spectrum] as measured on one signal: [SpectrumSource.all] is [spectrum]
+  /// itself, and the other four are the front pair's left, right, mid and
+  /// side — see [SpectrumSource]. NaN throughout for a source this
+  /// measurement cannot make: the right, mid and side of a one-channel
+  /// signal, or every one of them on a source that carries only the
+  /// combined bands. A painter treats it the way it treats [spectrum] under
+  /// [hasSpectrum] — as no measurement, never as silence.
+  ///
+  /// The same rule as every other array here: a view built once, never a
+  /// fresh list per call.
+  Float32List spectrumOf(SpectrumSource source);
+
+  /// [spectrumPeak] for [spectrumOf]'s signal, held by the source for the
+  /// same reason. NaN where [spectrumOf] is.
+  Float32List spectrumPeakOf(SpectrumSource source);
 
   /// Stereo frames, interleaved x=left, y=right, oldest first, of which the
   /// first [scopeFrames] pairs are valid. Raw sample values, not rotated into

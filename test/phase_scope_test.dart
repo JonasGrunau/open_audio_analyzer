@@ -3,84 +3,136 @@
 // The property that makes the goniometer's trail cheap without making it a
 // different picture.
 //
-// The trail draws its dimmest frames at a fraction of their points — an eighth
-// by the oldest — and the whole legitimacy of that rests on *which* fraction.
-// A prefix of a slot has to be a subsample spread evenly across the analysis
-// block, because a goniometer traces the signal's path in time: an even
-// subsample in time is an even subsample along the path, and draws the same
-// figure more sparsely. The obvious implementation — keep the first eighth of
-// the samples — would instead draw one eighth *of the path*, so a fading trail
-// would visibly shrink towards wherever the block happened to start.
+// The trail draws its dimmest frames at a fraction of their samples — an
+// eighth by the oldest — and the whole legitimacy of that rests on *which*
+// fraction. A detail level has to be a subsample spread evenly across the
+// analysis block, because a goniometer traces the signal's path in time: an
+// even subsample in time is an even subsample along the path, and draws the
+// same figure more sparsely. Keeping the first eighth of the samples instead
+// would draw one eighth *of the path*, so a fading trail would visibly shrink
+// towards wherever the block happened to start.
 //
-// That failure is a picture, not an exception. It would look like a phase
-// scope with an unusually tight trail, which is a plausible thing for a phase
-// scope to look like, so it is pinned here rather than left to the eye.
+// The trace is a polyline, which adds the second property: every level must be
+// in **time order**, because `PointMode.polygon` joins consecutive buffer
+// entries, and joining samples that are far apart in time draws a web across
+// the figure rather than the signal's path. And what a short block leaves
+// unfilled must be NaN — a culled segment — not stale audio joined to this
+// moment's.
+//
+// All three failures are pictures, not exceptions. They would look like a
+// phase scope with an unusually tight trail, or an unusually busy one, which
+// are plausible things for a phase scope to look like, so they are pinned here
+// rather than left to the eye.
+
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:oaa/src/modules/phase_scope.dart';
 import 'package:oaa_core/oaa_core.dart';
 
 void main() {
-  group('the trail\'s stratified order', () {
-    const points = MeterShape.scopePoints;
+  const points = MeterShape.scopePoints;
 
-    test('is a permutation, so no sample is dropped or drawn twice', () {
-      final order = PhaseScopeModule.stratifiedOrder(points);
+  /// A block whose sample index is readable back off either coordinate:
+  /// L = index, R = −index.
+  Float32List ramp(int frames) {
+    final scope = Float32List(frames * 2);
+    for (var i = 0; i < frames; i++) {
+      scope[i * 2] = i.toDouble();
+      scope[i * 2 + 1] = -i.toDouble();
+    }
+    return scope;
+  }
 
-      expect(order, hasLength(points));
-      expect(order.toSet(), hasLength(points));
-      expect(order.every((v) => v >= 0 && v < points), isTrue);
+  group('a trail slot', () {
+    test('holds every detail level in time order, strided evenly', () {
+      final slot = Float32List(PhaseScopeModule.slotFloats);
+      PhaseScopeModule.writeSlot(slot, ramp(points), points);
+
+      for (var level = 0; level < 4; level++) {
+        final offset = PhaseScopeModule.levelOffset(level);
+        final count = points >> level;
+        final stride = 1 << level;
+        for (var i = 0; i < count; i++) {
+          expect(
+            slot[offset + i * 2],
+            (i * stride).toDouble(),
+            reason:
+                'level $level position $i should hold sample ${i * stride}: '
+                'every ${stride}th sample of the block, in time order, so a '
+                'polyline of the level draws the same figure more sparsely',
+          );
+          expect(slot[offset + i * 2 + 1], -(i * stride).toDouble());
+        }
+      }
     });
 
-    test('spreads every power-of-two prefix evenly across the block', () {
-      final order = PhaseScopeModule.stratifiedOrder(points);
+    test('even the sparsest level spans the whole block', () {
+      final slot = Float32List(PhaseScopeModule.slotFloats);
+      PhaseScopeModule.writeSlot(slot, ramp(points), points);
 
-      // Position p receives sample `where[p]`. The drawn prefix is positions
-      // 0..n, so that is the set whose spacing has to be even.
-      final where = List<int>.filled(points, -1);
-      for (var sample = 0; sample < points; sample++) {
-        where[order[sample]] = sample;
-      }
+      final offset = PhaseScopeModule.levelOffset(3);
+      final count = points >> 3;
+      expect(slot[offset], 0);
+      expect(
+        slot[offset + (count - 1) * 2],
+        greaterThan((points - points ~/ 8).toDouble()),
+        reason:
+            'the eighth the oldest frames are drawn at still has to reach '
+            'both ends of the block; that reach is what keeps the trail the '
+            'same shape',
+      );
+    });
 
-      // The four detail levels the module actually draws at.
-      for (final take in [points, points ~/ 2, points ~/ 4, points ~/ 8]) {
-        final drawn = where.take(take).toList()..sort();
-        final stride = points ~/ take;
+    test('keeps the newest samples of an oversized snapshot', () {
+      // A snapshot off a wire may carry several blocks in one frame; the
+      // figure is drawn from the newest block's worth.
+      final frames = points * 3;
+      final slot = Float32List(PhaseScopeModule.slotFloats);
+      PhaseScopeModule.writeSlot(slot, ramp(frames), frames);
 
-        expect(
-          drawn,
-          List<int>.generate(take, (i) => i * stride),
-          reason:
-              'a prefix of $take should be every ${stride}th sample of the '
-              'block, so the figure is drawn sparsely rather than partially',
-        );
+      expect(
+        slot[0],
+        (frames - points).toDouble(),
+        reason: 'the oldest kept sample is the first of the newest block',
+      );
+      expect(slot[(points - 1) * 2], (frames - 1).toDouble());
+    });
+
+    test('fills what a short block leaves with NaN, at every level', () {
+      const take = 100;
+      final slot = Float32List(PhaseScopeModule.slotFloats);
+      PhaseScopeModule.writeSlot(slot, ramp(take), take);
+
+      for (var level = 0; level < 4; level++) {
+        final offset = PhaseScopeModule.levelOffset(level);
+        final count = points >> level;
+        final stride = 1 << level;
+        for (var i = 0; i < count; i++) {
+          final sample = i * stride;
+          if (sample < take) {
+            expect(slot[offset + i * 2], sample.toDouble());
+          } else {
+            expect(
+              slot[offset + i * 2].isNaN,
+              isTrue,
+              reason:
+                  'level $level position $i is beyond the short block and '
+                  'must be NaN — a culled segment — not stale audio joined '
+                  'to this moment\'s',
+            );
+          }
+        }
       }
     });
 
-    test('covers the whole block even at the sparsest level', () {
-      final order = PhaseScopeModule.stratifiedOrder(points);
-      final where = List<int>.filled(points, -1);
-      for (var sample = 0; sample < points; sample++) {
-        where[order[sample]] = sample;
+    test('a null block blanks the slot entirely', () {
+      final slot = Float32List(PhaseScopeModule.slotFloats)..fillRange(0, 4, 7);
+      PhaseScopeModule.writeSlot(slot, null, 0);
+
+      for (var i = 0; i < slot.length; i++) {
+        expect(slot[i].isNaN, isTrue);
       }
-
-      // The eighth the oldest frames are drawn at still has to reach both ends
-      // of the block; that reach is what keeps the trail the same shape.
-      final sparsest = where.take(points ~/ 8).toList()..sort();
-      expect(sparsest.first, 0);
-      expect(sparsest.last, greaterThan(points - points ~/ 8));
     });
-
-    test(
-      'falls back to the identity on a block that is not a power of two',
-      () {
-        // No engine block is, but a producer is not obliged to be an engine and
-        // the bit-reversal is only defined on a power of two.
-        expect(
-          PhaseScopeModule.stratifiedOrder(100),
-          List<int>.generate(100, (i) => i),
-        );
-      },
-    );
   });
 }

@@ -81,7 +81,7 @@ inline constexpr uint32_t kMagic = 0x5741414Fu;
  * changes when the bytes on the socket change. An additive ABI bump that leaves
  * `oaa_snapshot` untouched — which is exactly what the file-decoding work is —
  * must not invalidate a link that would have worked perfectly. */
-inline constexpr uint16_t kProtocolVersion = 4;
+inline constexpr uint16_t kProtocolVersion = 5;
 
 /* The oldest version this build can still decode. Version 3 added a frame type
  * and moved no table, so a version-2 peer is a peer whose every table this
@@ -119,24 +119,35 @@ inline constexpr size_t kHeaderBytes = 12;
 /* Payload sizes                                                          */
 /* --------------------------------------------------------------------- */
 
-/* Version 4. The five arrays a module *plots* — spectrum, spectrum_peak,
- * spectrum_pan, scope, histogram — are fixed point rather than float32, which
- * is 95 % of the frame; every scalar a person reads as a number is still
- * float32. See `quantise` below and the version 4 table in docs/WIRE.md.
+/* Version 5. The arrays a module *plots* — spectrum, spectrum_peak,
+ * spectrum_pan, histogram, scope, and since version 5 the eight per-source
+ * spectra — are fixed point rather than float32; every scalar a person reads
+ * as a number is still float32. See `quantise` below and the version 5 table
+ * in docs/WIRE.md.
  *
- * `scope` is also **variable length and last**, carrying however much audio
+ * `scope` is **variable length and last**, carrying however much audio
  * elapsed rather than a fixed block, so that a relay publishing more slowly
  * than the engine measures can still send a contiguous waveform. A plugin is
  * never that relay — it publishes once per analysis block — so what it writes
- * is always exactly one block and `kSnapshotBytes` is a constant here. */
+ * is always exactly one block and `kSnapshotBytes` is a constant here. The
+ * per-source spectra sit between `histogram` and the scope count, which is
+ * why the base grew by 8,192 from version 4's 3,556. */
 inline constexpr size_t kScopeFrames    = 1024;
-inline constexpr size_t kSnapshotBase   = 3556;
+inline constexpr size_t kSnapshotBase   = 11748;
 inline constexpr size_t kSnapshotBytes  = kSnapshotBase + kScopeFrames * 4;
 
-/* What versions 1 to 3 sent, and still the size of the C struct. A consumer
- * accepts either — an older plugin outlives an app upgrade — but nothing here
- * writes this one any more. */
+/* What versions 1 to 3 sent. A consumer accepts it — an older plugin outlives
+ * an app upgrade — but nothing here writes it any more, and it has not been
+ * the size of the C struct since ABI 6 appended the per-source spectra. */
 inline constexpr size_t kSnapshotLegacyBytes = 15056;
+
+/* What version 4 sent: the same table as version 5 without the eight
+ * per-source arrays. Decode-only on the app side, like the legacy size. */
+inline constexpr size_t kSnapshotV4Bytes = 7652;
+
+/* The C struct today — ABI 6, with the eight per-source arrays appended. Not a
+ * wire size at any version; see the static_assert below for what it is for. */
+inline constexpr size_t kSnapshotStructBytes = 31440;
 
 inline constexpr size_t kTransportBytes = 88;
 
@@ -156,17 +167,19 @@ inline constexpr size_t kHelloFixedBytes = 32;
  * Neither is a decision to make by accident, which is why this is a build
  * failure and not a runtime check.
  *
- * The fix is to bump `kProtocolVersion`, add the field to the version-4 table
- * in docs/WIRE.md, and update both implementations together.
+ * The fix is to bump `kProtocolVersion`, add the field to the current table
+ * in docs/WIRE.md, and update both implementations together — which is what
+ * version 5 did when ABI 6 appended the per-source spectra, and why the
+ * number below moved from 15,056 to 31,440 in the same change.
  *
- * Note what this no longer says. Up to version 3 the wire happened to be
+ * Note what this does not say. Up to version 3 the wire happened to be
  * `sizeof(oaa_snapshot)` and a producer could memcpy the struct behind this
- * assert; at version 4 it cannot, because the plotted arrays are two bytes per
- * element on the wire and four in the struct. The guard is still worth having
- * for exactly the reason above — it is the tripwire on the struct, not on the
- * frame — so it is written against the struct's own size.
+ * assert; since version 4 it cannot, because the plotted arrays are two bytes
+ * per element on the wire and four in the struct. The guard is still worth
+ * having for exactly the reason above — it is the tripwire on the struct, not
+ * on the frame — so it is written against the struct's own size.
  */
-static_assert(sizeof(oaa_snapshot) == kSnapshotLegacyBytes,
+static_assert(sizeof(oaa_snapshot) == kSnapshotStructBytes,
               "oaa_snapshot changed size. See the comment above: this is a "
               "wire-protocol version decision, not a mechanical fix.");
 

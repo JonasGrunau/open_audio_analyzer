@@ -3,6 +3,7 @@
 import 'dart:math' as math;
 
 import 'metric.dart';
+import 'spectrum_source.dart';
 import 'transport.dart';
 
 /// The kinds of module a tab can contain.
@@ -1209,6 +1210,15 @@ class ModuleSpec {
   ColorRamp get colorRamp {
     final raw = options['ramp'];
     return (raw is String ? ColorRamp.fromId(raw) : null) ?? ColorRamp.skin;
+  }
+
+  /// Which signal the spectrum analyser or the spectrogram reads. See
+  /// [SpectrumSource]; defaults to [SpectrumSource.all], which is what both
+  /// drew before the setting existed.
+  SpectrumSource get spectrumSource {
+    final raw = options['source'];
+    return (raw is String ? SpectrumSource.fromId(raw) : null) ??
+        SpectrumSource.all;
   }
 
   /// What a LUFS module's integration counts from.

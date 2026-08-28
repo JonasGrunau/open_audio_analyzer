@@ -79,6 +79,7 @@ class _Harness extends StatefulWidget {
     required this.source,
     required this.boundary,
     this.smoothing = HistogramSmoothing.normal,
+    this.calibration = BuiltInCalibrations.streaming,
     super.key,
   });
 
@@ -88,6 +89,14 @@ class _Harness extends StatefulWidget {
   /// Defaulted to what ships, so the resting-curve cases below exercise the
   /// setting a module actually opens with.
   final HistogramSmoothing smoothing;
+
+  /// The smoothing cases hand in [_lowTarget] instead: the target's dashes and
+  /// axis value are drawn in `over` red, which [_isCurve] cannot tell from the
+  /// curve's own over-target colour, so a target in the middle of the scale
+  /// would cap every `_curveTop` read at its own row. Moving the target out of
+  /// the way keeps those tests about the curve; the resting cases read only
+  /// the plot floor and keep the shipped target.
+  final Calibration calibration;
 
   @override
   State<_Harness> createState() => _HarnessState();
@@ -118,7 +127,7 @@ class _HarnessState extends State<_Harness>
               child: HistogramModule(
                 engine: widget.source,
                 clock: clock,
-                calibration: BuiltInCalibrations.streaming,
+                calibration: widget.calibration,
                 smoothing: widget.smoothing,
               ),
             ),
@@ -131,6 +140,26 @@ class _HarnessState extends State<_Harness>
 
 const _colors = OaaColors.precisionInstrument;
 const _size = Size(480, 220);
+
+/// A target below everything the smoothing cases draw — see
+/// [_Harness.calibration].
+const _lowTarget = Calibration(
+  id: 'test-low',
+  name: 'Out of the way',
+  lufsTarget: -40,
+  lufsTolerance: 0.5,
+  truePeakMax: -1,
+  loudnessRangeMax: 20,
+);
+
+/// The plot's floor row: the module keeps an overview strip under the plot,
+/// and the resting curve rests on the plot's own bottom edge above it. Derived
+/// from the module's arithmetic rather than copied as a number, so a resized
+/// strip moves the tests with it.
+int _plotFloor() {
+  final overview = HistogramModule.overviewHeight(_size.height);
+  return (_size.height - (overview > 0 ? overview + Space.xs : 0)).floor();
+}
 
 Future<void> _frame(WidgetTester tester) =>
     tester.pump(const Duration(milliseconds: 17));
@@ -162,24 +191,28 @@ Future<Uint8List> _shoot(WidgetTester tester, GlobalKey key) async {
 ///
 /// Both colours are far off the grey axis in opposite directions — accent
 /// `0xFF35E0C4` is much greener than red, over `0xFFFF4D4D` much redder than
-/// green — and nothing else the module draws is either. The graticule is a
-/// near-black hairline; the target dashes and every label are grey, where the
-/// two channels are within a few counts; the fill under the curve reaches only
-/// 0.16 alpha at the floor, about 30 counts apart. A margin of 64 separates the
-/// stroke from all of them, including where an antialiased end covers half a
-/// pixel.
+/// green — and nothing else the module draws **near the plot floor** is
+/// either. The graticule is a near-black hairline; the tick labels are grey,
+/// where the two channels are within a few counts; the fill under the curve
+/// fades to 0.14 alpha of a background-leaning tint at the floor, under 20
+/// counts apart. A margin of 64 separates the stroke from all of them,
+/// including where an antialiased end covers half a pixel. What the margin
+/// **cannot** exclude is the target's own furniture — its dashes and axis
+/// value are `over` red by design — which is why the cases reading anywhere
+/// but the floor move the target out of the way; see [_Harness.calibration].
 bool _isCurve(Uint8List pixels, int x, int y) {
   final i = (y * _size.width.toInt() + x) * 4;
   return (pixels[i + 1] - pixels[i]).abs() > 64;
 }
 
-/// The x of every column carrying the curve within [rows] of the bottom edge.
+/// The x of every column carrying the curve within [rows] of the plot floor —
+/// the bottom of the *plot*, which sits above the overview strip.
 List<int> _curveColumns(Uint8List pixels, {int rows = 3}) {
-  final height = _size.height.toInt();
+  final floor = _plotFloor();
   return [
     for (var x = 0; x < _size.width.toInt(); x++)
       if ([
-        for (var y = height - rows; y < height; y++) y,
+        for (var y = floor - rows; y < floor; y++) y,
       ].any((y) => _isCurve(pixels, x, y)))
         x,
   ];
@@ -214,6 +247,7 @@ Future<Uint8List> _spike(
       source: source,
       boundary: key,
       smoothing: smoothing,
+      calibration: _lowTarget,
     ),
   );
 
@@ -310,6 +344,7 @@ void main() {
           source: source,
           boundary: key,
           smoothing: smoothing,
+          calibration: _lowTarget,
         ),
       );
       for (var publish = 1; publish <= 600; publish++) {

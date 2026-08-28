@@ -42,7 +42,8 @@ export 'src/offline.dart';
 /// modules with no engine at all. Re-exported rather than moved silently so
 /// that the CLI, the plugin and this package's own tests keep reading it where
 /// they always have, and so there is still exactly one definition.
-export 'package:oaa_core/oaa_core.dart' show bandCentreHz, bandOfHz;
+export 'package:oaa_core/oaa_core.dart'
+    show SpectrumSource, bandCentreHz, bandOfHz;
 
 /// Widest channel layout the engine carries (7.1).
 const int kOaaMaxChannels = 8;
@@ -235,6 +236,14 @@ class OaaEngine implements MeterSource {
       spectrumPan = native
           .oaa_snapshot_spectrum_pan(snapshot)
           .asTypedList(kOaaSpectrumBands),
+      _spectrumLeft = _sourceView(snapshot, SpectrumSource.left),
+      _spectrumLeftPeak = _sourcePeakView(snapshot, SpectrumSource.left),
+      _spectrumRight = _sourceView(snapshot, SpectrumSource.right),
+      _spectrumRightPeak = _sourcePeakView(snapshot, SpectrumSource.right),
+      _spectrumMid = _sourceView(snapshot, SpectrumSource.mid),
+      _spectrumMidPeak = _sourcePeakView(snapshot, SpectrumSource.mid),
+      _spectrumSide = _sourceView(snapshot, SpectrumSource.side),
+      _spectrumSidePeak = _sourcePeakView(snapshot, SpectrumSource.side),
       scope = native
           .oaa_snapshot_scope(snapshot)
           .asTypedList(kOaaScopePoints * 2),
@@ -243,7 +252,7 @@ class OaaEngine implements MeterSource {
           .asTypedList(kOaaHistogramBins);
 
   /// The ABI this Dart code was written against. Mirrors `OAA_ABI_VERSION`.
-  static const int expectedAbiVersion = 5;
+  static const int expectedAbiVersion = 6;
 
   final Pointer<native.oaa_engine> _handle;
 
@@ -303,6 +312,63 @@ class OaaEngine implements MeterSource {
   /// direction.
   @override
   final Float32List spectrumPan;
+
+  /// [spectrum] and [spectrumPeak] on each of the four signals a stereo pair
+  /// can be read as. Views like the rest, built once from the accessors the
+  /// header exports for them — NaN throughout on a one-channel engine for
+  /// the three it cannot make, which [spectrumOf]'s contract promises.
+  final Float32List _spectrumLeft;
+  final Float32List _spectrumLeftPeak;
+  final Float32List _spectrumRight;
+  final Float32List _spectrumRightPeak;
+  final Float32List _spectrumMid;
+  final Float32List _spectrumMidPeak;
+  final Float32List _spectrumSide;
+  final Float32List _spectrumSidePeak;
+
+  @override
+  Float32List spectrumOf(SpectrumSource source) => switch (source) {
+    SpectrumSource.all => spectrum,
+    SpectrumSource.left => _spectrumLeft,
+    SpectrumSource.right => _spectrumRight,
+    SpectrumSource.mid => _spectrumMid,
+    SpectrumSource.side => _spectrumSide,
+  };
+
+  @override
+  Float32List spectrumPeakOf(SpectrumSource source) => switch (source) {
+    SpectrumSource.all => spectrumPeak,
+    SpectrumSource.left => _spectrumLeftPeak,
+    SpectrumSource.right => _spectrumRightPeak,
+    SpectrumSource.mid => _spectrumMidPeak,
+    SpectrumSource.side => _spectrumSidePeak,
+  };
+
+  /// The C constant for [source] — `oaa_spectrum_source`, which the header
+  /// carries as an `int32_t` so that the width of an enum never reaches the
+  /// ABI. The two enums are kept in the same order, and this is the one
+  /// place that order is relied on.
+  static int _sourceCode(SpectrumSource source) => switch (source) {
+    SpectrumSource.all => native.oaa_spectrum_source.OAA_SPECTRUM_ALL.value,
+    SpectrumSource.left => native.oaa_spectrum_source.OAA_SPECTRUM_LEFT.value,
+    SpectrumSource.right => native.oaa_spectrum_source.OAA_SPECTRUM_RIGHT.value,
+    SpectrumSource.mid => native.oaa_spectrum_source.OAA_SPECTRUM_MID.value,
+    SpectrumSource.side => native.oaa_spectrum_source.OAA_SPECTRUM_SIDE.value,
+  };
+
+  static Float32List _sourceView(
+    Pointer<native.oaa_snapshot> snapshot,
+    SpectrumSource source,
+  ) => native
+      .oaa_snapshot_spectrum_of(snapshot, _sourceCode(source))
+      .asTypedList(kOaaSpectrumBands);
+
+  static Float32List _sourcePeakView(
+    Pointer<native.oaa_snapshot> snapshot,
+    SpectrumSource source,
+  ) => native
+      .oaa_snapshot_spectrum_peak_of(snapshot, _sourceCode(source))
+      .asTypedList(kOaaSpectrumBands);
 
   /// The last [kOaaScopePoints] stereo frames, interleaved x=left, y=right,
   /// oldest first.

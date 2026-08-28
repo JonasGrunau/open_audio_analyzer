@@ -10,7 +10,7 @@ import 'package:flutter/widgets.dart';
 ///
 /// Two modules draw a display made of tens of thousands of small marks in a
 /// few dozen colours — the spectrogram's run-length columns and the stereo
-/// cloud's accumulated cells. The obvious shape, one `drawRect` or `drawCircle`
+/// cloud's ring of hits. The obvious shape, one `drawRect` or `drawCircle`
 /// per mark, builds a display list of thirty thousand ops, and *building* it is
 /// work the UI thread does inside `paint`: 5.6 ms for a wide spectrogram,
 /// against 0.15 ms for the same picture as one `drawRawPoints` per colour, plus

@@ -219,14 +219,17 @@ class OaaColors {
   /// Approaching a limit.
   final Color warn;
 
-  /// Over a limit.
+  /// Over a limit — and the limit itself.
   ///
-  /// Used for nothing else on the measurement surface. Two interaction states
-  /// borrow it and are listed here rather than left to be discovered: the
-  /// destructive button emphasis, and the outline of a layout drop the grid
-  /// will refuse. Both are refusals, both are momentary, and neither can be on
-  /// screen at the same time as a reading it might be mistaken for — but the
-  /// honest version of "used for nothing else, ever" is this list.
+  /// The delivery target line and its printed value wear this colour on every
+  /// module that draws against the target, because the line and the readings
+  /// past it are one statement: this is the number, that is what stands over
+  /// it. Two interaction states also borrow it and are listed here rather than
+  /// left to be discovered: the destructive button emphasis, and the outline
+  /// of a layout drop the grid will refuse. Both are refusals, both are
+  /// momentary, and neither can be on screen at the same time as a reading it
+  /// might be mistaken for — but the honest version of "used for nothing else,
+  /// ever" is this list.
   final Color over;
 
   /// The unfilled part of a bar or arc.

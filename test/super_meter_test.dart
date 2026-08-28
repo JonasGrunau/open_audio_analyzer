@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// The super meter's innermost ring, which is the one that gets delivered.
+// The super meter's inner ring, which is the one that gets delivered.
 //
 // It takes its verdict's colour for its whole length — a green ring when the
 // integrated reading is in spec, not a green tip — and that rule collided with
@@ -47,8 +47,9 @@ class _Levels implements MeterSource {
     _elapsed += 1;
   }
 
-  // The two outer rings sit far below the target, so no pixel of `over` in the
-  // picture belongs to anything but the ring under test.
+  // The outer ring sits far below the target, so the only `over` pixels in
+  // the annulus besides the ring under test's are the target tick's own — a
+  // radial hairline, well under a segment's worth of ink.
   @override
   double get lufsMomentary => -30;
   @override
@@ -65,11 +66,20 @@ class _Levels implements MeterSource {
   @override
   double get loudnessRange => double.nan;
 
-  /// Unmeasured for the same reason as the range: the readout under it would
+  /// Unmeasured for the same reason as the range: the readouts under it would
   /// be `textPrimary` against a target with no floor, in the middle of the
-  /// module, and carry the tests that are about the ring.
+  /// module, and carry the tests that are about the ring. Unmeasured dynamics
+  /// also leave the right-hand arcs undrawn, so every arc pixel in the annulus
+  /// belongs to loudness.
   @override
   double get odrIntegrated => double.nan;
+  @override
+  double get odrShort => double.nan;
+
+  /// Unmeasured, so the TRUEPEAK MAX row is an em dash and the ceiling zone is
+  /// judged against nothing.
+  @override
+  double get truePeakMax => double.nan;
 
   @override
   int get generation => _generation;
@@ -138,22 +148,24 @@ class _HarnessState extends State<_Harness>
 ///
 /// Exact matches only. Every colour asked about below is laid down by an opaque
 /// paint over an opaque backdrop, so it survives compositing unchanged; the
-/// antialiased edges land on none of them and simply are not counted.
+/// antialiased edges land on none of them and simply are not counted, and so
+/// does the ceiling zone, which is translucent over the track by design.
 ///
-/// **The centre is excluded, and has to be.** The readout in the middle is
-/// drawn in the integrated reading's own verdict colour — `-11.0` against a −14
-/// target is five glyphs of `over`, which in a test with no fonts loaded are
-/// five solid boxes and thousands of red pixels. Counted, they swamped the
-/// arcs: the red segment came out larger than the whole rest of the ring, which
-/// is the opposite of what the picture shows.
+/// **Everything inside the rings is excluded, and has to be.** The readouts in
+/// the middle and the tick values inside the rings are drawn in their
+/// readings' own verdict colours — `-11.0` against a −14 target is five glyphs
+/// of `over`, which in a test with no fonts loaded are five solid boxes and
+/// thousands of red pixels. Counted, they swamped the arcs: the red segment
+/// came out larger than the whole rest of the ring, which is the opposite of
+/// what the picture shows.
 ///
 /// The geometry to do it is *found*, not copied from the painter. The gauge is
 /// symmetric about the middle of the module and its outer ring reaches furthest
 /// left at exactly the centre's height, so the leftmost ink gives both the
 /// centre and the outer radius without knowing anything about how the module
-/// lays itself out. The rings live between 0.46 and 1.0 of that radius and the
-/// readout inside 0.37 of it, so a cut at 0.42 separates them with room on both
-/// sides.
+/// lays itself out. The two rings live between 0.67 and 1.0 of that radius and
+/// everything printed lives inside 0.66 of it, so counting the annulus outside
+/// 0.70 keeps most of both rings and none of the text.
 Future<Map<Color, int>> _tally(
   WidgetTester tester,
   double integrated,
@@ -201,7 +213,7 @@ Future<Map<Color, int>> _tally(
       if (leftmost < width) break;
     }
     final outer = cx - leftmost;
-    final readout = outer * 0.42;
+    final rings = outer * 0.70;
 
     final wanted = {
       for (final color in of)
@@ -213,7 +225,7 @@ Future<Map<Color, int>> _tally(
     for (var y = 0; y < image.height; y++) {
       for (var x = 0; x < width; x++) {
         final dx = x - cx, dy = y - centreY;
-        if (dx * dx + dy * dy < readout * readout) continue;
+        if (dx * dx + dy * dy < rings * rings) continue;
         final color = wanted[at(x, y)];
         if (color != null) counts[color] = counts[color]! + 1;
       }
@@ -288,6 +300,8 @@ void main() {
     ]);
 
     expect(counts[_colors.textPrimary], greaterThan(segment));
+    // Not zero: the target's own tick is red by design. A tick is a hairline
+    // and a segment of arc is not, which is what the floor separates.
     expect(
       counts[_colors.over],
       lessThan(segment),

@@ -267,14 +267,24 @@ class _LoudnessDistributionModuleState
   Widget build(BuildContext context) {
     final colors = OaaTheme.of(context);
 
+    // The scale's ticks yield to the target's own number, as the histogram's
+    // and the LUFS meter's do: the target is the one value on the axis the
+    // user chose, and a tick that reads in tens is still readable a tick short.
+    final target = widget.calibration.lufsTarget;
     if (_graticule == null ||
-        !_graticule!.matches(_scale, ScaleSide.bottom, colors.textFaint)) {
+        !_graticule!.matches(
+          _scale,
+          ScaleSide.bottom,
+          colors.textFaint,
+          avoiding: target,
+        )) {
       _graticule?.dispose();
       _graticule = ScaleGraticule(
         scale: _scale,
         side: ScaleSide.bottom,
         lineColor: colors.hairline,
         labelColor: colors.textFaint,
+        avoid: target,
       );
       _unit = layoutParagraph(
         'LUFS',
@@ -518,8 +528,13 @@ class _DistributionPainter extends MeterPainter {
          ..color = colors.over
          ..style = PaintingStyle.stroke
          ..strokeWidth = OaaStroke.mark),
+       // [OaaColors.over], like every target mark in the application — the
+       // LUFS meter's dashes, the histogram's, the super meter's tick — and
+       // the value under it wears the same. It was the muted grey for a
+       // phase, which made this the one loudness display whose target was
+       // not the colour the others had taught the reader to look for.
        _target = (Paint()
-         ..color = colors.textMuted
+         ..color = colors.over
          ..strokeWidth = OaaStroke.mark
          ..strokeCap = StrokeCap.butt
          ..isAntiAlias = false),
@@ -571,8 +586,8 @@ class _DistributionPainter extends MeterPainter {
     }
 
     final targetX = _x(plot, calibration.lufsTarget);
-    _paintDistribution(canvas, plot, columns, targetX);
-    _paintTarget(canvas, plot, targetX);
+    final clearTo = _paintDistribution(canvas, plot, columns, targetX);
+    _paintTarget(canvas, plot, targetX, clearTo);
 
     // Last, so that nothing is ever drawn over the reading. The percentile marks
     // and their labels were painted *before* the bars, which was survivable
@@ -586,12 +601,17 @@ class _DistributionPainter extends MeterPainter {
 
   /// The distribution itself: one column of fill per pixel, and the top edge
   /// that makes them a silhouette.
-  void _paintDistribution(
+  /// Returns the top of the column the target line falls in — the plot's
+  /// floor where that column is empty — which is how far down the target's
+  /// dashes may reach without crossing the picture.
+  double _paintDistribution(
     Canvas canvas,
     Rect plot,
     int columns,
     double targetX,
   ) {
+    final targetColumn = ((targetX - plot.left) / _columnWidth).floor();
+    var targetTop = plot.bottom;
     // Scaled to the tallest bin rather than to 1.0. A distribution over a long
     // programme spreads thin — a quarter of an hour of material rarely puts
     // more than a few percent in any one bin — and a plot fixed at 0..1 would
@@ -611,7 +631,7 @@ class _DistributionPainter extends MeterPainter {
       final value = bins[bin];
       if (value > tallest) tallest = value;
     }
-    if (tallest <= 0) return;
+    if (tallest <= 0) return targetTop;
 
     // The strip at the top the caliper lives in. The tallest bin reaches the
     // top of the plot *by construction*, so without this the mode is drawn
@@ -662,6 +682,7 @@ class _DistributionPainter extends MeterPainter {
 
       final x = plot.left + (i + 0.5) * _columnWidth;
       final top = plot.bottom - value / tallest * usable;
+      if (i == targetColumn && value > 0) targetTop = top;
 
       fill[i * 4] = x;
       fill[i * 4 + 1] = plot.bottom;
@@ -721,6 +742,7 @@ class _DistributionPainter extends MeterPainter {
       state._fillOver!,
       _edgeOver,
     );
+    return targetTop;
   }
 
   /// The gated range, as a dimension line with its reading on it.
@@ -804,33 +826,42 @@ class _DistributionPainter extends MeterPainter {
     canvas.drawParagraph(label, Offset(labelLeft, plot.top));
   }
 
-  /// The dashed target line, and its value in the gutter under it.
+  /// The dashed target line, from the top of the plot down to [clearTo] — the
+  /// top of the distribution where the line meets it — and its value in the
+  /// gutter under it.
   ///
-  /// The label is dropped rather than allowed to collide with a scale tick,
-  /// which is the same rule the Histogram applies to its own — the annotation
-  /// gives way to the scale, because a half-covered tick reads as a rendering
-  /// fault where a missing one reads as a scale you can still count in tens.
-  void _paintTarget(Canvas canvas, Rect plot, double targetX) {
+  /// **The line stops at the picture.** The fill is already split at the
+  /// target, quieter in the accent and louder in the over colour, so across
+  /// the distribution the boundary is drawn by the colours meeting; dashes
+  /// run through it said the same thing a second time over the reading. What
+  /// the dashes add is the line's extension into the clear space above, where
+  /// the eye carries it up to the axis. Every dash is still written — the
+  /// ones past [clearTo] collapse to zero length, which a butt cap draws as
+  /// nothing, so the buffer goes over whole.
+  ///
+  /// The label is always printed; it is the scale's tick that yields to it,
+  /// through the graticule's `avoid` — the rule the Histogram and the LUFS
+  /// meter apply to theirs. It used to be the other way about, and on a
+  /// −14 target the number the whole module is judged against was the one
+  /// the axis never printed.
+  void _paintTarget(Canvas canvas, Rect plot, double targetX, double clearTo) {
     final dashes = state._dashes;
+    final floor = clearTo - Space.xxs;
     for (var i = 0; i < dashes.length ~/ 4; i++) {
       final y = plot.top + i * _dashPeriod;
+      final from = y < floor ? y : floor;
+      final to = y + _dashOn < floor ? y + _dashOn : floor;
       dashes[i * 4] = targetX;
-      dashes[i * 4 + 1] = y;
+      dashes[i * 4 + 1] = from;
       dashes[i * 4 + 2] = targetX;
-      dashes[i * 4 + 3] = y + _dashOn > plot.bottom ? plot.bottom : y + _dashOn;
+      dashes[i * 4 + 3] = to;
     }
     canvas.drawRawPoints(ui.PointMode.lines, dashes, _target);
 
     final label = state._targetValue.of(
       Metric.lufsIntegrated.format(calibration.lufsTarget),
-      OaaType.tick.copyWith(color: colors.textMuted),
+      OaaType.tick.copyWith(color: colors.over),
     );
-
-    final scale = graticule.scale;
-    final target = calibration.lufsTarget.clamp(scale.min, scale.max);
-    final nearestTick = (target / scale.step).roundToDouble() * scale.step;
-    final gap = (target - nearestTick).abs() / scale.span * plot.width;
-    if (gap <= label.longestLine + Space.xs) return;
 
     canvas.drawParagraph(
       label,

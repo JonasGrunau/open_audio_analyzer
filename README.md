@@ -130,19 +130,19 @@ other thirteen.
 | Module | What it shows |
 |---|---|
 | **Number Box** | Any single measurement, as a number. |
-| **LUFS Meter** | Momentary and short-term loudness as bars, integrated loudness as a line. |
-| **Super Meter** | Momentary, short-term and integrated loudness as three concentric arcs, with LRA and ODR-I under the reading. |
-| **Digital Meter** | Sample peak and RMS, per channel, up to 7.1. |
+| **LUFS Meter** | Momentary, short-term and integrated loudness as three bars against a target band, each with its value printed beneath. |
+| **Super Meter** | One half-gauge: short-term and integrated loudness filling from the left, ODR-S and ODR-I continuing from each loudness tip to the true peak, so the dark rest of a ring is its true-peak headroom. Names ride the outer tips, every arc prints its reading in the lane inside it, and LUFS, ODR and true peak max are in the centre; LRA on tall modules. |
+| **Digital Meter** | Sample peak and RMS, per channel, up to 7.1 — as segmented bars and as numbers. |
 | **VU Meter** | A needle, on the movement the engine models. |
 | **Alert Meter** | One measurement, watched, with the worst it has been latched. |
 | **Validator** | The delivery decision, as a table. |
-| **Histogram** | Loudness against time: how the programme moved, and when it was over target. Both bands averaged over a window its menu names. |
+| **Histogram** | Loudness against time: how the programme moved, and when it was over target. Both bands averaged over a window its menu names, and the whole recording in an overview strip along the floor. |
 | **Loudness Distribution** | How much of the programme was spent at each loudness, bracketed between the two percentiles LRA is the distance between. The axis fits the programme, so a distribution occupying eight decibels is drawn across the module instead of into a fifth of it; `Scale` gives the whole −60 to 0 range back. |
-| **Spectrum Analyzer** | Level against frequency, log-spaced, tilted so a mix reads roughly flat, with a peak hold. |
-| **Spectrogram** | Frequency against time, level as colour. `Colour` picks the ramp: the skin's own, rising monotonically in brightness through the accent hue, or `Full RGB`, the spectrogram rainbow, which separates far more steps of level than one hue can. |
+| **Spectrum Analyzer** | Level against frequency, log-spaced, tilted so a mix reads roughly flat, with a peak hold. `Source` picks which signal the bands are measured on: all channels, or the front pair's left, right, mid or side. |
+| **Spectrogram** | Frequency against time, level as colour. `Source` is the analyser's, and changing it clears the record. `Colour` picks the ramp: the skin's own, rising monotonically in brightness through the accent hue, or `Full RGB`, the spectrogram rainbow, which separates far more steps of level than one hue can. |
 | **Oscilloscope** | The waveform, one lane per channel or both overlaid: triggered at scope speeds, rolling from half a second up, locked to the DAW's bar grid when a plugin is attached, or swept from a transient. Height and threshold are sliders on the module, because both are chosen by watching the picture move; `AUTO` takes the threshold six decibels under the loudest transient, so the sweep starts inside the attack rather than on top of it. `Colour: Full RGB` draws each column in its own balance of bass, mids and highs, so a kick is red, a hat is blue and a full-spectrum hit is white. |
-| **Phase Scope** | A goniometer: left against right, rotated so mono stands upright. Needs two channels; on a mono source it says **MONO SOURCE** rather than drawing the straight line one produces. |
-| **Stereo Cloud** | Where each frequency sits in the stereo image, accumulated over time. |
+| **Phase Scope** | A goniometer: left against right, rotated so mono stands upright, `L`, `R` and `M` engraved at the axis ends, with balance and correlation riding the frame's edges as markers — correlation in the warning colour below zero. Needs two channels; on a mono source it says **MONO SOURCE** rather than drawing the straight line one produces. |
+| **Stereo Cloud** | Where each frequency sits in the stereo image over the last two seconds: one mark per band per frame, brighter and larger the louder, fading with age, placed at the pan pot's angle. |
 
 Every module that draws against the delivery target splits its bar, arc or area
 at the target and draws the part above in `over`. The split is a clip rather
@@ -200,13 +200,13 @@ Four consequences worth naming, because they are what usually goes wrong:
 | Module | Technique |
 |---|---|
 | Number box, LUFS, Alert, Validator | Cached `ui.Paragraph`, rebuilt on string change only |
-| Digital meter | Batched `drawRect`, one reused `Paint` |
-| VU meter | The whole face redrawn each frame — four `drawArc`s and eleven `drawLine`s, cheaper than caching it and keeping it in step with a resize. The needle is one `Path`, reset and refilled; the scale labels are cached paragraphs, each placed where it clears the boxes already placed |
+| Digital meter | Batched `drawRect` under one cached gradient shader; the segment gaps are one `drawRawPoints` from a buffer rebuilt only on resize |
+| VU meter | The whole face redrawn each frame — a handful of `drawArc`s and `drawLine`s, cheaper than caching it and keeping it in step with a resize. The needle is one `Path`, reset and refilled; the scale labels are cached paragraphs, each placed where it clears the boxes already placed |
 | Spectrum analyzer | `drawRawPoints` over the native `Float32List` — C writes screen-space x,y directly. The drawn level is a one-pole average at the time constant `Response` names, plus the offset `Tilt` names; the line above it is that curve's envelope on the same pole |
-| Phase scope | The last forty frames of samples in a ring, one `drawRawPoints` each at its age's brightness. The trail is the frames, not a faded picture |
-| Stereo cloud | A decayed accumulator per two-pixel cell, emitted as points sorted into brightness buckets |
+| Phase scope | The last forty frames of samples in a ring, each drawn as one polyline at its age's brightness. The trail is the frames, not a faded picture |
+| Stereo cloud | A ring of the last 96 frames' hits — band, position, weight — re-emitted every published frame as square-capped points under a 45° rotation, which draws them as diamonds, sorted into brightness buckets whose paints also size them |
 | Spectrogram | One byte of palette step per cell as the record, plus an RGBA buffer shifted a column per published frame and uploaded as a pixel-backed `ui.Image` for a single `drawImageRect`. Bounded by the module's area, whatever the signal does. A skin or `Colour` change re-renders the buffer from the record, moving no cell |
-| Histogram | Ten columns a second into a fixed ring of loudness values, redrawn whole as three `drawRawPoints`. Kept as measurements rather than pixels, so it survives a resize, and raw, with `Smoothing` applied on the way out, so the setting redraws the whole programme |
+| Histogram | Ten columns a second into a fixed ring of loudness values, redrawn whole as a handful of `drawRawPoints` — the momentary band bucketed by how far over target each column stands. Kept as measurements rather than pixels, so it survives a resize, and raw, with `Smoothing` applied on the way out, so the setting redraws the whole programme |
 | Loudness distribution | The engine's 120 bins as one-pixel columns that tile exactly, over an axis fitted to every occupied bin, the gated range and the target, rounded to whole ticks and left alone until the distribution outgrows it, so the scale never slides while it is being read. One `drawRawPoints` for the fill and one for the top edge, each clipped twice so either side of the target takes its own colour |
 
 ---
@@ -302,6 +302,32 @@ Super Meter and beside `LUFS-I` and true peak max on the other, which is, by
 process.audio's own description, this pair. It is not documented as one, so
 nothing here claims to match its ballistics or its rounding; the numbers are
 published under their own name and checked against arithmetic instead.
+
+And what a reading *means*. Normalise a master to a target and its true peak
+lands at the target plus its ODR-I — exactly — so under −14 LUFS and a −1 dBTP
+ceiling, **13 LU** is the most a platform can play at its own level: below it
+the master was limited harder than anyone asked and gets turned down, above it
+the platform cannot lift it without clipping and it plays quieter by the
+excess, transients intact. The bands are the specification's
+[Annex A](docs/ODR.md#annex-a--reading-the-numbers-informative), informative
+and kept apart from the definition on purpose. The anchors are arithmetic on
+published delivery levels; the names are editorial, and genre-dependent in a
+way no number can be — 7 LU is a choice in a techno track and a casualty in a
+string quartet.
+
+| ODR-I | Reads as | Anchor |
+|---|---|---|
+| 0 – 5 LU | **Flat.** The limiter's ceiling is the loudness. | 0.0 LU is a full-scale stereo sine |
+| 5 – 8 LU | **Crushed.** The late loudness war. | −6 LUFS at −0.1 dBTP → 5.9 LU |
+| 8 – 10 LU | **Loud.** | −9 LUFS at −0.3 dBTP, a loud CD → 8.7 LU |
+| 10 – 13 LU | **Balanced.** Nothing is lost at −14 LUFS. | −14 LUFS at −1 dBTP → 13.0 LU, the streaming line |
+| 13 – 16 LU | **Dynamic.** Plays below target on −14 platforms, transients intact. | −16 LUFS at −1 dBTP → 15.0 LU |
+| over 16 LU | **Wide.** Ordinary for classical, jazz, film and broadcast. | −23 LUFS at −1 dBTP (EBU R 128) → 22.0 LU |
+
+The text report prints the band's name after ODR-I. Overcompression lives in
+the *minimum* ODR-S rather than in ODR-I, and the one published floor for it is
+8 LU in the loudest passage, any genre — the number the **Dynamic master**
+target carries.
 
 A quantity this build does not measure is **NaN**, never zero — zero is a
 legitimate reading for correlation, balance and several dB quantities, so it
@@ -483,18 +509,23 @@ API left — and as properties of the document they also survive a save, which t
 switches they replaced did not.
 
 Delivery targets ship as **data**, not code, so the set can be corrected and
-extended without a release. Six are built in: **Streaming (−14 LUFS)** — Spotify,
+extended without a release. Seven are built in: **Streaming (−14 LUFS)** — Spotify,
 Apple Music, YouTube, Amazon and Tidal all normalise to about the same place, so
 one target with their names in its note beats five identical entries — plus
-**Spotify Loud**, **Podcast (−16 LUFS)**, **EBU R 128**, **ATSC A/85** and
-**CD / no normalisation**. Anything else is a JSON file you write; see
+**Spotify Loud**, **Podcast (−16 LUFS)**, **EBU R 128**, **ATSC A/85**,
+**CD / no normalisation**, and **Dynamic master**, the one built-in that is a
+recommendation rather than a platform: the streaming target's loudness and peak
+lines with a floor of 8 LU on the minimum ODR-S, Ian Shepherd's published
+number for the loudest passage in any genre
+([ODR Annex A](docs/ODR.md#annex-a--reading-the-numbers-informative)).
+Anything else is a JSON file you write; see
 [Configuration](#-configuration). A target names a loudness with a tolerance,
-a true peak ceiling and an LRA ceiling, and may name a **ODR-I floor** and a
+a true peak ceiling and an LRA ceiling, and may name an **ODR-I floor** and an
 **ODR-S floor** — the two limits that run the other way, and the ones no platform
-publishes, so none of the six carries either and a house standard that wants
-one writes `odr_i_min` or `odr_s_min` into its file. **Reset**, beside Edit in
-Settings, deletes
-every target you wrote and puts those six back, which is also how a correction
+publishes: of the built-ins only Dynamic master carries one, and a house
+standard that wants its own writes `odr_i_min` or `odr_s_min` into its file.
+**Reset**, beside Edit in Settings, deletes
+every target you wrote and puts those seven back, which is also how a correction
 to a built-in is undone, since a correction *is* a file shadowing it. It asks
 first, and says how many files went.
 

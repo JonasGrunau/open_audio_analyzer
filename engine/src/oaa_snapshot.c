@@ -111,3 +111,43 @@ const float *oaa_snapshot_scope(const oaa_snapshot *snapshot) {
 const float *oaa_snapshot_histogram(const oaa_snapshot *snapshot) {
   return snapshot == NULL ? NULL : snapshot->histogram;
 }
+
+const float *oaa_snapshot_spectrum_of(const oaa_snapshot *snapshot,
+                                      int32_t source) {
+  if (snapshot == NULL) {
+    return NULL;
+  }
+  switch ((oaa_spectrum_source)source) {
+  case OAA_SPECTRUM_ALL:
+    return snapshot->spectrum;
+  case OAA_SPECTRUM_LEFT:
+    return snapshot->spectrum_left;
+  case OAA_SPECTRUM_RIGHT:
+    return snapshot->spectrum_right;
+  case OAA_SPECTRUM_MID:
+    return snapshot->spectrum_mid;
+  case OAA_SPECTRUM_SIDE:
+    return snapshot->spectrum_side;
+  }
+  return NULL;
+}
+
+const float *oaa_snapshot_spectrum_peak_of(const oaa_snapshot *snapshot,
+                                           int32_t source) {
+  if (snapshot == NULL) {
+    return NULL;
+  }
+  switch ((oaa_spectrum_source)source) {
+  case OAA_SPECTRUM_ALL:
+    return snapshot->spectrum_peak;
+  case OAA_SPECTRUM_LEFT:
+    return snapshot->spectrum_left_peak;
+  case OAA_SPECTRUM_RIGHT:
+    return snapshot->spectrum_right_peak;
+  case OAA_SPECTRUM_MID:
+    return snapshot->spectrum_mid_peak;
+  case OAA_SPECTRUM_SIDE:
+    return snapshot->spectrum_side_peak;
+  }
+  return NULL;
+}

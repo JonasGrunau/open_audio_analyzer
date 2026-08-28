@@ -100,11 +100,11 @@ external ffi.Pointer<oaa_snapshot> oaa_snapshot_buffer(
 ///
 /// This is the only function called every frame, so it is the only one whose
 /// cost is worth arguing about. It is a seqlock read: an atomic load, a memcpy
-/// of the snapshot — about 15 kB, most of it the scope and the spectrum — and a
-/// second atomic load to confirm no writer intervened. It never blocks the
-/// analysis thread and it never waits on a mutex.
+/// of the snapshot — about 31 kB, most of it the five spectrum sets and the
+/// scope — and a second atomic load to confirm no writer intervened. It never
+/// blocks the analysis thread and it never waits on a mutex.
 ///
-/// Fifteen kilobytes at 120 fps is under 2 MB/s and roughly a microsecond a
+/// Thirty-one kilobytes at 120 fps is under 4 MB/s and a few microseconds a
 /// frame, which is the argument for copying the whole thing rather than growing
 /// a second, narrower path for the modules that only want one number. Two ways
 /// to read a measurement is two ways for them to disagree.
@@ -198,6 +198,25 @@ external ffi.Pointer<ffi.Float> oaa_snapshot_scope(
 @ffi.Native<ffi.Pointer<ffi.Float> Function(ffi.Pointer<oaa_snapshot>)>()
 external ffi.Pointer<ffi.Float> oaa_snapshot_histogram(
   ffi.Pointer<oaa_snapshot> snapshot,
+);
+
+/// `spectrum` and `spectrum_peak` for one signal — see `spectrum_left` and its
+/// siblings in the struct. OAA_SPECTRUM_ALL returns the combined pair the two
+/// accessors above return; a value outside the enum returns NULL.
+@ffi.Native<
+  ffi.Pointer<ffi.Float> Function(ffi.Pointer<oaa_snapshot>, ffi.Int32)
+>()
+external ffi.Pointer<ffi.Float> oaa_snapshot_spectrum_of(
+  ffi.Pointer<oaa_snapshot> snapshot,
+  int source,
+);
+
+@ffi.Native<
+  ffi.Pointer<ffi.Float> Function(ffi.Pointer<oaa_snapshot>, ffi.Int32)
+>()
+external ffi.Pointer<ffi.Float> oaa_snapshot_spectrum_peak_of(
+  ffi.Pointer<oaa_snapshot> snapshot,
+  int source,
 );
 
 /// Opens `path`, a UTF-8 filename, and identifies its format. Returns NULL if
@@ -521,6 +540,72 @@ final class oaa_snapshot extends ffi.Struct {
   /// exists.
   @ffi.Array.multi([120])
   external ffi.Array<ffi.Float> histogram;
+
+  /// --- Appended in ABI 6 ------------------------------------------------- */
+  /// /* `spectrum` as measured on each of the four signals a stereo pair can be
+  /// read as: channels 0 and 1 of the front pair, their mid `(L + R) / 2` and
+  /// their side `(L - R) / 2` — each with the peak hold `spectrum_peak`
+  /// describes, held per signal because a side band's transient is not the
+  /// mix's. Same bands, same rule per band, same floor as `spectrum`, whose
+  /// combined fold is what a source setting of OAA_SPECTRUM_ALL reads.
+  ///
+  /// **NaN throughout for a signal this source cannot make** — the right, mid
+  /// and side of a one-channel engine. Not the floor: the floor is silence,
+  /// which is a measurement, and these are the absence of one. A consumer
+  /// draws them the way it draws a spectrum under OAA_FLAG_SPECTRUM_UNAVAILABLE.
+  ///
+  /// Left and right are folded from the per-channel transforms the pan already
+  /// needed; mid and side are two more transforms per hop, because `|L + R|^2`
+  /// carries a cross term that per-channel power has thrown away.
+  @ffi.Array.multi([512])
+  external ffi.Array<ffi.Float> spectrum_left;
+
+  @ffi.Array.multi([512])
+  external ffi.Array<ffi.Float> spectrum_left_peak;
+
+  @ffi.Array.multi([512])
+  external ffi.Array<ffi.Float> spectrum_right;
+
+  @ffi.Array.multi([512])
+  external ffi.Array<ffi.Float> spectrum_right_peak;
+
+  @ffi.Array.multi([512])
+  external ffi.Array<ffi.Float> spectrum_mid;
+
+  @ffi.Array.multi([512])
+  external ffi.Array<ffi.Float> spectrum_mid_peak;
+
+  @ffi.Array.multi([512])
+  external ffi.Array<ffi.Float> spectrum_side;
+
+  @ffi.Array.multi([512])
+  external ffi.Array<ffi.Float> spectrum_side_peak;
+}
+
+/// Which signal a spectrum is read from — the argument to
+/// oaa_snapshot_spectrum_of() and oaa_snapshot_spectrum_peak_of(), carried as
+/// an int32_t the way `oaa_source_kind` is, because the width of an enum is
+/// the compiler's choice and the ABI must not depend on one. ALL is the
+/// combined fold `spectrum` carries; the other four name the arrays appended
+/// in ABI 6, in the order they were appended.
+enum oaa_spectrum_source {
+  OAA_SPECTRUM_ALL(0),
+  OAA_SPECTRUM_LEFT(1),
+  OAA_SPECTRUM_RIGHT(2),
+  OAA_SPECTRUM_MID(3),
+  OAA_SPECTRUM_SIDE(4);
+
+  final int value;
+  const oaa_spectrum_source(this.value);
+
+  static oaa_spectrum_source fromValue(int value) => switch (value) {
+    0 => OAA_SPECTRUM_ALL,
+    1 => OAA_SPECTRUM_LEFT,
+    2 => OAA_SPECTRUM_RIGHT,
+    3 => OAA_SPECTRUM_MID,
+    4 => OAA_SPECTRUM_SIDE,
+    _ => throw ArgumentError('Unknown value for oaa_spectrum_source: $value'),
+  };
 }
 
 final class oaa_device_info extends ffi.Struct {
@@ -669,7 +754,7 @@ final class oaa_file_info extends ffi.Struct {
 
 final class oaa_file extends ffi.Opaque {}
 
-const int OAA_ABI_VERSION = 5;
+const int OAA_ABI_VERSION = 6;
 
 const int OAA_MAX_CHANNELS = 8;
 

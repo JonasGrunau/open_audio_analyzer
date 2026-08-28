@@ -8,10 +8,10 @@ exactly once.
 | `src/tokens.dart` | `Space`, `OaaControl`, `OaaRadius`, `OaaStroke`, `OaaColors`, `OaaType`. |
 | `src/theme.dart` | `OaaTheme` (an `InheritedWidget`) and a derived Material theme. |
 | `src/module_frame.dart` | `ModuleFrame` — the chrome all fourteen modules sit inside. |
-| `src/meter_painter.dart` | The base every module painter extends. It exists to make `hitTest` return false; see the rules below. |
+| `src/meter_painter.dart` | The base every module painter extends — it exists to make `hitTest` return false; see the rules below. Also `MeterFill`, the one gradient every filled meter body is painted with, anchored at the reading's tip without allocating on the frame path. |
 | `src/readout.dart` | `ReadoutPainter` (cached paragraph layout) and `ReadingState`. |
 | `src/text_cache.dart` | `layoutParagraph` for static labels and `ValueParagraph` for changing ones — the cache that re-lays out only when a *formatted string* differs. |
-| `src/scale.dart` | `MeterScale` and `ScaleGraticule`. Five modules draw a dB scale, and two side by side whose ticks disagree look like a rendering bug. |
+| `src/scale.dart` | `MeterScale` and `ScaleGraticule`, plus the shared frequency-label series `kHzGrid` and `fitHzLabels`, the one rule the three frequency axes label by — every value that fits, 100 Hz, 1 kHz and 10 kHz first. The level scale is tapered — the filled fraction is `10^(dB/60)`, −∞ is the floor — and five modules draw it; two side by side whose ticks disagree look like a rendering bug. |
 | `src/color_ramp.dart` | What `ColorRamp` paints, and the one place the argument for it is written down: colour carries whatever a module's axes do not. The spectrogram's level ramp — the skin's, or the rainbow — and the oscilloscope's three-band mix, where red, green and blue *are* the bass, the mids and the highs. |
 | `src/grid_geometry.dart` | Grid cells to pixels. The one place the 24×16 canvas becomes a rectangle. |
 | `src/point_buckets.dart` | Marks sorted by the colour they are drawn in, so a display of tens of thousands of them is a few dozen `drawRawPoints` calls. Behind the stereo cloud; the spectrogram drew through it too until real material's run counts outgrew it. |

@@ -111,6 +111,12 @@ class _Fake implements MeterSource {
   Float32List get spectrum => _spectrum;
   @override
   Float32List get spectrumPeak => _spectrum;
+
+  @override
+  Float32List spectrumOf(SpectrumSource source) => spectrum;
+
+  @override
+  Float32List spectrumPeakOf(SpectrumSource source) => spectrumPeak;
   @override
   Float32List get scope => _scope;
   @override
@@ -313,7 +319,10 @@ void main() {
       final middle = await shot(tester, ColorRamp.rgb, db: -40);
       final loud = await shot(tester, ColorRamp.rgb, db: -16);
       const at = _width - 2;
-      final row = _height ~/ 2;
+      // Not the middle of the module: the 1 kHz gridline of the spectrogram's
+      // new frequency axis lands there, and a hairline over the field mutes
+      // the very hue being asserted.
+      const row = 40;
 
       expect(
         _isBlue(quiet, at, row),
@@ -339,7 +348,10 @@ void main() {
       // a colour saying what the y axis has already said.
       final pixels = await shot(tester, ColorRamp.rgb, db: -40);
       const at = _width - 2;
-      for (final row in [4, _height ~/ 4, _height ~/ 2, _height - 5]) {
+      // Rows spread over the plot, dodging what is not field: the time band
+      // along the top and the 10k / 1k / 100 Hz gridlines of the frequency
+      // axis, which mute the hue where they cross.
+      for (final row in [18, 40, 75, 112]) {
         expect(
           _isGreen(pixels, at, row),
           isTrue,
@@ -353,13 +365,15 @@ void main() {
     ) async {
       // The left of the display is what the module has not measured yet, and it
       // has to be the same colour as the background painted under it, or there
-      // is a seam down the picture where one becomes the other.
+      // is a seam down the picture where one becomes the other. Sampled inside
+      // the plot — x 0 is the frequency axis's gutter now — and clear of the
+      // gridlines, which are deliberately drawn over the field.
       final pixels = await shot(tester, ColorRamp.rgb);
       final ground = ColorRamp.rgb.groundOf(_colors);
-      expect(_isInk(pixels, 0, _height ~/ 2), isFalse);
-      expect(_r(pixels, 0, _height ~/ 2), (ground.r * 255).round());
-      expect(_g(pixels, 0, _height ~/ 2), (ground.g * 255).round());
-      expect(_b(pixels, 0, _height ~/ 2), (ground.b * 255).round());
+      expect(_isInk(pixels, 40, 55), isFalse);
+      expect(_r(pixels, 40, 55), (ground.r * 255).round());
+      expect(_g(pixels, 40, 55), (ground.g * 255).round());
+      expect(_b(pixels, 40, 55), (ground.b * 255).round());
     });
   });
 

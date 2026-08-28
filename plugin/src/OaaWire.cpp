@@ -106,6 +106,19 @@ void writeSnapshotFrame(std::vector<uint8_t>& out, const oaa_snapshot& s,
   w.unitArray(s.spectrum_pan, kBands);
   w.fractionArray(s.histogram, kHistogram);
 
+  /* Version 5: the per-source spectra, in the engine's order, each followed by
+   * its hold. A source this signal cannot provide — the right, mid or side of
+   * one channel — is NaN band for band and travels as the reserved code, so
+   * a display asked for it says "not measured" rather than drawing silence. */
+  w.dbArray(s.spectrum_left, kBands);
+  w.dbArray(s.spectrum_left_peak, kBands);
+  w.dbArray(s.spectrum_right, kBands);
+  w.dbArray(s.spectrum_right_peak, kBands);
+  w.dbArray(s.spectrum_mid, kBands);
+  w.dbArray(s.spectrum_mid_peak, kBands);
+  w.dbArray(s.spectrum_side, kBands);
+  w.dbArray(s.spectrum_side_peak, kBands);
+
   /* Last, and length-prefixed. A plugin always sends exactly one block. */
   w.u32(static_cast<uint32_t>(kScopeFrames));
   w.sampleArray(s.scope, kScope);

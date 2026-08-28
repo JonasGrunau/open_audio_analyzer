@@ -1,9 +1,30 @@
 # The Open Audio Analyzer wire protocol
 
-**Protocol version 4.** This document is normative. Where an implementation and
+**Protocol version 5.** This document is normative. Where an implementation and
 this file disagree, this file is right and the implementation has a bug.
 
-**Version 4 is the first version to change a measurement table**, and it is the
+**Version 5 grows the snapshot table**: the engine's per-source spectra —
+`spectrum_left`, `spectrum_right`, `spectrum_mid`, `spectrum_side`, each with
+its peak hold — ride between `histogram` and the scope run, in the encoding
+`spectrum` already uses, which takes the one-block payload from 7,652 bytes to
+**15,844**. They are what lets a display's Spectrum Analyzer and Spectrogram
+read a `Source` other than the combined bands. The setting is a module option
+and travels in `0x0002 LAYOUT` like every other, so the display port stays
+one-directional: nothing new is asked of a display, and nothing new may be
+asked *by* one. A source the producer cannot measure — the right, mid and side
+of a one-channel signal, or all four from a producer older than this version —
+is NaN band for band, which the fixed-point encoding reserves a code for. See
+[the version 5 snapshot table](#the-version-5-snapshot-table).
+
+**A version-5 consumer still reads the version 4 table and the version 1–3
+table, and must** — a plugin installed under either outlives the app upgrade —
+and it chooses the table **by the frame's version, never by its length**,
+because a version-4 frame carrying a long enough scope run is exactly as long
+as a version-5 one. A version-4 *consumer* meeting a version-5 producer refuses
+at the handshake, on the payload size, which is the designed behaviour and
+produces a sentence naming both numbers.
+
+**Version 4 was the first version to change a measurement table**, and the
 first that a version-3 consumer cannot read. The five arrays a module *plots* —
 `spectrum`, `spectrum_peak`, `spectrum_pan`, `scope`, `histogram` — are
 fixed point rather than `float32`, which takes the snapshot payload from 15,056
@@ -21,8 +42,8 @@ cannot otherwise send a contiguous waveform — see
 
 A version-4 consumer still reads the version 1–3 table, and must: see
 [Version compatibility](#version-compatibility). A version-3 *consumer* meeting
-a version-4 producer refuses at the handshake, on the payload size, which is
-the designed behaviour and produces a sentence naming both numbers.
+a version-4 producer refuses at the handshake, on the payload size, for the
+same reason a version-4 one refuses a version-5 producer.
 
 Version 2 differed from version 1 in one field: the magic, which spells the
 application's name and moved when the name did. Every other table was the
@@ -56,7 +77,7 @@ the layout to draw them in** — never audio, never control.
 
 **The display port is deliberately one-directional.** A remote display cannot
 reset the host's integrated loudness, cannot change its device and cannot load a
-preset on it, in version 4 exactly as in versions 2 and 3. That is not an omission to
+preset on it, in version 5 exactly as in versions 2 to 4. That is not an omission to
 be filled in later without thought: a read-only stream has no attack surface
 beyond the measurements it already publishes, and adding a control channel there
 is the change that turns "a screen in the live room shows the mix engineer's
@@ -139,7 +160,7 @@ picture that looks slightly wrong.
 | off | type | field |
 |---|---|---|
 | 0 | `u8[4]` | magic, the ASCII bytes `O`, `A`, `A`, `W` |
-| 4 | `u16` | protocol version, currently `3` |
+| 4 | `u16` | protocol version, currently `5` |
 | 6 | `u16` | frame type |
 | 8 | `u32` | payload length in bytes |
 | 12 | … | payload |
@@ -151,9 +172,9 @@ not understand cost it a `seek` and nothing else.
 
 **A payload longer than 1 MiB is rejected and the connection is dropped.** A
 length field is an instruction to allocate, and a corrupt or hostile one that
-says four gigabytes must not be obeyed. Nothing in version 4 comes close to the
-cap; the largest legitimate frame is a snapshot at 19,952 bytes — a full 4,096-
-pair scope run — and 7,664 in the ordinary one-block case.
+says four gigabytes must not be obeyed. Nothing in version 5 comes close to the
+cap; the largest legitimate frame is a snapshot at 28,144 bytes — a full 4,096-
+pair scope run — and 15,856 in the ordinary one-block case.
 
 ### Version compatibility
 
@@ -162,8 +183,14 @@ Concretely: a frame whose version is greater than the receiver's own is refused
 and the connection dropped, because a higher version may have moved a table the
 receiver would then misread. A frame whose version is *lower* is accepted, and
 decoded with that version's tables — which for 2 against 3 are the same tables,
-and for 1–3 against 4 are the frozen table in
-[the version 1–3 snapshot](#the-version-13-snapshot-table).
+for 1–3 against 4 or 5 the frozen table in
+[the version 1–3 snapshot](#the-version-13-snapshot-table), and for 4 against 5
+the frozen [version 4 table](#the-version-4-snapshot-table). **The version
+in the frame header is what selects the table.** Two of the three shapes
+overlap in length — a version-4 relay frame of 2,048 or more stereo pairs is as
+long as some version-5 frame, and 15,056 is a legal length at every version —
+so a receiver that dispatched on the length would, sooner or later, read a
+scope run as a spectrum and draw it.
 
 This replaces the equality check versions 1 and 2 used, and it is a change to
 the framing rules rather than to any byte layout. Equality was survivable while
@@ -283,16 +310,19 @@ two is going to be believed.
 
 ### `0x0003` — SNAPSHOT
 
-**Payload is `3,556 + 4 x scope_frames` bytes at protocol version 4** — 7,652
-for the one analysis block every measuring producer sends — and was exactly
-15,056 at versions 1 to 3. A consumer must accept both shapes and decode each
-with its own table; a producer writes only its own version's.
+**Payload is `11,748 + 4 x scope_frames` bytes at protocol version 5** —
+15,844 for the one analysis block every measuring producer sends. It was
+`3,556 + 4 x scope_frames` at version 4 — 7,652 for one block — and exactly
+15,056 at versions 1 to 3. A consumer must accept all three shapes and decode
+each with its own table, chosen by the frame's version; a producer writes only
+its own version's.
 
-A payload that is neither 15,056 nor `3,556 + 4n` for some `0 <= n <= 4096` is
-refused, and so is one whose `scope_frames` disagrees with its length. The
-length and the count are two statements of the same fact and a receiver must not
-pick one: reading past the payload draws whatever the previous frame left
-there.
+A payload whose length is not the one its version sends — `11,748 + 4n` at
+version 5, `3,556 + 4n` at version 4, for some `0 <= n <= 4096`, and 15,056
+below that — is refused, and so is one whose `scope_frames` disagrees with its
+length. The length and the count are two statements of the same fact and a
+receiver must not pick one: reading past the payload draws whatever the
+previous frame left there.
 
 The version 1–3 layout was *derived* mechanically, so that two hand-written
 serialisers could not drift: take `oaa_snapshot` from `engine/include/oaa/oaa.h`
@@ -310,11 +340,12 @@ silently break every remote display in the field, and it would break them by
 drawing wrong numbers rather than by failing.
 
 **Version 4 ends the coincidence that made a struct copy possible at all.** The
-five plotted arrays are two bytes an element on the wire and four in the struct,
-so a producer must walk the fields. Field *order* is unchanged; every offset
-after `clip` moved.
+plotted arrays are two bytes an element on the wire and four in the struct, so
+a producer must walk the fields. Field *order* is unchanged from the struct's;
+every offset after `clip` moved at version 4, and version 5's eight arrays
+moved the scope count and run again.
 
-#### The version 4 snapshot table
+#### The version 5 snapshot table
 
 | off | type | field | | off | type | field |
 |---|---|---|---|---|---|---|
@@ -332,12 +363,41 @@ after `clip` moved.
 | 52 | `f32` | `true_peak_max` | | 2284 | `f32` | `reserved3` |
 | 56 | `f32` | `sample_peak_max` | | 2288 | `i16[512]` | `spectrum_pan` |
 | 60 | `f32` | `reserved1` | | 3312 | `u16[120]` | `histogram` |
-| 64 | `f32` | `dr_short` | | 3552 | `u32` | `scope_frames` |
-| 68 | `f32` | `dr_integrated` | | 3556 | `i16[2n]` | `scope` |
-| 72 | `f32` | `crest` | | | | |
-| 76 | `f32` | `plr` | | **3556+4n** | | **total** |
-| 80 | `f32` | `psr` | | | | |
-| 84 | `f32` | `reserved2` | | | | |
+| 64 | `f32` | `dr_short` | | 3552 | `u16[512]` | `spectrum_left` |
+| 68 | `f32` | `dr_integrated` | | 4576 | `u16[512]` | `spectrum_left_peak` |
+| 72 | `f32` | `crest` | | 5600 | `u16[512]` | `spectrum_right` |
+| 76 | `f32` | `plr` | | 6624 | `u16[512]` | `spectrum_right_peak` |
+| 80 | `f32` | `psr` | | 7648 | `u16[512]` | `spectrum_mid` |
+| 84 | `f32` | `reserved2` | | 8672 | `u16[512]` | `spectrum_mid_peak` |
+| | | | | 9696 | `u16[512]` | `spectrum_side` |
+| | | | | 10720 | `u16[512]` | `spectrum_side_peak` |
+| | | | | 11744 | `u32` | `scope_frames` |
+| | | | | 11748 | `i16[2n]` | `scope` |
+| | | | | | | |
+| | | | | **11748+4n** | | **total** |
+
+The eight per-source arrays are the front pair's left and right channels and
+their mid `(L + R) / 2` and side `(L − R) / 2`, each folded onto the same 512
+display bands by the same rule as `spectrum`, and each followed by its own peak
+hold on the same schedule as `spectrum_peak`. The combined `spectrum` stays
+what it was — the loudest bin across every channel — so a version-5 frame read
+by a module that never asks for a source draws exactly what a version-4 frame
+drew. On a one-channel signal `spectrum_left` equals `spectrum` band for band
+and the other six arrays are the NaN code throughout: not measured, which is
+not the same statement as silent.
+
+#### The version 4 snapshot table
+
+Frozen. A version-5 consumer decodes a frame stamped version 4 with this
+table. It is the table above without the eight per-source arrays, so the scope
+count and the run sit 8,192 bytes earlier; the per-source spectra of such a
+producer are reported as NaN throughout.
+
+| off | type | field | | off | type | field |
+|---|---|---|---|---|---|---|
+| 0–3551 | | *identical to the table above* | | 3552 | `u32` | `scope_frames` |
+| | | | | 3556 | `i16[2n]` | `scope` |
+| | | | | **3556+4n** | | **total** |
 
 #### The scope run
 
@@ -371,8 +431,8 @@ still compare a single integer.
 
 #### The version 1–3 snapshot table
 
-Frozen. A version-4 consumer decodes a producer that announces 15,056 bytes with
-this table, which is what keeps a plugin working across an app upgrade.
+Frozen. A version-4 or version-5 consumer decodes a frame stamped 3 or lower
+with this table, which is what keeps a plugin working across an app upgrade.
 
 | off | type | field | | off | type | field |
 |---|---|---|---|---|---|---|
@@ -388,18 +448,20 @@ padding on every platform Open Audio Analyzer targets, so a C or C++ producer
 could `memcpy` the struct behind
 `static_assert(sizeof(oaa_snapshot) == 15056)`. **That is no longer true at
 version 4** and the assert in `plugin/src/OaaWire.h` is now a tripwire on the
-struct rather than a licence to copy it.
+struct rather than a licence to copy it — against 31,440 since ABI 6 appended
+the per-source spectra, which is not a wire size at any version.
 
 #### Fixed point: the arrays that are only ever drawn
 
 **The rule is narrow: a number a person reads stays exact.** Every scalar, and
-`peak`, `rms`, `vu` and `clip`, are `float32` at version 4 exactly as before —
-those are what a delivery decision is made from, and they are 128 bytes. The
-five quantised arrays are never displayed as numbers; they become pixels.
+`peak`, `rms`, `vu` and `clip`, are `float32` at versions 4 and 5 exactly as
+before — those are what a delivery decision is made from, and they are 128
+bytes. The quantised arrays are never displayed as numbers; they become pixels.
 
 | array | code | encoding | resolution |
 |---|---|---|---|
 | `spectrum`, `spectrum_peak` | `u16` | `round((dB + 160) * 256)`, clamped to `0..0xFFFE` | 1/256 dB |
+| the eight `spectrum_<source>` and `spectrum_<source>_peak` arrays (v5) | `u16` | as `spectrum` | 1/256 dB |
 | `spectrum_pan` | `i16` | `round(v * 32767)`, clamped to `±32767` | 3.1e-5 |
 | `scope` | `i16` | Q1.14: `round(v * 16384)`, clamped to `±32767` | 6.1e-5, range ±1.9999 |
 | `histogram` | `u16` | `round(v * 0xFFFE)`, clamped to `0..0xFFFE` | 1.5e-5 |

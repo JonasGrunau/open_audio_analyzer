@@ -11,6 +11,15 @@ import '../data/metric_reader.dart';
 
 /// Displays any single measurement as a number.
 ///
+/// The body carries the metric's own name above the reading, so the box says
+/// what it is showing without the frame's help — six Number Boxes on one tab
+/// are six different measurements, and a reader should not have to travel to
+/// six title bars to keep them apart. Under everything sits a low glow rising
+/// from the bottom edge in the reading's verdict colour: present and calm in
+/// the accent while the reading is in spec or judged by nothing, and turning
+/// with the verdict when the reading stands past its limit — a statement the
+/// eye catches from across a room before the digits resolve.
+///
 /// The simplest of the fourteen modules, and therefore the one that establishes
 /// the pattern all the others follow:
 ///
@@ -96,6 +105,29 @@ class _NumberBoxPainter extends MeterPainter {
   final OaaColors colors;
   final ReadoutPainter readout;
 
+  /// The bottom glow, rebuilt only when the module resizes or the verdict
+  /// changes colour — which happens when a reading crosses its limit, not per
+  /// frame. The same bargain every cached shader in the application makes.
+  final Paint _glowPaint = Paint();
+  ui.Shader? _glow;
+  Size? _glowSize;
+  Color? _glowColor;
+
+  void _prepareGlow(Size size, Color color) {
+    if (_glow != null && _glowSize == size && _glowColor == color) return;
+    _glowSize = size;
+    _glowColor = color;
+    final radius = size.width * 0.75;
+    // Anchored below the bottom edge so only the crown of the circle reaches
+    // into the module: a glow, not a spotlight.
+    _glow = ui.Gradient.radial(
+      Offset(size.width / 2, size.height + radius * 0.3),
+      radius,
+      [color.withValues(alpha: 0.28), color.withValues(alpha: 0.0)],
+    );
+    _glowPaint.shader = _glow;
+  }
+
   @override
   void paint(Canvas canvas, Size size) {
     // No size guard here. Below `ModuleKind.numberBox.minBodyHeight` the frame
@@ -106,9 +138,23 @@ class _NumberBoxPainter extends MeterPainter {
     final state = classify(metric, value, calibration);
     final color = colorForState(state, colors);
 
+    // The glow is always present — a box with no verdict glows in the accent,
+    // because the glow is part of what a Number Box looks like and a box that
+    // only lit up on a target would read as broken until one was set. Only a
+    // reading past a limit changes its colour.
+    if (size.width > 0) {
+      final glowColor = switch (state) {
+        ReadingState.over => colors.over,
+        ReadingState.warn => colors.warn,
+        _ => colors.accent,
+      };
+      _prepareGlow(size, glowColor);
+      canvas.drawRect(Offset.zero & size, _glowPaint);
+    }
+
     // Scale the number to the box rather than fixing it, so a Number Box works
     // both as a two-cell chip and as the one big readout on a tab.
-    final fontSize = (size.height * 0.62).clamp(14.0, 72.0);
+    final fontSize = (size.height * 0.52).clamp(14.0, 72.0);
 
     final valueParagraph = readout.value(
       metric.format(value),
@@ -120,7 +166,31 @@ class _NumberBoxPainter extends MeterPainter {
     final unitText = metric.unit;
     final hasUnit = unitText.isNotEmpty && state != ReadingState.unavailable;
 
-    final top = (size.height - valueParagraph.height) / 2;
+    // The metric's name above the reading, and the pair centred as one block.
+    // On a module too short to carry both, the name is the one that yields —
+    // the frame still says which meter this is; the reading has no understudy.
+    final labelParagraph = readout.label(
+      metric.label,
+      colors.textMuted,
+      size.width,
+    );
+    final blockHeight =
+        labelParagraph.height + Space.xs + valueParagraph.height;
+    final showLabel = blockHeight <= size.height;
+
+    final top = showLabel
+        ? (size.height - blockHeight) / 2 + labelParagraph.height + Space.xs
+        : (size.height - valueParagraph.height) / 2;
+
+    if (showLabel) {
+      canvas.drawParagraph(
+        labelParagraph,
+        Offset(
+          (size.width - labelParagraph.longestLine) / 2,
+          (size.height - blockHeight) / 2,
+        ),
+      );
+    }
 
     final unitParagraph = hasUnit
         ? readout.unit(unitText, colors.textMuted, size.width)

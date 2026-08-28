@@ -43,14 +43,25 @@ extension ColorRampColors on ColorRamp {
   Color colorAt(double level, OaaColors colors) {
     final at = level.clamp(0.0, 1.0);
     return switch (this) {
-      // Ground to accent to warn. The step at 0.55 is where the accent hue is
-      // reached in full, so the top 45% of the range is the hue somebody
-      // reading this canvas already associates with signal shading into the one
-      // that means "approaching a limit".
+      // Ground to accent to a bright accent tip — one hue, carried by
+      // brightness alone. The ramp used to shade into `warn` at the top, and
+      // that gave the warning colour a second meaning: the loudest cell of a
+      // perfectly healthy mix wore the colour every meter reserves for
+      // "approaching a limit", on a display whose levels are nowhere near one.
+      // Monochrome keeps `warn` and `over` meaning what they mean everywhere
+      // else, and it is what every hardware spectrogram in this instrument's
+      // register draws. The step at 0.55 is where the accent hue is reached in
+      // full; above it the same hue brightens towards the text colour, so a
+      // peak stands off the field without changing what colour it claims to
+      // be.
       ColorRamp.skin =>
         at < 0.55
             ? Color.lerp(colors.panel, colors.accent, at / 0.55)!
-            : Color.lerp(colors.accent, colors.warn, (at - 0.55) / 0.45)!,
+            : Color.lerp(
+                colors.accent,
+                colors.textPrimary,
+                0.7 * (at - 0.55) / 0.45,
+              )!,
       ColorRamp.rgb => _level(at),
     };
   }

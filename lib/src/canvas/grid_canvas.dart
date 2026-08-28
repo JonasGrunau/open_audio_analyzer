@@ -262,7 +262,16 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
       // is: the analyser draws every frame the engine publishes at every
       // setting, and what changes is how long the drawn level takes to follow
       // one. See `SpectrumResponse`.
+      // Which signal the bands are measured on, and it is the first row of
+      // both frequency modules that have one: what is measured comes before
+      // how it is drawn. The same row in the same words on the spectrogram
+      // below, because the two read the same bands. See `SpectrumSource`.
       if (module.kind == ModuleKind.spectrumAnalyzer) ...[
+        oaaMenuItem(
+          context,
+          _ModuleAction.source,
+          'Source: ${module.spectrumSource.label}',
+        ),
         oaaMenuItem(
           context,
           _ModuleAction.response,
@@ -300,12 +309,18 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
       // with it: which colours a level is drawn in. Both modules answer with a
       // hue rather than with a length, so both have the same choice to make and
       // it is spelled the same way in both menus. See `ColorRamp`.
-      if (module.kind == ModuleKind.spectrogram)
+      if (module.kind == ModuleKind.spectrogram) ...[
+        oaaMenuItem(
+          context,
+          _ModuleAction.source,
+          'Source: ${module.spectrumSource.label}',
+        ),
         oaaMenuItem(
           context,
           _ModuleAction.colorRamp,
           'Colour: ${module.colorRamp.label}',
         ),
+      ],
       // The one control the oscilloscope has, and it is two settings in one:
       // it sets how much time the width holds *and*, by doing so, whether
       // the display is triggered or rolls. See `ScopeTimeBase`.
@@ -405,6 +420,8 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
     switch (action) {
       case _ModuleAction.metric:
         await _showMetricMenu(globalPosition, module);
+      case _ModuleAction.source:
+        await _showSourceMenu(globalPosition, module);
       case _ModuleAction.response:
         await _showResponseMenu(globalPosition, module);
       case _ModuleAction.tilt:
@@ -665,6 +682,28 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
     _controller.setModuleOption(module.id, 'trigger', trigger.id);
   }
 
+  Future<void> _showSourceMenu(Offset globalPosition, ModuleSpec module) async {
+    final colors = OaaTheme.of(context);
+    final current = module.spectrumSource;
+    final source = await showMenu<SpectrumSource>(
+      context: context,
+      color: colors.panelRaised,
+      position: menuPositionAt(context, globalPosition),
+      items: [
+        for (final source in SpectrumSource.values)
+          oaaMenuItem(
+            context,
+            source,
+            source.label,
+            selected: source == current,
+          ),
+      ],
+    );
+
+    if (source == null || !mounted) return;
+    _controller.setModuleOption(module.id, 'source', source.id);
+  }
+
   Future<void> _showColorRampMenu(
     Offset globalPosition,
     ModuleSpec module,
@@ -855,6 +894,7 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
 
 enum _ModuleAction {
   metric,
+  source,
   response,
   tilt,
   smoothing,

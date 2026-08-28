@@ -130,12 +130,20 @@ K filter's gain at 1 kHz cancel to nothing — and
 `packages/oaa_engine/test/conformance_test.dart` asserts every case in ODR § 7.
 
 **Where the product shows them.** ODR-S and ODR-I are Number Box and Alert
-Meter metrics; the Super Meter prints ODR-I under its LRA readout; a file
+Meter metrics; the Super Meter draws them as arcs continuing from each
+loudness arc's tip to the true peak — stacked on the same dB scale, so the
+dark rest of the ring is the true peak's headroom — and prints ODR-S in the
+lane inside its arc and ODR-I beside the integrated loudness in its centre; a
+file
 report states ODR-I and the **minimum ODR-S** of the programme (ODR § 4.5), the
 most squeezed three seconds; and a delivery target may set a floor on either,
 `odr_i_min` and `odr_s_min`, each of which is a line of the Validator, the
 report and the `oaa` verdict — the ODR-S line judged against the minimum,
-which the Validator keeps since the last reset. Through 0.14.0 ODR-S read a
+which the Validator keeps since the last reset. The text report prints ODR-I's
+band word after the reading — `(balanced)` — from ODR Annex A, in the human
+format alone, never the JSON; and one built-in target, **Dynamic master**,
+carries the annex's 8 LU floor on the minimum ODR-S, the one built-in that is
+a recommendation rather than a platform. Through 0.14.0 ODR-S read a
 number in silence; see the changelog.
 
 **The name.** Through 0.14.0 the pair was published as `PSR` / `PLR` and again
@@ -148,6 +156,13 @@ Audio Analyzer does not report the TT figure under any name. A Number Box
 saved on `psr`, `plr`, `dr_s` or `dr_i` opens on ODR-S or ODR-I. What ODR is
 and is not, measure by measure — the AES pair, TrueDyn, DR, LRA, crest — is
 ODR § 8.
+
+**What a value means.** High, low, crushed, wide — the interpretation is
+ODR Annex A, informative and kept apart from the definition so the guidance
+can move without the measurement moving. The short version: after a platform
+normalises a master, its true peak lands at the platform's target plus the
+master's ODR-I — so 13 LU is the most a −14 LUFS platform can play at its
+target — and the one published perceptual floor is 8 LU on the minimum ODR-S.
 
 ## Stereo field
 
@@ -167,10 +182,11 @@ rotates that into a hard, perfectly straight vertical line that never moves. It
 is a true picture of a tautology and it is indistinguishable from a display that
 has stuck, which is what the Stereo Cloud's version of it was reported as. Both
 say **MONO SOURCE** across the face instead and leave their graticule drawn. The
-correlation bar under the Phase Scope is drawn as an empty track for the same
-reason: `+1` pinned hard against its right end is the same tautology one row
-lower. The number itself is still measured and still available — a Number Box set
-to `Correlation` prints it, and so does an offline report.
+correlation and balance markers on the Phase Scope's frame are withheld for the
+same reason: a marker pinned at the mono end of its edge is the same tautology
+one stroke over. The numbers themselves are still measured and still available —
+a Number Box set to `Correlation` or `Balance` prints them, and so does an
+offline report.
 
 ## Spectrum
 
@@ -178,7 +194,9 @@ to `Correlation` prints it, and so does an offline report.
 |---|---|---|---|
 | `Spectrum` | dBFS | 512 log-spaced bands from 20 Hz to 20 kHz. A 4096-point Hann window per channel at a 1024-sample hop, zero-padded to a 16384-point transform. A band wide enough to contain bins takes the **loudest bin in the band** rather than their mean, so that a narrow resonance survives the mapping; a band too narrow to contain one reads the transform **between** its two nearest bins. | **now** |
 | `Spectrum peak` | dBFS | Per-band hold, computed in the engine because a transform runs every hop and a publish carries only the last one. | **now** |
-| `Spectrum pan` | — | Per-band stereo position, `−1` hard left to `+1` hard right. What the stereo cloud draws. | **now**, two channels or more |
+| `Spectrum pan` | — | Per-band stereo position, `−1` hard left to `+1` hard right, as the energy balance `(R − L) / (R + L)` of the band's power over the front pair. What the stereo cloud draws — through the pan pot's angle rather than as the balance itself, see below. | **now**, two channels or more |
+| `Spectrum · Left`, `Right` | dBFS | The same bands, folded from one channel of the front pair alone, with the same loudest-bin rule and each with its own `Spectrum peak`. `Left` on a one-channel source is the combined set band for band. | **now**; `Right` two channels or more |
+| `Spectrum · Mid`, `Side` | dBFS | The same bands of `(L + R) / 2` and `(L − R) / 2`, transformed as signals — so a signal identical in both channels reads its full level on Mid and nothing on Side, an anti-phase one the reverse, and a hard-left one −6.02 dB on both. Each with its own `Spectrum peak`. | **now**, two channels or more |
 
 The Spectrum Analyzer **draws** an average of these bands rather than the last
 one published, and says which in its own menu: `Response` is Fast (no
@@ -203,10 +221,19 @@ apart: 20 Hz is drawn 25.4 dB lower than it measures and 20 kHz 19.4 dB higher.
 it**, which is why the module prints the tilt it is drawing at, and why 0 dB/oct
 — where the scale is true everywhere — prints nothing.
 
-The measurement above is untouched by any of it: `Spectrum` and `Spectrum peak`
-are what the wire protocol carries whatever a module is set to, and every other
-module reading these bands — the spectrogram, the stereo cloud — draws them as
-published.
+The measurement above is untouched by any of it: every set of bands and its
+peak is what the wire protocol carries whatever a module is set to, and every
+other module reading these bands — the spectrogram, the stereo cloud — draws
+them as published.
+
+`Source` in the Spectrum Analyzer's and the Spectrogram's menus chooses which
+set: `All` is the combined bands — the loudest bin across every channel, which
+is what both drew before the setting existed and is deliberately not called a
+sum, because it is not one — and `Left`, `Right`, `Mid` and `Side` are the
+sets above. A set the signal cannot provide is not measured, and the module
+says **MONO SOURCE** rather than drawing the one channel twice. The setting is
+part of the module and travels with the layout, so a tablet shows the host's
+choice.
 
 Spectrum pan needs a front pair. A one-channel source reports every band at `0`,
 for the same reason correlation reports `+1` — mono is dead centre, and it is
@@ -214,6 +241,15 @@ true. The stereo cloud does not *draw* that, because a column of centred bands
 is a bright vertical line down the middle of the display and is read as a
 broken module rather than as a mono signal; it says **MONO SOURCE** instead, as
 the Phase Scope does for the same reason — see **Stereo field**.
+
+The stereo cloud places a band at the **pan pot's angle** the balance implies,
+not at the balance itself: `atan2(√R, √L)` over the two channels' shares of
+the band's power, 45° at centre and the edges at 0° and 90°, so a source sits
+where a constant-power pan pot put it and a lean of three decibels is a fifth
+of the way over. The balance is steepest at the centre — three decibels is a
+third of the way to the edge on it, ten nearly hard against it — and drawn on
+that ruler every band of any width swept the plot from side to side. The
+published number is the balance; the ruler is the module's.
 
 Levels are window-compensated: a full-scale sine on a bin centre reads
 0.0 dBFS, and that is asserted on every push. A tone **between** two bin centres

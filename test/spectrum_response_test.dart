@@ -98,6 +98,12 @@ class _Fake implements MeterSource {
   Float32List get spectrumPeak => _spectrumPeak;
 
   @override
+  Float32List spectrumOf(SpectrumSource source) => spectrum;
+
+  @override
+  Float32List spectrumPeakOf(SpectrumSource source) => spectrumPeak;
+
+  @override
   dynamic noSuchMethod(Invocation invocation) => throw UnimplementedError();
 }
 
@@ -311,9 +317,12 @@ void main() {
       reason: 'Normal did not move at all — the fold is not running',
     );
 
-    // Half a second is four time constants. It has to actually get there: a
-    // one-pole that stops short reads low on steady programme forever.
-    for (var i = 0; i < 25; i++) {
+    // Seven-tenths of a second is nearly six time constants. It has to
+    // actually get there: a one-pole that stops short reads low on steady
+    // programme forever. Six rather than four because the tapered scale gives
+    // the top of the range about five pixels per decibel, so the same
+    // two-pixel tolerance is a finer statement in decibels than it used to be.
+    for (var i = 0; i < 35; i++) {
       source.publish(0.02, db: -12);
       await _frame(tester);
     }

@@ -405,6 +405,14 @@ void oaa_analyse(oaa_engine *engine, const float *interleaved,
   /* --- Frequency content and the scope ------------------------------------ */
   oaa_spectrum_read(&engine->spectrum, out->spectrum, out->spectrum_peak,
                     out->spectrum_pan);
+  oaa_spectrum_read_source(&engine->spectrum, OAA_SPECTRUM_LEFT,
+                           out->spectrum_left, out->spectrum_left_peak);
+  oaa_spectrum_read_source(&engine->spectrum, OAA_SPECTRUM_RIGHT,
+                           out->spectrum_right, out->spectrum_right_peak);
+  oaa_spectrum_read_source(&engine->spectrum, OAA_SPECTRUM_MID,
+                           out->spectrum_mid, out->spectrum_mid_peak);
+  oaa_spectrum_read_source(&engine->spectrum, OAA_SPECTRUM_SIDE,
+                           out->spectrum_side, out->spectrum_side_peak);
   oaa_scope_append(out, in, frames, channels);
 
   /* --- Housekeeping ------------------------------------------------------ */

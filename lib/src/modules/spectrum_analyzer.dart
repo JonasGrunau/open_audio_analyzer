@@ -28,11 +28,11 @@ import '../clock/meter_clock.dart';
 /// ---------------------------------------------------------------------------
 /// Why the fill is a shader and not a colour
 ///
-/// The band area is a vertical gradient — bright along the curve, fading to
-/// almost nothing at the floor — which is what stops a spectrum reading as a
-/// solid block of paint and lets the shape of the top edge carry the
-/// information. That would normally want a filled `Path` with a gradient, and
-/// the paragraph above is the reason it cannot have one.
+/// The band area is a vertical gradient — brightest along the curve, the base
+/// colour a little down, still clearly present at the floor — which is what
+/// keeps the top edge the brightest thing in the plot without hollowing the
+/// fill out into an outline. That would normally want a filled `Path` with a
+/// gradient, and the paragraph above is the reason it cannot have one.
 ///
 /// It does not need one. A shader on the `Paint` is evaluated per pixel in
 /// canvas space, so five hundred butt-capped vertical strokes drawn through it
@@ -48,6 +48,7 @@ class SpectrumAnalyzerModule extends StatefulWidget {
   const SpectrumAnalyzerModule({
     required this.engine,
     required this.clock,
+    this.source = SpectrumSource.all,
     this.response = SpectrumResponse.normal,
     this.tilt = SpectrumTilt.db4p5,
     super.key,
@@ -55,6 +56,11 @@ class SpectrumAnalyzerModule extends StatefulWidget {
 
   final MeterSource engine;
   final MeterClock clock;
+
+  /// Which signal the bands are measured on. See [SpectrumSource]. A source
+  /// the measurement cannot make on this signal — the right, mid or side of a
+  /// one-channel input — is drawn as the notice it is, not as silence.
+  final SpectrumSource source;
 
   /// How fast the curve follows what the engine publishes. See
   /// [SpectrumResponse] for why this is a time constant and not a frame rate.
@@ -81,34 +87,15 @@ class SpectrumAnalyzerModule extends StatefulWidget {
 const double _holdSeconds = 1.5;
 const double _fallDbPerSecond = 12;
 
-/// The decade lines a frequency axis is read against.
-const _gridHz = <double>[
-  20,
-  30,
-  50,
-  100,
-  200,
-  300,
-  500,
-  1000,
-  2000,
-  3000,
-  5000,
-  10000,
-  20000,
-];
-
-/// And the ones that get a label, at each of two widths.
-///
-/// Labelling all thirteen turns the graticule into text, and three of them on a
-/// wide analyser leaves the reader counting gridlines to find 200 Hz. Which set
-/// is drawn depends on whether the labels fit with a gap between them, measured
-/// rather than guessed — see `_labelStride`.
-const _labelledHz = <double>[20, 50, 100, 200, 500, 1000, 2000, 5000, 10000];
-const _labelledHzNarrow = <double>[100, 1000, 10000];
-
 class _SpectrumAnalyzerModuleState extends State<SpectrumAnalyzerModule> {
-  static const _scale = MeterScale(min: -96, max: 0, step: 12);
+  /// Ticks crowded at the top, −∞ on the floor. The top of the scale is
+  /// unlabelled: 0 dB is the plot's own top edge, and a label there would sit
+  /// in the frequency axis's band. The taper is [MeterScale.tapered]'s and
+  /// shared with every other level scale.
+  static const _scale = MeterScale.tapered(
+    max: 0,
+    ticks: [-3, -6, -9, -12, -18, -24, -30, -40, -60],
+  );
 
   /// x, yBottom, x, yTop per band.
   final Float32List _bars = Float32List(MeterShape.spectrumBands * 4);
@@ -141,6 +128,9 @@ class _SpectrumAnalyzerModuleState extends State<SpectrumAnalyzerModule> {
   /// a peak the programme really reached, because the curve it is holding never
   /// went there. [SpectrumResponse.fast] is the setting that catches one.
   final Float32List _shownHold = Float32List(MeterShape.spectrumBands);
+
+  /// What a source the signal cannot provide is drawn as.
+  ui.Paragraph? _mono;
 
   /// Seconds left at the top, per band, before the hold starts falling.
   final Float32List _holdLeft = Float32List(MeterShape.spectrumBands);
@@ -177,7 +167,7 @@ class _SpectrumAnalyzerModuleState extends State<SpectrumAnalyzerModule> {
   /// 30 fps the clock reads fewer of the engine's ~47 published frames per
   /// second than at 120, and a fixed per-fold coefficient would make Normal
   /// slower on a laptop than on a workstation.
-  void _advance(MeterSource engine, double tau) {
+  void _advance(MeterSource engine, double tau, SpectrumSource source) {
     final elapsed = engine.elapsedSeconds;
     final dt = elapsed - _seenElapsed;
     _seenElapsed = elapsed;
@@ -206,7 +196,7 @@ class _SpectrumAnalyzerModuleState extends State<SpectrumAnalyzerModule> {
     final alpha = reseat || tau <= 0 ? 1.0 : 1 - math.exp(-dt / tau);
     final instant = alpha >= 1;
 
-    final spectrum = engine.spectrum;
+    final spectrum = engine.spectrumOf(source);
     final step = dt > 0 ? dt : 0.0;
 
     for (var band = 0; band < MeterShape.spectrumBands; band++) {
@@ -237,42 +227,65 @@ class _SpectrumAnalyzerModuleState extends State<SpectrumAnalyzerModule> {
 
   ScaleGraticule? _graticule;
 
+  /// A paragraph per gridline, laid out at both label densities. Both sets are
+  /// built here rather than at paint time because laying out a paragraph on the
+  /// frame path is the thing the frame path most wants not to do.
+  List<ui.Paragraph> _gridLabels = const [];
+
   /// The tilt, printed in the plot's top-left corner.
   ///
-  /// Only when there is one. At [SpectrumTilt.db0] the dB scale on the right is
-  /// true everywhere and there is nothing to disclose; at any other setting it
-  /// is true at 1 kHz and rotated away from it, and a reader who has not been
+  /// Only when there is one. At [SpectrumTilt.db0] the dB scale is true
+  /// everywhere and there is nothing to disclose; at any other setting it is
+  /// true at 1 kHz and rotated away from it, and a reader who has not been
   /// told that is reading the wrong numbers off a correct-looking axis.
   ///
   /// Top left because that is the corner a tilt *clears*: the same rotation
   /// that makes the label necessary takes the bottom octaves — which are the
   /// loudest part of every mix and were drawn against the ceiling — down the
-  /// plot by twenty-odd decibels.
+  /// plot by twenty-odd decibels. Decibel prints no such caption; this one
+  /// stays, because the scale beside a tilted curve is a scale with a caveat.
   ui.Paragraph? _tiltLabel;
   SpectrumTilt? _labelledTilt;
   Color? _labelColor;
 
-  /// A paragraph per gridline, laid out at both label densities. Both sets are
-  /// built here rather than at paint time because laying out a paragraph on the
-  /// frame path is the thing the frame path most wants not to do.
-  List<ui.Paragraph> _gridLabels = const [];
-  List<ui.Paragraph> _gridLabelsNarrow = const [];
+  /// Which [kHzGrid] values carry a label at the current plot width — solved
+  /// by [fitHzLabels] when the plot resizes, not per frame.
+  List<bool> _gridLabelled = const [];
+  double _gridLabelledFor = -1;
+
+  void solveAxis(double plotWidth) {
+    if (_gridLabelledFor == plotWidth || _gridLabels.isEmpty) return;
+    _gridLabelledFor = plotWidth;
+    _gridLabelled = fitHzLabels(plotWidth, (i) => _gridLabels[i].longestLine);
+  }
 
   /// The band fill's vertical gradient, and the plot it was built for. Rebuilt
   /// on a resize or a skin change and at no other time.
+  ///
+  /// Near-flat on purpose: brightest at the top where the curve lives, the
+  /// accent itself a little down, and still unmistakably the accent at the
+  /// floor. The old ramp faded to fourteen percent alpha at the bottom, which
+  /// made a full-range mix read as a curve with a shadow rather than as a
+  /// filled spectrum.
   ui.Shader? _fillShader;
   Rect? _shaderPlot;
-  Color? _shaderColor;
+  OaaColors? _shaderColors;
 
-  ui.Shader fillShader(Rect plot, Color accent) {
-    if (_fillShader == null || _shaderPlot != plot || _shaderColor != accent) {
+  ui.Shader fillShader(Rect plot, OaaColors colors) {
+    if (_fillShader == null || _shaderPlot != plot || _shaderColors != colors) {
+      final base = colors.accent;
       _fillShader = ui.Gradient.linear(
         plot.topCenter,
         plot.bottomCenter,
-        <Color>[accent.withValues(alpha: 0.66), accent.withValues(alpha: 0.14)],
+        <Color>[
+          Color.lerp(base, colors.textPrimary, 0.30)!,
+          base,
+          Color.lerp(base, colors.background, 0.25)!,
+        ],
+        const [0.0, 0.4, 1.0],
       );
       _shaderPlot = plot;
-      _shaderColor = accent;
+      _shaderColors = colors;
     }
     return _fillShader!;
   }
@@ -306,27 +319,26 @@ class _SpectrumAnalyzerModuleState extends State<SpectrumAnalyzerModule> {
     }
 
     if (_graticule == null ||
-        !_graticule!.matches(_scale, ScaleSide.right, colors.textFaint)) {
+        !_graticule!.matches(_scale, ScaleSide.left, colors.textFaint)) {
       _graticule?.dispose();
       _graticule = ScaleGraticule(
         scale: _scale,
-        side: ScaleSide.right,
+        side: ScaleSide.left,
         lineColor: colors.hairline,
         labelColor: colors.textFaint,
       );
 
       final style = OaaType.tick.copyWith(color: colors.textFaint);
-      List<ui.Paragraph> labels(List<double> labelled) => [
-        for (final hz in _gridHz)
-          layoutParagraph(
-            labelled.contains(hz)
-                ? (hz >= 1000 ? '${(hz / 1000).round()}k' : '${hz.round()}')
-                : '',
-            style,
-          ),
+      _gridLabels = [
+        for (final hz in kHzGrid) layoutParagraph(formatHz(hz), style),
       ];
-      _gridLabels = labels(_labelledHz);
-      _gridLabelsNarrow = labels(_labelledHzNarrow);
+      _gridLabelledFor = -1;
+      // The same words the stereo cloud and the phase scope use for the same
+      // fact, in the same face.
+      _mono = layoutParagraph(
+        'MONO SOURCE',
+        OaaType.label.copyWith(color: colors.textMuted),
+      );
     }
 
     return MeterBody(
@@ -334,6 +346,7 @@ class _SpectrumAnalyzerModuleState extends State<SpectrumAnalyzerModule> {
         engine: widget.engine,
         colors: colors,
         graticule: _graticule!,
+        source: widget.source,
         response: widget.response,
         tilt: widget.tilt,
         state: this,
@@ -348,6 +361,7 @@ class _SpectrumPainter extends MeterPainter {
     required this.engine,
     required this.colors,
     required this.graticule,
+    required this.source,
     required this.response,
     required this.tilt,
     required this.state,
@@ -373,6 +387,7 @@ class _SpectrumPainter extends MeterPainter {
   final MeterSource engine;
   final OaaColors colors;
   final ScaleGraticule graticule;
+  final SpectrumSource source;
   final SpectrumResponse response;
   final SpectrumTilt tilt;
   final _SpectrumAnalyzerModuleState state;
@@ -382,60 +397,68 @@ class _SpectrumPainter extends MeterPainter {
   final Paint _hold;
   final Paint _grid;
 
-  /// Labels are drawn at the wider density only when the widest of them fits
-  /// into the narrowest gap between two labelled gridlines with a clear space
-  /// beside it. The gap that decides it is 20→50 Hz, which is the tightest pair
-  /// on a log axis that starts at 20.
-  List<ui.Paragraph> _labelsFor(Rect plot) {
-    final wide = state._gridLabels;
-    var widest = 0.0;
-    for (final label in wide) {
-      if (label.longestLine > widest) widest = label.longestLine;
-    }
-    final gap =
-        (bandOfHz(50) - bandOfHz(20)) / MeterShape.spectrumBands * plot.width;
-    return gap > widest + Space.sm ? wide : state._gridLabelsNarrow;
-  }
-
   @override
   void paint(Canvas canvas, Size size) {
     final labelHeight = OaaType.tick.fontSize! + Space.xs;
     final plot = Rect.fromLTRB(
-      0,
-      0,
-      size.width - graticule.gutter,
-      size.height - labelHeight,
+      graticule.gutter,
+      labelHeight,
+      size.width,
+      size.height,
     );
     if (plot.width < 60 || plot.height < 32) return;
 
     graticule.paint(canvas, plot);
 
     // --- Frequency graticule ------------------------------------------------
-    final labels = _labelsFor(plot);
-    for (var i = 0; i < _gridHz.length; i++) {
+    // Labels along the top, where the loudest octaves of a mix — the bottom of
+    // the plot — cannot run into them; every value that fits, by the one rule
+    // every frequency axis fits by. See [fitHzLabels].
+    state.solveAxis(plot.width);
+    final labels = state._gridLabels;
+    for (var i = 0; i < kHzGrid.length; i++) {
       final x =
           plot.left +
-          bandOfHz(_gridHz[i]) / MeterShape.spectrumBands * plot.width;
+          bandOfHz(kHzGrid[i]) / MeterShape.spectrumBands * plot.width;
       if (x < plot.left || x > plot.right) continue;
       canvas.drawLine(Offset(x, plot.top), Offset(x, plot.bottom), _grid);
 
       final label = labels[i];
-      if (label.longestLine > 0) {
+      if (i < state._gridLabelled.length && state._gridLabelled[i]) {
         // Nudged inside the plot rather than centred on the line, because the
         // first gridline *is* the left edge: 20 Hz is band zero. Centred, half
-        // of "20" is drawn off the module and the axis appears to start at 50.
+        // of "20" is drawn off the module and the axis appears to start at 30.
         final room = plot.right - label.longestLine;
         final left = room <= plot.left
             ? plot.left
             : (x - label.longestLine / 2).clamp(plot.left, room);
-        canvas.drawParagraph(label, Offset(left, plot.bottom + Space.xxs));
+        canvas.drawParagraph(
+          label,
+          Offset(left, plot.top - label.height - Space.xxs),
+        );
       }
     }
 
     if (!engine.hasSpectrum) return;
 
+    // A source this signal cannot provide is NaN throughout — see
+    // `MeterSource.spectrumOf`. Nothing is folded from it, so the curve is
+    // where the last measured source left it when the setting is changed
+    // back, and the plot says why it is empty rather than drawing the floor.
+    if (engine.spectrumOf(source)[0].isNaN) {
+      final mono = state._mono!;
+      canvas.drawParagraph(
+        mono,
+        Offset(
+          plot.left + (plot.width - mono.longestLine) / 2,
+          plot.top + (plot.height - mono.height) / 2,
+        ),
+      );
+      return;
+    }
+
     if (engine.generation != state._seenGeneration) {
-      state._advance(engine, response.timeConstant);
+      state._advance(engine, response.timeConstant, source);
       state._seenGeneration = engine.generation;
     }
 
@@ -446,7 +469,7 @@ class _SpectrumPainter extends MeterPainter {
     // hairline seams read as vertical banding across the whole fill.
     final bandWidth = plot.width / MeterShape.spectrumBands;
     _fill.strokeWidth = bandWidth + 0.5;
-    _fill.shader = state.fillShader(plot, colors.accent);
+    _fill.shader = state.fillShader(plot, colors);
 
     // The tilt is added here rather than folded into [_advance], and that is
     // not an arrangement of convenience: a fixed per-band offset commutes with
@@ -497,6 +520,7 @@ class _SpectrumPainter extends MeterPainter {
   @override
   bool shouldRepaint(_SpectrumPainter oldDelegate) =>
       oldDelegate.colors != colors ||
+      oldDelegate.source != source ||
       oldDelegate.response != response ||
       oldDelegate.tilt != tilt ||
       !identical(oldDelegate.engine, engine) ||

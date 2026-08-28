@@ -266,6 +266,21 @@ class ReplaySource implements MeterSource {
   Float32List get spectrumPeak => _spectrumPeak;
   @override
   Float32List get spectrumPan => _spectrumPan;
+
+  /// A recording carries the combined bands and nothing else, so every other
+  /// source is unavailable here — NaN, which a module draws as no
+  /// measurement. The demo never asks: its modules open on
+  /// [SpectrumSource.all].
+  @override
+  Float32List spectrumOf(SpectrumSource source) =>
+      source == SpectrumSource.all ? _spectrum : _unavailable;
+
+  @override
+  Float32List spectrumPeakOf(SpectrumSource source) =>
+      source == SpectrumSource.all ? _spectrumPeak : _unavailable;
+
+  static final Float32List _unavailable = Float32List(MeterShape.spectrumBands)
+    ..fillRange(0, MeterShape.spectrumBands, double.nan);
   @override
   Float32List get scope => _scope;
   @override

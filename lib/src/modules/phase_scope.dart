@@ -19,15 +19,23 @@ import '../clock/meter_clock.dart';
 /// glance. It stays here rather than in the engine because it is a convention
 /// this module has and the CLI does not.
 ///
+/// The frame around the plot is a square with its two diagonals drawn: after
+/// the rotation those diagonals *are* the L and R axes, so a signal in one
+/// channel only lies along a diagonal, and the square's edges are where the
+/// gamut's extremes point. The balance and correlation readings ride the
+/// frame's own edges as markers — balance along the bottom, correlation up the
+/// right — because both are one-dimensional summaries of the same picture, and
+/// an axis a marker slides on says more than a bar in a corner.
+///
 /// ---------------------------------------------------------------------------
-/// The transform does the work, so the audio is never copied
+/// The transform does the work, so the audio is never copied per frame
 ///
 /// The engine publishes 1024 raw (L, R) pairs as a `Float32List` view straight
 /// onto its own memory. Rotating and scaling those in Dart would mean writing
 /// 2048 floats into a second buffer every frame. Instead the canvas is
-/// transformed — translate, scale, rotate — and the buffer is handed to
-/// `drawRawPoints` as it arrived. The GPU does arithmetic it was going to do
-/// anyway.
+/// transformed — translate, scale, rotate — and the trail's buffers are handed
+/// to `drawRawPoints` as they were written. The GPU does arithmetic it was
+/// going to do anyway.
 ///
 /// ---------------------------------------------------------------------------
 /// The trail is the last [_trailFrames] frames, not a faded picture
@@ -42,12 +50,28 @@ import '../clock/meter_clock.dart';
 ///
 /// The trail is short, so keeping the frames is cheaper than keeping a picture
 /// of them: at a decay of 0.86 a frame is below one part in 255 after forty of
-/// them, and forty frames of scope is a 327 KB ring. Each is one
-/// `drawRawPoints` call at its own age's alpha — forty calls, recorded in about
-/// 0.1 ms. Two things improve as a side effect: the decay is exact rather
-/// than compounded through an 8-bit surface, and the trail no longer blurs. The
-/// old one resampled the whole picture every frame, so a moving dot smeared
-/// instead of fading in place.
+/// them. Each is one `drawRawPoints` call at its own age's alpha — forty
+/// calls, recorded in about 0.1 ms. Two things improve as a side effect: the
+/// decay is exact rather than compounded through an 8-bit surface, and the
+/// trail no longer blurs. The old one resampled the whole picture every frame,
+/// so a moving line smeared instead of fading in place.
+///
+/// ---------------------------------------------------------------------------
+/// The trace is a polyline, so a slot holds its block in time order
+///
+/// Each frame is drawn with `PointMode.polygon` — consecutive samples joined —
+/// because the connected path is what carries the waveform's structure: a bass
+/// note is a loop, a delay is a braid, and a cloud of disconnected dots shows
+/// neither. Joining consecutive *buffer* entries only draws the signal's path
+/// if the buffer is in time order, so each slot stores its block that way, at
+/// four detail levels side by side — full, then every 2nd, 4th and 8th sample,
+/// each level contiguous so a draw is one buffer and no copy. See
+/// [PhaseScopeModule.writeSlot]; the levels exist for the sparseness below,
+/// and an even-in-time subsample traces the same figure with longer segments
+/// rather than a piece of it. A short block ends in NaN pairs, and a segment
+/// with a NaN endpoint is culled rather than drawn — which is also what ages a
+/// mono source's trail out instead of freezing its last stereo frame.
+///
 /// ---------------------------------------------------------------------------
 /// It is fragment-bound, and that is why the fix is sparseness
 ///
@@ -63,32 +87,26 @@ import '../clock/meter_clock.dart';
 /// reordered the table underneath it; the ranking's top entry survived.
 ///
 /// **The cost is fragments, and only fragments.** Drawing all forty frames in a
-/// single `drawRawPoints` call measured 5,985 µs against 6,057 µs for forty
-/// separate ones, so batching the calls buys nothing and there is no point
-/// building a bucketing scheme for them. 40,960 translucent dots over a plot
-/// about 300 px across is four and a half dots per pixel, and blending them is
-/// the entire bill.
+/// single call measured the same as forty separate ones, so batching buys
+/// nothing and only the fragment count is left. Those numbers were measured on
+/// the dot cloud this module drew first; a polyline covers more fragments per
+/// sample than a 1.4 px dot, which makes the two mitigations below more
+/// load-bearing, not less:
 ///
-/// So the two things that worked both remove fragments rather than rearrange
-/// them, and neither touches the exactness the trail is built on:
+///   - **No antialiasing.** On dots it measured 9,616 → 6,057 µs; a hairline
+///     in a fading braid gains nothing legible from it either.
+///   - **Sparseness that follows the fade** — see [_detailFor]. The dimmest
+///     frames are drawn from an eighth of their samples.
 ///
-///   - **No antialiasing.** 9,616 → 6,057 µs. A 1.4 px dot in a cloud of tens
-///     of thousands gains nothing legible from it. `StrokeCap.square` is
-///     *slower* than round, which sounds backwards and is not: Skia has a fast
-///     path for round points and none for square ones.
-///   - **Sparseness that follows the fade** — see [_detailFor]. 19,200 points
-///     instead of 40,960.
-///
-/// Together, **9.6 ms to 3.3 ms** on the GPU, and 24.3 ms to 9.1 ms on the
-/// software rasteriser — two backends, the same 2.6x, which is the sort of
-/// agreement worth having before believing either. What was *not* done is worth recording too:
-/// accumulating the trail into a pixel buffer, the way `spectrogram.dart` does.
-/// That works there because a spectrogram scrolls — one new column and a
-/// memmove, O(height) a frame. A trail decays everywhere at once, so the same
-/// idea is O(width x height) of Dart on the UI thread every published frame,
-/// and it would trade a parallel raster cost for a serial one while
-/// reintroducing the 8-bit compounding this design was written to escape.
-///
+/// On dots the pair took 9.6 ms to 3.3 ms on the GPU and 24.3 ms to 9.1 ms on
+/// the software rasteriser — two backends, the same 2.6x. What was *not* done
+/// is worth recording too: accumulating the trail into a pixel buffer, the way
+/// `spectrogram.dart` does. That works there because a spectrogram scrolls —
+/// one new column and a memmove, O(height) a frame. A trail decays everywhere
+/// at once, so the same idea is O(width x height) of Dart on the UI thread
+/// every published frame, and it would trade a parallel raster cost for a
+/// serial one while reintroducing the 8-bit compounding this design was
+/// written to escape.
 class PhaseScopeModule extends StatefulWidget {
   const PhaseScopeModule({
     required this.engine,
@@ -99,35 +117,63 @@ class PhaseScopeModule extends StatefulWidget {
   final MeterSource engine;
   final MeterClock clock;
 
-  /// A permutation whose every power-of-two prefix is evenly spread.
-  ///
-  /// Bit reversal: position *p* receives sample `bitrev(p)`, so the first
-  /// 2^k positions hold samples spaced 2^(10-k) apart across the block. A
-  /// goniometer traces the signal's path in time, so a subsample that is even
-  /// in time is even along the path — which is what makes a shortened prefix
-  /// look like the same figure drawn more sparsely rather than like a piece of
-  /// it. Falls back to the identity if the block is not a power of two, which
-  /// no engine block is.
+  /// Floats in one trail slot: the block at full detail, then at every 2nd,
+  /// 4th and 8th sample, each level contiguous. 2 · P · (1 + ½ + ¼ + ⅛).
   @visibleForTesting
-  static Int32List stratifiedOrder(int count) {
-    final order = Int32List(count);
-    final bits = count.bitLength - 1;
-    if (count != 1 << bits) {
+  static const int slotFloats = MeterShape.scopePoints * 2 * 15 ~/ 8;
+
+  /// Where detail [level]'s pairs start inside a slot, in floats.
+  @visibleForTesting
+  static int levelOffset(int level) {
+    var offset = 0;
+    for (var l = 0; l < level; l++) {
+      offset += (MeterShape.scopePoints >> l) * 2;
+    }
+    return offset;
+  }
+
+  /// Writes the newest [frames] pairs of [scope] into [slot], in time order,
+  /// once per detail level — full, then strided by 2, 4 and 8.
+  ///
+  /// Time order is what lets `PointMode.polygon` join consecutive entries into
+  /// the signal's path, and the stride is what keeps a sparser level *the same
+  /// figure* drawn with longer segments: an even subsample in time is an even
+  /// subsample along the path. Keeping the first eighth of the samples instead
+  /// would draw one eighth *of the path*, and a fading trail would visibly
+  /// shrink towards wherever the block happened to start.
+  ///
+  /// Takes at most [MeterShape.scopePoints] pairs, and the newest ones: a
+  /// snapshot off a wire may carry several blocks in one frame — see
+  /// `MeterSource.scopeFrames` — and this display draws a figure, not a
+  /// waveform; the oscilloscope is the module that needs every sample. What a
+  /// short block leaves unfilled is NaN rather than stale audio: a segment
+  /// with a NaN endpoint is culled, where a leftover would draw samples from a
+  /// different moment joined to this one. A null [scope] blanks the slot
+  /// entirely, which is how a mono source's trail ages out — see
+  /// [_PhaseScopeModuleState.blank].
+  @visibleForTesting
+  static void writeSlot(Float32List slot, Float32List? scope, int frames) {
+    final take = frames < MeterShape.scopePoints
+        ? frames
+        : MeterShape.scopePoints;
+    final from = (frames - take) * 2;
+
+    var out = 0;
+    for (var level = 0; level < _detailLevels; level++) {
+      final stride = 1 << level;
+      final count = MeterShape.scopePoints >> level;
       for (var i = 0; i < count; i++) {
-        order[i] = i;
+        final sample = i * stride;
+        if (scope != null && sample < take) {
+          slot[out] = scope[from + sample * 2];
+          slot[out + 1] = scope[from + sample * 2 + 1];
+        } else {
+          slot[out] = double.nan;
+          slot[out + 1] = double.nan;
+        }
+        out += 2;
       }
-      return order;
     }
-    for (var i = 0; i < count; i++) {
-      var value = i;
-      var reversed = 0;
-      for (var bit = 0; bit < bits; bit++) {
-        reversed = (reversed << 1) | (value & 1);
-        value >>= 1;
-      }
-      order[i] = reversed;
-    }
-    return order;
   }
 
   @override
@@ -150,18 +196,14 @@ const int _detailLevels = 4;
 ///
 /// **The dimmer a frame is, the more sparsely it is drawn.** This is the whole
 /// of the module's cost control and it is worth saying why it is legitimate.
-/// The trail is 40,960 points blended over a plot about 300 px across — four
-/// and a half dots per pixel — and it was measured at 9.6 ms of rasterising a
-/// frame on an Apple Silicon Mac, over half a 60 fps budget for one module, on
-/// a feature whose whole purpose is a tablet with less GPU than that. The cost
-/// is fragments and nothing else: drawing all forty frames in a *single*
-/// `drawRawPoints` call measured 5,985 µs against 6,057 µs for forty calls, so
-/// batching them buys nothing and only the point count is left.
-///
-/// Ages 30 to 39 are drawn at alphas from 0.011 down to 0.0024 — at most three
-/// parts in 255. An eighth of the points at three parts in 255 is not a picture
-/// anybody can tell from all of them, and the frames that carry the shape you
-/// actually read are untouched: the first ten are drawn whole.
+/// The cost is fragments and nothing else — see the header — and ages 30 to 39
+/// are drawn at alphas from 0.011 down to 0.0024, at most three parts in 255.
+/// An eighth of the samples at three parts in 255, joined into a polyline of
+/// segments eight times as long, is not a picture anybody can tell from all of
+/// them; the frames that carry the shape you actually read are untouched: the
+/// first ten are drawn whole. Even the sparsest level still spans the whole
+/// block — 128 joined samples — so an old frame is a coarser figure, never a
+/// shorter one.
 int _detailFor(int age) {
   if (age < 10) return 0;
   if (age < 20) return 1;
@@ -170,28 +212,33 @@ int _detailFor(int age) {
 }
 
 class _PhaseScopeModuleState extends State<PhaseScopeModule> {
-  /// [_trailFrames] frames of scope points, oldest overwritten. The views onto
-  /// its slots are built once, so drawing neither copies nor allocates.
+  /// [_trailFrames] slots of scope samples, oldest overwritten. The views onto
+  /// each slot's detail levels are built once, so drawing neither copies nor
+  /// allocates.
   Float32List _ring = Float32List(0);
 
-  /// Views onto each slot, one per detail level — see [_detail]. Built with the
-  /// ring so that a paint picks one rather than allocating one.
+  /// Views onto each slot, one per detail level. Built with the ring so that a
+  /// paint picks one rather than allocating one.
   List<List<Float32List>> _frames = const [];
 
-  /// Where a sample goes inside a slot, so that a *prefix* of the slot is a
-  /// subsample spread evenly over the block. See [PhaseScopeModule.stratifiedOrder].
-  Int32List _order = Int32List(0);
+  /// A whole-slot view per slot, for writing — built with the ring for the
+  /// same reason: a publish must not allocate either.
+  List<Float32List> _slots = const [];
   int _next = 0;
   int _filled = 0;
 
+  ui.Paragraph? _balanceLabel;
+  ui.Paragraph? _correlationLabel;
+
+  /// The three axis letters: `L` and `R` at the far ends of the two
+  /// diagonals, which after the 45° rotation are the two channels' axes, and
+  /// `M` at the top, where a mono signal stands. Engraved on the frame, so a
+  /// reader who has not learnt the rotation still knows which way is left.
   ui.Paragraph? _left;
   ui.Paragraph? _right;
   ui.Paragraph? _mono;
 
   /// Why the face is empty on a one-channel source. See the painter.
-  ///
-  /// Not [_mono], which is the `M` at the top of the graticule — that one is an
-  /// axis label and is drawn whatever the source is.
   ui.Paragraph? _monoNotice;
   Color? _builtColor;
 
@@ -208,15 +255,7 @@ class _PhaseScopeModuleState extends State<PhaseScopeModule> {
   /// sitting exactly at the origin.
   int lastGeneration = 0;
 
-  /// Stores the newest measurement's points as the newest trail frame.
-  ///
-  /// **Takes at most [MeterShape.scopePoints] pairs, and the newest ones.** A
-  /// snapshot off a wire may carry several blocks of audio in one frame — see
-  /// `MeterSource.scopeFrames` — and a goniometer does not want them: it draws
-  /// a cloud rather than a waveform, the extra pairs land on pixels the others
-  /// already covered, and a variable run would give the ring a variable stride
-  /// and break the stratified order below. The oscilloscope is the module that
-  /// needs every sample; this one needs a representative scatter of them.
+  /// Stores the newest measurement's samples as the newest trail frame.
   void write(Float32List scope, int frames) {
     if (scope.isEmpty || frames <= 0) return;
     _writeInto(scope, frames);
@@ -229,52 +268,40 @@ class _PhaseScopeModuleState extends State<PhaseScopeModule> {
   /// simply stopped being written would hold the last stereo frame at full
   /// brightness for the rest of the session — a Lissajous figure of audio that
   /// stopped playing. Ageing it out with empty frames is what makes changing to
-  /// a mono input *dissolve* the cloud over the trail's own length, which is
+  /// a mono input *dissolve* the figure over the trail's own length, which is
   /// what the stereo cloud's fade does for the same reason.
   void blank() => _writeInto(null, 0);
 
   void _writeInto(Float32List? scope, int frames) {
-    final take = frames < MeterShape.scopePoints
-        ? frames
-        : MeterShape.scopePoints;
-    final from = (frames - take) * 2;
-    final slotLength = MeterShape.scopePoints * 2;
-
-    if (_ring.length != _trailFrames * slotLength) {
-      _ring = Float32List(_trailFrames * slotLength);
-      _order = PhaseScopeModule.stratifiedOrder(MeterShape.scopePoints);
+    if (_ring.length != _trailFrames * PhaseScopeModule.slotFloats) {
+      _ring = Float32List(_trailFrames * PhaseScopeModule.slotFloats);
       _frames = [
         for (var slot = 0; slot < _trailFrames; slot++)
           [
             for (var level = 0; level < _detailLevels; level++)
               Float32List.sublistView(
                 _ring,
-                slot * slotLength,
-                slot * slotLength + (slotLength >> level),
+                slot * PhaseScopeModule.slotFloats +
+                    PhaseScopeModule.levelOffset(level),
+                slot * PhaseScopeModule.slotFloats +
+                    PhaseScopeModule.levelOffset(level) +
+                    (MeterShape.scopePoints >> level) * 2,
               ),
           ],
+      ];
+      _slots = [
+        for (var slot = 0; slot < _trailFrames; slot++)
+          Float32List.sublistView(
+            _ring,
+            slot * PhaseScopeModule.slotFloats,
+            (slot + 1) * PhaseScopeModule.slotFloats,
+          ),
       ];
       _next = 0;
       _filled = 0;
     }
 
-    // Scattered rather than copied, so that the first half of a slot is every
-    // other sample and the first eighth is every eighth — see [_detail].
-    final base = _next * slotLength;
-    for (var i = 0; i < MeterShape.scopePoints; i++) {
-      final to = base + _order[i] * 2;
-      if (i < take) {
-        _ring[to] = scope![from + i * 2];
-        _ring[to + 1] = scope[from + i * 2 + 1];
-      } else {
-        // A short run — the link dropped a frame, the source is mono and
-        // nothing is being plotted, or nothing has been measured yet. NaN
-        // rather than a stale pair: `drawRawPoints` skips it, where a leftover
-        // would draw a sample from a different moment.
-        _ring[to] = double.nan;
-        _ring[to + 1] = double.nan;
-      }
-    }
+    PhaseScopeModule.writeSlot(_slots[_next], scope, frames);
 
     _next = (_next + 1) % _trailFrames;
     if (_filled < _trailFrames) _filled++;
@@ -286,7 +313,9 @@ class _PhaseScopeModuleState extends State<PhaseScopeModule> {
 
     if (_builtColor != colors.textFaint) {
       _builtColor = colors.textFaint;
-      final style = OaaType.tick.copyWith(color: colors.textFaint);
+      final style = OaaType.label.copyWith(color: colors.textFaint);
+      _balanceLabel = layoutParagraph('BALANCE', style);
+      _correlationLabel = layoutParagraph('CORRELATION', style);
       _left = layoutParagraph('L', style);
       _right = layoutParagraph('R', style);
       _mono = layoutParagraph('M', style);
@@ -304,12 +333,14 @@ class _PhaseScopeModuleState extends State<PhaseScopeModule> {
             ..color = colors.accent.withValues(
               alpha: math.pow(_decay, age).toDouble(),
             )
-            ..strokeCap = StrokeCap.round
-            // A 1.4 px dot in a cloud of tens of thousands gains nothing
-            // legible from being antialiased, and it measured 9,616 µs against
-            // 6,057 µs to have it. `StrokeCap.square` is *slower* than round
-            // here, which is the opposite of what it sounds like — Skia has a
-            // fast path for round points and none for square ones.
+            // Butt caps: the polyline's joins cover their own ends, and caps
+            // are per-segment work. The round-versus-square note that used to
+            // sit here was about Skia's fast path for round *points*, which a
+            // line does not take.
+            ..strokeCap = StrokeCap.butt
+            // A hairline in a fading braid gains nothing legible from being
+            // antialiased, and on the dot cloud this trace grew from, having
+            // it measured 9,616 µs against 6,057 µs.
             ..isAntiAlias = false,
       ];
     }
@@ -335,8 +366,11 @@ class _PhaseScopePainter extends MeterPainter {
          ..color = colors.hairline
          ..style = PaintingStyle.stroke
          ..strokeWidth = OaaStroke.hairline),
-       _correlation = (Paint()..color = colors.meterFill),
-       _correlationTrack = (Paint()..color = colors.meterTrack),
+       _marker = (Paint()..color = colors.accent),
+       // The correlation marker below zero: a signal that is losing itself
+       // in mono, which is the failure a phase scope exists to catch, and the
+       // one reading on this face that earns the warning colour.
+       _markerWarn = (Paint()..color = colors.warn),
        super(repaint: repaint);
 
   final MeterSource engine;
@@ -344,27 +378,55 @@ class _PhaseScopePainter extends MeterPainter {
   final _PhaseScopeModuleState state;
 
   final Paint _guide;
-  final Paint _correlation;
-  final Paint _correlationTrack;
+  final Paint _marker;
+  final Paint _markerWarn;
 
-  /// Radius of a plotted sample, in logical pixels.
-  static const double _pointSize = 1.4;
+  /// The balance and correlation markers: one diamond, built once and
+  /// translated to wherever a reading puts it — never a `Path` on the frame
+  /// path. A rotated square rather than a dot, so it reads as an indicator
+  /// sitting on an axis rather than as a stray sample that escaped the plot.
+  static final Path _diamond = Path()
+    ..moveTo(0, -_markerReach)
+    ..lineTo(_markerReach, 0)
+    ..lineTo(0, _markerReach)
+    ..lineTo(-_markerReach, 0)
+    ..close();
 
-  static const double _correlationHeight = 10;
+  static const double _markerReach = 4.5;
+
+  /// Stroke width of the trace, in logical pixels.
+  static const double _strokeWidth = 1.0;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final plotHeight = size.height - _correlationHeight - Space.smd;
-    if (plotHeight < 40) return;
-    final plot = Size(size.width, plotHeight);
+    // The square leaves room on the right for the correlation label and
+    // marker, and the same amount below for balance — and nothing on the
+    // other two sides beyond a margin. It reserved the band on all four for a
+    // phase, so the figure stayed centred as a square, and the price was a
+    // quarter of the module's height standing empty above and below it. What
+    // is centred now is the figure *with* its two label bands, which is the
+    // ink the reader sees.
+    final labelBand =
+        (state._correlationLabel?.height ?? 0) + Space.sm + _markerReach;
+    final half =
+        math.min(
+          size.width - Space.sm - labelBand,
+          size.height - Space.sm - labelBand,
+        ) /
+        2;
+    if (half < 24) return;
 
-    final centre = Offset(plot.width / 2, plot.height / 2);
+    final centre = Offset(
+      (size.width - labelBand) / 2,
+      (size.height - labelBand) / 2,
+    );
+    final square = Rect.fromCircle(center: centre, radius: half);
+
     // sqrt(2) of headroom, because a mono full-scale signal reaches (1,1),
-    // whose rotated length is sqrt(2). Without it a loud mono passage would
-    // clip against the top of the display and read as a limiter.
-    final radius =
-        math.min(plot.width, plot.height) / 2 / math.sqrt2 - Space.xs;
-    if (radius <= 0) return;
+    // whose rotated length is sqrt(2) — the middle of the square's top edge.
+    // Without it a loud mono passage would clip against the frame and read as
+    // a limiter.
+    final radius = half / math.sqrt2;
 
     // **A one-channel source is not plotted at all.** The engine duplicates
     // channel 0 into the scope's right slot — see `oaa_scope_append` — so a mono
@@ -397,65 +459,69 @@ class _PhaseScopePainter extends MeterPainter {
       for (var age = state._filled - 1; age >= 0; age--) {
         final slot = (state._next - 1 - age + _trailFrames * 2) % _trailFrames;
         canvas.drawRawPoints(
-          ui.PointMode.points,
+          ui.PointMode.polygon,
           state._frames[slot][_detailFor(age)],
           // strokeWidth is in the transformed space, so it has to be divided
-          // back out or a dot would be `radius` pixels across.
-          state._trail[age]..strokeWidth = _pointSize / radius,
+          // back out or the line would be `radius` pixels across.
+          state._trail[age]..strokeWidth = _strokeWidth / radius,
         );
       }
       canvas.restore();
     }
 
-    // --- Guides, drawn fresh each frame so the trail cannot burn them in ----
-    canvas.drawCircle(centre, radius * math.sqrt2, _guide);
+    // --- The frame, drawn fresh each frame so the trail cannot burn it in ---
+    // A square with its diagonals: after the 45° rotation the diagonals are
+    // the L and R axes, and the horizontal is the out-of-phase axis. The
+    // notice, when there is one, breaks whatever would run through it — a
+    // hairline through the middle of a word reads as a strikethrough, which is
+    // the opposite of what the notice says.
+    canvas.drawRect(square, _guide);
 
-    final reach = radius * math.sqrt2;
     final notice = stereo ? null : state._monoNotice!;
-
-    // Both axes are broken around the notice when there is one. A hairline
-    // through the middle of a word reads as a strikethrough, which is the
-    // opposite of what the notice says, and the vertical one would split it in
-    // two — this display's cross meets exactly where the words go.
     final holdX = notice == null ? 0.0 : notice.longestLine / 2 + Space.sm;
     final holdY = notice == null ? 0.0 : notice.height / 2 + Space.xs;
+    // The diagonals cross the centre at 45°, so their clearance from the
+    // notice box is along the diagonal.
+    final holdDiagonal = notice == null
+        ? 0.0
+        : math.max(holdX, holdY) * math.sqrt2;
+    final diagonal = Offset(math.sqrt1_2, math.sqrt1_2);
+
+    // The two upper diagonals start inside their corners, past the letters
+    // that name them — a hairline through an `L` is the strikethrough
+    // problem again, at the one place it would be read as a glyph.
+    final left = state._left!;
+    final letterHold = (left.height + Space.sm) * math.sqrt2;
 
     for (final (from, to) in [
+      // The horizontal, in two halves around the notice.
+      (Offset(square.left, centre.dy), Offset(centre.dx - holdX, centre.dy)),
+      (Offset(centre.dx + holdX, centre.dy), Offset(square.right, centre.dy)),
+      // The two diagonals, each in two halves for the same reason.
       (
-        Offset(centre.dx, centre.dy - reach),
-        Offset(centre.dx, centre.dy - holdY),
+        square.topLeft + diagonal * letterHold,
+        centre - diagonal * holdDiagonal,
+      ),
+      (centre + diagonal * holdDiagonal, square.bottomRight),
+      (
+        square.bottomLeft,
+        centre + Offset(-diagonal.dx, diagonal.dy) * holdDiagonal,
       ),
       (
-        Offset(centre.dx, centre.dy + holdY),
-        Offset(centre.dx, centre.dy + reach),
-      ),
-      (
-        Offset(centre.dx - reach, centre.dy),
-        Offset(centre.dx - holdX, centre.dy),
-      ),
-      (
-        Offset(centre.dx + holdX, centre.dy),
-        Offset(centre.dx + reach, centre.dy),
+        centre + Offset(diagonal.dx, -diagonal.dy) * holdDiagonal,
+        square.topRight + Offset(-diagonal.dx, diagonal.dy) * letterHold,
       ),
     ]) {
       canvas.drawLine(from, to, _guide);
     }
 
-    _label(
-      canvas,
-      state._mono!,
-      Offset(centre.dx, centre.dy - reach + Space.sm),
-    );
-    _label(
-      canvas,
-      state._left!,
-      Offset(centre.dx - reach * 0.72, centre.dy - reach * 0.72 + Space.sm),
-    );
-    _label(
-      canvas,
-      state._right!,
-      Offset(centre.dx + reach * 0.72, centre.dy - reach * 0.72 + Space.sm),
-    );
+    // The axis letters, inside the frame at the ends they name: `L` and `R`
+    // a step in from their corners along the diagonals, `M` a step under
+    // the top edge, where a mono signal stands after the rotation.
+    final inset = Space.sm + left.height / 2;
+    _letter(canvas, left, square.topLeft + Offset(inset, inset));
+    _letter(canvas, state._right!, square.topRight + Offset(-inset, inset));
+    _letter(canvas, state._mono!, Offset(centre.dx, square.top + inset));
 
     if (notice != null) {
       // Over the graticule, which stays drawn: the module is not unavailable,
@@ -470,64 +536,71 @@ class _PhaseScopePainter extends MeterPainter {
       );
     }
 
-    // --- Correlation --------------------------------------------------------
-    // The same fact as the shape above, as a number you can read off. −1 is a
-    // signal that will disappear in mono, which is the failure a phase scope
-    // exists to catch and the one thing about it worth quantifying.
-    //
-    // **Empty on a one-channel source, track and no fill.** The engine answers
-    // +1 for mono deliberately — "perfectly correlated with itself", see
-    // `oaa_analyse` — and that is true, but a bar pinned hard against its right
-    // end is the same tautology the scatter above refuses to draw, in the same
-    // module, a few pixels below the words saying there is nothing to show. The
-    // number is in `docs/METRICS.md` and in a Number Box for anybody who wants
-    // it; what this module draws is the stereo field, and a mono source has
-    // none. An empty track rather than no bar at all, because the row is part of
-    // the module's shape and a face that changes height when the source does
-    // reads as a different module.
-    final track = Rect.fromLTWH(
-      0,
-      size.height - _correlationHeight,
-      size.width,
-      _correlationHeight,
+    // --- Balance, along the bottom edge --------------------------------------
+    // −1 hard left to +1 hard right, the marker riding the frame itself. On a
+    // one-channel source the marker is withheld the way the plot is — the
+    // engine answers dead centre for mono, which is the same tautology — but
+    // the label stays, because the face keeping its shape is what says the
+    // module is fine and the signal has nothing to show.
+    final balanceLabel = state._balanceLabel!;
+    canvas.drawParagraph(
+      balanceLabel,
+      Offset(
+        centre.dx - balanceLabel.longestLine / 2,
+        square.bottom + _markerReach + Space.xs,
+      ),
     );
-    // Rounded at the two ends only: the bar is the one thing here that is not
-    // part of the graticule, so it reads as a control rather than a scale.
-    final rounded = RRect.fromRectAndRadius(track, OaaRadius.sm);
-    canvas.drawRRect(rounded, _correlationTrack);
+    final balance = engine.balance;
+    if (stereo && !balance.isNaN) {
+      _markerAt(
+        canvas,
+        Offset(centre.dx + balance.clamp(-1.0, 1.0) * half, square.bottom),
+        _marker,
+      );
+    }
+
+    // --- Correlation, up the right edge ---------------------------------------
+    // +1 — mono — at the top, where the mono axis of the plot points, and −1 at
+    // the bottom: a signal that will disappear in mono, which is the failure a
+    // phase scope exists to catch. Withheld for mono like the balance above;
+    // the number is in `docs/METRICS.md` and in a Number Box for anybody who
+    // wants it as a figure.
+    final correlationLabel = state._correlationLabel!;
+    // After the −90° turn the paragraph's box extends *rightwards* by its own
+    // height from the origin, so the origin is the label's left edge.
+    canvas.save();
+    canvas.translate(
+      square.right + _markerReach + Space.xs,
+      centre.dy + correlationLabel.longestLine / 2,
+    );
+    canvas.rotate(-math.pi / 2);
+    canvas.drawParagraph(correlationLabel, Offset.zero);
+    canvas.restore();
 
     final correlation = engine.correlation;
     if (stereo && !correlation.isNaN) {
-      final centreX = track.center.dx;
-      final extent = correlation.clamp(-1.0, 1.0) * track.width / 2;
-      _correlation.color = correlation < 0 ? colors.warn : colors.meterFill;
-      // At ±1 the fill reaches the end of the track, so it is clipped to the
-      // same corners rather than drawn square over them.
-      canvas.save();
-      canvas.clipRRect(rounded);
-      canvas.drawRect(
-        Rect.fromLTRB(
-          extent < 0 ? centreX + extent : centreX,
-          track.top,
-          extent < 0 ? centreX : centreX + extent,
-          track.bottom,
-        ),
-        _correlation,
+      _markerAt(
+        canvas,
+        Offset(square.right, centre.dy - correlation.clamp(-1.0, 1.0) * half),
+        correlation < 0 ? _markerWarn : _marker,
       );
-      canvas.restore();
     }
-    canvas.drawLine(
-      Offset(track.center.dx, track.top),
-      Offset(track.center.dx, track.bottom),
-      _guide,
-    );
   }
 
-  void _label(Canvas canvas, ui.Paragraph label, Offset at) =>
-      canvas.drawParagraph(
-        label,
-        at - Offset(label.longestLine / 2, label.height / 2),
-      );
+  void _markerAt(Canvas canvas, Offset at, Paint paint) {
+    canvas.save();
+    canvas.translate(at.dx, at.dy);
+    canvas.drawPath(_diamond, paint);
+    canvas.restore();
+  }
+
+  /// One axis letter, centred on [at].
+  void _letter(Canvas canvas, ui.Paragraph letter, Offset at) {
+    canvas.drawParagraph(
+      letter,
+      Offset(at.dx - letter.longestLine / 2, at.dy - letter.height / 2),
+    );
+  }
 
   @override
   bool shouldRepaint(_PhaseScopePainter oldDelegate) =>

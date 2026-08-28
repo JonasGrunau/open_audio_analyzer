@@ -60,10 +60,10 @@ const FLOW = [
     `The canvas you arranged, every module on it reading the same instant of the same audio. It
      makes no difference whether that audio came from the plugin, from an input or from a file: the
      meters are the same meters.`,
-    `The desktop canvas, eight modules reading one instant: a LUFS meter and a set of concentric
-     loudness arcs both at −9.9, a spectrum analyser, a loudness histogram running against a −14
+    `The desktop canvas, eight modules reading one instant: a LUFS meter and a loudness half-gauge
+     both at −8.0, a spectrum analyser, a loudness histogram running against a −14
      target line, a delivery verdict reading NOT READY with two failures and one pass, per-channel
-     peak bars, a waveform, and a latched true-peak alert at −0.2.`,
+     peak bars, a waveform, and a latched true-peak alert at −0.1.`,
   ],
   [
     'tablet',
@@ -74,7 +74,7 @@ const FLOW = [
      canvas instead. What you arranged on a 32-inch monitor opens on the tablet still looking
      arranged, not squashed.`,
     `The application running on an iPad in landscape, attached over Wi-Fi to the same plugin: six
-     loudness readouts along the top, a LUFS meter, concentric loudness arcs reading −8.9, a
+     loudness readouts along the top, a LUFS meter, a loudness half-gauge reading −8.9, a
      per-channel peak meter, a delivery verdict reading NOT READY, a VU meter, a loudness histogram
      against a −14 target line, a distribution and a latched true-peak alert.`,
   ],
@@ -96,11 +96,11 @@ const flow = FLOW.filter(([id]) => flowShots[id]);
 const MODULES = [
   ['number-box', 'Number Box', 'Any single measurement, as a number.',
     'A Number Box reading −14.1 LUFS in green, on target.'],
-  ['lufs-meter', 'LUFS Meter', 'Momentary and short-term loudness as bars, integrated loudness as a line.',
-    'A LUFS Meter: momentary and short-term bars against a scale, reading −14.1 LUFS integrated over a 7.1 LU range.'],
-  ['super-meter', 'Super Meter', 'Momentary, short-term and integrated loudness as three concentric arcs, with LRA and ODR-I under the reading.',
-    'A Super Meter: three concentric arcs around a −14.1 LUFS readout, with the loudness range and the integrated Open Dynamic Range printed beneath it.'],
-  ['digital-meter', 'Digital Meter', 'Sample peak and RMS, per channel, up to 7.1.',
+  ['lufs-meter', 'LUFS Meter', 'Momentary, short-term and integrated loudness as three bars against a target band, each with its value beneath.',
+    'A LUFS Meter: three bars named MOMENTARY, SHORT and INTEGRATED against a dashed target line, each with its reading printed beneath it.'],
+  ['super-meter', 'Super Meter', 'Loudness from the left and Open Dynamic Range continuing from its tip to the true peak, on one half-gauge, every arc with its reading; LUFS, ODR and true peak max in the centre.',
+    'A Super Meter: a half-gauge with loudness arcs filling from the left and thinner Open Dynamic Range arcs continuing from their tips to grey true-peak ticks, LUFS-S and ODR-S riding the outer tips, each arc\'s reading printed inside it, a red target tick, and LUFS, ODR and true peak readouts in the centre.'],
+  ['digital-meter', 'Digital Meter', 'Sample peak and RMS, per channel, up to 7.1 — as segmented bars and as numbers.',
     'A Digital Meter: left and right bars with peak-hold lines held near the top of the scale.'],
   ['vu-meter', 'VU Meter', 'A needle, with the ballistics of the real thing.',
     'A VU Meter reading −7.0 VU: a needle under a banded scale that turns red above 0 VU, with the peak mark left standing near the top of it.'],
@@ -119,9 +119,9 @@ const MODULES = [
   ['oscilloscope', 'Oscilloscope', 'The waveform itself, one lane per channel or both overlaid.',
     'An Oscilloscope showing 20 milliseconds of waveform in two lanes, left above right.'],
   ['phase-scope', 'Phase Scope', 'A goniometer: left against right, rotated so mono stands upright.',
-    'A Phase Scope: an upright figure leaning slightly, drawn from left against right.'],
-  ['stereo-cloud', 'Stereo Cloud', 'Where each frequency sits in the stereo image, accumulated over time.',
-    'A Stereo Cloud: frequency up the side, stereo position across, bass gathered at the centre and the top spread wide.'],
+    'A Phase Scope: an upright figure leaning slightly, drawn from left against right inside a lettered square frame, with balance and correlation markers on its edges.'],
+  ['stereo-cloud', 'Stereo Cloud', 'Where each frequency sits in the stereo image over the last two seconds, one mark per band per frame.',
+    'A Stereo Cloud: frequency up the side, stereo position across, a field of diamonds brighter where the band is louder, bass gathered at the centre and the top spread wide.'],
 ];
 
 const METRICS = [
@@ -168,6 +168,30 @@ const PLATFORMS = [
   ['Linux', 'One file, no root, GTK from the host', '.AppImage', '—'],
   ['Linux', 'Sandboxed, carries its own runtime', '.flatpak', '—'],
   ['Any', 'The file analyser, for a terminal', 'oaa CLI', '—'],
+];
+
+/* Annex A.2 of the ODR specification, informative, restated here so the
+   reader gets the sense of scale without a click — and to scale: each band is
+   drawn as wide as it is long in LU. `README.md`'s ODR section carries the
+   same table; a change to the annex is a change to both. The anchors are
+   arithmetic on published delivery levels (target + ODR-I is where the peaks
+   land after normalisation); the names are editorial and say so. */
+const BANDS = [
+  { lu: 5, range: '0 – 5', name: 'Flat', note: 'The limiter’s ceiling is the loudness.' },
+  { lu: 3, range: '5 – 8', name: 'Crushed', note: 'The late loudness war.' },
+  { lu: 2, range: '8 – 10', name: 'Loud', note: '' },
+  { lu: 3, range: '10 – 13', name: 'Balanced', note: 'Nothing is lost at −14 LUFS.', line: true },
+  { lu: 3, range: '13 – 16', name: 'Dynamic', note: 'Plays below target on −14 platforms, transients intact.' },
+  { lu: 8, range: 'over 16', name: 'Wide', note: 'Ordinary for classical, jazz, film and broadcast.' },
+];
+const BAND_SCALE = BANDS.reduce((sum, b) => sum + b.lu, 0);
+const ANCHORS = [
+  { lu: 0, label: '0.0', what: 'a full-scale stereo sine' },
+  { lu: 5.9, label: '5.9', what: '−6 LUFS at −0.1 dBTP' },
+  { lu: 8.7, label: '8.7', what: '−9 LUFS at −0.3 dBTP, a loud CD' },
+  { lu: 13, label: '13.0', what: '−14 LUFS at −1 dBTP, the streaming line', line: true },
+  { lu: 15, label: '15.0', what: '−16 LUFS at −1 dBTP' },
+  { lu: 22, label: '22.0', what: '−23 LUFS at −1 dBTP, EBU R 128' },
 ];
 ---
 
@@ -304,7 +328,7 @@ const PLATFORMS = [
         src="/analyzer-still.webp"
         srcset={still.sources.map((source) => `${source.file} ${source.width}w`).join(', ')}
         sizes="(min-width: 1440px) 1376px, (min-width: 901px) calc(100vw - 64px), (min-width: 561px) calc(100vw - 48px), calc(100vw - 32px)"
-        alt="Eight meter modules on one canvas: loudness bars, three concentric arcs, a spectrum analyser, a minute of loudness against time, a delivery verdict reading NOT READY, per-channel peak bars, a waveform and a latched true-peak alert."
+        alt="Eight meter modules on one canvas: loudness bars, a loudness half-gauge, a spectrum analyser, a minute of loudness against time, a delivery verdict reading NOT READY, per-channel peak bars, a waveform and a latched true-peak alert."
         width={still.width}
         height={still.height}
         fetchpriority="high"
@@ -589,6 +613,47 @@ const PLATFORMS = [
           </tbody>
         </table>
       </div>
+    </div>
+
+    <div class="bands" style={`--scale: ${BAND_SCALE}`}>
+      <div class="stack-24">
+        <p class="label">Reading the number</p>
+        <p class="prose bands-lead">
+          Normalise a master to a target and its true peak lands at the target plus its ODR-I — so
+          under −14 LUFS and a −1 dBTP ceiling, <strong>13 LU</strong> is the most a platform can
+          play at its own level. The bands are the specification’s Annex A: the anchors are
+          arithmetic on published delivery levels, the names are editorial, and 7 LU is a choice in
+          a techno track and a casualty in a string quartet.
+        </p>
+      </div>
+      <div class="band-scale" aria-hidden="true">
+        {ANCHORS.map((a) => (
+          <span class:list={['band-tick', { 'band-tick-line': a.line }]} style={`--at: ${a.lu}`}>
+            {a.label}
+          </span>
+        ))}
+      </div>
+      <ol
+        class="band-strip"
+        style={`--cols: ${BANDS.map((b) => `minmax(0, ${b.lu}fr)`).join(' ')}`}
+        aria-label="What an ODR-I reading means, from flat to wide"
+      >
+        {BANDS.map((b) => (
+          <li class:list={['band', { 'band-line': b.line }]}>
+            <span class="band-range">{b.range} LU</span>
+            <span class="band-name">{b.name}</span>
+            {b.note && <span class="band-note">{b.note}</span>}
+          </li>
+        ))}
+      </ol>
+      <ul class="band-legend" aria-label="Where the anchors come from">
+        {ANCHORS.map((a) => (
+          <li class:list={{ 'band-legend-line': a.line }}>
+            <span class="band-legend-n">{a.label}</span>
+            {a.what}
+          </li>
+        ))}
+      </ul>
     </div>
   </section>
 
@@ -1540,6 +1605,202 @@ const PLATFORMS = [
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: var(--s48);
+  }
+
+  /* ---------- dynamics: the bands ---------- */
+
+  /* Annex A.2 to scale: each band is as wide as it is long in LU, so the strip
+     says at a glance that "loud" is two units wide and "wide" is open-ended.
+     No colour ramp — the site draws no gradients, and the specification
+     colours a reading against a delivery target's floor rather than against a
+     fixed opinion — so the one colour is the streaming line at 13, which is
+     arithmetic and not taste. The anchors sit on a rail above the strip as bare
+     numerals, positioned to scale, and are explained in the legend beneath it,
+     because a two-unit column has no width for a sentence. Below 980 px the
+     segments stack into rows and the rail goes: the legend already says
+     everything it did.
+
+     A grid, not a flex row. A flex item's padding and hairline come out of the
+     free space *before* it is shared by flex-grow, so each segment was its
+     share of (width − 150 px) plus its own 25 px — and the boundary at 13 sat
+     twenty pixels right of the tick above it. `fr` tracks divide the container
+     itself, padding included, and `minmax(0, …)` keeps a nowrap range label
+     from widening its track. The streaming line is a pseudo-element straddling
+     the track edge by a pixel each side, rather than a border, which would sit
+     entirely inside one segment and miss the tick by its own width. */
+  .bands {
+    margin-top: var(--s48);
+    display: grid;
+    gap: var(--s24);
+  }
+
+  .bands-lead {
+    max-width: var(--measure);
+  }
+
+  .band-scale {
+    position: relative;
+    height: var(--s24);
+    margin: 0 1px calc(-1 * var(--s24) + var(--s16));
+  }
+
+  .band-tick {
+    position: absolute;
+    left: calc(var(--at) / var(--scale) * 100%);
+    bottom: 0;
+    transform: translateX(-50%);
+    padding-bottom: var(--s8);
+    font-family: var(--readout);
+    font-size: 0.6875rem;
+    line-height: 1;
+    color: var(--faint);
+    white-space: nowrap;
+  }
+  .band-tick::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    bottom: 0;
+    width: 1px;
+    height: var(--s4);
+    background: var(--hair-strong);
+  }
+  .band-tick:first-child {
+    transform: none;
+  }
+  .band-tick:first-child::after {
+    left: 0;
+  }
+  .band-tick-line {
+    color: var(--signal);
+  }
+  .band-tick-line::after {
+    width: 2px;
+    height: var(--s8);
+    margin-left: -1px;
+    background: var(--signal);
+  }
+
+  .band-strip {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: var(--cols);
+    border: 1px solid var(--hair-strong);
+  }
+
+  .band {
+    position: relative;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--s4);
+    padding: var(--s12) var(--s12) var(--s16);
+    border-left: 1px solid var(--hair);
+  }
+  .band:first-child {
+    border-left: 0;
+  }
+  .band:nth-child(even) {
+    background: var(--panel);
+  }
+  .band-line::after {
+    content: '';
+    position: absolute;
+    z-index: 1;
+    top: 0;
+    bottom: 0;
+    right: -1px;
+    width: 2px;
+    background: var(--signal);
+  }
+  .band-line + .band {
+    border-left: 0;
+  }
+
+  .band-range {
+    font-family: var(--readout);
+    font-size: 0.6875rem;
+    color: var(--faint);
+  }
+  .band-name {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 1rem;
+    line-height: 1.2;
+    color: var(--text);
+  }
+  .band-note {
+    font-size: 0.8125rem;
+    line-height: 1.45;
+    color: var(--muted);
+  }
+
+  .band-legend {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s8) var(--s24);
+    font-size: 0.8125rem;
+    line-height: 1.5;
+    color: var(--muted);
+  }
+  .band-legend-n {
+    font-family: var(--readout);
+    font-size: 0.75rem;
+    color: var(--text);
+    margin-right: var(--s4);
+  }
+  .band-legend-line .band-legend-n {
+    color: var(--signal);
+  }
+
+  @media (max-width: 980px) {
+    .band-scale {
+      display: none;
+    }
+    .band-strip {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .band {
+      display: grid;
+      grid-template-columns: 5.5rem minmax(0, 1fr);
+      grid-template-areas:
+        'range name'
+        'range note';
+      column-gap: var(--s16);
+      row-gap: var(--s4);
+      padding: var(--s12) var(--s16);
+      border-left: 0;
+      border-top: 1px solid var(--hair);
+    }
+    .band:first-child {
+      border-top: 0;
+    }
+    .band-range {
+      grid-area: range;
+      padding-top: 0.25em;
+    }
+    .band-name {
+      grid-area: name;
+    }
+    .band-note {
+      grid-area: note;
+    }
+    .band-line::after {
+      top: auto;
+      right: 0;
+      bottom: -1px;
+      left: 0;
+      width: auto;
+      height: 2px;
+    }
+    .band-line + .band {
+      border-top: 0;
+    }
   }
 
   /* ---------- reach ---------- */

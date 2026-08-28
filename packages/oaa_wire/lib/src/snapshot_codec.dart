@@ -26,6 +26,15 @@ import 'quantise.dart';
 /// display in the field — and break it by drawing wrong numbers rather than by
 /// failing, which is worse.
 ///
+/// Version 5 is the second time the table moved, and the first time it grew:
+/// the engine's per-source spectra — left, right, mid and side, each with its
+/// peak hold — ride between `histogram` and the scope run, in the encoding
+/// `spectrum` already uses. They are what lets a display's Spectrum Analyzer
+/// and Spectrogram read a `Source` other than the combined bands, with the
+/// setting travelling in the layout's `options` and the display port staying
+/// one-directional. [SnapshotWireV4] is the version 4 table, decode-only, for
+/// the same reason [SnapshotWireLegacy] is the version 1–3 one.
+///
 /// The offsets below are computed from [MeterShape] rather than written out, so
 /// that they cannot drift *among themselves*. `test/snapshot_codec_test.dart`
 /// pins the resulting total against the frozen constant, so a change to
@@ -84,9 +93,23 @@ abstract final class SnapshotWire {
   static const int offsetSpectrumPan = offsetReserved3 + _f32;
   static const int offsetHistogram = offsetSpectrumPan + _bandBytes;
 
-  /// How many stereo pairs of [offsetScope] are this measurement's.
-  static const int offsetScopeFrames =
+  /// The per-source spectra, protocol version 5: the front pair's left, right,
+  /// mid and side, each followed by its peak hold, in the engine's order and
+  /// in `spectrum`'s encoding. Between `histogram` and the scope count rather
+  /// than at the end, so that the count stays beside the run it counts and
+  /// the run stays last.
+  static const int offsetSpectrumLeft =
       offsetHistogram + MeterShape.histogramBins * _i16;
+  static const int offsetSpectrumLeftPeak = offsetSpectrumLeft + _bandBytes;
+  static const int offsetSpectrumRight = offsetSpectrumLeftPeak + _bandBytes;
+  static const int offsetSpectrumRightPeak = offsetSpectrumRight + _bandBytes;
+  static const int offsetSpectrumMid = offsetSpectrumRightPeak + _bandBytes;
+  static const int offsetSpectrumMidPeak = offsetSpectrumMid + _bandBytes;
+  static const int offsetSpectrumSide = offsetSpectrumMidPeak + _bandBytes;
+  static const int offsetSpectrumSidePeak = offsetSpectrumSide + _bandBytes;
+
+  /// How many stereo pairs of [offsetScope] are this measurement's.
+  static const int offsetScopeFrames = offsetSpectrumSidePeak + _bandBytes;
 
   /// **Last, and the only variable-length section in the protocol.** A frame
   /// carries the audio that actually elapsed since the previous one rather
@@ -213,6 +236,51 @@ abstract final class SnapshotWire {
     _writeUnits(into, offset + offsetSpectrumPan, source.spectrumPan);
     _writeFractions(into, offset + offsetHistogram, source.histogram);
 
+    // A source the producer cannot measure — the right, mid or side of a
+    // one-channel signal — is NaN throughout, and travels as the reserved
+    // code band for band. Not the floor: a display asked for it says "not
+    // measured", never "silent".
+    _writeDb(
+      into,
+      offset + offsetSpectrumLeft,
+      source.spectrumOf(SpectrumSource.left),
+    );
+    _writeDb(
+      into,
+      offset + offsetSpectrumLeftPeak,
+      source.spectrumPeakOf(SpectrumSource.left),
+    );
+    _writeDb(
+      into,
+      offset + offsetSpectrumRight,
+      source.spectrumOf(SpectrumSource.right),
+    );
+    _writeDb(
+      into,
+      offset + offsetSpectrumRightPeak,
+      source.spectrumPeakOf(SpectrumSource.right),
+    );
+    _writeDb(
+      into,
+      offset + offsetSpectrumMid,
+      source.spectrumOf(SpectrumSource.mid),
+    );
+    _writeDb(
+      into,
+      offset + offsetSpectrumMidPeak,
+      source.spectrumPeakOf(SpectrumSource.mid),
+    );
+    _writeDb(
+      into,
+      offset + offsetSpectrumSide,
+      source.spectrumOf(SpectrumSource.side),
+    );
+    _writeDb(
+      into,
+      offset + offsetSpectrumSidePeak,
+      source.spectrumPeakOf(SpectrumSource.side),
+    );
+
     final run = scope ?? source.scope;
     var frames = scopeFrames ?? source.scopeFrames;
     if (frames > MeterShape.maxScopeFrames) frames = MeterShape.maxScopeFrames;
@@ -272,6 +340,38 @@ abstract final class SnapshotWire {
   }
 }
 
+/// The `0x0003 SNAPSHOT` table exactly as protocol version 4 froze it.
+///
+/// **Decode only.** Identical to version 5 up to and including `histogram`;
+/// what version 5 inserted after it is exactly what this table lacks, so the
+/// scope count and the run sit 8,192 bytes earlier. A version 4 producer is
+/// the plugin somebody installed before upgrading the app, and it keeps
+/// drawing — with the four per-source spectra reported as not measured.
+///
+/// **A consumer decides between this table and version 5's by the frame's
+/// version, never by its length.** The two overlap: a version 4 relay frame
+/// carrying 2,048 or more stereo pairs is exactly as long as some version 5
+/// frame, and the version 1–3 size coincides with both. The header carries
+/// the version for this reason.
+abstract final class SnapshotWireV4 {
+  static const int _i16 = 2;
+
+  static const int offsetScopeFrames =
+      SnapshotWire.offsetHistogram + MeterShape.histogramBins * _i16;
+  static const int offsetScope = offsetScopeFrames + 4;
+
+  static const int baseBytes = offsetScope;
+
+  static int payloadBytesFor(int scopeFrames) =>
+      baseBytes + scopeFrames * 2 * _i16;
+
+  static const int maxPayloadBytes =
+      baseBytes + MeterShape.maxScopeFrames * 2 * _i16;
+
+  /// 7,652 — the one-block size a version 4 producer announces in its `HELLO`.
+  static const int payloadBytes = baseBytes + MeterShape.scopePoints * 2 * _i16;
+}
+
 /// The `0x0003 SNAPSHOT` table exactly as protocol versions 1 to 3 froze it.
 ///
 /// **Decode only, and it is not dead weight.** `WireFrame.minimumVersion` is 2
@@ -282,15 +382,15 @@ abstract final class SnapshotWire {
 /// per-channel block, so honouring that promise means being able to read the
 /// old table as well as write the new one.
 ///
-/// Nothing writes this. A version 4 producer sends version 4; this is what a
-/// version 4 *consumer* uses when the producer announced 15,056 bytes.
+/// Nothing writes this. This is what a version 4 or 5 *consumer* uses when
+/// the producer's frames are stamped 3 or lower and announced 15,056 bytes.
 abstract final class SnapshotWireLegacy {
   static const int _f32 = 4;
   static const int _channelBytes = MeterShape.maxChannels * _f32;
   static const int _bandBytes = MeterShape.spectrumBands * _f32;
 
-  // Everything up to the end of `clip` is identical to version 4 and is read
-  // through `SnapshotWire`'s constants; only what follows moved.
+  // Everything up to the end of `clip` is identical to versions 4 and 5 and
+  // is read through `SnapshotWire`'s constants; only what follows moved.
   static const int offsetSpectrum = SnapshotWire.offsetClip + _channelBytes;
   static const int offsetSpectrumPeak = offsetSpectrum + _bandBytes;
 

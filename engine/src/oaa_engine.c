@@ -229,10 +229,22 @@ static void oaa_clear_measurements(oaa_engine *engine) {
     s->vu[c] = OAA_DB_FLOOR;
     s->clip[c] = 0;
   }
+  /* The per-signal sets clear to what the signal can say: the floor where
+   * there is a signal to be silent, NaN where a one-channel source has no
+   * right, mid or side to measure — see `spectrum_left` in the header. */
+  const float pair = engine->cfg.channels >= 2 ? OAA_DB_FLOOR : NAN;
   for (uint32_t b = 0; b < OAA_SPECTRUM_BANDS; b++) {
     s->spectrum[b] = OAA_DB_FLOOR;
     s->spectrum_peak[b] = OAA_DB_FLOOR;
     s->spectrum_pan[b] = 0.0f;
+    s->spectrum_left[b] = OAA_DB_FLOOR;
+    s->spectrum_left_peak[b] = OAA_DB_FLOOR;
+    s->spectrum_right[b] = pair;
+    s->spectrum_right_peak[b] = pair;
+    s->spectrum_mid[b] = pair;
+    s->spectrum_mid_peak[b] = pair;
+    s->spectrum_side[b] = pair;
+    s->spectrum_side_peak[b] = pair;
   }
   memset(s->scope, 0, sizeof(s->scope));
   memset(s->histogram, 0, sizeof(s->histogram));

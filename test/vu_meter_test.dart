@@ -10,12 +10,13 @@
 // bottom of the scale, and the tablet's dial rested confidently at −20 VU with
 // the same authority it reads a real quiet passage with.
 //
-// The assertion counts pixels of `textPrimary` over the whole picture rather
-// than probing the angle the needle would be at, because that angle is a copy
-// of the painter's layout, and a copy has to be kept in step with the original
-// and silently stops testing anything the day it is not. A needle is two orders
-// of magnitude more of that colour than the 0 VU mark and its label, which are
-// the only other things drawn in it.
+// The assertion counts pixels of `meterFill` — the needle's colour — over the
+// whole picture rather than probing the angle the needle would be at, because
+// that angle is a copy of the painter's layout, and a copy has to be kept in
+// step with the original and silently stops testing anything the day it is
+// not. The needle is the only thing on the face drawn in that colour, which is
+// exactly why the needle wears it: it is the reading, in the same voice as
+// every other meter's fill.
 
 import 'dart:io';
 import 'dart:typed_data';
@@ -145,7 +146,7 @@ Future<void> _loadFonts() async {
   ]);
 }
 
-/// Pixels of [OaaColors.textPrimary] in the module, to the nearest whole
+/// Pixels of [OaaColors.meterFill] in the module, to the nearest whole
 /// channel. Antialiased edges are not counted, which is fine: the question is
 /// whether a shape the length of the radius is there at all.
 Future<int> _needleInk(WidgetTester tester, GlobalKey key) async {
@@ -156,9 +157,9 @@ Future<int> _needleInk(WidgetTester tester, GlobalKey key) async {
     final image = await boundary.toImage();
     final data = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
     final bytes = data!.buffer.asUint8List();
-    final r = (_colors.textPrimary.r * 255).round();
-    final g = (_colors.textPrimary.g * 255).round();
-    final b = (_colors.textPrimary.b * 255).round();
+    final r = (_colors.meterFill.r * 255).round();
+    final g = (_colors.meterFill.g * 255).round();
+    final b = (_colors.meterFill.b * 255).round();
     for (var i = 0; i < bytes.length; i += 4) {
       if (bytes[i] == r && bytes[i + 1] == g && bytes[i + 2] == b) count++;
     }

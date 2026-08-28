@@ -159,12 +159,14 @@ class ModuleHost extends StatelessWidget {
       ModuleKind.spectrumAnalyzer => SpectrumAnalyzerModule(
         engine: engine,
         clock: clock,
+        source: spec.spectrumSource,
         response: spec.spectrumResponse,
         tilt: spec.spectrumTilt,
       ),
       ModuleKind.spectrogram => SpectrogramModule(
         engine: engine,
         clock: clock,
+        source: spec.spectrumSource,
         ramp: spec.colorRamp,
       ),
       ModuleKind.oscilloscope => OscilloscopeModule(

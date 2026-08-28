@@ -226,7 +226,9 @@ class DisplayClient {
           case WireFrameType.calibration:
             calibration.value = Calibration.fromJson(_json(_reader.payload));
           case WireFrameType.snapshot:
-            snapshot.decode(_reader.payload);
+            // The frame's version chooses the table — a version 4 host with a
+            // long scope run sends exactly the length a version 5 one does.
+            snapshot.decode(_reader.payload, version: _reader.version);
             _lastFrameAt = DateTime.now();
             if (state.value != RemoteLinkState.live) {
               state.value = RemoteLinkState.live;

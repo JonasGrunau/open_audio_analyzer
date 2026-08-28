@@ -152,6 +152,35 @@ void main() {
       expect(snapshot.samplePeakMax, _isFiniteBetween(-70, 0));
 
       expect(snapshot.hasSpectrum, isTrue);
+
+      // Version 5: the per-source spectra, measured on a two-channel file
+      // and so every one of them a number rather than the NaN code. Left,
+      // right and mid carry the tone; side is whatever the file's two
+      // channels disagree by, which is a measurement even when it is the
+      // floor.
+      for (final source in SpectrumSource.values) {
+        expect(
+          snapshot.spectrumOf(source).every((band) => !band.isNaN),
+          isTrue,
+          reason: '${source.id} arrived as not measured on a stereo file',
+        );
+        expect(
+          snapshot.spectrumPeakOf(source).every((band) => !band.isNaN),
+          isTrue,
+          reason: '${source.id} hold arrived as not measured',
+        );
+      }
+      for (final source in [
+        SpectrumSource.left,
+        SpectrumSource.right,
+        SpectrumSource.mid,
+      ]) {
+        expect(
+          snapshot.spectrumOf(source).any((band) => band > -120.0),
+          isTrue,
+          reason: '${source.id} is nothing but floor',
+        );
+      }
     });
 
     test('reports the transport the host actually set', () {
@@ -472,7 +501,7 @@ Future<_Session?> _run(File binary, List<String> arguments) async {
             case WireFrameType.dawTransport:
               transports.add(DawTransportCodec.decode(reader.payload));
             case WireFrameType.snapshot:
-              snapshot.decode(reader.payload);
+              snapshot.decode(reader.payload, version: reader.version);
               snapshotFrames++;
           }
         }

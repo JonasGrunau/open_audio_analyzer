@@ -32,7 +32,7 @@ void main() {
   // sentimental. Version 3 promises that it moved a frame type and no table,
   // and the only way to hold a promise like that is to decode bytes that were
   // produced before it was made. Regenerating this file would destroy the
-  // evidence — it is frozen, and `wire_v3.bin` is the one that tracks the
+  // evidence — it is frozen, and `wire_v5.bin` is the one that tracks the
   // current serialiser.
   group('a version-2 producer, decoded by this version-3 build', () {
     test('every frame is accepted, and the tables read identically', () {
@@ -55,7 +55,7 @@ void main() {
           case WireFrameType.dawTransport:
             transport = DawTransportCodec.decode(reader.payload);
           case WireFrameType.snapshot:
-            snapshot.decode(reader.payload);
+            snapshot.decode(reader.payload, version: reader.version);
             sawSnapshot = true;
         }
       }
@@ -121,7 +121,7 @@ void main() {
   //
   // These bytes were written by a compiler before version 4 was designed, which
   // is what makes them evidence rather than a restatement.
-  group('a version-3 producer, decoded by this version-4 build', () {
+  group('a version-3 producer, decoded by this version-5 build', () {
     test('is accepted, and its measurements arrive intact', () {
       final reader = FrameReader()..add(_goldenBytes('wire_v3.bin'));
 
@@ -135,7 +135,7 @@ void main() {
           case WireFrameType.hello:
             hello = WireHello.decode(reader.payload);
           case WireFrameType.snapshot:
-            snapshot.decode(reader.payload);
+            snapshot.decode(reader.payload, version: reader.version);
             sawSnapshot = true;
         }
       }
@@ -169,6 +169,68 @@ void main() {
       for (var i = 0; i < MeterShape.histogramBins; i++) {
         expect(snapshot.histogram[i], closeTo(i / 120.0, 1e-6));
       }
+      // Never measured by a producer this old, and reported so.
+      for (final source in SpectrumSource.values) {
+        if (source == SpectrumSource.all) continue;
+        expect(snapshot.spectrumOf(source).every((v) => v.isNaN), isTrue);
+      }
+    });
+  });
+
+  // The same promise a version later. `wire_v4.bin` was the current golden
+  // until version 5 inserted the per-source spectra before the scope run; it
+  // is frozen now, and reading it exercises `SnapshotWireV4` — the table a
+  // plugin installed under version 4 still writes after the app moves on.
+  // The frame's *version* is what selects the table: a version 4 frame with
+  // a long enough scope run is exactly as long as a version 5 one.
+  group('a version-4 producer, decoded by this version-5 build', () {
+    test('is accepted, read by its own table, and reports no sources', () {
+      final reader = FrameReader()..add(_goldenBytes('wire_v4.bin'));
+
+      WireHello? hello;
+      final snapshot = WireSnapshot();
+      var sawSnapshot = false;
+
+      while (reader.moveNext()) {
+        expect(reader.version, 4);
+        switch (reader.type) {
+          case WireFrameType.hello:
+            hello = WireHello.decode(reader.payload);
+          case WireFrameType.snapshot:
+            snapshot.decode(reader.payload, version: reader.version);
+            sawSnapshot = true;
+        }
+      }
+
+      expect(hello, isNotNull);
+      expect(hello!.snapshotPayloadBytes, SnapshotWireV4.payloadBytes);
+      expect(hello.incompatibility, isNull);
+      expect(sawSnapshot, isTrue);
+
+      const dbTolerance = 0.5 / Quantise.dbStep;
+      const sampleTolerance = 0.5 / Quantise.sampleScale;
+      expect(snapshot.channels, 2);
+      expect(snapshot.loudnessRangeLow, closeTo(-20.0, 1e-5));
+      for (var i = 0; i < MeterShape.spectrumBands; i++) {
+        expect(
+          snapshot.spectrum[i],
+          closeTo(-(i % 100).toDouble(), dbTolerance),
+        );
+      }
+      // The scope run sits 8,192 bytes earlier than at version 5: read from
+      // the wrong table this would be the mid spectrum's bytes as samples.
+      expect(snapshot.scopeFrames, MeterShape.scopePoints);
+      for (var i = 0; i < MeterShape.scopePoints * 2; i++) {
+        expect(
+          snapshot.scope[i],
+          closeTo((i % 7) / 7.0 - 0.5, sampleTolerance),
+        );
+      }
+      for (final source in SpectrumSource.values) {
+        if (source == SpectrumSource.all) continue;
+        expect(snapshot.spectrumOf(source).every((v) => v.isNaN), isTrue);
+        expect(snapshot.spectrumPeakOf(source).every((v) => v.isNaN), isTrue);
+      }
     });
   });
 
@@ -197,19 +259,19 @@ void main() {
           case WireFrameType.dawTransport:
             transport = DawTransportCodec.decode(reader.payload);
           case WireFrameType.snapshot:
-            snapshot.decode(reader.payload);
+            snapshot.decode(reader.payload, version: reader.version);
         }
       }
     });
 
     test('carries three frames of the expected sizes', () {
       // A 32-byte hello block plus a 38-byte UTF-8 name, an 88-byte transport
-      // and a 7,652-byte snapshot, each behind a 12-byte envelope. The snapshot
-      // was 15,056 through version 3: the five plotted arrays are most of the
-      // difference, and the scope's four-byte length prefix is the rest.
+      // and a 15,844-byte snapshot, each behind a 12-byte envelope. The
+      // snapshot was 7,652 at version 4 — the eight per-source spectra are the
+      // whole difference — and 15,056 through version 3.
       final bytes = _goldenBytes().length;
-      expect(bytes, (12 + 32 + 38) + (12 + 88) + (12 + 7652));
-      expect(bytes, 7846);
+      expect(bytes, (12 + 32 + 38) + (12 + 88) + (12 + 15844));
+      expect(bytes, 16038);
     });
 
     test('agrees with this build about what a frame means', () {
@@ -311,6 +373,36 @@ void main() {
           snapshot.spectrumPan[i],
           closeTo((i % 3).toDouble() - 1, unitTolerance),
         );
+      }
+
+      // The eight per-source arrays, each on its own modulus so that one
+      // serialised into its neighbour's slot is a wrong value and not merely
+      // a wrong length. The fixture leaves `spectrum_side[0]` unmeasured.
+      const moduli = {
+        SpectrumSource.left: 50,
+        SpectrumSource.right: 60,
+        SpectrumSource.mid: 70,
+        SpectrumSource.side: 80,
+      };
+      for (final entry in moduli.entries) {
+        final spectrum = snapshot.spectrumOf(entry.key);
+        final peak = snapshot.spectrumPeakOf(entry.key);
+        for (var i = 0; i < MeterShape.spectrumBands; i++) {
+          if (entry.key == SpectrumSource.side && i == 0) {
+            expect(spectrum[i].isNaN, isTrue);
+            continue;
+          }
+          expect(
+            spectrum[i],
+            closeTo(-(i % entry.value).toDouble(), dbTolerance),
+            reason: '${entry.key.id}[$i]',
+          );
+          expect(
+            peak[i],
+            closeTo(-(i % entry.value).toDouble() + 2, dbTolerance),
+            reason: '${entry.key.id} peak [$i]',
+          );
+        }
       }
 
       for (var i = 0; i < MeterShape.scopePoints * 2; i++) {
@@ -453,7 +545,7 @@ void main() {
 /// be a stale copy — and the entire value of this file is that the bytes came
 /// out of a different implementation in a different language. A golden that has
 /// drifted back into agreement with the code it is checking proves nothing.
-Uint8List _goldenBytes([String name = 'wire_v4.bin']) {
+Uint8List _goldenBytes([String name = 'wire_v5.bin']) {
   var directory = Directory.current;
   for (var depth = 0; depth < 5; depth++) {
     final candidate = File('${directory.path}/plugin/test/golden/$name');

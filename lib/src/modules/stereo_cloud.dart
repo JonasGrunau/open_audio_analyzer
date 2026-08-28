@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
@@ -9,7 +10,7 @@ import 'package:flutter/widgets.dart';
 
 import '../clock/meter_clock.dart';
 
-/// Where each frequency sits in the stereo image, accumulated over time.
+/// Where each frequency sits in the stereo image, over the last two seconds.
 ///
 /// The phase scope answers "is this mix mono-compatible" in the time domain and
 /// cannot tell you *which part* of it is not. This module is the same question
@@ -17,33 +18,67 @@ import '../clock/meter_clock.dart';
 /// bass note that has drifted off centre or a cymbal pinned hard right shows up
 /// as a shape in a place, which is the thing you can act on.
 ///
-/// It accumulates rather than showing an instant, and that is the module. A
-/// single frame of per-band pan is noise — the pan of a band between notes is
-/// whatever leaked into it. Over a few seconds the persistent parts of the
-/// image emerge from the noise and the transient parts fade, which is exactly
-/// the distinction a mix engineer is trying to make.
+/// It shows a stretch of time rather than an instant, and that is the module.
+/// A single frame of per-band pan is noise — the pan of a band between notes
+/// is whatever leaked into it. Over a couple of seconds the persistent parts
+/// of the image stand still while the transient parts scatter and fade, which
+/// is exactly the distinction a mix engineer is trying to make.
 ///
 /// ---------------------------------------------------------------------------
-/// The accumulation is a grid of numbers, not a picture
+/// The picture is a ring of hits, drawn as marks, not an accumulation
 ///
-/// This module used to accumulate into an image: draw last frame's picture back
-/// at 96.5%, add this frame's dots, keep the result. The image came from
-/// `toImageSync`, which holds the display list that drew it for as long as the
-/// image lives — so each frame's image pinned the one before it, back to the
-/// first, and none of it was ever released. See the header of
-/// `spectrogram.dart` for what that cost.
+/// Each published frame contributes one *hit* per band that stands out of the
+/// mix: where the band sat and how far it stood out. The module keeps the
+/// last [_frames] frames of those in a ring and draws every hit still in it
+/// as a diamond — brighter and larger the louder the band, dimmer the older
+/// the frame — so the display is Decibel's: a field of distinct marks, a
+/// bright spine where the persistent energy sits, and a bass band that drifts
+/// slowly across the middle leaving a ribbon, because its neighbours in
+/// frequency and its own positions a frame apart adjoin.
 ///
-/// What the image actually held was one number per cell: how bright this bit of
-/// the plot is right now. So that is what is kept — a `Float32List` of
-/// [_cell]-sized cells, faded in place on each published frame and splatted
-/// into by the bands that are loud enough. The whole grid is then drawn as
-/// points sorted into [_alphaSteps] brightness buckets, which is that many draw
-/// calls rather than one per cell.
+/// The module went through two other designs first. It accumulated into an
+/// image kept between frames, which held every display list back to the first
+/// — see the header of `spectrogram.dart` for what that cost. Then it
+/// accumulated into a grid of cell brightnesses, composited additively and
+/// faded in place, which was bounded but drew the wrong picture: every band a
+/// few decibels down the mix added a little to the cells it passed through,
+/// and a little forty times a second is a lot, so the field filled edge to
+/// edge with a haze that answered no question about *where* anything sat. A
+/// hit's brightness here is its own and only its own; a quiet band is a faint
+/// mark for two seconds and then nothing.
 ///
-/// It costs one pass over the grid per published frame and one to emit it,
-/// which is proportional to the module's *area* rather than to how long the
-/// session has been running. That is the property the image version did not
-/// have.
+/// The ring is fixed at [_frames] × [MeterShape.spectrumBands] entries, which
+/// is proportional to nothing the session does — not its length, not the
+/// module's size. The hits are re-emitted into [PointBuckets] on every
+/// published frame, one buffer per brightness step, which is that many draw
+/// calls rather than one per mark; a resize re-emits the same ring at the new
+/// geometry rather than dropping it.
+///
+/// ---------------------------------------------------------------------------
+/// What makes a hit is relative, and that is what keeps the cloud readable
+///
+/// A fixed floor lit every band of real music every frame. What matters in a
+/// mix is which bands stand out of it, so a band's weight is measured against
+/// the frame's own loudest band — only the top [_StereoCloudPainter._window]
+/// dB of the frame contribute at all — and cubed, so the top ten decibels do
+/// nearly all of the lighting and a band twenty down is a mark the eye finds
+/// only by looking for it. Squared over a 36 dB window, which is where this
+/// started, lit two thirds of every frame's bands and the field read as a
+/// haze whatever was drawn into it.
+///
+/// ---------------------------------------------------------------------------
+/// Where a hit sits is the pan pot's angle, not the power balance
+///
+/// The engine publishes a band's balance as `(R − L) / (R + L)` over power,
+/// which is the honest measurement and the wrong ruler for a picture: it is
+/// steepest at the centre, so a band three decibels louder on one side lands
+/// a third of the way to the edge and one ten decibels louder is nearly hard
+/// against it, and every band with any width to it swept the plot from side
+/// to side. What a mix engineer means by "half left" is the pan pot at half,
+/// and under the constant-power law that is an amplitude *angle*:
+/// `atan2(√R, √L)`, 45° at centre, 0 and 90° at the edges. Drawn at that
+/// angle a source sits where its pot is, and a three-decibel lean is a fifth
+/// of the way over. The measurement is unchanged; only the ruler is.
 class StereoCloudModule extends StatefulWidget {
   const StereoCloudModule({
     required this.engine,
@@ -58,99 +93,111 @@ class StereoCloudModule extends StatefulWidget {
   State<StereoCloudModule> createState() => _StereoCloudModuleState();
 }
 
-/// How many brightness buckets the accumulated grid is drawn in. Each is one
+/// How many brightness steps the marks are drawn in. Each is one
 /// `drawRawPoints` call, so this is also the number of draw calls per frame.
-/// Sixteen steps of alpha on a soft cloud are not distinguishable from a
-/// continuous ramp.
+/// Sixteen steps on a soft cloud are not distinguishable from a continuous
+/// ramp.
 const int _alphaSteps = 16;
 
-/// The side of an accumulator cell, in logical pixels — and the size of the dot
-/// drawn for it, which is the dot size this module has always used. Cells any
-/// finer would cost four times the passes to draw the same picture.
-const double _cell = 2.0;
+/// Published frames of history the ring holds — about two seconds at the
+/// engine's rate, which is enough for a slow drift to draw its ribbon and
+/// short enough that a change in the mix is seen as one.
+const int _frames = 96;
+
+/// The diamond drawn for the faintest and the brightest hit, in logical
+/// pixels. Level is told twice, by brightness and by size, because a bright
+/// mark two pixels wide and a dim one read as the same thing at arm's length
+/// and a loud band is the one thing the eye is meant to land on.
+const double _markMin = 1.5;
+const double _markMax = 4.0;
 
 class _StereoCloudModuleState extends State<StereoCloudModule> {
-  /// Brightness per cell, `0..1`. The picture the module used to keep, as the
-  /// numbers it was a picture of.
-  Float32List _grid = Float32List(0);
-  int _columns = 0;
-  int _rows = 0;
+  /// The ring: where each band sat, and how far it stood out of its frame
+  /// (`0` for a band that did not), for each of the last [_frames] frames.
+  /// Slot [_head] is where the next frame goes; the newest is the one before.
+  final Float32List _pan = Float32List(_frames * MeterShape.spectrumBands);
+  final Float32List _weight = Float32List(_frames * MeterShape.spectrumBands);
+  int _head = 0;
 
-  /// The emitted grid, sorted by brightness.
+  /// The base index of the slot the next frame is recorded into, advancing
+  /// the ring. The caller fills every band of it — a band that does not stand
+  /// out is written as a weight of zero, not skipped, or the slot would keep
+  /// the hits of a frame [_frames] frames ago.
+  int beginFrame() {
+    final base = _head * MeterShape.spectrumBands;
+    _head = (_head + 1) % _frames;
+    return base;
+  }
+
+  /// Records a frame with no hits — a mono source, or one with no spectrum —
+  /// so what is on screen ages out instead of freezing.
+  void recordNothing() {
+    final base = beginFrame();
+    _weight.fillRange(base, base + MeterShape.spectrumBands, 0);
+  }
+
+  /// The emitted ring, sorted by brightness.
   final _marks = PointBuckets(_alphaSteps);
 
-  /// One [Paint] per brightness bucket.
+  /// One [Paint] per brightness step.
   List<Paint> _passes = const [];
   Color? _builtFor;
   ui.Paragraph? _left;
+  ui.Paragraph? _centre;
   ui.Paragraph? _right;
+  ui.Paragraph? _pair;
   ui.Paragraph? _mono;
   List<ui.Paragraph> _frequencyLabels = const [];
+
+  /// Which [kHzGrid] values carry a label at the current plot height, solved
+  /// when the plot resizes rather than per frame — by [fitHzLabels], the one
+  /// rule every frequency axis fits by. The gridlines are all drawn; only the
+  /// text thins, because two labels printed into each other read as neither.
+  List<bool> _labelled = const [];
+  double _labelledFor = -1;
+
+  void solveAxis(double plotHeight) {
+    if (_labelledFor == plotHeight || _frequencyLabels.isEmpty) return;
+    _labelledFor = plotHeight;
+    final labelHeight = _frequencyLabels.first.height;
+    _labelled = fitHzLabels(plotHeight, (_) => labelHeight);
+  }
 
   /// Generation 0 is "nothing has been measured yet". The arrays behind a fresh
   /// source are zeroed, which as dB is full scale on every band, at a pan of
   /// dead centre — a bright line down the middle of the cloud that then takes
-  /// several seconds to fade, before any audio has arrived.
+  /// two seconds to fade, before any audio has arrived.
   int lastGeneration = 0;
 
-  /// Reallocates the grid when the plot changes size, and reports whether it
-  /// did. The accumulation is dropped: it is in cells, and the same cell means
-  /// a different pan and a different band once the plot has moved under it.
-  bool resize(Size plot) {
-    final columns = (plot.width / _cell).ceil();
-    final rows = (plot.height / _cell).ceil();
-    if (columns == _columns && rows == _rows) return false;
-    _columns = columns;
-    _rows = rows;
-    _grid = Float32List(columns * rows);
-    return true;
-  }
+  /// The plot the marks were last emitted for. A resize re-emits the ring at
+  /// the new geometry; nothing is dropped, because the ring is bands and
+  /// positions rather than cells.
+  Size _emittedFor = Size.zero;
 
-  /// Everything dims by [decay], once per published frame.
-  void fade(double decay) {
-    for (var cell = 0; cell < _grid.length; cell++) {
-      _grid[cell] *= decay;
-    }
-  }
-
-  /// Adds a dot of [alpha] at ([x], [y]) in cells, spread across the four cells
-  /// it lies between.
+  /// Sorts every hit in the ring into a brightness step, newest frame first.
   ///
-  /// The spread is what keeps the cloud smooth. Rounding to the nearest cell
-  /// instead would quantise every band's pan to two logical pixels, and a bass
-  /// note drifting slowly off centre — the thing this module exists to show —
-  /// would move in visible steps rather than sliding.
-  void splat(double x, double y, double alpha) {
-    final left = x.floor();
-    final top = y.floor();
-    final fx = x - left;
-    final fy = y - top;
-
-    _add(left, top, alpha * (1 - fx) * (1 - fy));
-    _add(left + 1, top, alpha * fx * (1 - fy));
-    _add(left, top + 1, alpha * (1 - fx) * fy);
-    _add(left + 1, top + 1, alpha * fx * fy);
-  }
-
-  void _add(int column, int row, double alpha) {
-    if (column < 0 || column >= _columns || row < 0 || row >= _rows) return;
-    final cell = row * _columns + column;
-    final was = _grid[cell];
-    // What drawing a dot of this alpha over the cell would have done.
-    _grid[cell] = was + alpha * (1 - was);
-  }
-
-  /// Sorts every cell that is above one part in 255 — the point below which a
-  /// surface cannot show it — into a brightness bucket.
-  void emit() {
+  /// **The positions are pre-rotated by −45°.** The painter draws the marks
+  /// under a canvas rotated by +45°, which is what turns a square-capped point
+  /// into a diamond; the two rotations cancel and each mark lands where the
+  /// band and its pan put it. Rotating the canvas is free; rotating thirty
+  /// thousand marks by hand is a multiply-add per mark, done here where they
+  /// are already being written.
+  void emit(Size plot) {
+    _emittedFor = plot;
     _marks.clear();
-    for (var row = 0; row < _rows; row++) {
-      final base = row * _columns;
-      for (var column = 0; column < _columns; column++) {
-        final value = _grid[base + column];
-        if (value < 1 / 255) continue;
-        final bucket = (value * _alphaSteps).ceil().clamp(1, _alphaSteps) - 1;
-        _marks.point(bucket, (column + 0.5) * _cell, (row + 0.5) * _cell);
+    const bands = MeterShape.spectrumBands;
+    const r = 0.7071067811865476;
+    for (var age = 0; age < _frames; age++) {
+      final slot = (_head - 1 - age + _frames) % _frames;
+      final fade = 1 - age / _frames;
+      final base = slot * bands;
+      for (var band = 0; band < bands; band++) {
+        final alpha = _weight[base + band] * fade;
+        if (alpha < 1 / 255) continue;
+        final bucket = (alpha * _alphaSteps).ceil().clamp(1, _alphaSteps) - 1;
+        final x = plot.width / 2 * (1 + _pan[base + band]);
+        final y = plot.height * (1 - band / bands);
+        _marks.point(bucket, (x + y) * r, (y - x) * r);
       }
     }
   }
@@ -165,30 +212,33 @@ class _StereoCloudModuleState extends State<StereoCloudModule> {
         for (var step = 0; step < _alphaSteps; step++)
           Paint()
             ..color = colors.accent.withValues(alpha: (step + 1) / _alphaSteps)
-            // A round, antialiased dot per cell, half again as wide as the
-            // cell so that neighbours overlap. Square dots tile the grid
-            // exactly and are cheaper, but they turn the cloud into a mosaic;
-            // round ones at exactly the cell pitch leave the corners between
-            // them dark, which reads as a halftone screen. The shape of the
-            // cloud is the whole reading, so it is worth the overlap.
-            ..strokeWidth = _cell * 1.5
-            ..strokeCap = StrokeCap.round,
+            // A square cap, drawn under the painter's 45° rotation — see
+            // [emit] — is a diamond; its size grows with the step, so the
+            // brightest marks are also the largest.
+            ..strokeWidth =
+                _markMin + (_markMax - _markMin) * (step + 1) / _alphaSteps
+            ..strokeCap = StrokeCap.square,
       ];
 
       final style = OaaType.tick.copyWith(color: colors.textFaint);
       _left = layoutParagraph('L', style);
+      _centre = layoutParagraph('C', style);
       _right = layoutParagraph('R', style);
+      // Which pair of channels the pan is computed from — the engine's
+      // `spectrum_pan` reads the front pair, and a caption that says so is
+      // what keeps the display honest on a source wider than stereo.
+      _pair = layoutParagraph(
+        'STEREO 1-2',
+        OaaType.tick.copyWith(color: colors.accent),
+      );
       _mono = layoutParagraph(
         'MONO SOURCE',
         OaaType.label.copyWith(color: colors.textMuted),
       );
       _frequencyLabels = [
-        for (final hz in _axisHz)
-          layoutParagraph(
-            hz >= 1000 ? '${(hz / 1000).round()}k' : '${hz.round()}',
-            style,
-          ),
+        for (final hz in kHzGrid) layoutParagraph(formatHz(hz), style),
       ];
+      _labelledFor = -1;
     }
 
     return MeterBody(
@@ -201,8 +251,6 @@ class _StereoCloudModuleState extends State<StereoCloudModule> {
     );
   }
 }
-
-const _axisHz = <double>[100, 1000, 10000];
 
 class _StereoCloudPainter extends MeterPainter {
   _StereoCloudPainter({
@@ -227,16 +275,18 @@ class _StereoCloudPainter extends MeterPainter {
   final Paint _guide;
   final Paint _centreGuide;
 
-  /// Slower than the phase scope's: this display is about what is *persistent*
-  /// in the image, so it wants a few seconds of memory rather than a fraction
-  /// of one.
-  static const double _decay = 0.965;
-
-  /// Bands quieter than this contribute nothing. Their pan is the pan of
-  /// whatever leaked into an empty band, which is a direction with no signal
-  /// behind it — see the note on `spectrumPan` in the engine.
+  /// Bands quieter than this contribute nothing, whatever the frame's maximum
+  /// is. The relative window below carries the picture; this absolute floor is
+  /// what keeps a silent frame from normalising its own noise to full
+  /// brightness — with only a relative rule, digital black would light the
+  /// cloud as confidently as a chorus. A band this quiet has no pan worth
+  /// plotting either: it is the pan of whatever leaked into an empty band —
+  /// see the note on `spectrumPan` in the engine.
   static const double _floorDb = -78;
-  static const double _ceilingDb = -12;
+
+  /// How far under the frame's loudest band a band may sit and still be a
+  /// hit. Only what stands out of the mix places itself; see the header.
+  static const double _window = 30;
 
   static const double _labelStrip = 12;
 
@@ -251,35 +301,71 @@ class _StereoCloudPainter extends MeterPainter {
     // so the way it says it for `correlation` and `balance`: mono is dead
     // centre. Drawing that is a confident bright line down the middle of the
     // display for every band at once — which is indistinguishable from a broken
-    // module, and was reported as one. The fade still runs, so switching to a
-    // mono device dissolves the previous cloud rather than freezing it.
+    // module, and was reported as one. An empty frame is still recorded, so
+    // switching to a mono device ages the previous cloud out rather than
+    // freezing it.
     final stereo = engine.channels >= 2;
 
-    var stale = state.resize(plot);
+    var stale = state._emittedFor != plot;
 
     if (engine.generation != 0 && engine.generation != state.lastGeneration) {
       state.lastGeneration = engine.generation;
-      state.fade(_decay);
-      if (stereo && engine.hasSpectrum) _accumulate(plot);
+      if (stereo && engine.hasSpectrum) {
+        _record();
+      } else {
+        state.recordNothing();
+      }
       stale = true;
     }
 
-    if (stale) state.emit();
+    if (stale) state.emit(plot);
+
+    // The marks, as diamonds — see [_StereoCloudModuleState.emit] for the
+    // rotation. Clipped to the plot, because a mark half off its edge would
+    // otherwise be drawn over the label strip.
+    canvas.save();
+    canvas.clipRect(Offset.zero & plot);
+    canvas.rotate(math.pi / 4);
     state._marks.draw(canvas, ui.PointMode.points, state._passes);
+    canvas.restore();
 
     // --- Guides -------------------------------------------------------------
     // **The frequency axis first, then the centre line over it.** The two are
     // not peers: the horizontals are a scale to read a height against, and the
     // vertical is the fact the module exists to show — where dead centre is.
-    // Drawn underneath, it was interrupted at all three crossings by a line
-    // dimmer than itself, which reads as a dashed line rather than as a marked
+    // Drawn underneath, it was interrupted at every crossing by a line dimmer
+    // than itself, which reads as a dashed line rather than as a marked
     // centre. Crossing hairlines have to resolve one way or the other, and the
     // one that resolves in front is the one carrying the meaning.
-    for (var i = 0; i < _axisHz.length; i++) {
-      final y = _y(plot, bandOfHz(_axisHz[i]));
-      canvas.drawLine(Offset(0, y), Offset(plot.width, y), _guide);
-      canvas.drawParagraph(state._frequencyLabels[i], Offset(Space.xxs, y));
+    //
+    // A gridline for every value of the shared series; a label only where the
+    // plot is tall enough for it — solved on resize, not per frame.
+    state.solveAxis(plot.height);
+    for (var i = 0; i < kHzGrid.length; i++) {
+      final y = _y(plot, bandOfHz(kHzGrid[i]));
+      if (y > 0.5 && y < plot.height - 0.5) {
+        canvas.drawLine(Offset(0, y), Offset(plot.width, y), _guide);
+      }
+      if (i < state._labelled.length && state._labelled[i]) {
+        // Centred on its line and kept inside the plot, as the spectrogram's
+        // are: the same series on two modules side by side has to sit the
+        // same way against the same lines.
+        final label = state._frequencyLabels[i];
+        canvas.drawParagraph(
+          label,
+          Offset(
+            Space.xxs,
+            (y - label.height / 2).clamp(0.0, plot.height - label.height),
+          ),
+        );
+      }
     }
+
+    final pair = state._pair!;
+    canvas.drawParagraph(
+      pair,
+      Offset(plot.width - pair.longestLine - Space.xs, Space.xxs),
+    );
 
     final centre = plot.width / 2;
     if (stereo) {
@@ -306,8 +392,16 @@ class _StereoCloudPainter extends MeterPainter {
     }
 
     final left = state._left!;
+    final centreLabel = state._centre!;
     final right = state._right!;
     canvas.drawParagraph(left, Offset(0, plot.height + Space.xxs));
+    canvas.drawParagraph(
+      centreLabel,
+      Offset(
+        (size.width - centreLabel.longestLine) / 2,
+        plot.height + Space.xxs,
+      ),
+    );
     canvas.drawParagraph(
       right,
       Offset(size.width - right.longestLine, plot.height + Space.xxs),
@@ -328,25 +422,48 @@ class _StereoCloudPainter extends MeterPainter {
     }
   }
 
-  /// Splats this frame's bands into the grid.
-  void _accumulate(Size plot) {
+  /// Records this frame's hits into the ring.
+  ///
+  /// **Relative to the frame's own loudest band.** Only the top [_window] dB
+  /// of the frame are hits at all, weighted by how far into that window they
+  /// stand, squared — see the header. Every band is written, a weight of zero
+  /// for the ones that are not, so the slot carries this frame and nothing
+  /// older.
+  void _record() {
+    final spectrum = engine.spectrum;
+    final pan = engine.spectrumPan;
+    var maxDb = _floorDb;
     for (var band = 0; band < MeterShape.spectrumBands; band++) {
-      final db = engine.spectrum[band];
-      if (db <= _floorDb) continue;
-
-      final loudness = ((db - _floorDb) / (_ceilingDb - _floorDb)).clamp(
-        0.0,
-        1.0,
-      );
-      final pan = engine.spectrumPan[band].clamp(-1.0, 1.0);
-
-      state.splat(
-        plot.width / 2 * (1 + pan) / _cell,
-        _y(plot, band.toDouble()) / _cell,
-        // The alpha this band's dot was drawn at before there was a grid.
-        0.12 + 0.88 * loudness,
-      );
+      final db = spectrum[band];
+      if (db > maxDb) maxDb = db;
     }
+    if (maxDb <= _floorDb) {
+      state.recordNothing();
+      return;
+    }
+    final sill = maxDb - _window;
+
+    final base = state.beginFrame();
+    for (var band = 0; band < MeterShape.spectrumBands; band++) {
+      final db = spectrum[band];
+      if (db <= sill || db <= _floorDb) {
+        state._weight[base + band] = 0;
+        continue;
+      }
+      final loudness = ((db - sill) / _window).clamp(0.0, 1.0);
+      state._weight[base + band] = loudness * loudness * loudness;
+      state._pan[base + band] = _positionOf(pan[band]);
+    }
+  }
+
+  /// The pan pot's angle for a power balance — see the header. The balance
+  /// gives each channel's share of the band's power, `(1 ± b) / 2`; their
+  /// square roots are the amplitudes the angle is taken between, and the
+  /// angle is scaled so that centre is 0 and the two edges are ±1.
+  static double _positionOf(double balance) {
+    final b = balance.clamp(-1.0, 1.0);
+    final angle = math.atan2(math.sqrt((1 + b) / 2), math.sqrt((1 - b) / 2));
+    return angle / (math.pi / 4) - 1;
   }
 
   /// Low frequencies at the bottom, as on the analyser.

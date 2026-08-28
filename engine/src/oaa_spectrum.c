@@ -143,6 +143,10 @@ int oaa_spectrum_init(oaa_spectrum *s, uint32_t channels,
   s->window = (float *)calloc(OAA_FFT_WINDOW, sizeof(float));
   s->input = (float *)calloc((size_t)channels * OAA_FFT_WINDOW, sizeof(float));
   s->power = (float *)calloc((size_t)channels * OAA_FFT_BINS, sizeof(float));
+  if (channels >= 2) {
+    s->power_mid = (float *)calloc(OAA_FFT_BINS, sizeof(float));
+    s->power_side = (float *)calloc(OAA_FFT_BINS, sizeof(float));
+  }
 
   s->frame = (float *)pffft_aligned_malloc(OAA_FFT_TRANSFORM * sizeof(float));
   s->work = (float *)pffft_aligned_malloc(OAA_FFT_TRANSFORM * sizeof(float));
@@ -151,7 +155,8 @@ int oaa_spectrum_init(oaa_spectrum *s, uint32_t channels,
 
   if (s->setup == NULL || s->window == NULL || s->input == NULL ||
       s->power == NULL || s->frame == NULL || s->work == NULL ||
-      s->coefficients == NULL) {
+      s->coefficients == NULL ||
+      (channels >= 2 && (s->power_mid == NULL || s->power_side == NULL))) {
     oaa_spectrum_free(s);
     return 0;
   }
@@ -183,6 +188,8 @@ void oaa_spectrum_free(oaa_spectrum *s) {
   free(s->window);
   free(s->input);
   free(s->power);
+  free(s->power_mid);
+  free(s->power_side);
   pffft_aligned_free(s->frame);
   pffft_aligned_free(s->work);
   pffft_aligned_free(s->coefficients);
@@ -196,6 +203,10 @@ void oaa_spectrum_reset(oaa_spectrum *s) {
   if (s->power != NULL) {
     memset(s->power, 0, (size_t)s->channels * OAA_FFT_BINS * sizeof(float));
   }
+  if (s->power_mid != NULL) {
+    memset(s->power_mid, 0, OAA_FFT_BINS * sizeof(float));
+    memset(s->power_side, 0, OAA_FFT_BINS * sizeof(float));
+  }
   s->write = 0;
   s->filled = 0;
   s->since_hop = 0;
@@ -206,14 +217,89 @@ void oaa_spectrum_reset(oaa_spectrum *s) {
     s->band_pan[b] = 0.0f;
     s->hold_db[b] = OAA_DB_FLOOR;
     s->hold_left[b] = 0.0f;
+    for (uint32_t i = 0; i < OAA_SPECTRUM_PAIR_SOURCES; i++) {
+      /* A one-channel engine has a left and nothing else: its right, mid and
+       * side are not quiet, they are not measured, and they say so with the
+       * value that cannot be mistaken for a level. */
+      const int measured = i == 0 || s->channels >= 2;
+      s->source_db[i][b] = measured ? OAA_DB_FLOOR : NAN;
+      s->source_hold_db[i][b] = measured ? OAA_DB_FLOOR : NAN;
+      s->source_hold_left[i][b] = 0.0f;
+    }
+  }
+}
+
+/* --- Folding one power array onto one band -------------------------------- */
+
+/* The band's level from one power array: the loudest bin it covers, or the
+ * transform read between the two nearest for a band too narrow to contain
+ * one — see "Between the bins" in the header. Written once so that the
+ * combined fold and the four per-source folds cannot come to read a band
+ * differently. */
+static float oaa_spectrum_band_power(const oaa_spectrum *s, const float *power,
+                                     uint32_t b) {
+  const uint32_t first = s->band_first[b];
+  const float lerp = s->band_lerp[b];
+  if (lerp >= 0.0f) {
+    const float below = power[first];
+    const float above = power[first + 1];
+    return below + (above - below) * lerp;
+  }
+  const uint32_t last = s->band_last[b];
+  float loudest = 0.0f;
+  for (uint32_t k = first; k <= last; k++) {
+    if (power[k] > loudest) {
+      loudest = power[k];
+    }
+  }
+  return loudest;
+}
+
+/* Hold at the maximum, then fall. Applied per transform rather than at
+ * publish time so that every transform is seen — a publish carries one frame,
+ * and a hold that only saw published frames would miss whatever landed
+ * between them. */
+static void oaa_spectrum_hold(float db, float *hold_db, float *hold_left,
+                              float dt, float fall) {
+  if (db >= *hold_db) {
+    *hold_db = db;
+    *hold_left = OAA_SPECTRUM_HOLD_SECONDS;
+  } else if (*hold_left > 0.0f) {
+    *hold_left -= dt;
+  } else {
+    *hold_db -= fall;
+    if (*hold_db < OAA_DB_FLOOR) {
+      *hold_db = OAA_DB_FLOOR;
+    }
+  }
+}
+
+/* One windowed transform of `frame` into `power`. `frame` holds the
+ * de-ringed, windowed samples in its first OAA_FFT_WINDOW slots and the
+ * padding after them. */
+static void oaa_spectrum_power_of_frame(oaa_spectrum *s, float *power) {
+  const float scale = OAA_FFT_AMPLITUDE_SCALE;
+
+  pffft_transform_ordered(s->setup, s->frame, s->coefficients, s->work,
+                          PFFFT_FORWARD);
+
+  /* pffft packs the two purely real coefficients — DC and Nyquist — into the
+   * first complex slot. Neither is inside the display range, and unpacking
+   * them only to drop them would be the kind of code somebody later "fixes"
+   * by plotting them. */
+  power[0] = 0.0f;
+  power[OAA_FFT_BINS - 1] = 0.0f;
+
+  for (uint32_t k = 1; k < OAA_FFT_BINS - 1; k++) {
+    const float re = s->coefficients[2 * k] * scale;
+    const float im = s->coefficients[2 * k + 1] * scale;
+    power[k] = re * re + im * im;
   }
 }
 
 /* --- One transform -------------------------------------------------------- */
 
 static void oaa_spectrum_transform(oaa_spectrum *s) {
-  const float scale = OAA_FFT_AMPLITUDE_SCALE;
-
   for (uint32_t c = 0; c < s->channels; c++) {
     const float *ring = &s->input[(size_t)c * OAA_FFT_WINDOW];
 
@@ -225,28 +311,40 @@ static void oaa_spectrum_transform(oaa_spectrum *s) {
       s->frame[n] = ring[index] * s->window[n];
     }
 
-    pffft_transform_ordered(s->setup, s->frame, s->coefficients, s->work,
-                            PFFFT_FORWARD);
+    oaa_spectrum_power_of_frame(s, &s->power[(size_t)c * OAA_FFT_BINS]);
+  }
 
-    float *power = &s->power[(size_t)c * OAA_FFT_BINS];
-
-    /* pffft packs the two purely real coefficients — DC and Nyquist — into the
-     * first complex slot. Neither is inside the display range, and unpacking
-     * them only to drop them would be the kind of code somebody later "fixes"
-     * by plotting them. */
-    power[0] = 0.0f;
-    power[OAA_FFT_BINS - 1] = 0.0f;
-
-    for (uint32_t k = 1; k < OAA_FFT_BINS - 1; k++) {
-      const float re = s->coefficients[2 * k] * scale;
-      const float im = s->coefficients[2 * k + 1] * scale;
-      power[k] = re * re + im * im;
+  /* The front pair's mid and side, as two more signals through the same
+   * window and the same transform. Windowing is linear, so the windowed mid
+   * is the mean of the two windowed channels sample for sample — one pass
+   * over both rings each, no third ring to keep. */
+  if (s->channels >= 2) {
+    const float *left = &s->input[0];
+    const float *right = &s->input[OAA_FFT_WINDOW];
+    for (uint32_t n = 0; n < OAA_FFT_WINDOW; n++) {
+      const uint32_t index = (s->write + n) & (OAA_FFT_WINDOW - 1);
+      s->frame[n] = 0.5f * (left[index] + right[index]) * s->window[n];
     }
+    oaa_spectrum_power_of_frame(s, s->power_mid);
+    for (uint32_t n = 0; n < OAA_FFT_WINDOW; n++) {
+      const uint32_t index = (s->write + n) & (OAA_FFT_WINDOW - 1);
+      s->frame[n] = 0.5f * (left[index] - right[index]) * s->window[n];
+    }
+    oaa_spectrum_power_of_frame(s, s->power_side);
   }
 
   /* --- Bands ----------------------------------------------------------- */
   const float dt = (float)OAA_FFT_HOP / (float)s->sample_rate;
   const float fall = OAA_SPECTRUM_FALL_DB_PER_SECOND * dt;
+
+  /* Which power array each pair source folds from. NULL is a source this
+   * engine cannot make, whose bands were set to NaN at reset and stay so. */
+  const float *source_power[OAA_SPECTRUM_PAIR_SOURCES] = {
+      &s->power[0],
+      s->channels >= 2 ? &s->power[OAA_FFT_BINS] : NULL,
+      s->power_mid,
+      s->power_side,
+  };
 
   for (uint32_t b = 0; b < OAA_SPECTRUM_BANDS; b++) {
     const uint32_t first = s->band_first[b];
@@ -254,6 +352,12 @@ static void oaa_spectrum_transform(oaa_spectrum *s) {
       s->band_db[b] = OAA_DB_FLOOR;
       s->band_pan[b] = 0.0f;
       s->hold_db[b] = OAA_DB_FLOOR;
+      for (uint32_t i = 0; i < OAA_SPECTRUM_PAIR_SOURCES; i++) {
+        if (source_power[i] != NULL) {
+          s->source_db[i][b] = OAA_DB_FLOOR;
+          s->source_hold_db[i][b] = OAA_DB_FLOOR;
+        }
+      }
       continue;
     }
     const uint32_t last = s->band_last[b];
@@ -263,23 +367,12 @@ static void oaa_spectrum_transform(oaa_spectrum *s) {
      * rule across channels is the one the number boxes use for per-channel
      * quantities: an average would hide one hot channel, which is the thing
      * worth seeing. */
-    const float lerp = s->band_lerp[b];
     float loudest = 0.0f;
     for (uint32_t c = 0; c < s->channels; c++) {
-      const float *power = &s->power[(size_t)c * OAA_FFT_BINS];
-      if (lerp >= 0.0f) {
-        const float below = power[first];
-        const float above = power[first + 1];
-        const float between = below + (above - below) * lerp;
-        if (between > loudest) {
-          loudest = between;
-        }
-      } else {
-        for (uint32_t k = first; k <= last; k++) {
-          if (power[k] > loudest) {
-            loudest = power[k];
-          }
-        }
+      const float level = oaa_spectrum_band_power(
+          s, &s->power[(size_t)c * OAA_FFT_BINS], b);
+      if (level > loudest) {
+        loudest = level;
       }
     }
     s->band_db[b] = oaa_db_from_power(loudest);
@@ -302,20 +395,19 @@ static void oaa_spectrum_transform(oaa_spectrum *s) {
                            : 0.0f;
     }
 
-    /* Hold at the maximum, then fall. Applied here rather than at publish
-     * time so that every transform is seen — a publish carries one frame, and
-     * a hold that only saw published frames would miss whatever landed
-     * between them. */
-    if (s->band_db[b] >= s->hold_db[b]) {
-      s->hold_db[b] = s->band_db[b];
-      s->hold_left[b] = OAA_SPECTRUM_HOLD_SECONDS;
-    } else if (s->hold_left[b] > 0.0f) {
-      s->hold_left[b] -= dt;
-    } else {
-      s->hold_db[b] -= fall;
-      if (s->hold_db[b] < OAA_DB_FLOOR) {
-        s->hold_db[b] = OAA_DB_FLOOR;
+    oaa_spectrum_hold(s->band_db[b], &s->hold_db[b], &s->hold_left[b], dt,
+                      fall);
+
+    /* The same band on each of the pair's four signals, each with a hold of
+     * its own. */
+    for (uint32_t i = 0; i < OAA_SPECTRUM_PAIR_SOURCES; i++) {
+      if (source_power[i] == NULL) {
+        continue;
       }
+      s->source_db[i][b] =
+          oaa_db_from_power(oaa_spectrum_band_power(s, source_power[i], b));
+      oaa_spectrum_hold(s->source_db[i][b], &s->source_hold_db[i][b],
+                        &s->source_hold_left[i][b], dt, fall);
     }
   }
 
@@ -362,5 +454,17 @@ void oaa_spectrum_read(const oaa_spectrum *s, float *bands, float *peaks,
     if (pan != NULL) {
       pan[b] = s->band_pan[b];
     }
+  }
+}
+
+void oaa_spectrum_read_source(const oaa_spectrum *s, int32_t source,
+                              float *bands, float *peaks) {
+  if (source < OAA_SPECTRUM_LEFT || source > OAA_SPECTRUM_SIDE) {
+    return;
+  }
+  const uint32_t i = (uint32_t)(source - OAA_SPECTRUM_LEFT);
+  for (uint32_t b = 0; b < OAA_SPECTRUM_BANDS; b++) {
+    bands[b] = s->source_db[i][b];
+    peaks[b] = s->source_hold_db[i][b];
   }
 }

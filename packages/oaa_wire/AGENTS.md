@@ -17,9 +17,9 @@ in.
 |------|----------|
 | `src/frame.dart` | The 12-byte header, the magic, the frame types, and the reader that skips what it does not recognise. |
 | `src/hello.dart` | `HELLO` — the shape negotiation, and the rejection when two builds disagree about what a byte means. |
-| `src/snapshot_codec.dart` | `0x0003 SNAPSHOT`. Every offset in the frozen table, as named constants — the version 4 one, and `SnapshotWireLegacy` for the version 1–3 one, which is decode-only and kept because a plugin outlives an app upgrade. |
-| `src/quantise.dart` | The fixed-point encodings version 4 carries the five *plotted* arrays in, and the reserved codes that keep NaN distinct from a reading. Mirrored by hand in `plugin/src/OaaWire.h`; the two agree because they were both written against `docs/WIRE.md`. |
-| `src/wire_snapshot.dart` | `WireSnapshot` — a decoded frame presented as a `MeterSource`, so the fourteen modules cannot tell it from an engine. Carries the DAW's playhead too, written from outside as transport frames decode: it is not in the snapshot frame, and a module has nowhere else to read it. |
+| `src/snapshot_codec.dart` | `0x0003 SNAPSHOT`. Every offset in the frozen table, as named constants — the version 5 one, `SnapshotWireV4` for the version 4 one and `SnapshotWireLegacy` for the version 1–3 one, both decode-only and kept because a plugin outlives an app upgrade. Version 5 is the eight per-source spectra between `histogram` and the scope run. |
+| `src/quantise.dart` | The fixed-point encodings versions 4 and 5 carry the *plotted* arrays in, and the reserved codes that keep NaN distinct from a reading. Mirrored by hand in `plugin/src/OaaWire.h`; the two agree because they were both written against `docs/WIRE.md`. |
+| `src/wire_snapshot.dart` | `WireSnapshot` — a decoded frame presented as a `MeterSource`, so the fourteen modules cannot tell it from an engine. **`decode` takes the frame's version and chooses the table by it, never by the length** — a version 4 relay frame with a long scope run is as long as a version 5 one — so every caller passes `FrameReader.version`. Carries the DAW's playhead too, written from outside as transport frames decode: it is not in the snapshot frame, and a module has nowhere else to read it. |
 | `src/daw_transport.dart` | `0x0010 DAW_TRANSPORT`, and the presence bits. |
 | `src/lufs_mode.dart` | `0x0020 SET_LUFS_MODE` — the one frame that travels consumer → producer, and the only one this package *encodes for sending to a producer*. Ingest port only; the reasoning is in `docs/WIRE.md` and it is the security model, not a detail. |
 | `test/plugin_golden_test.dart` | This codec against bytes the C++ actually wrote. |
@@ -79,17 +79,19 @@ dart test packages/oaa_wire
 `test/plugin_golden_test.dart` decodes the goldens the C++ serialiser wrote —
 the only test that catches the two implementations drifting apart, because each
 one round-tripping against itself would pass forever while they disagreed. It
-reads three. `plugin/test/golden/wire_v4.bin` tracks the current serialiser.
-`wire_v2.bin` and `wire_v3.bin` are **frozen and never regenerated**: bytes
-produced before a promise was made are the only thing that can hold it, and
-today's build cannot prove anything about yesterday's.
+reads four. `plugin/test/golden/wire_v5.bin` tracks the current serialiser.
+`wire_v2.bin`, `wire_v3.bin` and `wire_v4.bin` are **frozen and never
+regenerated**: bytes produced before a promise was made are the only thing that
+can hold it, and today's build cannot prove anything about yesterday's.
 
-The two frozen files carry different promises, and version 4 changed what
-`wire_v3.bin` is *for*. It used to be the current golden, and the pair
-`v2`/`v3` proved that version 3 moved a frame type and no table — a byte-level
-diff that comes out as four version fields and nothing else. Now it is also the
-only evidence that the version 1–3 decode path works at all: version 4 moved
-every offset after `clip`, so reading those bytes exercises
-`SnapshotWireLegacy` rather than the normal table. That path is what keeps a
-plugin sitting in somebody's VST3 folder drawing after they upgrade the app,
-and it is not exercised by anything else in the repository.
+The frozen files carry different promises, and each version change has
+changed what the previous golden is *for*. The pair `v2`/`v3` proves that
+version 3 moved a frame type and no table — a byte-level diff that comes out
+as four version fields and nothing else. `v3` is also the only evidence that
+the version 1–3 decode path works at all: version 4 moved every offset after
+`clip`, so reading those bytes exercises `SnapshotWireLegacy` rather than the
+normal table. `v4` is the same evidence for `SnapshotWireV4`, one version on:
+version 5 inserted 8,192 bytes before the scope count, so reading its bytes
+through the version 5 table would draw the mid spectrum as a waveform. Those
+paths are what keep a plugin sitting in somebody's VST3 folder drawing after
+they upgrade the app, and nothing else in the repository exercises them.

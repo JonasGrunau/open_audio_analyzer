@@ -10,25 +10,46 @@ import 'package:flutter/widgets.dart';
 import '../clock/meter_clock.dart';
 import '../data/metric_reader.dart';
 
-/// Momentary, short-term and integrated loudness as three concentric arcs.
+/// Loudness and dynamics on one half-gauge, meeting at the true peak.
 ///
-/// Decibel's name, kept because there is no better one for this. The arrangement
-/// earns its space by making one relationship immediate: the three arcs share a
-/// scale and a target tick, so a momentary arc running far past the integrated
-/// one is a mix that is about to get louder than it should, and that is visible
-/// as a shape rather than as three numbers to compare.
+/// Decibel's name, kept because there is no better one for this. The gauge is
+/// a single dB scale from −∞ at the left end to 0 at the right, on two rings:
+/// short-term outside, integrated inside — outward is more volatile, which is
+/// what a glance should skip past.
 ///
-/// The innermost arc is the integrated reading — the number that actually gets
-/// delivered — and it is the one the centre readout repeats. Outward from it is
-/// increasingly short-term, which is increasingly volatile, which is what a
-/// glance should skip past.
+/// **Loudness fills from the left; Open Dynamic Range continues from its
+/// tip.** That is not a decoration, it is the arithmetic drawn: ODR is true
+/// peak minus loudness, so a dynamics arc stacked on the loudness tip ends at
+/// exactly the true peak's position on the same scale — marked with its own
+/// grey tick — and the dark remainder of the ring is the headroom to full
+/// scale, closing as the limiter works. A dynamics arc reaching the right end
+/// is a peak at 0 dBTP; past it is over.
 ///
-/// Under the reading sit the two other numbers that survive to delivery: LRA,
-/// how far the programme moves, and ODR-I, how hard it was squeezed. Decibel's
-/// Super Meter carries its dynamics figure on the rings, one ring per quantity;
-/// here every ring is loudness and the dynamics are a readout, because a ratio
-/// in LU has no place on a scale in LUFS and a ring that is not on the scale
-/// beside it is a ring that cannot be compared with it.
+/// The outer ring's two tips carry their names, set along the arc outside it
+/// the way a gauge face is engraved: LUFS-S rides the loudness tip, ODR-S the
+/// dynamics tip. Each arc's own reading is printed flat in the dark lane
+/// inside it — raw from the measurement, positioned by the eased tip, hung
+/// just behind it on the loudness side and mid-arc on the dynamics side so
+/// the two never fight over the boundary they share. A reading that would
+/// overprint the target's or the ceiling's printed number is skipped for that
+/// frame instead: the centre repeats both integrated readings, so nothing is
+/// lost but the duplicate. **A tip value wears its arc's ink**, never a
+/// verdict's: the integrated arc is drawn neutral past the target and its
+/// value follows, because a red number at the tip beside the red target
+/// number read as one figure. The verdict colours live in the centre.
+///
+/// The right end carries the delivery ceiling as a red zone, the way the VU
+/// meter's face carries its red sector: the region past the calibration's
+/// true-peak ceiling is tinted on both rings, and the ceiling's value is
+/// printed on its own radial tick. The target gets the same treatment on the
+/// loudness side — a radial tick with the target value beside it, in
+/// [OaaColors.over], the application's one colour for "the number you set".
+///
+/// The centre repeats the two integrated readings — LUFS and ODR — because
+/// they are what gets delivered, with TRUEPEAK MAX under them, and LRA as the
+/// last row where the module is tall enough to carry a fourth. Every value is
+/// taken raw from the measurement, never from the eased arc positions: easing
+/// decides where a shape is drawn, not what the instrument says.
 class SuperMeterModule extends StatefulWidget {
   const SuperMeterModule({
     required this.engine,
@@ -46,24 +67,31 @@ class SuperMeterModule extends StatefulWidget {
 }
 
 class _SuperMeterModuleState extends State<SuperMeterModule> {
-  static const _scale = MeterScale(min: -48, max: 0, step: 6);
+  /// The tapered level scale, shared with every other level meter. No
+  /// graticule is drawn on the rings — the gauge is read against its ticks'
+  /// two printed ends and the marks on it — but every angle comes from this
+  /// mapping, so the gauge and the bar meters agree about where −12 is.
+  static const _scale = MeterScale.tapered(
+    max: 0,
+    ticks: [0, -3, -6, -9, -12, -18, -24, -30, -40],
+  );
+
+  /// The dynamics family's ink: the arc colour lifted towards the text
+  /// colour, because an arc can afford to recede and a printed number cannot.
+  /// One recipe, used by the names in [build] and the values in the painter.
+  static Color dynInkOf(OaaColors colors) =>
+      Color.lerp(colors.meterFill, colors.textPrimary, 0.55)!;
 
   /// Seconds for an arc to cover 63% of the distance to a new reading.
   ///
-  /// The three quantities behind the arcs advance on the engine's gating grid
-  /// and nowhere else: a momentary reading is a 400 ms window that slides in
-  /// 100 ms steps, so it changes exactly ten times a second however often it
-  /// is read. The clock repaints at the engine's publish rate, about 47 Hz, so
-  /// four frames in five drew the arc exactly where the frame before had left
-  /// it and the fifth jumped. A bar a few pixels tall gets away with that; a
-  /// 240 degree arc across the whole module does not, and it reads as an
-  /// instrument stuttering rather than as a signal moving.
-  ///
-  /// Half the interval between readings, so each step is 87% travelled before
-  /// the next one arrives, and an eighth of the momentary window, so the ease
-  /// is much shorter than the shortest thing the measurement itself can
-  /// resolve. It fills the gap between readings; it cannot smooth away
-  /// anything a reading could have shown.
+  /// The quantities behind the arcs advance on the engine's gating grid and
+  /// nowhere else: a short-term reading is a 3 s window that slides in 100 ms
+  /// steps, so it changes ten times a second however often it is read. The
+  /// clock repaints at the engine's publish rate, about 47 Hz, so four frames
+  /// in five drew the arc exactly where the frame before had left it and the
+  /// fifth jumped. A bar a few pixels tall gets away with that; a half-gauge
+  /// across the whole module does not, and it reads as an instrument
+  /// stuttering rather than as a signal moving.
   ///
   /// **Arcs only.** Every number this module prints, and every colour it
   /// decides from one, is the measurement — drawn the frame it arrives. What
@@ -71,10 +99,10 @@ class _SuperMeterModuleState extends State<SuperMeterModule> {
   /// response setting already does to its curve.
   static const double _tau = 0.05;
 
-  /// The level each arc is drawn at, in LUFS: momentary, short-term,
-  /// integrated. NaN until that reading has a value, which is not a level of
-  /// zero and is drawn as no arc at all.
-  final List<double> _shown = List<double>.filled(3, double.nan);
+  /// The level each arc is drawn at: [0] short-term LUFS, [1] integrated
+  /// LUFS, [2] ODR-S, [3] ODR-I. NaN until that reading has a value, which is
+  /// not a level of zero and is drawn as no arc at all.
+  final List<double> _shown = List<double>.filled(4, double.nan);
 
   /// The published measurement [_shown] was last folded for, and the engine
   /// time it was folded at.
@@ -112,9 +140,10 @@ class _SuperMeterModuleState extends State<SuperMeterModule> {
         ? 1.0
         : 1 - math.exp(-dt / _tau);
 
-    _fold(0, engine.lufsMomentary, alpha);
-    _fold(1, engine.lufsShort, alpha);
-    _fold(2, engine.lufsIntegrated, alpha);
+    _fold(0, engine.lufsShort, alpha);
+    _fold(1, engine.lufsIntegrated, alpha);
+    _fold(2, engine.odrShort, alpha);
+    _fold(3, engine.odrIntegrated, alpha);
   }
 
   /// One arc. A reading that is not yet defined leaves the arc undrawn rather
@@ -141,18 +170,15 @@ class _SuperMeterModuleState extends State<SuperMeterModule> {
   double _beyondFrom = double.nan;
   double _beyondTo = double.nan;
 
-  /// The wedge a ring has swept, rebuilt every frame.
+  /// The wedge an arc has swept, rebuilt every frame.
   ///
   /// Separate from [_beyond] and deliberately **not** cached: it moves with the
   /// reading, so there is nothing to cache. It is reset and refilled rather
-  /// than reallocated, because the frame path may not allocate — three rings at
-  /// the refresh rate is a `Path` a hundred and forty times a second otherwise.
+  /// than reallocated, because the frame path may not allocate — four arcs at
+  /// the refresh rate is a `Path` two hundred times a second otherwise.
   final Path _swept = Path();
 
-  /// The sector from the bottom of the scale out to [to].
-  ///
-  /// [from] backs off far enough to clear the round cap at the start, which
-  /// must survive the clip — see the note on the caps in `_SuperMeterPainter`.
+  /// The sector from [from] round to [to], apex at the centre.
   Path _sweptTo(Offset centre, double radius, double from, double to) {
     _swept.reset();
     _swept.moveTo(centre.dx, centre.dy);
@@ -168,9 +194,9 @@ class _SuperMeterModuleState extends State<SuperMeterModule> {
 
   /// A wedge from [from] round to [to], apex at the centre.
   ///
-  /// Deep enough to reach the outermost ring, which makes it the clip for all
-  /// three: every ring is inside the same radius, and the only boundary that
-  /// matters is the radial one at the target.
+  /// Deep enough to reach the outermost ring, which makes it the clip for both
+  /// loudness arcs: every ring is inside the same radius, and the only
+  /// boundary that matters is the radial one at the target.
   Path _sectorBeyond(Offset centre, double radius, double from, double to) {
     if (_beyond != null &&
         _beyondCentre == centre &&
@@ -194,21 +220,37 @@ class _SuperMeterModuleState extends State<SuperMeterModule> {
       ..close();
   }
 
-  final _integrated = ValueParagraph();
+  final _lufs = ValueParagraph();
+  final _odr = ValueParagraph();
+  final _truePeak = ValueParagraph();
   final _range = ValueParagraph();
-  final _ratio = ValueParagraph();
-  ui.Paragraph? _unit;
+  final _target = ValueParagraph();
+  final _ceiling = ValueParagraph();
+  final _tipLufsS = ValueParagraph();
+  final _tipLufsI = ValueParagraph();
+  final _tipOdrS = ValueParagraph();
+  final _tipOdrI = ValueParagraph();
+  ui.Paragraph? _integratedLabel;
+  ui.Paragraph? _lufsLabel;
+  ui.Paragraph? _odrLabel;
+  ui.Paragraph? _truePeakLabel;
   ui.Paragraph? _rangeLabel;
-  ui.Paragraph? _ratioLabel;
-  List<ui.Paragraph> _arcLabels = const [];
-  double _arcLabelHeight = 0;
-  Color? _labelColor;
+  ui.Paragraph? _nameLoud;
+  ui.Paragraph? _nameDyn;
+  OaaColors? _colorsKey;
 
   @override
   void dispose() {
-    _integrated.dispose();
+    _lufs.dispose();
+    _odr.dispose();
+    _truePeak.dispose();
     _range.dispose();
-    _ratio.dispose();
+    _target.dispose();
+    _ceiling.dispose();
+    _tipLufsS.dispose();
+    _tipLufsI.dispose();
+    _tipOdrS.dispose();
+    _tipOdrI.dispose();
     super.dispose();
   }
 
@@ -216,18 +258,25 @@ class _SuperMeterModuleState extends State<SuperMeterModule> {
   Widget build(BuildContext context) {
     final colors = OaaTheme.of(context);
 
-    if (_labelColor != colors.textFaint) {
-      _labelColor = colors.textFaint;
+    if (_colorsKey != colors) {
+      _colorsKey = colors;
       final style = OaaType.label.copyWith(color: colors.textFaint);
-      _unit = layoutParagraph('LUFS', style);
+      _integratedLabel = layoutParagraph('INTEGRATED', style);
+      _lufsLabel = layoutParagraph('LUFS', style);
+      _odrLabel = layoutParagraph('ODR', style);
+      _truePeakLabel = layoutParagraph('TRUEPEAK MAX', style);
       _rangeLabel = layoutParagraph('LRA', style);
-      _ratioLabel = layoutParagraph('ODR-I', style);
-      _arcLabels = [
-        layoutParagraph('M', style),
-        layoutParagraph('S', style),
-        layoutParagraph('I', style),
-      ];
-      _arcLabelHeight = _arcLabels.first.height;
+      // The tip names, each in its family's ink rather than the label grey:
+      // they ride moving tips, and a name the same colour as its arc is what
+      // says which tip it is naming without a legend.
+      _nameLoud = layoutParagraph(
+        'LUFS-S',
+        OaaType.label.copyWith(color: colors.meterFill),
+      );
+      _nameDyn = layoutParagraph(
+        'ODR-S',
+        OaaType.label.copyWith(color: dynInkOf(colors)),
+      );
     }
 
     return MeterBody(
@@ -251,68 +300,72 @@ class _SuperMeterPainter extends MeterPainter {
     required this.scale,
     required this.state,
     required Listenable repaint,
-  }) : // **The gauge's two ends are round; a reading's own end is square.**
+  }) : // **Every end is square** — the gauge's two ends at the diameter, and
+       // the readings' moving tips. The ends were round through one release
+       // and went back: a half-gauge whose feet are rounded reads as a horse-
+       // shoe rather than as a scale cut at its two extremes, and the LUFS
+       // meter beside it has square feet.
        //
-       // The track carries the rounded ends, so each ring finishes in one at
-       // both extremes of the sweep — and the half ring of ink a round cap puts
-       // *beyond* the sweep is what [_labelGap] carries at the open end.
-       //
-       // The fill is drawn with the same round cap and then **cut back to the
-       // reading** by [_SuperMeterModuleState._sweptTo], which is not the same
-       // as giving it a butt cap. A butt cap squares off *both* ends, and the
-       // start of a fill is not a value — it is the bottom of the scale, where
-       // a square edge sits inside the track's rounded end and leaves a dark
-       // crescent of track around it. Cutting instead keeps the round start,
-       // where it coincides with the track's, and squares only the moving end,
-       // which is the end that points at a number: a round tip is half a ring
-       // of ink standing past the reading, and on a 240 degree sweep of 48 LU
-       // that is most of a decibel nobody measured.
+       // The fills are still **cut back to the reading** by
+       // [_SuperMeterModuleState._sweptTo] rather than trusting the stroke's
+       // own end, and the clips still open a little past each fixed end: an
+       // arc that ends exactly on the clip's edge loses the antialiased half
+       // pixel of its cap to it, and a fixed end that sits a hair inside the
+       // track's reads as a dark seam.
        _track = (Paint()
          ..color = colors.meterTrack
          ..style = PaintingStyle.stroke
-         ..strokeCap = StrokeCap.round),
+         ..strokeCap = StrokeCap.butt),
        _arc = (Paint()
          ..style = PaintingStyle.stroke
-         ..strokeCap = StrokeCap.round),
+         ..strokeCap = StrokeCap.butt),
+       // The dynamics arcs, at half the ring's width — see [_dynWidth].
+       _dynArc = (Paint()
+         ..style = PaintingStyle.stroke
+         ..strokeCap = StrokeCap.butt),
        // Derived from `meterFill`, never from a text colour: `textMuted` sits
        // lighter than `meterFill` under the dark palette and darker under a
-       // light one, so the momentary and short-term arcs would swap which
-       // looked emphasised when the skin changed. Built here rather than in
-       // `paint`, which is on the frame path and allocates nothing.
+       // light one, so the two rings would swap which looked emphasised when
+       // the skin changed. Built here rather than in `paint`, which is on the
+       // frame path and allocates nothing.
        _shortFill = colors.meterFill.withValues(alpha: 0.55),
-       // Where an arc runs past the target, in [OaaColors.over]. The short-term
-       // ring keeps its 0.55 so the three rings hold the same weights on both
-       // sides of the line — a warning that also promoted the middle ring would
-       // say two things at once.
+       // The dynamics arcs are the same instrument's second voice, and the
+       // palette has no second hue to give them: [OaaColors.accent] means "in
+       // spec" and [OaaColors.over] means over, on every surface. So they are
+       // told apart by *weight* instead — half the ring's width, see
+       // [_dynWidth] — and can then afford most of their ring's strength,
+       // which they need: a printed value hangs off each of them now. At the
+       // 0.42 and 0.28 they were first drawn at, the arcs vanished into the
+       // track and the values were left labelling nothing.
+       _dynFill = colors.meterFill.withValues(alpha: 0.70),
+       _dynFillShort = colors.meterFill.withValues(alpha: 0.45),
+       // Where a loudness arc runs past the target, in [OaaColors.over]. The
+       // short-term ring keeps its 0.55 so the rings hold the same weights on
+       // both sides of the line — a warning that also promoted the outer ring
+       // would say two things at once.
        _over = (Paint()
          ..style = PaintingStyle.stroke
-         ..strokeCap = StrokeCap.round),
+         ..strokeCap = StrokeCap.butt),
        _overShort = colors.over.withValues(alpha: 0.55),
+       // The ceiling zone: the stretch of track past the calibration's
+       // true-peak ceiling, on both rings — the same statement as the VU
+       // face's red sector, in the same colour at the same reticence.
+       _ceilingZone = (Paint()
+         ..color = colors.over.withValues(alpha: 0.30)
+         ..style = PaintingStyle.stroke),
        // [OaaStroke.heavy] where every other target mark in the application
        // takes [OaaStroke.mark], because this one is *radial* and the others
        // are axis-aligned. A horizontal target line at 1.5 px is drawn with
-       // antialiasing off and lands on whole pixels at full strength; an angled
-       // stroke cannot be, and antialiasing spreads the same 1.5 px across two
-       // pixel columns at about half the alpha each. The nominal weight matched
-       // and the contrast did not, which is why three deliberate ticks read as
-       // three rendering artefacts. Two steps rather than one, because this
-       // mark is also crossed by the arcs themselves, and by the over colour
-       // past it: it has to be found over the brightest ink on the module, not
-       // against the background.
-       // **[OaaColors.accent], because that is already what "in spec" means
-       // here.** The tick is the number the whole gauge is aimed at, and the
-       // integrated arc turns this same colour when it lands on it — so an arc
-       // arriving at the mark and taking the mark's colour is one statement
-       // told twice rather than two colours to learn. Grey said only "some
-       // furniture on the scale", which is what it looked like.
+       // antialiasing off and lands on whole pixels at full strength; an
+       // angled stroke cannot be, and antialiasing spreads the same 1.5 px
+       // across two pixel columns at about half the alpha each.
        //
-       // It does not dilute the accent the way colouring all three *arcs*
-       // would. That was rejected because an arc is a reading and three
-       // coloured readings make the accent decorative; a target is a reference,
-       // and there is exactly one of them on this module — drawn three times
-       // because there are three rings to compare against it.
+       // [OaaColors.over], like every target mark: the tick is the number the
+       // whole gauge is aimed at, and the arc standing past it is drawn in
+       // the same colour — one statement told twice rather than two colours
+       // to learn.
        _target = (Paint()
-         ..color = colors.textMuted
+         ..color = colors.over
          ..style = PaintingStyle.stroke
          ..strokeWidth = OaaStroke.heavy),
        // The tick's backdrop, drawn first and at the tick's own width — so the
@@ -321,16 +374,28 @@ class _SuperMeterPainter extends MeterPainter {
        // That width is the decision, not an oversight. Standing the slot out
        // either side of the tick cuts a visible notch across every arc at the
        // target, and that change has been made and reverted three times.
-       // **Do not make it again without asking.** What it was for: one grey
-       // tick sits on three different backdrops — the empty track, the ring's
-       // own fill, and [OaaColors.over] past the line, measured at L* 24, 39
-       // and 51 on the default skin in a single ordinary frame — so the same
-       // mark reads at three contrasts. That is a real effect, and it was
-       // judged not worth cutting the arcs to fix.
+       // **Do not make it again without asking.** What it was for: one tick
+       // sits on three different backdrops — the empty track, the ring's own
+       // fill, and [OaaColors.over] past the line — so the same mark reads at
+       // three contrasts. That is a real effect, and it was judged not worth
+       // cutting the arcs to fix.
        _targetSlot = (Paint()
          ..color = colors.meterTrack
          ..style = PaintingStyle.stroke
          ..strokeWidth = OaaStroke.heavy),
+       // The true peak's own mark: where a dynamics arc ends, which is the
+       // one point on the ring that is a measurement of something other than
+       // loudness. [OaaColors.textMuted] because it reports where a peak
+       // stands, and red is reserved for the two numbers somebody *set*.
+       _truePeakMark = (Paint()
+         ..color = colors.textMuted
+         ..style = PaintingStyle.stroke
+         ..strokeWidth = OaaStroke.heavy),
+       _overTickStyle = OaaType.tick.copyWith(color: colors.over),
+       _loudTickStyle = OaaType.tick.copyWith(color: colors.meterFill),
+       _dynTickStyle = OaaType.tick.copyWith(
+         color: _SuperMeterModuleState.dynInkOf(colors),
+       ),
        super(repaint: repaint);
 
   final MeterSource engine;
@@ -341,46 +406,35 @@ class _SuperMeterPainter extends MeterPainter {
 
   final Paint _track;
   final Paint _arc;
+  final Paint _dynArc;
   final Paint _over;
+  final Paint _ceilingZone;
   final Paint _target;
   final Paint _targetSlot;
+  final Paint _truePeakMark;
   final Color _shortFill;
+  final Color _dynFill;
+  final Color _dynFillShort;
   final Color _overShort;
+  final TextStyle _overTickStyle;
+  final TextStyle _loudTickStyle;
+  final TextStyle _dynTickStyle;
 
-  /// The gauge opens at the bottom: 150° round to 30°, clockwise. A full ring
-  /// would have no beginning and no end, and a scale needs both.
-  static const double _startAngle = 150 * math.pi / 180;
-  static const double _sweepAngle = 240 * math.pi / 180;
+  /// A half-gauge over the top: −π at the left end, 0 at the right, in screen
+  /// angles (y down). The scale's fraction maps straight onto it.
+  static const double _startAngle = -math.pi;
+  static const double _sweepAngle = math.pi;
 
   /// The width of one ring, as a fraction of the outer radius.
   static const double _ringWidth = 0.115;
 
-  /// Where a ring's name sits, as a fraction of the ring's width, measured
-  /// **along the arc** from its open end.
-  ///
-  /// An arc length rather than an angle, which is the whole point. The names
-  /// used to lead the arcs by a fixed 0.12 radians, and a fixed angle is a
-  /// fixed fraction of each radius — so the outermost name stood nearly twice
-  /// as far from its own arc as the innermost did from its. Three names that
-  /// each mark one ring then read as a diagonal drifting off the bottom of the
-  /// gauge rather than as three labels. The same number of pixels for all
-  /// three puts each name beside the arc it names.
-  ///
-  /// Half a ring of it is the round cap, which is ink the arc did not have when
-  /// this was 0.7: the gap is measured from the *end of the sweep*, and the cap
-  /// is a semicircle drawn past it. Clearance from what is actually on screen
-  /// is what the eye reads, so the cap is paid for here rather than allowed to
-  /// close on the names.
-  static const double _labelGap = 1.2;
+  /// The width of a dynamics arc, as a fraction of the ring's. Narrower than
+  /// the loudness arc it continues from, on the same centre line: a thinner
+  /// stroke picking up where a thicker one stopped reads as a second quantity
+  /// measured along the same scale, which is what it is.
+  static const double _dynWidth = 0.5;
 
-  /// The angular lead of the *outermost* name.
-  ///
-  /// It is the lowest ink on the face, so the layout is solved against it
-  /// rather than against the arcs. Both terms of the arc length scale with the
-  /// outer radius, so this angle does not depend on the module's size: the
-  /// name sits on its ring's centreline, half a ring in from the outer edge.
-  static const double _labelLead =
-      _ringWidth * _labelGap / (1 - _ringWidth / 2);
+  double _angleOf(double fraction) => _startAngle + fraction * _sweepAngle;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -389,60 +443,60 @@ class _SuperMeterPainter extends MeterPainter {
       state._seenGeneration = engine.generation;
     }
 
-    // **The gauge is not a circle and must not be centred as one.** It opens
-    // 120° at the bottom, so its ink reaches only `sin` of the way below the
-    // centre that it does above it — and centring the notional circle instead
-    // of the drawn shape left a band of dead space along the bottom of the
-    // module a fifth of its height deep, with the ring labels stranded in it.
-    // Solve for the radius that fills the box, then centre what is actually
-    // drawn.
-    final labelDrop = math.sin(_startAngle - _labelLead);
-    final labelHalf = state._arcLabelHeight / 2;
-
-    final outer = math.min(
-      size.width / 2,
-      (size.height - labelHalf) / (1 + labelDrop),
-    );
+    // **The gauge is a half-disc and must not be centred as a circle.** Its
+    // ink stops at the diameter, plus the tip names riding outside the outer
+    // ring — solve for the radius that fills the box less that margin, then
+    // centre what is actually drawn.
+    final nameBand = OaaType.label.fontSize! * 1.2 + Space.xxs;
+    final outer = math.min(size.width / 2 - nameBand, size.height - nameBand);
     if (outer < 40) return;
 
-    final inkHeight = outer * (1 + labelDrop) + labelHalf;
+    final ring = outer * _ringWidth;
+    // The height of one printed tip value, from the style rather than a
+    // layout: OaaType.tick is line-height 1.0, so the paragraph is exactly
+    // its font size tall.
+    final tipHeight = OaaType.tick.fontSize!;
+    // Whether the gauge is big enough to print readings at the tips at all.
+    // Below this the text would outweigh the rings it annotates, and the
+    // centre still carries the two numbers that get delivered.
+    final roomForTips = outer >= 72;
+    // The lane between the rings. Sized to the rings when it is only a
+    // separation; widened to hold a row of tick-sized text when the tips
+    // print their values into it.
+    final gap = roomForTips
+        ? math.max(ring * 0.85, tipHeight + Space.xs)
+        : ring * 0.85;
+    final inkHeight = nameBand + outer;
     final centre = Offset(
       size.width / 2,
-      (size.height - inkHeight) / 2 + outer,
+      (size.height - inkHeight) / 2 + nameBand + outer,
     );
-
-    // Three rings and two gaps, sized off the module rather than fixed, so the
-    // meter reads the same at 6x6 cells and at 12x12.
-    //
-    // The gap is nearly as wide as a ring on purpose. At a third of a ring the
-    // arithmetic is fine and the display is not: two adjacent rings at similar
-    // brightness read as one thick band with a seam, and the whole point of
-    // three concentric arcs is being able to tell which is which at a glance.
-    final ring = outer * _ringWidth;
-    final gap = ring * 0.85;
 
     _track.strokeWidth = ring;
     _arc.strokeWidth = ring;
+    _dynArc.strokeWidth = ring * _dynWidth;
     _over.strokeWidth = ring;
+    _ceilingZone.strokeWidth = ring;
 
-    // The target, as an angle, and the sector of the dial past it. Both are
-    // wanted by all three rings — the tick is drawn on each of them and the
-    // sector clips each arc's warning colour — so neither is recomputed inside
-    // the loop.
-    final targetSweep = scale.fractionOf(calibration.lufsTarget) * _sweepAngle;
-    final targetAngle = _startAngle + targetSweep;
+    // The target and the ceiling, as angles. Wanted by both rings — the ticks
+    // are drawn on each and the sectors clip each arc — so neither is
+    // recomputed inside the loop.
+    final targetFraction = scale.fractionOf(calibration.lufsTarget);
+    final targetAngle = _angleOf(targetFraction);
+    final ceilingFraction = scale.fractionOf(calibration.truePeakMax);
     final beyond = state._sectorBeyond(
       centre,
-      outer,
+      outer + ring,
       targetAngle,
-      _startAngle + _sweepAngle,
+      // A little past the right end, so the clip's edge never shaves it.
+      _ringWidth,
     );
 
-    // The integrated reading, and the colour it is in. Both are wanted twice —
-    // by the innermost arc and by the centre readout — and taken **raw**, from
-    // the measurement rather than from the eased arc position: a pass or fail
-    // is a fact about a number somebody delivered, and easing decides where a
-    // shape is drawn, never what it says.
+    // The integrated readings and their colours. Wanted twice — by the arcs
+    // and tips and by the centre — and taken **raw**, from the measurement
+    // rather than from the eased arc positions: a pass or fail is a fact
+    // about a number somebody delivered, and easing decides where a shape is
+    // drawn, never what it says.
     final integrated = engine.lufsIntegrated;
     final integratedState = classify(
       Metric.lufsIntegrated,
@@ -450,58 +504,123 @@ class _SuperMeterPainter extends MeterPainter {
       calibration,
     );
     final integratedColor = colorForState(integratedState, colors);
+    final odrIntegrated = engine.odrIntegrated;
+    final odrIntegratedColor = colorForState(
+      classify(Metric.odrIntegrated, odrIntegrated, calibration),
+      colors,
+    );
 
-    // What the innermost ring is drawn in *below* the target, which is not
-    // always its verdict's colour.
-    //
-    // The ring takes the verdict for its whole length — that is what makes an
-    // in-spec reading a green ring rather than a green tip — with one exception.
-    // A verdict of [ReadingState.over] is *already* being drawn past the target
-    // by the pass further down, so painting the rest of the arc red as well
-    // erases the one thing the cut exists to show. At −11 against a −14 target
-    // the ring ran red from the bottom of the scale to the reading with its own
-    // target tick stranded in the middle of it, the same colour on both sides:
-    // three quarters of the arc claiming to be over when a quarter of it was.
-    // An over-target ring therefore falls back to the neutral colour below the
-    // line and lets the red segment carry the verdict — which it does more
-    // precisely, because its length is the size of the miss. Nothing is lost:
-    // the centre readout is red either way, and it is the reading that gets
-    // delivered.
+    // What the inner ring's loudness arc is drawn in *below* the target,
+    // which is not always its verdict's colour: a verdict of
+    // [ReadingState.over] is already drawn past the target by the clipped
+    // pass, and painting the rest of the arc red as well erases the one thing
+    // the cut exists to show — the size of the miss. An over-target ring
+    // therefore falls back to the neutral colour below the line; the centre
+    // readout is red either way, and it is the reading that gets delivered.
     final integratedBase = integratedState == ReadingState.over
         ? colorForState(ReadingState.neutral, colors)
         : integratedColor;
 
-    for (var i = 0; i < 3; i++) {
+    final innerClear = outer - 2 * ring - gap;
+
+    // The inner ring's tip values sit on this circle, just inside the ring;
+    // the target's and the ceiling's numbers one row further in. Two rows
+    // rather than one because the integrated reading spends its life a
+    // decibel or so either side of the target — that is what a target is for
+    // — and a tip value sharing the target's row was hidden by it exactly
+    // when the material was mastered to spec.
+    final tipRadius = innerClear - Space.xxs - tipHeight / 2;
+    final markRadius = tipRadius - tipHeight - Space.xs;
+
+    // Where the centre's heading will go — see the centre, below. Wanted
+    // here because a mark's number that would land on it is not printed.
+    final integratedLabel = state._integratedLabel!;
+    final headingRect = Rect.fromLTWH(
+      centre.dx - integratedLabel.longestLine / 2,
+      centre.dy - innerClear * 0.72,
+      integratedLabel.longestLine,
+      integratedLabel.height,
+    );
+
+    // --- The target's and the ceiling's own numbers --------------------------
+    // Each on its tick's radial, in the mark's own colour, inside the rings.
+    // Drawn before the rings only in code — nothing else reaches the clear
+    // disc — and kept as rects so a tip value crossing one can yield to it.
+    Rect? targetRect;
+    Rect? ceilingRect;
+    if (innerClear > 56) {
+      targetRect = _tipValue(
+        canvas,
+        centre,
+        state._target.of(
+          calibration.lufsTarget.toStringAsFixed(1),
+          _overTickStyle,
+        ),
+        targetAngle,
+        markRadius,
+        headingRect,
+        null,
+        null,
+      );
+      ceilingRect = _tipValue(
+        canvas,
+        centre,
+        state._ceiling.of(
+          calibration.truePeakMax.toStringAsFixed(1),
+          _overTickStyle,
+        ),
+        _angleOf(ceilingFraction),
+        markRadius,
+        headingRect,
+        targetRect,
+        null,
+      );
+    }
+
+    // Where the outer ring's tip names ride, resolved inside the ring loop.
+    // Each rests at its home end until its arc has a tip to name: the
+    // loudness name at the silent end, the dynamics name at full scale.
+    var nameLoudAngle = _startAngle;
+    var nameDynAngle = _startAngle + _sweepAngle;
+
+    // --- The rings -----------------------------------------------------------
+    // Ring 0 is the outer, short-term pair; ring 1 the inner, integrated one.
+    for (var i = 0; i < 2; i++) {
       final radius = outer - i * (ring + gap);
-      if (radius < ring) break;
-      final bounds = Rect.fromCircle(center: centre, radius: radius - ring / 2);
+      final mid = radius - ring / 2;
+      final bounds = Rect.fromCircle(center: centre, radius: mid);
+      // Half a ring's width as an angle at this radius: how far past each
+      // fixed end the swept clips open, so the clip's edge never shaves an
+      // end that coincides with the track's.
+      final cap = ring / 2 / mid;
 
       canvas.drawArc(bounds, _startAngle, _sweepAngle, false, _track);
 
-      // Where the arc is drawn to, which lags the reading by [_tau] and
-      // nothing else — see the note on it. NaN here is a reading that does not
-      // exist yet, and the arc is simply absent.
-      final value = state._shown[i];
-      if (!value.isNaN) {
-        // The integrated arc is the only one with a pass/fail meaning, so it is
-        // the only one that takes the signal colour. Colouring all three would
-        // make the accent decorative, and an accent that is decoration cannot
-        // also be a warning.
-        _arc.color = i == 2
-            ? integratedBase
-            : (i == 0 ? colors.meterFill : _shortFill);
-        final sweep = scale.fractionOf(value) * _sweepAngle;
+      // The ceiling zone, over the track and under the arcs: the stretch of
+      // scale past the delivery ceiling is a place, and it is tinted whether
+      // or not anything has reached it.
+      if (ceilingFraction < 1) {
+        canvas.drawArc(
+          bounds,
+          _angleOf(ceilingFraction),
+          (1 - ceilingFraction) * _sweepAngle,
+          false,
+          _ceilingZone,
+        );
+      }
+
+      // --- Loudness, filling clockwise from the left end -------------------
+      final level = state._shown[i];
+      final loudFraction = level.isNaN ? double.nan : scale.fractionOf(level);
+      if (!level.isNaN) {
+        final sweep = loudFraction * _sweepAngle;
         if (sweep > 0) {
-          // Everything this ring draws is cut back to the reading, which is
-          // what squares the moving end while leaving the round start alone.
-          // The wedge opens half a ring early — `cap`, the round start's own
-          // angular size at this radius — so the clip passes over it untouched.
-          final cap = ring / 2 / (radius - ring / 2);
+          _arc.color = i == 1 ? integratedBase : _shortFill;
           canvas.save();
           canvas.clipPath(
             state._sweptTo(
               centre,
-              outer,
+              outer + ring,
               _startAngle - cap,
               _startAngle + sweep,
             ),
@@ -517,10 +636,10 @@ class _SuperMeterPainter extends MeterPainter {
           // the target.** Two arcs meeting at the tick would meet cap to cap,
           // and the seam would be a lump straddling the target with the over
           // colour nosing into the good side of it. Clipping puts the colour
-          // boundary exactly where the target is, which is the only place it is
-          // true.
-          if (sweep > targetSweep) {
-            _over.color = i == 1 ? _overShort : colors.over;
+          // boundary exactly where the target is, which is the only place it
+          // is true.
+          if (_startAngle + sweep > targetAngle) {
+            _over.color = i == 0 ? _overShort : colors.over;
             canvas.clipPath(beyond);
             canvas.drawArc(bounds, _startAngle, sweep, false, _over);
           }
@@ -528,101 +647,212 @@ class _SuperMeterPainter extends MeterPainter {
         }
       }
 
-      // Target tick, on every ring, so the three can be compared against it
-      // without the eye travelling to a legend. Over the arcs, because the
-      // reading it judges is drawn up to it and often past it.
-      final inner = radius - ring;
-      final from =
-          centre + Offset(math.cos(targetAngle), math.sin(targetAngle)) * inner;
-      final to =
-          centre +
-          Offset(math.cos(targetAngle), math.sin(targetAngle)) * radius;
-      canvas.drawLine(from, to, _targetSlot);
-      canvas.drawLine(from, to, _target);
+      // --- Open Dynamic Range, stacked on the loudness tip -----------------
+      // The arc spans [loudness, loudness + ODR] on the same dB scale, so its
+      // moving end lands exactly on the true peak — see the module header.
+      // Both of its ends are cut by the clip: the start is the loudness tip's
+      // boundary, and the end is a value of its own, marked with the grey
+      // true-peak tick. Only when the peak stands at full scale does the clip
+      // open past the scale's end, so the arc reaches the track's end there
+      // rather than stopping a half pixel inside it.
+      final odr = state._shown[i + 2];
+      var dynFrom = double.nan;
+      var dynTo = double.nan;
+      if (!level.isNaN && !odr.isNaN && odr > 0) {
+        final peakFraction = scale.fractionOf(level + odr);
+        if (peakFraction > loudFraction) {
+          dynFrom = _angleOf(loudFraction);
+          dynTo = _angleOf(peakFraction);
+          _dynArc.color = i == 1 ? _dynFill : _dynFillShort;
+          canvas.save();
+          canvas.clipPath(
+            state._sweptTo(
+              centre,
+              outer + ring,
+              dynFrom,
+              peakFraction >= 1 ? cap : dynTo,
+            ),
+          );
+          canvas.drawArc(bounds, dynFrom, dynTo - dynFrom, false, _dynArc);
+          canvas.restore();
+          if (peakFraction < 1) {
+            _radialTick(canvas, centre, dynTo, radius - ring, radius, false);
+          }
+        }
+      }
 
-      // Ring name, at the open end of the gauge, on the ring's own centreline
-      // and the same arc length from every arc — see [_labelGap].
-      final label = state._arcLabels[i];
-      final labelRadius = radius - ring / 2;
-      final labelAngle = _startAngle - ring * _labelGap / labelRadius;
-      canvas.drawParagraph(
-        label,
-        centre +
-            Offset(math.cos(labelAngle), math.sin(labelAngle)) * labelRadius -
-            Offset(label.longestLine / 2, label.height / 2),
-      );
+      // Target tick on both rings, so each can be compared against it without
+      // the eye travelling. Over the arcs, because the reading it judges is
+      // drawn up to it and often past it.
+      _radialTick(canvas, centre, targetAngle, radius - ring, radius, true);
+
+      if (i == 0) {
+        if (!loudFraction.isNaN) nameLoudAngle = _angleOf(loudFraction);
+        if (!dynTo.isNaN) nameDynAngle = dynTo;
+      }
+
+      // --- The tips' own numbers --------------------------------------------
+      // Flat in the dark lane inside the ring: the outer pair between the
+      // rings, the inner pair in the clear disc, each raw from the
+      // measurement and positioned by the eased tip. The loudness value hangs
+      // just behind its tip; the dynamics value sits mid-arc, so the two
+      // never meet at the boundary they share — and either yields entirely,
+      // for a frame, rather than overprint a number already standing.
+      final drawTips = i == 0 ? roomForTips : roomForTips && innerClear > 56;
+      if (drawTips) {
+        final rowRadius = i == 0 ? outer - ring - gap / 2 : tipRadius;
+        Rect? loudRect;
+        final rawLoud = i == 0 ? engine.lufsShort : integrated;
+        if (!level.isNaN && !rawLoud.isNaN) {
+          final value = (i == 0 ? state._tipLufsS : state._tipLufsI).of(
+            Metric.lufsShort.format(rawLoud),
+            i == 0
+                ? _loudTickStyle
+                : OaaType.tick.copyWith(color: integratedBase),
+          );
+          final half = value.longestLine / 2 / rowRadius;
+          final at = math.max(
+            _angleOf(loudFraction) - half - Space.xs / rowRadius,
+            _startAngle + half,
+          );
+          loudRect = _tipValue(
+            canvas,
+            centre,
+            value,
+            at,
+            rowRadius,
+            targetRect,
+            ceilingRect,
+            null,
+          );
+        }
+        final rawOdr = i == 0 ? engine.odrShort : odrIntegrated;
+        if (!dynFrom.isNaN && !rawOdr.isNaN) {
+          final value = (i == 0 ? state._tipOdrS : state._tipOdrI).of(
+            Metric.odrShort.format(rawOdr),
+            _dynTickStyle,
+          );
+          _tipValue(
+            canvas,
+            centre,
+            value,
+            (dynFrom + dynTo) / 2,
+            rowRadius,
+            loudRect,
+            targetRect,
+            ceilingRect,
+          );
+        }
+      }
     }
 
-    // --- The centre ---------------------------------------------------------
-    // Sized off the gauge rather than off the module's short side: the
-    // readout lives inside the rings, so it has to scale with them.
-    // The ceiling is high enough that the gauge is what limits the number, not
-    // the constant. At 56 a Super Meter given a quarter of a 27" display drew
-    // the same digits in the middle of a 700 px dial as one in a corner drew in
-    // a 350 px one, and the readout stopped looking like the centre of the
-    // instrument and started looking like a caption that had been left behind.
-    final dial = outer * 2;
+    // --- Names, riding the outer tips ----------------------------------------
+    // Set along the arc outside the outer ring, the way a gauge face is
+    // engraved: LUFS-S at the loudness tip, ODR-S at the dynamics tip, which
+    // is the true peak. Only the outer ring is named — the inner one is what
+    // the centre block spells out as INTEGRATED. When the two tips converge,
+    // the dynamics name gives way clockwise rather than overprint.
+    final nameLoud = state._nameLoud!;
+    final nameDyn = state._nameDyn!;
+    final nameRadius = outer + Space.xxs;
+    final halfLoudName = nameLoud.longestLine / 2 / nameRadius;
+    final halfDynName = nameDyn.longestLine / 2 / nameRadius;
+    final namePad = Space.xs / nameRadius;
+    var aLoud = nameLoudAngle.clamp(_startAngle + halfLoudName, -halfLoudName);
+    var aDyn = nameDynAngle.clamp(_startAngle + halfDynName, -halfDynName);
+    if (aDyn - aLoud < halfLoudName + halfDynName + namePad) {
+      aDyn = aLoud + halfLoudName + halfDynName + namePad;
+      if (aDyn > -halfDynName) {
+        aDyn = -halfDynName;
+        aLoud = aDyn - halfLoudName - halfDynName - namePad;
+      }
+    }
+    _tipName(canvas, centre, nameLoud, aLoud, nameRadius);
+    _tipName(canvas, centre, nameDyn, aDyn, nameRadius);
 
-    // **The rings bound the readout, not the module.** `outer` is the outside
-    // of the first arc; three rings and two gaps in, what is left is the clear
-    // disc the number sits in. Sizing against `dial` alone is what put a
-    // four-digit reading through the innermost arc on both sides: the old
-    // `maxWidth` of `dial * 0.6` is 1.2 times `outer`, and the disc is only
-    // 0.92 of it across.
-    final innerRadius = outer - 2 * (ring + gap) - ring;
+    // --- The centre -----------------------------------------------------------
+    // The two integrated readings side by side, TRUEPEAK MAX under them, LRA
+    // last — see the module header. Sized off the gauge rather than the
+    // module, because the readout lives inside the rings.
+    final truePeakMax = engine.truePeakMax;
+    final lufsText = Metric.lufsIntegrated.format(integrated);
+    final odrText = Metric.odrIntegrated.format(odrIntegrated);
 
-    // A chord, not the diameter. The number is not a line — it stands about
-    // four tenths of the inner radius tall — and a box as wide as the circle
-    // fits only if it has no height. At 0.8 of the radius its corners still
-    // clear the arc.
-    final textWidth = innerRadius * 1.6;
-
-    // Every glyph in a reading is a digit, a minus or a point, and the reading
-    // face is monospaced, so the width is arithmetic and not a measurement —
-    // no second layout to find out whether the first one fitted. 0.62 em covers
-    // Google Sans Code's 0.6 advance with a little slack.
-    final text = Metric.lufsIntegrated.format(integrated);
+    // Every glyph in a reading is a digit, a minus or a point, and the
+    // reading face is monospaced, so the width is arithmetic and not a
+    // measurement — no second layout to find out whether the first fitted.
+    // The two columns share the clear width between the rings.
+    final columnWidth = innerClear * 1.5 - Space.sm;
+    final glyphs = math.max(5, math.max(lufsText.length, odrText.length));
     final fontSize = math
-        .min(dial * 0.16, textWidth / (text.length * 0.62))
-        .clamp(12.0, 120.0);
+        .min(outer * 0.17, columnWidth / (glyphs * 0.62))
+        .clamp(11.0, 96.0)
+        .toDouble();
 
-    final value = state._integrated.of(
-      text,
+    final lufsValue = state._lufs.of(
+      lufsText,
       OaaType.reading(fontSize).copyWith(color: integratedColor),
-      align: TextAlign.center,
-      maxWidth: textWidth,
     );
-    canvas.drawParagraph(
-      value,
-      Offset(centre.dx - textWidth / 2, centre.dy - value.height * 0.72),
+    final odrValue = state._odr.of(
+      odrText,
+      OaaType.reading(fontSize).copyWith(color: odrIntegratedColor),
     );
 
-    final unit = state._unit!;
+    final lufsLabel = state._lufsLabel!;
+    final odrLabel = state._odrLabel!;
+
+    final rowWidth = lufsValue.longestLine + Space.md + odrValue.longestLine;
+    final lufsLeft = centre.dx - rowWidth / 2;
+    final odrLeft = lufsLeft + lufsValue.longestLine + Space.md;
+
+    var top = headingRect.top;
+    canvas.drawParagraph(integratedLabel, headingRect.topLeft);
+    top += integratedLabel.height + Space.xs;
+
     canvas.drawParagraph(
-      unit,
-      Offset(centre.dx - unit.longestLine / 2, centre.dy + value.height * 0.32),
+      lufsLabel,
+      Offset(
+        lufsLeft + (lufsValue.longestLine - lufsLabel.longestLine) / 2,
+        top,
+      ),
+    );
+    canvas.drawParagraph(
+      odrLabel,
+      Offset(odrLeft + (odrValue.longestLine - odrLabel.longestLine) / 2, top),
+    );
+    top += lufsLabel.height + Space.xxs;
+
+    canvas.drawParagraph(lufsValue, Offset(lufsLeft, top));
+    canvas.drawParagraph(odrValue, Offset(odrLeft, top));
+    top += lufsValue.height + Space.xs;
+
+    // TRUEPEAK MAX, the number the ceiling zone is about. Red exactly when it
+    // stands in that zone.
+    top += _row(
+      canvas,
+      centre.dx,
+      top,
+      state._truePeakLabel!,
+      state._truePeak.of(
+        Metric.truePeakMax.format(truePeakMax),
+        OaaType.readingSmall.copyWith(
+          color: colorForState(
+            classify(Metric.truePeakMax, truePeakMax, calibration),
+            colors,
+          ),
+        ),
+      ),
     );
 
-    // LRA underneath, because "how far does it move" is the second question
-    // asked of an integrated reading, and ODR-I under that, because "how hard
-    // was it squeezed" is the third. They are the two numbers besides the
-    // reading itself that survive to delivery, and they are the two a target
-    // can put a limit on, so each takes its verdict's colour the way the
-    // reading does.
-    //
-    // Stacked rather than side by side, and it matters: the gauge is open at
-    // the bottom, so a row straight below the centre clears the rings for as
-    // long as it stays inside the open sector, and a narrow row does at any
-    // module size. Two readouts on one line did not — at the smallest size the
-    // ends of the line ran under the innermost arc. The second row asks for a
-    // little more height than the first, so the LRA a smaller module already
-    // showed is never the one that gives way.
-    if (size.height > 140) {
-      var top = centre.dy + value.height * 0.32 + unit.height + Space.xs;
-      top += _row(
+    // LRA, where the module is tall enough to carry a fourth row. Decibel's
+    // Super Meter stops at true peak; the loudness range survives here
+    // because it is the other number a target can put a limit on, and the
+    // Loudness Distribution is not always on the canvas.
+    if (size.height > 200) {
+      _row(
         canvas,
         centre.dx,
-        top,
+        top + Space.xxs,
         state._rangeLabel!,
         state._range.of(
           Metric.loudnessRange.format(engine.loudnessRange),
@@ -634,25 +864,76 @@ class _SuperMeterPainter extends MeterPainter {
           ),
         ),
       );
-      if (size.height > 180) {
-        final ratio = engine.odrIntegrated;
-        _row(
-          canvas,
-          centre.dx,
-          top + Space.xxs,
-          state._ratioLabel!,
-          state._ratio.of(
-            Metric.odrIntegrated.format(ratio),
-            OaaType.readingSmall.copyWith(
-              color: colorForState(
-                classify(Metric.odrIntegrated, ratio, calibration),
-                colors,
-              ),
-            ),
-          ),
-        );
-      }
     }
+  }
+
+  /// One radial tick between [inner] and [outerRadius]. The target's carries
+  /// a slot under it — see [_targetSlot]; the true peak's is a reported
+  /// value, not a set one, and takes the muted mark instead.
+  void _radialTick(
+    Canvas canvas,
+    Offset centre,
+    double angle,
+    double inner,
+    double outerRadius,
+    bool isTarget,
+  ) {
+    final direction = Offset(math.cos(angle), math.sin(angle));
+    final from = centre + direction * inner;
+    final to = centre + direction * outerRadius;
+    if (isTarget) {
+      canvas.drawLine(from, to, _targetSlot);
+      canvas.drawLine(from, to, _target);
+    } else {
+      canvas.drawLine(from, to, _truePeakMark);
+    }
+  }
+
+  /// One tip's number, flat, centred at [angle] on the circle of [radius] —
+  /// skipped entirely when it would overprint something already standing.
+  /// Returns the rect it covered, so the next label can yield to it in turn.
+  Rect? _tipValue(
+    Canvas canvas,
+    Offset centre,
+    ui.Paragraph value,
+    double angle,
+    double radius,
+    Rect? avoidA,
+    Rect? avoidB,
+    Rect? avoidC,
+  ) {
+    final at =
+        centre +
+        Offset(math.cos(angle), math.sin(angle)) * radius -
+        Offset(value.longestLine / 2, value.height / 2);
+    final rect = Rect.fromLTWH(at.dx, at.dy, value.longestLine, value.height);
+    if ((avoidA != null && rect.overlaps(avoidA)) ||
+        (avoidB != null && rect.overlaps(avoidB)) ||
+        (avoidC != null && rect.overlaps(avoidC))) {
+      return null;
+    }
+    canvas.drawParagraph(value, at);
+    return rect;
+  }
+
+  /// One tip's name, set along the arc: rotated to the tangent at [angle],
+  /// its baseline resting on the circle of [radius], reading clockwise —
+  /// which over the top half of a dial is never upside down.
+  void _tipName(
+    Canvas canvas,
+    Offset centre,
+    ui.Paragraph name,
+    double angle,
+    double radius,
+  ) {
+    canvas.save();
+    canvas.translate(
+      centre.dx + math.cos(angle) * radius,
+      centre.dy + math.sin(angle) * radius,
+    );
+    canvas.rotate(angle + math.pi / 2);
+    canvas.drawParagraph(name, Offset(-name.longestLine / 2, -name.height));
+    canvas.restore();
   }
 
   /// One label-and-value row, centred on [cx] with its top at [top]. Returns

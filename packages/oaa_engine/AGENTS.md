@@ -7,7 +7,7 @@ Dart bindings for the engine, plus the build hook that compiles it.
 | `hook/build.dart` | Compiles `../../engine/src/*.c` via `native_toolchain_c` and bundles it as a code asset. The app's only native build description; `engine/CMakeLists.txt` is the same compile for consumers that are not Dart. |
 | `ffigen.yaml` | Generates `lib/oaa_engine_bindings_generated.dart` from `oaa.h`. |
 | `lib/src/oaa_ffi.dart` | The one hand-written binding: `oaa_snapshot_acquire` with `isLeaf: true`. |
-| `lib/oaa_engine.dart` | The `OaaEngine` facade and the zero-copy typed views. Implements `oaa_core`'s `MeterSource`. |
+| `lib/oaa_engine.dart` | The `OaaEngine` facade and the zero-copy typed views — one per snapshot array, the five spectrum sets included, built once in the constructor and handed back by `spectrumOf` / `spectrumPeakOf` through a switch. Implements `oaa_core`'s `MeterSource`. |
 | `lib/src/oaa_file.dart` | `oaa_file_*` as Dart: open a file, read blocks, close. Decoding only — it measures nothing. |
 | `lib/src/offline.dart` | `analyseFile` — the decode-push-read loop. Both the app and the CLI drive files through this one function, which is what makes an offline reading and a live reading the same number rather than two numbers that agree. |
 
@@ -108,3 +108,9 @@ Dart bindings for the engine, plus the build hook that compiles it.
 
 - **The typed lists are windows onto native memory, not copies.** Writing to one
   corrupts the engine's snapshot. They are valid only until `dispose()`.
+- **`spectrumOf` returns a view built at construction, never a list built on
+  the call.** It is read on the frame path by three modules, and the accessor
+  behind it takes the source as an `int32_t` — `oaa_spectrum_source` is kept
+  out of the function signatures because the width of a C enum is the
+  compiler's, and `_sourceCode` is the one place the two enums' order is
+  relied on.

@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:oaa_core/oaa_core.dart';
 
+import 'frame.dart';
 import 'quantise.dart';
 import 'snapshot_codec.dart';
 
@@ -48,6 +49,36 @@ class WireSnapshot implements MeterSource {
 
   @override
   final Float32List spectrumPan = Float32List(MeterShape.spectrumBands);
+
+  /// The per-source spectra of protocol version 5, allocated once like every
+  /// array here. NaN throughout on a frame from an older producer, which
+  /// never measured them, exactly as on a mono one that could not.
+  final Float32List _spectrumLeft = Float32List(MeterShape.spectrumBands);
+  final Float32List _spectrumLeftPeak = Float32List(MeterShape.spectrumBands);
+  final Float32List _spectrumRight = Float32List(MeterShape.spectrumBands);
+  final Float32List _spectrumRightPeak = Float32List(MeterShape.spectrumBands);
+  final Float32List _spectrumMid = Float32List(MeterShape.spectrumBands);
+  final Float32List _spectrumMidPeak = Float32List(MeterShape.spectrumBands);
+  final Float32List _spectrumSide = Float32List(MeterShape.spectrumBands);
+  final Float32List _spectrumSidePeak = Float32List(MeterShape.spectrumBands);
+
+  @override
+  Float32List spectrumOf(SpectrumSource source) => switch (source) {
+    SpectrumSource.all => spectrum,
+    SpectrumSource.left => _spectrumLeft,
+    SpectrumSource.right => _spectrumRight,
+    SpectrumSource.mid => _spectrumMid,
+    SpectrumSource.side => _spectrumSide,
+  };
+
+  @override
+  Float32List spectrumPeakOf(SpectrumSource source) => switch (source) {
+    SpectrumSource.all => spectrumPeak,
+    SpectrumSource.left => _spectrumLeftPeak,
+    SpectrumSource.right => _spectrumRightPeak,
+    SpectrumSource.mid => _spectrumMidPeak,
+    SpectrumSource.side => _spectrumSidePeak,
+  };
 
   @override
   /// Allocated at the largest a frame may carry, and only partly filled — read
@@ -105,32 +136,61 @@ class WireSnapshot implements MeterSource {
   bool get isStale => _stale;
   bool _stale = true;
 
-  /// Fills this snapshot from a `0x0003 SNAPSHOT` payload.
+  /// Fills this snapshot from a `0x0003 SNAPSHOT` payload stamped [version].
   ///
-  /// Throws [ArgumentError] on a payload that is not the size this build
-  /// expects. In practice the handshake has already refused such a producer —
+  /// **The table is chosen by the frame's version, never by its length.** A
+  /// version 1–3 producer sends 15,056 bytes; a version 4 one `3,556 + 4n`;
+  /// a version 5 one `11,748 + 4n` — and the three overlap, because a relay
+  /// carrying a long scope run at an older version is exactly as long as
+  /// some frame at a newer one. The header carries the version for this
+  /// reason, and `FrameReader.version` is what a caller passes here. The
+  /// default is this build's own version, which is what every producer this
+  /// build itself writes.
+  ///
+  /// Throws [ArgumentError] on a payload that is not a size that version
+  /// sends. In practice the handshake has already refused such a producer —
   /// `HELLO` carries the payload size for exactly this reason — so reaching
   /// here means something ignored it, and decoding a differently shaped frame
   /// would produce a screen of plausible wrong numbers.
-  void decode(ByteData payload, {int offset = 0}) {
+  void decode(
+    ByteData payload, {
+    int offset = 0,
+    int version = WireFrame.protocolVersion,
+  }) {
     final available = payload.lengthInBytes - offset;
+
+    if (version < 1 || version > WireFrame.protocolVersion) {
+      throw ArgumentError(
+        'snapshot stamped protocol version $version, which this build '
+        'cannot decode',
+      );
+    }
 
     // Which table this frame is written in. A version 1-3 producer — an older
     // plugin, which `WireFrame.minimumVersion` exists to keep working — sends
-    // the 15,056-byte one, and the difference is visible in the length alone.
-    // Dispatching on the size rather than on a remembered handshake keeps the
-    // decision beside the bytes it is about.
-    final legacy = available == SnapshotWireLegacy.payloadBytes;
+    // the 15,056-byte one; a version 4 producer the table before the
+    // per-source spectra were added.
+    final legacy = version <= 3;
+    final v4 = version == 4;
 
-    if (!legacy &&
-        (available < SnapshotWire.baseBytes ||
-            available > SnapshotWire.maxPayloadBytes ||
-            (available - SnapshotWire.baseBytes) % 4 != 0)) {
-      throw ArgumentError(
-        'snapshot payload is $available bytes, which is neither the version '
-        '1-3 size of ${SnapshotWireLegacy.payloadBytes} nor '
-        '${SnapshotWire.baseBytes} plus four bytes a stereo pair',
-      );
+    if (legacy) {
+      if (available != SnapshotWireLegacy.payloadBytes) {
+        throw ArgumentError(
+          'a version $version snapshot payload is $available bytes, not '
+          '${SnapshotWireLegacy.payloadBytes}',
+        );
+      }
+    } else {
+      final base = v4 ? SnapshotWireV4.baseBytes : SnapshotWire.baseBytes;
+      final max = v4
+          ? SnapshotWireV4.maxPayloadBytes
+          : SnapshotWire.maxPayloadBytes;
+      if (available < base || available > max || (available - base) % 4 != 0) {
+        throw ArgumentError(
+          'a version $version snapshot payload is $available bytes, which is '
+          'not $base plus four bytes a stereo pair',
+        );
+      }
     }
 
     double f32(int at) => payload.getFloat32(offset + at, Endian.little);
@@ -221,22 +281,71 @@ class WireSnapshot implements MeterSource {
         offset + SnapshotWireLegacy.offsetHistogram,
         histogram,
       );
+      _clearSources();
     } else {
-      // Fixed-point at protocol version 4; see [Quantise] for the widths and
-      // for how NaN survives them.
+      // Fixed-point since protocol version 4; see [Quantise] for the widths
+      // and for how NaN survives them. Identical offsets at 4 and 5 this far.
       _readDb(payload, offset + SnapshotWire.offsetSpectrum, spectrum);
       _readDb(payload, offset + SnapshotWire.offsetSpectrumPeak, spectrumPeak);
       _readUnits(payload, offset + SnapshotWire.offsetSpectrumPan, spectrumPan);
       _readFractions(payload, offset + SnapshotWire.offsetHistogram, histogram);
 
+      // What version 5 inserted, and what a version 4 producer never
+      // measured: NaN throughout, so a display asked for a source its host
+      // cannot send draws "not measured" rather than the combined bands
+      // under the wrong name.
+      if (v4) {
+        _clearSources();
+      } else {
+        _readDb(
+          payload,
+          offset + SnapshotWire.offsetSpectrumLeft,
+          _spectrumLeft,
+        );
+        _readDb(
+          payload,
+          offset + SnapshotWire.offsetSpectrumLeftPeak,
+          _spectrumLeftPeak,
+        );
+        _readDb(
+          payload,
+          offset + SnapshotWire.offsetSpectrumRight,
+          _spectrumRight,
+        );
+        _readDb(
+          payload,
+          offset + SnapshotWire.offsetSpectrumRightPeak,
+          _spectrumRightPeak,
+        );
+        _readDb(payload, offset + SnapshotWire.offsetSpectrumMid, _spectrumMid);
+        _readDb(
+          payload,
+          offset + SnapshotWire.offsetSpectrumMidPeak,
+          _spectrumMidPeak,
+        );
+        _readDb(
+          payload,
+          offset + SnapshotWire.offsetSpectrumSide,
+          _spectrumSide,
+        );
+        _readDb(
+          payload,
+          offset + SnapshotWire.offsetSpectrumSidePeak,
+          _spectrumSidePeak,
+        );
+      }
+
       // Trusted only as far as the length agrees with it. A count that does not
       // match the bytes is a producer this build does not understand, and
       // reading past the payload would draw whatever the last frame left there.
-      var frames = payload.getUint32(
-        offset + SnapshotWire.offsetScopeFrames,
-        Endian.little,
-      );
-      if (SnapshotWire.payloadBytesFor(frames) != available) {
+      final offsetScopeFrames = v4
+          ? SnapshotWireV4.offsetScopeFrames
+          : SnapshotWire.offsetScopeFrames;
+      var frames = payload.getUint32(offset + offsetScopeFrames, Endian.little);
+      final expected = v4
+          ? SnapshotWireV4.payloadBytesFor(frames)
+          : SnapshotWire.payloadBytesFor(frames);
+      if (expected != available) {
         throw ArgumentError(
           'snapshot says $frames stereo pairs, which is not $available bytes',
         );
@@ -247,13 +356,29 @@ class WireSnapshot implements MeterSource {
       _scopeFrames = frames;
       _readSamples(
         payload,
-        offset + SnapshotWire.offsetScope,
+        offset + (v4 ? SnapshotWireV4.offsetScope : SnapshotWire.offsetScope),
         scope,
         frames * 2,
       );
     }
 
     _stale = false;
+  }
+
+  /// The per-source spectra to "not measured".
+  void _clearSources() {
+    for (final array in [
+      _spectrumLeft,
+      _spectrumLeftPeak,
+      _spectrumRight,
+      _spectrumRightPeak,
+      _spectrumMid,
+      _spectrumMidPeak,
+      _spectrumSide,
+      _spectrumSidePeak,
+    ]) {
+      array.fillRange(0, array.length, double.nan);
+    }
   }
 
   /// The link has gone quiet: no snapshot has arrived for long enough that
@@ -310,6 +435,7 @@ class WireSnapshot implements MeterSource {
     spectrum.fillRange(0, spectrum.length, double.nan);
     spectrumPeak.fillRange(0, spectrumPeak.length, double.nan);
     spectrumPan.fillRange(0, spectrumPan.length, double.nan);
+    _clearSources();
     scope.fillRange(0, scope.length, double.nan);
     // A block's worth of NaN rather than nothing, so the trail-keeping modules
     // are handed the unavailable state and clear rather than holding their last

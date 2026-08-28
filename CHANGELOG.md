@@ -35,12 +35,21 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   asserted to be true peak, against a signal whose every sample sits 3 dB under
   its own waveform; and silence and a −80 dBFS tone read as undefined. The
   definition, operand by operand, is now in `docs/METRICS.md` and the README.
+- **The spectrum is measured on five signals.** Beside the combined bands —
+  the loudest bin across every channel, unchanged — the engine publishes the
+  front pair's `Left`, `Right`, `Mid` `(L + R) / 2` and `Side` `(L − R) / 2`
+  spectra, each with its own peak hold, and holds them against sines of known
+  amplitude: a hard-left sine reads its full level on Left, −6.02 dB on Mid
+  and on Side and the floor on Right; an in-phase one its full level on Mid
+  and the floor on Side; an anti-phase one the reverse. On a one-channel
+  source Right, Mid and Side are not measured rather than reported as the
+  channel twice. Nothing previously reported changes.
 
 ### ✨ Added
-- **A delivery target can set a `ODR-I` floor and a `ODR-S` floor.** `odr_i_min` and
+- **A delivery target can set an `ODR-I` floor and an `ODR-S` floor.** `odr_i_min` and
   `odr_s_min` in the target's file, or the two rows of the editor's new Dynamics
   section — the limits that run the other way, and the ones no platform
-  publishes, so none of the six built-in targets carries either. Each floor
+  publishes; of the built-ins only Dynamic master carries one. Each floor
   the target sets adds a line to the Validator, the report, the report card
   and the `oaa` verdict, and a master limited past one fails a build the way
   one over its peak ceiling does. The `ODR-S` line is judged against the
@@ -55,6 +64,23 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   a table of what ODR is and is not beside the AES ratios, TrueDyn, DR, LRA and
   crest. Normative and versioned; its text is CC BY 4.0 so another product's
   documentation may reproduce it.
+- **The specification says what a reading means.** Annex A, informative: the
+  identity that a normalised master's true peak is the platform's target plus
+  its `ODR-I`, the bands from flat to wide with an arithmetic anchor on every
+  row, the published 8 LU floor for the minimum `ODR-S`, and why the TT `DR`
+  scale's thresholds do not transfer. Kept apart from the definition so the
+  guidance can be revised without a version bump. The bands are also in the
+  README's ODR section and, drawn to scale, under the website's Dynamics
+  section.
+- **Dynamic master is a seventh built-in delivery target** — the streaming
+  target's loudness and peak lines plus the one floor with a published source:
+  8 LU on the minimum `ODR-S`, Ian Shepherd's recommendation for the loudest
+  passage in any genre. The one built-in that is a recommendation rather than
+  a platform, and its note says so.
+- **The text report prints `ODR-I`'s band word after the reading** —
+  `12.8 LU  (balanced)` — the bands of ODR Annex A, flat to wide, in the app's
+  export and the CLI's alike. The word appears in the human format alone; the
+  JSON stays numbers, so nothing a script gates on changed.
 - **A file report states the lowest `ODR-S` reached**, where it was defined, as
   its `ODR-S` line and as `odr_s_min` in the JSON — beside `ODR-I`, which is one
   peak against the whole programme.
@@ -65,6 +91,12 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   and in Settings › Signal. Several inserts are several rows. The selection is
   remembered between launches, so a machine that meters a DAW every day opens
   ready for one.
+- **The Spectrum Analyzer and the Spectrogram have a `Source` setting** — All,
+  Left, Right, Mid or Side — as the first row of their menus. It is part of
+  the module, so it is saved with the preset and a tablet shows the host's
+  choice; changing the spectrogram's clears its record, because a picture
+  that is one signal on the left and another on the right is a measurement
+  nobody took. A source the signal cannot provide says **MONO SOURCE**.
 
 ### ⚡ Changed
 - **A source can be changed while a plugin is connected.** A plugin used to take
@@ -88,6 +120,101 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   chip's 220 px ellipsis.
 - The status bar prints no sample rate and channel count when nothing has
   reported one, instead of `0.0 kHz · 0 ch`.
+- **Every level scale is tapered, with −∞ at its floor.** The dB scales were
+  linear; the top decade now takes most of the track — the filled fraction is
+  `10^(dB/60)` — the labelled ticks crowd the top, and the bottom of a track
+  means silence rather than "−48, or quieter, who knows". One taper for the
+  whole application, so two meters side by side still agree about where −12 is.
+- **The LUFS Meter draws three bars — momentary, short-term, integrated — with
+  their values printed beneath.** Integrated was a line across the other two
+  and its number sat in a readout row; the bars now carry their names up their
+  own faces, the scale is labelled on both edges, and the target line is
+  dashed in the over colour with the target value printed on the axis. The LRA
+  readout moved off this module; it stays on the Loudness Distribution, the
+  Super Meter's tall layout, the Validator and any Number Box.
+- **The Super Meter is a half-gauge on which loudness and dynamics meet at the
+  true peak.** Short-term and integrated LUFS fill from the left end; ODR-S
+  and ODR-I continue from each loudness tip on the same dB scale as thinner
+  arcs, ending at the true peak with a grey tick, so the dark rest of a ring
+  is its true-peak headroom — a dynamics arc reaching the right end is a peak
+  at 0 dBTP. `LUFS-S` and `ODR-S` ride the outer ring's tips as engraved
+  names, every arc prints its reading in the lane inside it, the delivery
+  ceiling is a red zone at the right end with its value on a tick, the target
+  keeps its tick with the value beside it, and the centre prints LUFS, ODR
+  and TRUEPEAK MAX, with LRA as a fourth row where the module is tall.
+- **The Digital Meter prints peak and RMS per channel above the bars.** The
+  bars are lit as segments under one gradient, the peak mark warms from the
+  fill colour to red as it nears full scale, and the fixed top-of-scale
+  warning region is gone — the mark that is actually hot carries the warning.
+- **The Histogram's time axis is wall-clock time, and an overview strip along
+  its floor shows the whole recording** with a frame over the slice the plot
+  is showing. The momentary band is tinted by how far over target each column
+  stands, from the accent into the over colour.
+- The Spectrum Analyzer's frequency labels moved to the top of the plot and
+  cover the 1-2-3-5-7 series from 20 Hz to 20 kHz; the dB labels moved to the
+  left; the tilt caption left the plot, and the setting is unchanged.
+- The Spectrogram gained its axes: frequency labels and gridlines on the left,
+  time along the top.
+- **The skin colour ramp is monochrome** — the module's ground through the
+  accent to a bright tip — so the warn and over colours keep their meaning on
+  modules that paint level as colour. The Full RGB rainbow is unchanged, and
+  switching still re-paints history without moving a cell.
+- **The Phase Scope is a square goniometer drawn as a connected trace**, with
+  balance riding its bottom edge and correlation its right edge as markers —
+  the correlation marker in the warning colour below zero, as the bar it
+  replaces was — and `L`, `R` and `M` engraved at the ends of the axes they
+  name. The correlation bar under the plot is gone. On a mono source the
+  markers are withheld beside the notice, as the bar was.
+- The Number Box names its metric inside the body and glows at its foot in the
+  reading's verdict colour.
+- Every Validator row prints the signed distance between its reading and the
+  limit that judges it, beside the limit.
+- **The VU Meter wears the standard face** — labelled −20 −10 −7 −5 −3 −1 0 +1
+  +2 with the pin at +3 and − and + at the ends, a peak lamp that lights while
+  the held peak stands over 0 VU, and its reading in a box under the needle.
+  The machined hub is gone; the needle wears the instrument colour.
+- **The Super Meter's ends are square again**, and every printed value on it
+  wears its arc's own ink — the integrated tip value is neutral past the
+  target, the way its arc is — so the one red number on the dial is the
+  target's.
+- **The Stereo Cloud is a field of marks, not an accumulation.** Each
+  published frame contributes one diamond per band that stands out of the
+  mix, brighter and larger the louder, and the last two seconds of those are
+  drawn, fading with age; a bass band drifting off centre leaves a ribbon. It
+  accumulated into a grid before, where every band a few decibels down the
+  mix added a little forty times a second and the field filled edge to edge.
+  Marks sit at the **pan pot's angle** the balance implies rather than at the
+  power balance itself, which is steepest at the centre — a three-decibel
+  lean is a fifth of the way over now, not a third — and only the top 30 dB
+  of a frame place a mark, cubed, so the picture is the bands that matter.
+- **The Phase Scope fills its module.** It reserved the label band on all
+  four sides to stay centred as a square; the figure with its two label bands
+  is what is centred now, and the square is a quarter taller for it.
+- **The three frequency axes label by one rule.** Every value of the
+  20-30-50-70 series that fits is labelled, 100 Hz, 1 kHz and 10 kHz first,
+  on the analyser's top edge and down the spectrogram's and the cloud's
+  sides alike; two of the three fell back to three labels the moment one
+  pair was tight, so a spectrogram beside a cloud carried three where the
+  cloud carried ten.
+- **The Histogram's overview strip runs edge to edge and spans the recording
+  so far** — the whole ring once it has filled — rather than the ring's
+  capacity, which put a session's first minute in a sliver at the right end
+  beside seven blank ones.
+- **The Loudness Distribution's target line is the over colour**, like every
+  other target mark, with its value under the axis in the same, and it stops
+  at the picture: the fill is already split at the target, so the dashes now
+  run only through the clear space above the distribution and no longer
+  through it.
+- **The wire protocol is version 5.** A snapshot carries the four extra
+  spectra and their peak holds as eight more fixed-point arrays before the
+  scope run, which takes a one-block frame from 7,652 to 15,844 bytes — at
+  the default 30 Hz display link about 250 kB/s more, a few percent of what
+  a tablet's Wi-Fi carries. A version-5 display still reads a version-4
+  plugin, reporting the four sources as not measured; a version-4 display
+  refuses a version-5 host at the handshake, on payload size, with the
+  sentence naming both numbers. Decoding is keyed to the frame's version
+  rather than its length, because a long version-4 relay frame can be the
+  size of a version-5 one. `docs/WIRE.md` is the specification.
 
 ### 🐛 Fixed
 - An Alert Meter watching `ODR-S` or `ODR-I` latches the **lowest** reading under
@@ -102,6 +229,17 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   everything but the plugin GPL-3.0-or-later and the card was the one place that
   still carried the old split; it now reads GPL-3.0 · AGPL-3.0, as the site's
   footer does.
+- **The Stereo Cloud is readable on dense material.** Every band lit against a
+  fixed floor, so real music filled every cell and the picture read as a wall
+  of dots; bands now light relative to the loudest in the frame, and the cloud
+  is sparse with a spine — which is the picture the module exists to show.
+  Frequency gridlines, a C mark and the STEREO 1-2 caption landed with it.
+- A skin change recolours every cached readout label and unit immediately;
+  they kept the previous skin's ink until their text next changed, which for a
+  static label is never.
+- The Digital Meter's `dB` sits on the same baseline as `PEAK`, `RMS` and
+  their values. The three faces in the row have three line heights, and
+  top-aligned the unit floated above the reading it belongs to.
 
 ### 🔥 Removed
 - **`PSR`, `PLR`, `DR-S` and `DR-I` as names**, and `plr` and `dr_i` as keys of

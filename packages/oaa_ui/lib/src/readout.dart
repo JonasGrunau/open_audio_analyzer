@@ -54,9 +54,11 @@ class ReadoutPainter {
 
   ui.Paragraph? _unitParagraph;
   String? _unitText;
+  Color? _unitColor;
 
   ui.Paragraph? _labelParagraph;
   String? _labelText;
+  Color? _labelColor;
 
   static ui.Paragraph _layout(String text, TextStyle style, double maxWidth) {
     final builder = ui.ParagraphBuilder(
@@ -84,17 +86,24 @@ class ReadoutPainter {
     return _valueParagraph!;
   }
 
+  // Keyed by colour as well as text. They cached by text alone for a long
+  // time, which held until a skin change: the value's cache already carried
+  // its colour — a verdict can recolour a number whose string is unchanged —
+  // but a label or unit kept the old palette's ink until its text happened to
+  // change, which for a static label is never.
   ui.Paragraph unit(String text, Color color, double width) {
-    if (_unitParagraph == null || _unitText != text) {
+    if (_unitParagraph == null || _unitText != text || _unitColor != color) {
       _unitText = text;
+      _unitColor = color;
       _unitParagraph = _layout(text, unitStyle.copyWith(color: color), width);
     }
     return _unitParagraph!;
   }
 
   ui.Paragraph label(String text, Color color, double width) {
-    if (_labelParagraph == null || _labelText != text) {
+    if (_labelParagraph == null || _labelText != text || _labelColor != color) {
       _labelText = text;
+      _labelColor = color;
       _labelParagraph = _layout(text, labelStyle.copyWith(color: color), width);
     }
     return _labelParagraph!;

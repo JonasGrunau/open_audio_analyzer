@@ -30,17 +30,17 @@
  * Regenerating, after a *deliberate* protocol change only:
  *
  *   cmake --build plugin/build --target oaa_wire_fixture
- *   ./plugin/build/oaa_wire_fixture plugin/test/golden/wire_v4.bin
+ *   ./plugin/build/oaa_wire_fixture plugin/test/golden/wire_v5.bin
  *
- * `wire_v4.bin` is the one that tracks this serialiser, and the one
+ * `wire_v5.bin` is the one that tracks this serialiser, and the one
  * `wire_fixture_matches_golden` compares against. **Never regenerate
- * `wire_v2.bin`, and as of version 4 never `wire_v3.bin` either.** Bytes
+ * `wire_v2.bin`, `wire_v3.bin` or, as of version 5, `wire_v4.bin`.** Bytes
  * written by today's build prove nothing about what yesterday's wrote, so
- * regenerating either destroys the only thing that holds a promise about the
- * past. `v2` against `v3` is the evidence that version 3 moved a frame type and
- * no table; `v3` on its own is now the only exercise of the version 1-3 decode
- * path, which is what lets an already-installed plugin survive an app
- * upgrade.
+ * regenerating any of them destroys the only thing that holds a promise about
+ * the past. `v2` against `v3` is the evidence that version 3 moved a frame
+ * type and no table; `v3` on its own is the only exercise of the version 1-3
+ * decode path, and `v4` of the version 4 one — each of which is what lets a
+ * plugin installed under that version survive an app upgrade.
  *
  * The values below include a NaN and a negative infinity on purpose. Both have
  * bit patterns that a careless serialiser normalises — NaN through arithmetic,
@@ -111,6 +111,22 @@ oaa_snapshot makeSnapshot() {
   s.lra_high  = -12.0f;
   s.lra_gate  = -34.0f;
   s.reserved3 = 0.0f;
+
+  /* Version 5: one modulus per source, so that a source written into its
+   * neighbour's slot is a wrong value and not merely the right length. The
+   * hold is the spectrum plus two. `spectrum_side[0]` is unmeasured on
+   * purpose — the one place a quantised NaN is exercised against the C++. */
+  for (int i = 0; i < OAA_SPECTRUM_BANDS; ++i) {
+    s.spectrum_left[i]       = -static_cast<float>(i % 50);
+    s.spectrum_left_peak[i]  = -static_cast<float>(i % 50) + 2.0f;
+    s.spectrum_right[i]      = -static_cast<float>(i % 60);
+    s.spectrum_right_peak[i] = -static_cast<float>(i % 60) + 2.0f;
+    s.spectrum_mid[i]        = -static_cast<float>(i % 70);
+    s.spectrum_mid_peak[i]   = -static_cast<float>(i % 70) + 2.0f;
+    s.spectrum_side[i]       = -static_cast<float>(i % 80);
+    s.spectrum_side_peak[i]  = -static_cast<float>(i % 80) + 2.0f;
+  }
+  s.spectrum_side[0] = std::numeric_limits<float>::quiet_NaN();
 
   for (int i = 0; i < OAA_SCOPE_POINTS * 2; ++i)
     s.scope[i] = static_cast<float>(i % 7) / 7.0f - 0.5f;

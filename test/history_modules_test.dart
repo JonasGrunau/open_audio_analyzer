@@ -101,10 +101,19 @@ class _Fake implements MeterSource {
   double get correlation => 0.5;
 
   @override
+  double get balance => 0.1;
+
+  @override
   Float32List get spectrum => _spectrum;
 
   @override
   Float32List get spectrumPeak => _spectrum;
+
+  @override
+  Float32List spectrumOf(SpectrumSource source) => spectrum;
+
+  @override
+  Float32List spectrumPeakOf(SpectrumSource source) => spectrumPeak;
 
   @override
   Float32List get spectrumPan => _pan;

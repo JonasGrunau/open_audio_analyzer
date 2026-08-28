@@ -118,9 +118,9 @@ The application. GPL-3.0-or-later.
   one that has stuck. The cloud's version was reported as a broken module. Both
   say **MONO SOURCE** across the middle now, keep their graticule drawn, and
   break the guides around the words rather than striking through them. The phase
-  scope's correlation bar goes with the scatter — an empty track, because a bar
-  pinned against its right end is the same tautology one row lower — while the
-  *number* stays measured and available in a Number Box. Not the
+  scope's correlation and balance markers go with the scatter — withheld,
+  because a marker pinned at the mono end of its edge is the same tautology one
+  stroke over — while the *numbers* stay measured and available in a Number Box. Not the
   `ModuleTooSmall` placeholder and not an em dash: the module is not
   unavailable, it is showing everything a one-channel signal has.
 - **A module that stops plotting has to keep ageing what it has already

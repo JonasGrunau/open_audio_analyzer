@@ -51,7 +51,7 @@ three consumers that never asked for JUCE.
 | `src/OaaStreamer.h/.cpp` | Owns the engine. Drains the FIFO, measures, serialises, sends, reconnects. |
 | `src/OaaPluginProcessor.h/.cpp` | The `AudioProcessor`. Real-time path and playhead capture. |
 | `src/OaaPluginEditor.h/.cpp` | A status panel. Not a meter, and must not become one. `StatusPanel` draws the window and owns the three controls; `OaaPluginEditor` is the fourteen lines that feed it a `Streamer::Status`. |
-| `test/wire_fixture.cpp` | Writes `test/golden/wire_v3.bin`, the golden the Dart codec is held against. `wire_v2.bin` beside it is frozen and is not regenerated. |
+| `test/wire_fixture.cpp` | Writes `test/golden/wire_v5.bin`, the golden the Dart codec is held against. `wire_v2.bin`, `wire_v3.bin` and `wire_v4.bin` beside it are frozen and are not regenerated: each is the only evidence that its version's decode path still reads what that version wrote. |
 | `test/editor_snapshot.cpp` | Renders `StatusPanel` in each of its five states to PNGs, with no DAW and no window; `--hold=<ms>` additionally loads the **built VST3 bundle** through JUCE's VST3 host and puts its editor on screen. The only ways to look at this window. Not a ctest — there is no golden, because a font rasteriser differs between platforms. |
 | `test/transport_box_test.cpp` | That an edge is delivered exactly once, and that only a host which says something is reported as saying it. No DAW, no socket, no thread, no JUCE. |
 | `test/transport_capture_test.cpp` | That a host which says nothing has nothing invented for it. Hosts the `AudioProcessor` directly, because no plugin format can express either half of it. Needs JUCE. |

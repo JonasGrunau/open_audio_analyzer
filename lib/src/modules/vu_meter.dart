@@ -31,10 +31,15 @@ import '../clock/meter_clock.dart';
 /// For eight phases this module was a hairline arc, eleven ticks and a
 /// one-pixel needle — an outline of a dial rather than a dial. So the scale is
 /// now a band along the rim rather than a line, in [OaaColors.meterTrack] up to
-/// 0 VU and [OaaColors.over] above it over a tinted ring, and the needle is a
-/// taper under a machined hub. That is weight rather than decoration: at a
-/// glance the module says *how far up the scale the programme is* from the
-/// proportion of the rim that is red, before the needle is read at all.
+/// 0 VU and [OaaColors.over] above it over a tinted ring, with the standard
+/// face's marks — −20 to +2 labelled, `−` and `+` past the ends — and a peak
+/// lamp beside the dial that lights while the held peak stands in the red.
+/// The needle is a taper in [OaaColors.meterFill], the instrument's own fill
+/// colour, rising from behind the boxed reading that sits over the pivot: a
+/// movement needs a hub, and a drawing of one does better with the number.
+/// That is weight rather than decoration: at a glance the module says *how far
+/// up the scale the programme is* from the proportion of the rim that is red,
+/// before the needle is read at all.
 ///
 /// **The module paints no surface of its own**, and two attempts at one are
 /// written down here so they are not made again. Filling the sector the needle
@@ -63,29 +68,31 @@ class VuMeterModule extends StatefulWidget {
 /// The marks on a VU face, in VU. Not evenly spaced, and that is the standard
 /// face rather than a stylistic choice — the scale crowds towards −20 because
 /// the movement's deflection is linear in *voltage*, not in decibels.
-const _vuMarks = <double>[-20, -10, -7, -5, -3, -2, -1, 0, 1, 2, 3];
+const _vuMarks = <double>[-20, -15, -10, -7, -5, -3, -2, -1, 0, 1, 2, 3];
 
-/// Which of them get a number under them. All eleven would be a wall of digits
-/// on a five-cell module.
-const _vuLabelled = <double>[-20, -10, -5, -3, 0, 3];
+/// Which of them get a number under them: the standard face's nine, −20 to +2.
+/// +3 is the pin, and the `+` sign at the end of the arc marks it better than
+/// a tenth digit would.
+const _vuLabelled = <double>[-20, -10, -7, -5, -3, -1, 0, 1, 2];
 
-/// The order the six are placed in, which is the order the room runs out in
+/// The order the nine are placed in, which is the order the room runs out in
 /// reverse. 0 is what the face is for and the two ends say how far it reaches;
-/// the three in between are the ones a small tile can do without.
-const _labelOrder = <double>[0, -20, 3, -10, -5, -3];
+/// the ones in between are the ones a small tile can do without.
+const _labelOrder = <double>[0, -20, 2, -10, -7, -5, -3, -1, 1];
 
-/// The widest reading the bottom row has to hold, used to reserve its room
+/// The widest reading the boxed readout has to hold, used to reserve its room
 /// rather than measuring the live string.
 ///
 /// The digits are tabular, but the *number of them* is not fixed — `+3.0` and
 /// `-20.0` are two glyphs apart — and reserving from whatever happens to be on
-/// screen is a row that changes its mind about whether it fits while you watch
+/// screen is a box that changes its mind about whether it fits while you watch
 /// the needle.
 const _readingTemplate = '-20.0';
 
 class _VuMeterModuleState extends State<VuMeterModule> {
   List<ui.Paragraph> _labels = const [];
-  ui.Paragraph? _unit;
+  ui.Paragraph? _minus;
+  ui.Paragraph? _plus;
   ui.Paragraph? _reference;
   ui.Paragraph? _referenceShort;
   ui.Paragraph? _template;
@@ -217,10 +224,14 @@ class _VuMeterModuleState extends State<VuMeterModule> {
           else
             layoutParagraph('', OaaType.tick),
       ];
-      _unit = layoutParagraph(
-        'VU',
-        OaaType.label.copyWith(color: colors.textFaint),
+      // The face's end signs: what a real VU face prints past its last marks.
+      // The minus end recedes like the scale under it; the plus end is the red
+      // family's, like everything past 0.
+      _minus = layoutParagraph(
+        '−',
+        OaaType.label.copyWith(color: colors.accent),
       );
+      _plus = layoutParagraph('+', OaaType.label.copyWith(color: colors.over));
       _template = layoutParagraph(
         _readingTemplate,
         OaaType.readingSmall.copyWith(color: colors.textPrimary),
@@ -250,7 +261,9 @@ class _VuMeterModuleState extends State<VuMeterModule> {
         _template!.alphabeticBaseline,
         _reference!.alphabeticBaseline,
       );
-      _readingWidth = _template!.longestLine + Space.xs + _unit!.longestLine;
+      // The readout box's width: the widest reading plus its padding. No unit
+      // inside the box — the face is the unit.
+      _readingWidth = _template!.longestLine + Space.sm * 2;
     }
 
     return MeterBody(
@@ -302,13 +315,18 @@ class _VuPainter extends MeterPainter {
        _peak = (Paint()
          ..color = colors.textPrimary
          ..strokeWidth = OaaStroke.mark),
-       _needle = (Paint()..color = colors.textPrimary),
-       _hub = (Paint()..color = colors.panel),
-       _hubRing = (Paint()
-         ..color = colors.hairlineStrong
+       // The instrument's own fill colour, not a text colour: the needle is
+       // the reading, and it should be the same voice as every other meter's
+       // fill — a white needle was the brightest thing on the module and
+       // outshone the number it pointed at.
+       _needle = (Paint()..color = colors.meterFill),
+       _lampOn = (Paint()..color = colors.over),
+       _lampIdle = (Paint()..color = colors.hairline),
+       _readoutFill = (Paint()..color = colors.panelRaised),
+       _readoutBorder = (Paint()
+         ..color = colors.hairline
          ..style = PaintingStyle.stroke
          ..strokeWidth = OaaStroke.hairline),
-       _hubCentre = (Paint()..color = colors.textMuted),
        super(repaint: repaint);
 
   final MeterSource engine;
@@ -324,9 +342,10 @@ class _VuPainter extends MeterPainter {
   final Paint _markZero;
   final Paint _peak;
   final Paint _needle;
-  final Paint _hub;
-  final Paint _hubRing;
-  final Paint _hubCentre;
+  final Paint _lampOn;
+  final Paint _lampIdle;
+  final Paint _readoutFill;
+  final Paint _readoutBorder;
 
   /// The needle, as a taper.
   ///
@@ -340,7 +359,12 @@ class _VuPainter extends MeterPainter {
   /// Where the scale labels have been put this frame, so the next one can be
   /// asked whether it fits. Held for the same reason as [_pointer]: the frame
   /// path may not allocate, and this is filled and refilled rather than built.
-  final List<Rect> _boxes = List<Rect>.filled(_vuLabelled.length, Rect.zero);
+  /// Two extra slots for the `−` and `+` end signs, which take part in the
+  /// same collision order.
+  final List<Rect> _boxes = List<Rect>.filled(
+    _vuLabelled.length + 2,
+    Rect.zero,
+  );
 
   /// How far the sweep may open, either side of vertical.
   ///
@@ -362,6 +386,12 @@ class _VuPainter extends MeterPainter {
 
   /// The gap between the arc and the near edge of a scale label.
   static const double _labelGap = Space.xs;
+
+  /// How far past the last marks the `−` and `+` end signs stand, in radians.
+  static const double _endSignLead = 0.12;
+
+  /// The peak lamp's radius.
+  static const double _lampRadius = 4;
 
   /// The pivot hub, as a fraction of the face radius.
   static const double _capShare = 0.045;
@@ -556,6 +586,34 @@ class _VuPainter extends MeterPainter {
       canvas.drawParagraph(label, at - half);
     }
 
+    // --- The end signs -------------------------------------------------------
+    // `−` and `+` just past the last marks, the way the standard face prints
+    // them: not values, but which way the scale runs — worth having exactly
+    // because the labels between them are the first things a small tile sheds.
+    for (final (side, sign) in [(-1, state._minus!), (1, state._plus!)]) {
+      final angle = zero + side * (halfSweep + _endSignLead);
+      final direction = Offset(math.cos(angle), math.sin(angle));
+      final half = Offset(sign.longestLine / 2, sign.height / 2);
+      final extent =
+          half.dx * direction.dx.abs() + half.dy * direction.dy.abs();
+      final at = pivot + direction * (face + _labelGap + extent);
+      final box = Rect.fromCenter(
+        center: at,
+        width: sign.longestLine + Space.xs,
+        height: sign.height,
+      );
+      var clear = true;
+      for (var i = 0; i < placed; i++) {
+        if (_boxes[i].overlaps(box)) {
+          clear = false;
+          break;
+        }
+      }
+      if (!clear) continue;
+      _boxes[placed++] = box;
+      canvas.drawParagraph(sign, at - half);
+    }
+
     // --- The reading --------------------------------------------------------
     // The loudest channel. A stereo pair on one movement is what a mono VU
     // does, and showing the quieter of the two would understate the programme.
@@ -606,8 +664,9 @@ class _VuPainter extends MeterPainter {
       // stuck out of the bottom of the pivot pointing the opposite way.
       //
       // Wide enough at the root that the taper is still visible *outside* the
-      // hub, which covers everything within [cap] of the pivot. Sized against
-      // the hub for that reason and not against the radius.
+      // readout box, which covers everything around the pivot. Sized against
+      // [cap] — the old hub's radius, kept as the measure of "near the pivot"
+      // — rather than against the radius.
       final root = across * math.max(OaaStroke.emphasis, cap * 0.7);
       final tipHalf = across * math.max(OaaStroke.hairline * 0.6, face * 0.004);
       final tip = pivot + direction * (rim + bandWidth * 0.65);
@@ -620,16 +679,37 @@ class _VuPainter extends MeterPainter {
       canvas.drawPath(_pointer, _needle);
     }
 
-    // --- The hub ------------------------------------------------------------
-    // Drawn last, over the needle's root, which is what a real movement looks
-    // like and what keeps the taper's widest end from reading as a blob.
-    canvas.drawCircle(pivot, cap, _hub);
-    canvas.drawCircle(pivot, cap, _hubRing);
-    canvas.drawCircle(pivot, cap * 0.32, _hubCentre);
+    // --- The peak lamp -------------------------------------------------------
+    // Beside the dial where a real face carries one, lit while the held peak
+    // stands over 0 VU — the same hold the mark on the rim draws, so the two
+    // can never disagree about whether the programme has been in the red.
+    // Skipped when the tile leaves it no clear margin: a lamp on top of the
+    // scale labels is furniture, not a signal.
+    final lampX = availW - Space.xs - _lampRadius;
+    if (lampX - _lampRadius >=
+        pivot.dx + face * sinHalf + _labelGap + state._labelBeside) {
+      canvas.drawCircle(
+        Offset(lampX, pivot.dy - face * 0.5),
+        _lampRadius,
+        state._peak > 0 ? _lampOn : _lampIdle,
+      );
+    }
 
-    // --- The bottom row ----------------------------------------------------
+    // --- The readout box -----------------------------------------------------
+    // Over the pivot, where a real movement has its hub: the number is the
+    // meter's own statement of where the needle is, and the needle vanishing
+    // behind it is what a pivot looks like when the pivot is a reading.
     if (!showRow) return;
-    final top = availH - state._rowHeight;
+
+    final boxHeight = state._rowHeight + Space.xs * 2;
+    final box = Rect.fromCenter(
+      center: Offset(pivot.dx, pivot.dy + boxHeight * 0.25),
+      width: state._readingWidth,
+      height: boxHeight,
+    );
+    final rounded = RRect.fromRectAndRadius(box, OaaRadius.sm);
+    canvas.drawRRect(rounded, _readoutFill);
+    canvas.drawRRect(rounded, _readoutBorder);
 
     final reading = state._reading.of(
       _readingText(vu),
@@ -641,30 +721,27 @@ class _VuPainter extends MeterPainter {
             : colors.textPrimary,
       ),
     );
-    // Baselines rather than boxes: the row holds two type sizes, and boxes
-    // aligned at the top sit the smaller one visibly high.
     canvas.drawParagraph(
       reading,
-      Offset(0, top + state._rowBaseline - reading.alphabeticBaseline),
-    );
-    final unit = state._unit!;
-    canvas.drawParagraph(
-      unit,
       Offset(
-        reading.longestLine + Space.xs,
-        top + state._rowBaseline - unit.alphabeticBaseline,
+        box.center.dx - reading.longestLine / 2,
+        box.center.dy - reading.height / 2,
       ),
     );
 
     // What 0 VU actually means, if there is room for it. The long form first,
     // then the level on its own, then nothing — a reference level printed half
-    // way across the reading is worse than an unlabelled face.
+    // way across the face is worse than an unlabelled one. Bottom-right, and
+    // it yields to the readout box when the tile is too small to hold both
+    // apart.
+    final top = availH - state._rowHeight;
+    final clearOfBox = top >= box.bottom + Space.xxs;
+    final noteRoom = clearOfBox ? availW : availW - box.right - Space.sm;
     final long = state._reference!;
     final short = state._referenceShort!;
-    final left = state._readingWidth + Space.md;
-    final note = availW - left >= long.longestLine
+    final note = noteRoom >= long.longestLine
         ? long
-        : availW - left >= short.longestLine
+        : noteRoom >= short.longestLine
         ? short
         : null;
     if (note == null) return;
