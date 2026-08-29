@@ -790,6 +790,25 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   both carry the one value, as every producer already wrote them.
 
 ### 🚧 Internal
+- **The website is deployed by a job of its own, after the release it
+  describes.** The front page prints the version out of `pubspec.yaml` on its
+  download button, so the release commit's own push to `main` deployed a site
+  reading `Download 0.15.0` while the newest release was 0.14.0 — and if an
+  artefact then fails to build, `publish` never runs and the site goes on
+  saying it. `website` still builds on every event; `website-deploy` deploys
+  only over a release that exists — from `main` when `pubspec.yaml` already
+  names a released version, and from a tag once `publish` has published one.
+- **The end-to-end scope test reads what a frame carried rather than what the
+  window holds.** ABI 7 grew the engine's scope from one block to four so a
+  reader that missed a publish could still find the audio, and both sides of
+  the wire mirror that window — so `scopeFrames` became the fill of a buffer
+  and stopped being a statement about one frame. The test that proves every
+  block crosses the wire in its own frame was still reading it, and failed on
+  the second frame of every run with 2048 against a clock that had advanced
+  1024: the window filling, not a block sent twice. It reads `lastRunFrames`
+  now, which exists for exactly this. Nothing about the plugin or the wire
+  changed. It runs only where a built fake DAW exists, which is a release or a
+  manual run, so it went unseen from the ABI bump to the 0.15.0 tag.
 - `--publish` and `--attach=oaa://host:port` open the display port and attach to
   a host at startup. They are what the website's signal-path photographs are
   taken with: a desktop publishing and an iPad drawing that desktop's canvas,

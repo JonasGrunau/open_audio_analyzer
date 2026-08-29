@@ -8,9 +8,23 @@ in:
 | Event | Jobs |
 |---|---|
 | pull request | `checks`, `engine`, `website` |
-| push to `main` | the same, and `website` deploys as well as builds |
+| push to `main` | the same, plus `website-deploy` |
+| tag `v*` | everything, and `website-deploy` **after** `publish` |
 | `workflow_dispatch` | the same, plus `plugin`, every installer, `ipa` and `android-aab` |
 | `workflow_dispatch` + `asc_notes_build` | the same, plus `asc-notes` and **not** the nine expensive jobs |
+
+**`website` builds and `website-deploy` deploys, and the split is about the
+release.** The front page prints the version out of `pubspec.yaml` on its
+download button, so the release commit's own push to `main` used to deploy a
+site advertising a version that had no release — and at 0.15.0 the plugin job
+then failed, `publish` never ran, and the site went on saying `Download 0.15.0`
+over a releases page whose newest was 0.14.0. `website-deploy` therefore names
+`publish` in its `needs` and checks, per branch, the result it actually wants:
+a push to `main` deploys only when `pubspec.yaml` already names a released
+version, and a tag deploys only when `publish` succeeded. A release whose
+artefacts fail now deploys nothing. It is `always()` plus explicit result
+checks rather than a plain `needs`, because `publish` is skipped on every push
+to main and a plain `needs` would skip the deploy with it.
 
 Three of the installer jobs — `macos-pkg`, `windows-installer` and
 `linux-tarball` — additionally `needs: plugin`, because each of them carries

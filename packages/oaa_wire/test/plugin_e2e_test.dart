@@ -265,6 +265,16 @@ void main() {
     // seen, drew that block as silence: a waveform in bursts with a gap
     // between every pair. Nothing else noticed, because every other reading
     // is an integral and the second push carried it.
+    //
+    // **The run, not the window.** ABI 7 grew the engine's scope from one
+    // block to four so a reader that misses a publish can still find the
+    // audio, and the decoder mirrors that window — so `scopeFrames` is now
+    // the fill of a buffer and says nothing about one frame. Read against it
+    // this test failed on the second frame of every run, with 2048 against a
+    // clock that had advanced 1024: the window filling, not a block sent
+    // twice. It fails only on a release or a manual run, because that is when
+    // a built fake DAW exists, so it went unseen from the ABI bump until the
+    // 0.15.0 tag.
     test('every block of audio crosses the wire in its own frame', () async {
       if (skip != null) return;
       final session = await _run(binary!, <String>[
@@ -566,7 +576,13 @@ Future<_Session?> _run(File binary, List<String> arguments) async {
               snapshotFrames++;
               scopeRuns.add((
                 elapsed: snapshot.elapsedSeconds,
-                frames: snapshot.scopeFrames,
+                // What *this frame carried*, not what the window holds. Since
+                // ABI 7 the scope is a sliding window of four blocks on both
+                // sides of the wire, so `scopeFrames` climbs 1024, 2048, 3072,
+                // 4096 and then stays — a number about the decoder's buffer
+                // rather than about the audio that just arrived.
+                // `lastRunFrames` exists for exactly this reading.
+                frames: snapshot.lastRunFrames,
                 sampleRate: snapshot.sampleRate,
               ));
           }

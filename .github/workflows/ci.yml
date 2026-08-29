@@ -485,10 +485,21 @@ jobs:
   # analyzer when `public/analyzer/` is there and simply does not when it is
   # not.
   #
-  # A tag does not redeploy. It names a commit that was already on main and
-  # already deployed, and every download button points at `releases/latest`
-  # rather than at a versioned filename, so the site does not have to wait for
-  # the release to exist.
+  # **Building the site and deploying it are two jobs, and the second waits for
+  # the release the first describes.** They were one, deploying on every push
+  # to main and never on a tag, on the reasoning that a tag names a commit
+  # already deployed and every download button points at `releases/latest`
+  # rather than at a versioned filename. The button's *label* does not: it
+  # prints the version out of `pubspec.yaml`, so the release commit's own push
+  # to main deployed a front page reading "Download 0.15.0" while the newest
+  # release was still 0.14.0 — and when the plugin job then failed, `publish`
+  # never ran and the site went on saying it. Observed at 0.15.0.
+  #
+  # So the site deploys only over a release that exists: from a push to main
+  # when `pubspec.yaml` names one already, and from a tag once `publish` has
+  # actually published it. A release build whose artefacts fail deploys
+  # nothing, which is the whole point — a site a version ahead of its
+  # downloads is worse than a site a few minutes behind them.
   # -------------------------------------------------------------------------
 
   website:
@@ -513,21 +524,6 @@ jobs:
         working-directory: website
         run: npm ci
 
-      - uses: subosito/flutter-action@v2
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-        with:
-          flutter-version: ${{ env.FLUTTER_VERSION }}
-          channel: stable
-          cache: true
-
-      # `--no-still` because the still in front of the analyzer is committed and
-      # is shot from a browser this runner does not have. The build itself is
-      # what a deploy needs.
-      - name: Build the live analyzer
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-        working-directory: website
-        run: npm run analyzer -- --no-still
-
       - name: Build
         working-directory: website
         run: npm run build
@@ -544,12 +540,89 @@ jobs:
           done
           test -s dist/sitemap.xml
 
+
+  website-deploy:
+    name: Deploy the website
+    # `publish` is named so that a tag's deploy is ordered *after* the release
+    # exists. It is skipped on a push to main, which is why every branch of the
+    # condition below names the result it wants rather than relying on the
+    # default "all needs succeeded" — that would skip this job on every push.
+    needs: [website, publish]
+    if: >-
+      always()
+      && github.event_name == 'push'
+      && needs.website.result == 'success'
+      && (
+        (github.ref == 'refs/heads/main' && needs.publish.result == 'skipped')
+        || (startsWith(github.ref, 'refs/tags/v') && needs.publish.result == 'success')
+      )
+    runs-on: ubuntu-latest
+    # Not keyed by ref, and not cancelled: two deploys of the same site race
+    # each other whatever ref they came from, and a deploy killed half way is
+    # the one state worse than a deploy that waited.
+    concurrency:
+      group: website-deploy
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+
+      # The front page prints this version on its download button. A tag has
+      # just published the matching release; a push to main may be the release
+      # commit itself, whose release does not exist until the tag is pushed and
+      # every artefact has built — and may never exist, if one of them fails.
+      # Building anyway and stopping short of the deploy keeps this job honest
+      # about *why* it did nothing.
+      - name: The release the site would name
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          v=$(sed -n 's/^version: *\([0-9][0-9.]*\).*/\1/p' pubspec.yaml)
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          if gh release view "v$v" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "Deploying: v$v is released."
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::pubspec.yaml says $v and there is no v$v release yet, so the site would print \"Download $v\" over a releases page whose newest is older. Not deploying. Tag v$v and this same job deploys once publish has succeeded."
+          fi
+
+      - name: Install
+        if: steps.release.outputs.exists == 'true'
+        working-directory: website
+        run: npm ci
+
+      - uses: subosito/flutter-action@v2
+        if: steps.release.outputs.exists == 'true'
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      # `--no-still` because the still in front of the analyzer is committed and
+      # is shot from a browser this runner does not have. The build itself is
+      # what a deploy needs.
+      - name: Build the live analyzer
+        if: steps.release.outputs.exists == 'true'
+        working-directory: website
+        run: npm run analyzer -- --no-still
+
+      - name: Build
+        if: steps.release.outputs.exists == 'true'
+        working-directory: website
+        run: npm run build
+
       # Unset in a fork, and a fork should not fail for it — the same policy the
       # unsigned installers follow. `wrangler` reads the token out of the
       # environment; the account id comes with it because a token that can see
       # more than one account cannot guess which one this is.
       - name: Deploy
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        if: steps.release.outputs.exists == 'true'
         working-directory: website
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
