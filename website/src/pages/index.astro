@@ -60,23 +60,25 @@ const FLOW = [
     `The canvas you arranged, every module on it reading the same instant of the same audio. It
      makes no difference whether that audio came from the plugin, from an input or from a file: the
      meters are the same meters.`,
-    `The desktop canvas, eight modules reading one instant: a LUFS meter and a loudness half-gauge
-     both at −8.0, a spectrum analyser, a loudness histogram running against a −14
-     target line, a delivery verdict reading NOT READY with two failures and one pass, per-channel
-     peak bars, a waveform, and a latched true-peak alert at −0.1.`,
+    `The desktop canvas at one minute twenty-five into the track: six loudness readouts along the
+     top, a LUFS meter and a loudness half-gauge both reading −13.7 LUFS integrated, per-channel
+     peak bars, a delivery verdict reading NOT READY with one failure and two passes, a VU meter at
+     +8.4, a loudness histogram against a −14 target line, a distribution, and a latched true-peak
+     alert at −0.2 dBTP.`,
   ],
   [
     'tablet',
     'Across the room',
     'A tablet reads it too',
-    `The same application, on an iPad. Attach it to the plugin your session is running and it meters
-     that stream over Wi-Fi, or press <strong>PUBLISH</strong> on the desktop and it draws that
-     canvas instead. What you arranged on a 32-inch monitor opens on the tablet still looking
-     arranged, not squashed.`,
-    `The application running on an iPad in landscape, attached over Wi-Fi to the same plugin: six
-     loudness readouts along the top, a LUFS meter, a loudness half-gauge reading −8.9, a
-     per-channel peak meter, a delivery verdict reading NOT READY, a VU meter, a loudness histogram
-     against a −14 target line, a distribution and a latched true-peak alert.`,
+    `Press <strong>PUBLISH</strong> on the desktop and <strong>ATTACH</strong> on an iPad, and the
+     tablet draws that canvas — the same application, the same modules, the same painters, over
+     Wi-Fi. It is not measuring anything of its own: what is on it is the frame the desktop
+     published. What you arranged on a 32-inch monitor opens on the tablet still looking arranged,
+     not squashed.`,
+    `The same application on an iPad in landscape, attached to that desktop over Wi-Fi: its bar
+     names the host and the DAW's playhead, and below it stands the desktop's canvas, reading
+     −13.7 LUFS integrated, 11.3 LU of range, −0.2 dBTP and +8.4 VU — every number the plate beside
+     it is showing, at the same instant.`,
   ],
 ];
 
@@ -411,7 +413,10 @@ const ANCHORS = [
       Nothing along this path measures anything twice. The plugin takes the readings, the desktop
       draws them, and the tablet across the room draws the same ones — one engine, one set of
       numbers, three places to read them. So the meter you glance at from the far side of the studio
-      cannot quietly disagree with the one under your hand.
+      cannot quietly disagree with the one under your hand. The two photographs below are that
+      claim rather than an illustration of it: they were taken from one frozen frame of one
+      session, with the tablet attached to the desktop beside it, which is why every reading in
+      them is the same reading.
     </p>
 
     <ol class="flow" style={`--flow-n: ${flow.length}`}>
@@ -1048,9 +1053,23 @@ const ANCHORS = [
 
   /* `:hover` still matches a disabled button, and the control disables itself
      the moment it is pressed — so the resting brightening has to be gated, or
-     the panel changes tone under a pointer that is only resting on a spinner. */
+     the panel changes tone under a pointer that is only resting on a spinner.
+     Gating it alone left the other half of that undone: the press disabled the
+     button, `:hover` stopped matching, and the scrim dropped back to its
+     resting tone — so the picture went *darker* in answer to being pressed,
+     stayed there for the whole load, and lightened only when the frame
+     arrived and the control went. Loading holds the tone the pointer gave it,
+     written in the same rule so the two cannot drift apart.
+
+     `aria-busy` rather than `.is-loading`, because the reduced-motion path
+     sets the first and never the second: it swaps the label for words instead
+     of running the spinner, and it is loading just the same. It is set at the
+     press and removed in the same breath as `.is-done`, which fades the whole
+     control out — so it is exactly the interval this is about, including the
+     30-second deadline and the cross-origin bail-out. */
   .facade-go:not(:disabled):hover,
-  .facade-go:not(:disabled):focus-visible {
+  .facade-go:not(:disabled):focus-visible,
+  .facade-go[aria-busy='true'] {
     background: color-mix(in srgb, var(--ink) 22%, transparent);
   }
 

@@ -18,5 +18,11 @@ import UIKit
     if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "OaaBonjour") {
       OaaBonjour.register(with: registrar)
     }
+    // And the second: iOS hands Dart's `main` an empty argument list, an empty
+    // environment, and no way to set `dartEntrypointArguments` on an engine it
+    // created itself. See `OaaLaunchArguments.swift`.
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "OaaLaunchArguments") {
+      OaaLaunchArguments.register(with: registrar)
+    }
   }
 }

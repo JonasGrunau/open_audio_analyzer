@@ -52,7 +52,7 @@ built, and `CHANGELOG.md` for what shipped when.
 | `packages/oaa_core/lib/src/meter_source.dart` | `MeterSource` — everything a module is allowed to read. `OaaEngine` implements it; so does the remote display's decoder. |
 | `docs/WIRE.md` | The wire protocol, normative. Three implementations, none written against another. |
 | `docs/ODR.md` | **Open Dynamic Range**, the project's own dynamics standard — `ODR-S` and `ODR-I` defined to the operand, with numbered conformance cases. Normative and versioned in its own header: the definition changes only with a version bump and a revision-history row, and `packages/oaa_engine/test/conformance_test.dart` asserts every case in its § 7. Annex A is informative — what a reading means — and moves without a bump. `METRICS.md` and the README summarise it and point at it; they do not restate it, so there is one text to drift from. Its prose is CC BY 4.0, the one file in `docs/` that is not GPL, because a specification nobody may reproduce is not open. |
-| `ios/Runner/OaaBonjour.swift` | One of the application's **six** platform channels, and every one of them exists because a platform will not answer a question Flutter can. iOS refuses an app the multicast socket every other platform browses with, so a tablet searches through the system's Bonjour responder instead; `lib/src/remote/mdns/host_discovery.dart` is where the two meet. The others: `lib/src/app/window_chrome.dart` over `oaa/window_chrome`, which removes the macOS title bar; `macos/Runner/OaaFileMenu.swift` over `oaa/file_menu`, which is the File menu, because `PlatformMenuBar` can carry no checkmark and would replace the stock Edit menu — see `lib/src/app/file_menu.dart`, which sends it labels, ticks and the chords off the shortcut table; and Android's three — `OaaMulticastLock.kt`, without which its multicast socket receives nothing; `OaaFilesDir.kt`, without which it has nowhere to save; and `OaaMicPermission.kt`, without which it cannot open an input at all. All three are registered in `android/app/src/main/kotlin/com/openaudioanalyzer/oaa/MainActivity.kt`, and all three are the same failure shape — an Android capability that is *absent* rather than broken, with every call below it succeeding and nothing logged. Two of the three shipped missing. |
+| `ios/Runner/OaaBonjour.swift` | One of the application's **seven** platform channels, and every one of them exists because a platform will not answer a question Flutter can. iOS refuses an app the multicast socket every other platform browses with, so a tablet searches through the system's Bonjour responder instead; `lib/src/remote/mdns/host_discovery.dart` is where the two meet. The others: `lib/src/app/window_chrome.dart` over `oaa/window_chrome`, which removes the macOS title bar; `macos/Runner/OaaFileMenu.swift` over `oaa/file_menu`, which is the File menu, because `PlatformMenuBar` can carry no checkmark and would replace the stock Edit menu — see `lib/src/app/file_menu.dart`, which sends it labels, ticks and the chords off the shortcut table; and Android's three — `OaaMulticastLock.kt`, without which its multicast socket receives nothing; `OaaFilesDir.kt`, without which it has nowhere to save; and `OaaMicPermission.kt`, without which it cannot open an input at all. All three are registered in `android/app/src/main/kotlin/com/openaudioanalyzer/oaa/MainActivity.kt`, and all three are the same failure shape — an Android capability that is *absent* rather than broken, with every call below it succeeding and nothing logged. Two of the three shipped missing. The seventh is `ios/Runner/OaaLaunchArguments.swift` over `oaa/launch_arguments`, which answers with `argv`, because iOS hands Dart's `main` an empty argument list **and** an empty `Platform.environment` — so every flag in `lib/src/app/launch_options.dart` did nothing on the one platform a tablet runs on, silently, with `xcrun simctl launch --args` looking for all the world like it had worked. |
 | `packages/oaa_core/lib/src/grid.dart` | Every rule about where a module may go, as pure functions. No pixels. |
 | `lib/src/canvas/grid_canvas.dart` | The canvas: drag, resize, selection, the preview overlay. |
 | `lib/src/canvas/workspace.dart` | The one path every layout edit takes, and the undo history. |
@@ -329,7 +329,7 @@ stale and the fix is to delete the claim, not to soften it. `mobile_scanner`,
   flag". Plain `open` takes the path and still forwards `--args`.
 
   **`screencapture` returns a black frame without screen-recording permission,**
-  and macOS grants that per terminal application, so an agent usually cannot
+  and macOS grants that per terminal application, so an agent may not be able to
   take one at all. The route that works headless and needs no permission is to
   render the tree in a widget test: a `RepaintBoundary` above `MaterialApp`,
   `boundary.toImage(...)` inside `tester.runAsync`, and the real fonts loaded
@@ -351,6 +351,78 @@ stale and the fix is to delete the claim, not to soften it. `mobile_scanner`,
   all, which is what tells a gesture that did nothing apart from a script that
   was denied. The menu bar's double-click zoom, the interval that pairs it and
   the drag it shares a detector with were all checked this way.
+
+  **Screen Recording, posting events and Accessibility are three separate
+  grants, and a script has to say which one it is short of.** They are commonly
+  written about as "the Accessibility grant the terminal needs", and they are
+  not one thing: `CGPreflightScreenCaptureAccess()` gates the window *image*,
+  `CGPreflightPostEventAccess()` gates synthesising a click or a key, and
+  `AXIsProcessTrusted()` gates the accessibility API — which is what every
+  `System Events` `window`, `size`, `position` or `menu item` call goes through.
+  An agent host commonly holds the first two and not the third, and that
+  refusal arrives as `AXErrorAPIDisabled` (-25211) or -1719 from `osascript`
+  *while* `name of first process whose frontmost is true` still answers, because
+  a process-level query does not touch the AX API at all. So it reads as a
+  missing window rather than as a missing permission.
+
+  **The answer is not to ask for the grant; it is to stop clicking.** Both
+  geometries this repository has to set are *preferences*, and writing them
+  before launch is exact as well as permission-free: `NSWindow Frame
+  OaaMainWindow` in the application's own defaults, and `DevicePreferences ›
+  <udid> › SimulatorWindowGeometry` in `com.apple.iphonesimulator`. What is
+  *not* a preference is a simulator's device orientation —
+  `SimulatorWindowOrientation` describes the window, and writing LandscapeLeft
+  into it leaves the springboard portrait — so that one is a posted ⌘→, which
+  moves no pointer and steals no cursor. See `packaging/signal_path.sh`.
+
+- **Two pictures that have to agree are taken from one frozen frame, not from
+  two runs.** Every photograph the website publishes is of the real thing —
+  `website/AGENTS.md` is why — so making one means driving the real application
+  and photographing a real window, and the front page's signal-path section
+  makes that harder than it looks by putting a desktop and a tablet side by side
+  under a sentence saying the meter across the room cannot disagree with the one
+  under your hand.
+
+  **Determinism is not enough, and this is the mistake to learn from.** The
+  first pair was shot by two scripts that could not run at once — the plugin
+  dials one address and one application holds 47822 — and were matched on
+  *transport position* instead, on the argument that the same audio from the
+  same start is the same reading. It is. They were still never at the same
+  instant, and shipped reading 00:01:19:21 against 00:01:20:03: LUFS-M 0.2
+  apart and two VU needles at different numbers, directly beneath the sentence.
+  The arrangement in which they cannot differ is the one the section is
+  describing anyway — the tablet is a **display** of that desktop, drawing the
+  frame it published — so there is one measurement and two photographs of it.
+  When a page claims two things agree, photograph them agreeing rather than
+  arranging for them to.
+
+  **Then freeze, and only then shoot.** Neither screen can be captured
+  instantly, so the readings are stopped rather than raced: `kill -STOP` the
+  fake DAW so no more audio reaches the plugin, wait one publish interval for
+  the display to catch up to the frame that is now standing still, then
+  `kill -STOP` both applications. Each window keeps its last surface — the
+  window server's for `screencapture`, the simulator's framebuffer for
+  `simctl io` — so there is no clock left to race. **There is a two-second
+  deadline on that**, because `PluginLink` marks a session stale after two
+  seconds without a frame and a stale snapshot is *cleared*, every reading to a
+  dash. Three signals in a row, not three captures.
+
+  **Both windows have to stay uncovered for the whole wait.** Flutter pauses its
+  ticker when a window is occluded and this application consumes the plugin's
+  stream from that one ticker, so a covered canvas stops measuring *silently*:
+  the link stays up, the format still reads 44.1 kHz, and the transport sits at
+  00:00:00:00. Being frontmost is not the requirement and could not be — two
+  windows are wanted at once — so they are laid out side by side and the run
+  refuses if a third application took the screen.
+
+  **A screenshot script that has to press something in the interface is a
+  script that will hijack somebody's pointer.** `packaging/ios/screenshots.sh`
+  posts CGEvents at the Simulator's window and owns the mouse for the two
+  minutes it runs; it is also how ATTACH stopped being pressed at all, because
+  its tap coordinates were read off a finished screenshot and the row moved
+  twice underneath them. Prefer a launch option, which is what `--publish` and
+  `--attach` are — see `lib/src/app/launch_options.dart`, including why neither
+  is gated to a debug build.
 
 - **A feature that only fails on the device is a feature nobody tested.** Three
   of Open Audio Analyzer's platforms lie about the network in a way a
@@ -503,6 +575,7 @@ claim something about it:
 | The iOS build, its signing, or the TestFlight upload | `packaging/AGENTS.md`, `docs/site/building.md`'s credential table, `.github/AGENTS.md`, and `docs/site/install.md`'s iPadOS section. The IPA is **not** a release asset — if you make it one, `README.md`'s note and the publish step's exclusion both become wrong |
 | A switch on the fake DAW | `plugin/host/AGENTS.md`, and `README.md` if it is one of the gestures a person cannot perform on cue. `--help` in `FakeDawOptions.h` is the exhaustive list and the only one that has to be; the other two name the interesting ones and are prose |
 | A page the documentation site publishes, or its filename | **Two lists that have to agree**: the manifest in `website/src/lib/docs.mjs` and the pattern in `website/src/content.config.ts`. Neither is a recursive glob over `docs/` — that publishes `AGENTS.md` to strangers the day somebody moves it. `docs.mjs` is written out page by page; `content.config.ts` is a scoped list (`docs/site/*.md` plus the three documents named individually), so it loads a superset and `docs.mjs` decides what is published. A renamed document therefore fails the website build instead of silently vanishing from it. The `website` job in `ci.yml` is what runs that build on every event |
+| A plate in the website's signal-path section | Nothing by hand — reshoot with `sh packaging/signal_path.sh`, then `cd website && npm run flow`, which writes the webps and `src/data/flow-shots.json`. **Both plates or neither**: they are one frozen frame of one session and re-encoding half a pair is how the two come to be photographs of different instants. Then the `FLOW` entry in `website/src/pages/index.astro` — its **alt text names readings**, so it is wrong the moment a plate is retaken, and nothing checks it. The plugin plate is the exception and comes from `oaa_editor_snapshot`; `npm run flow -- --only=plugin` is its own thing. |
 | The mark, the logo or the app icon | Nothing by hand — redraw `assets/brand/oaa-logo.svg` and run `dart run packaging/icon/make_icons.dart`, which writes every icon, every vector twin and the README's image. Then `assets/AGENTS.md` if a file appeared or went, `CHANGELOG.md` ⚡, and `npm run og` in `website/` because the card carries the mark. **`packaging/icon/oaa.svg`, `website/public/`'s icons and everything in `assets/brand/` except `oaa-logo.svg` itself are generated: editing one by hand is a change the next run silently reverts.** The one exception is `website/public/favicon.svg`, which a browser tab shows at 16 px where the tile does not read — it is drawn by hand, the generator no longer writes it, and it is the file that taught this rule its exception by being reverted. |
 | A version, a stated requirement, an artefact filename, or how a module looks | Not the version: `website/src/lib/app.mjs` reads it out of `pubspec.yaml` at build time, because three typed literals were a release behind within the hour after a tag. The rest is typed and nothing regenerates it — `PLATFORMS` in `website/src/pages/index.astro` carries the minimum macOS and what each installer holds, and the macOS floor moved to 14.2 in the same change that added `website/` while the page still said 11 Big Sur. `npm run modules -- --only <id>` for the photograph. See `website/AGENTS.md` |
 | Anything a user sees or configures | `README.md`, and `CHANGELOG.md` under ✨ or ⚡ |

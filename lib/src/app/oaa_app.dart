@@ -533,7 +533,8 @@ class _WorkspaceState extends ConsumerState<_Workspace>
   /// what `showOaaPanel` needs as well.
   final GlobalKey _belowScopes = GlobalKey();
 
-  /// Acts on `--open-panel`, and says so when an argument was not understood.
+  /// Acts on `--open-panel`, `--publish` and `--attach`, and says so when an
+  /// argument was not understood.
   void _applyLaunchOptions() {
     if (!mounted) return;
     final options = ref.read(launchOptionsProvider);
@@ -549,12 +550,29 @@ class _WorkspaceState extends ConsumerState<_Workspace>
           .report([?notice, ...options.warnings].join(' '));
     }
 
+    // First, because it needs no context at all: the service is this State's
+    // own field and the switch on the bar is only a view onto it.
+    if (options.publish) unawaited(_remote.setEnabled(true));
+
     // **Shadows this State's own `context` on purpose**, so that neither this
     // method nor anything added to it can reach for the one that cannot see
     // the scopes. Non-null by the time this runs — it is a post-frame callback,
     // and the `Material` it hangs on is built in both branches of [build].
     final context = _belowScopes.currentContext;
     if (context == null) return;
+
+    // Pushed rather than swapped in, because that is what the ATTACH button
+    // does: a display is a route over the canvas, and the way out of one is the
+    // way back. See `RemoteDisplayScreen._leave`.
+    final attach = options.attach;
+    if (attach != null) {
+      Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) =>
+              RemoteDisplayScreen(host: attach.host, port: attach.port),
+        ),
+      );
+    }
 
     switch (options.openPanel) {
       case null:

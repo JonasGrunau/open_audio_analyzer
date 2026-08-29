@@ -97,10 +97,26 @@ documents now, opened and saved through the platform's own dialogs from the File
 menu, and a native panel is not something a screenshot run can drive. It is a debug-build affordance and a
 release build says so rather than ignoring it.
 
+Two more are the remote display, from either end. `--publish` opens the display
+port at startup, and `--attach=oaa://host:port` opens a display of that host over
+whatever the canvas would have been. Neither is gated to a debug build, because
+the photographs they exist for are of the release one; nothing persists either,
+so the next launch publishes nothing again. They are what lets a desktop and a
+tablet be photographed drawing one published frame without a mouse event being
+posted at anybody's machine — see `packaging/signal_path.sh`.
+
 On a built macOS bundle, pass them with `open --args`:
 
 ```sh
 open "build/macos/Build/Products/Debug/Open Audio Analyzer.app" --args --open-panel=shortcuts
+```
+
+On an iPad simulator, pass them with `--args` too — the runner is asked for its
+command line over a channel, because iOS gives Flutter neither that nor an
+environment:
+
+```sh
+xcrun simctl launch <device> com.openaudioanalyzer.oaa --args --attach=oaa://192.168.1.20:47821
 ```
 
 ## The plugin

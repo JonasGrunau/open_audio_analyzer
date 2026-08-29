@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:oaa_engine/oaa_engine.dart';
 
 import 'src/app/oaa_app.dart';
+import 'src/app/launch_arguments.dart';
 import 'src/app/launch_options.dart';
 import 'src/data/providers.dart';
 import 'src/storage/config_store.dart';
@@ -26,6 +27,12 @@ import 'src/storage/startup_config.dart';
 /// explicitly. Without that, `--config-dir` would work on two platforms out of
 /// three and appear to be ignored on the one where it matters most — see
 /// `lib/src/app/launch_options.dart` for why it exists at all.
+///
+/// **On iOS it does not reach here at all**, and neither does the environment,
+/// which is why [launchArguments] exists: the runner builds its engine
+/// implicitly, there is no `dartEntrypointArguments` to set, and the only way
+/// left is to ask it. Android is in the same position and is not asked, because
+/// nothing yet needs a flag there.
 Future<void> main(List<String> arguments) async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -45,7 +52,10 @@ Future<void> main(List<String> arguments) async {
     OaaEngine.resetAll();
   } catch (_) {}
 
-  final options = parseLaunchOptions(arguments);
+  // Asked for rather than taken, because on iOS `arguments` is empty and the
+  // runner has to be asked — see `launch_arguments.dart`. Every other platform
+  // answers with what it was already given.
+  final options = parseLaunchOptions(await launchArguments(arguments));
 
   final store = await ConfigStore.open(configDir: options.configDir);
   final config = await loadStartupConfig(store);

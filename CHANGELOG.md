@@ -788,6 +788,29 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   both carry the one value, as every producer already wrote them.
 
 ### 🚧 Internal
+- `--publish` and `--attach=oaa://host:port` open the display port and attach to
+  a host at startup. They are what the website's signal-path photographs are
+  taken with: a desktop publishing and an iPad drawing that desktop's canvas,
+  neither of which could be reached from a script without posting mouse events
+  at the machine somebody was sitting at. Nothing persists either, so the next
+  launch publishes nothing again.
+- Flags reach the application on iOS. `main` is handed an empty argument list
+  there and `Platform.environment` is empty as well, both without error, so
+  every launch option did nothing on the one platform a tablet runs on — and
+  `xcrun simctl launch --args` looked exactly as though it had worked.
+  `ios/Runner/OaaLaunchArguments.swift` answers with the real `argv` over
+  `oaa/launch_arguments`, the application's seventh platform channel.
+- `packaging/signal_path.sh` takes the website's desktop and tablet plates from
+  one session, replacing `packaging/macos/screenshot.sh` and the website's use
+  of `packaging/ios/screenshots.sh`. The tablet in it is a **remote display
+  attached to that desktop**, so the two pictures are one measurement drawn
+  twice rather than two runs matched by transport position — which is what they
+  were, and which shipped a pair reading 00:01:19:21 against 00:01:20:03. It
+  posts no mouse events and needs no Accessibility grant: both windows are
+  placed by writing the preferences that hold their geometry.
+- The signal-path plates on the front page were reshot. The tablet one is now
+  an iPad attached to the desktop beside it rather than an iPad metering a
+  plugin of its own, which is what the paragraph above them describes.
 - `OAA_ABI_VERSION` is 8, and this release moves it twice.
 - `oaa_engine_reset_all` destroys every engine the process created and did not
   destroy, and the application calls it from `main`. It reclaims nothing in a

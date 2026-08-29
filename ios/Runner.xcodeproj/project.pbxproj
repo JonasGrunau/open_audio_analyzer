@@ -18,6 +18,7 @@
 		97C147011CF9000F007C117D /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FF1CF9000F007C117D /* LaunchScreen.storyboard */; };
 		AC1C0DE000000000000000B2 /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = AC1C0DE000000000000000B1 /* AppIcon.icon */; };
 		D17DE9E84744F93298B2FE67 /* OaaBonjour.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2337D91E94105701846F5B87 /* OaaBonjour.swift */; };
+		A1B2C3D400000000000000B2 /* OaaLaunchArguments.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D400000000000000A1 /* OaaLaunchArguments.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -47,6 +48,7 @@
 		1498D2321E8E86230040F4C2 /* GeneratedPluginRegistrant.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = GeneratedPluginRegistrant.h; sourceTree = "<group>"; };
 		1498D2331E8E89220040F4C2 /* GeneratedPluginRegistrant.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = GeneratedPluginRegistrant.m; sourceTree = "<group>"; };
 		2337D91E94105701846F5B87 /* OaaBonjour.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = OaaBonjour.swift; sourceTree = "<group>"; };
+		A1B2C3D400000000000000A1 /* OaaLaunchArguments.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = OaaLaunchArguments.swift; sourceTree = "<group>"; };
 		331C807B294A618700263BE5 /* RunnerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunnerTests.swift; sourceTree = "<group>"; };
 		331C8081294A63A400263BE5 /* RunnerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RunnerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		3B3967151E833CAA004F5970 /* AppFrameworkInfo.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = AppFrameworkInfo.plist; path = Flutter/AppFrameworkInfo.plist; sourceTree = "<group>"; };
@@ -130,6 +132,7 @@
 				7884E8672EC3CC0400C636F2 /* SceneDelegate.swift */,
 				74858FAD1ED2DC5600515810 /* Runner-Bridging-Header.h */,
 				2337D91E94105701846F5B87 /* OaaBonjour.swift */,
+				A1B2C3D400000000000000A1 /* OaaLaunchArguments.swift */,
 			);
 			path = Runner;
 			sourceTree = "<group>";
@@ -292,6 +295,7 @@
 				1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */,
 				7884E8682EC3CC0700C636F2 /* SceneDelegate.swift in Sources */,
 				D17DE9E84744F93298B2FE67 /* OaaBonjour.swift in Sources */,
+				A1B2C3D400000000000000B2 /* OaaLaunchArguments.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

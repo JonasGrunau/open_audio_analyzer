@@ -2,15 +2,20 @@
 //
 // The command line.
 //
-// Small surface, and worth testing anyway for one reason: both flags exist to
-// make something *else* testable — a config directory that can be pointed
-// somewhere without breaking device capture, and a panel that can be
-// screenshotted without accessibility permission. A flag that silently stopped
-// parsing would take the thing it enables with it, and the failure would look
-// like the config being ignored rather than like an argument being dropped.
+// Small surface, and worth testing anyway for one reason: every flag here
+// exists to make something *else* testable — a config directory that can be
+// pointed somewhere without breaking device capture, a panel that can be
+// screenshotted without accessibility permission, and the two ends of the
+// website's signal-path pair, which without them can only be photographed by
+// posting synthetic mouse events at somebody's machine. A flag that silently
+// stopped parsing would take the thing it enables with it, and the failure
+// would look like the config being ignored rather than like an argument being
+// dropped.
 
 import 'package:oaa/src/app/launch_options.dart';
 import 'package:oaa/src/app/oaa_app.dart';
+import 'package:oaa/src/remote/display_host.dart';
+import 'package:oaa/src/remote/display_screen.dart';
 import 'package:oaa/src/data/providers.dart';
 import 'package:oaa/src/panels/settings_panel.dart';
 import 'package:oaa/src/storage/config_store.dart';
@@ -22,6 +27,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   _panelOpens();
+  _attachAttaches();
 
   group('parseLaunchOptions', () {
     test('an empty command line asks for nothing', () {
@@ -94,6 +100,33 @@ void main() {
           reason: '${panel.flagName} is offered and does not parse',
         );
       }
+    });
+
+    test('--attach takes every spelling of an address', () {
+      // The same parser as the pairing code and the typed address, which is
+      // the point: a flag with its own idea of what a bare host means would be
+      // a third opinion for the two in `pair_link.dart` to drift from.
+      expect(
+        parseLaunchOptions(const ['--attach=oaa://192.168.1.20:47821']).attach,
+        (host: '192.168.1.20', port: 47821),
+      );
+      expect(
+        parseLaunchOptions(const ['--attach', 'studio-mac.local']).attach,
+        (host: 'studio-mac.local', port: 47821),
+      );
+    });
+
+    test('an address that is not one is named in a warning', () {
+      final options = parseLaunchOptions(const [
+        '--attach=https://example.com',
+      ]);
+      expect(options.attach, isNull);
+      expect(options.warnings.single, contains('--attach'));
+    });
+
+    test('--publish is off unless it is asked for', () {
+      expect(parseLaunchOptions(const []).publish, isFalse);
+      expect(parseLaunchOptions(const ['--publish']).publish, isTrue);
     });
 
     test('a flag with nothing after it is a warning, not a crash', () {
@@ -204,5 +237,77 @@ void _panelOpens() {
     await tester.pump();
 
     expect(find.byType(SettingsPanel), findsOneWidget);
+  });
+}
+
+// And the other other half: `--attach` has to end at a display of that host.
+//
+// The flag is one end of the website's signal-path pair — the tablet in it is a
+// display attached to the desktop beside it, so the two are drawing one
+// published frame and cannot disagree. Parsing an address and then not
+// connecting to it would produce a photograph of the host picker, which is a
+// picture of the feature not working.
+void _attachAttaches() {
+  testWidgets('--attach opens a display of that host', (tester) async {
+    tester.view.physicalSize = const Size(1400, 1000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    final host = DisplayHost(
+      source: null,
+      hostName: 'Studio Desktop',
+      abiVersion: 0,
+    );
+    addTearDown(host.dispose);
+
+    await tester.runAsync(() => host.start(port: 0));
+    final port = host.port!;
+    host.publishLayout(
+      const PresetSpec(
+        name: 'One',
+        tabs: [TabSpec(name: 'Master', modules: [])],
+      ),
+    );
+
+    final store = ConfigStore.disabled();
+    addTearDown(store.dispose);
+
+    final container = ProviderContainer(
+      overrides: [
+        configStoreProvider.overrideWithValue(store),
+        startupConfigProvider.overrideWithValue(
+          StartupConfig(notice: store.lastError),
+        ),
+        launchOptionsProvider.overrideWithValue(
+          parseLaunchOptions(['--attach=oaa://127.0.0.1:$port']),
+        ),
+        pluginLinkPortProvider.overrideWithValue(0),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(container: container, child: const OaaApp()),
+    );
+
+    expect(find.byType(RemoteDisplayScreen), findsNothing);
+
+    // The socket is real, so the frames that carry the handshake are delivered
+    // by the event loop this zone does not return to on its own. Alternating a
+    // real pause with a pump is the same shape `_untilStored` uses in
+    // `panels_test.dart`, and for the same reason.
+    for (var i = 0; i < 60; i++) {
+      await tester.pump();
+      if (find.text('Studio Desktop').evaluate().isNotEmpty) break;
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 20)),
+      );
+    }
+
+    expect(find.byType(RemoteDisplayScreen), findsOneWidget);
+    expect(find.text('Studio Desktop'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.runAsync(host.stop);
   });
 }

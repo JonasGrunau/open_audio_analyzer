@@ -70,7 +70,15 @@
 # a full run takes, the pointer belongs to this script and not to the person at
 # the machine. Only the four navigated pictures need them; `01-loudness` is shot
 # before the first tap, off the canvas the app opens on. So a run that wants only
-# that one — the website's tablet plate does — can and should skip the rest.
+# that one can and should skip the rest.
+#
+# **The website's tablet plate no longer comes from here.** It used to be this
+# script's `01-loudness`, which is the iPad running as the primary application
+# with the plugin dialling *it* — a real thing the product does, and not the one
+# the paragraph beside that plate describes. It is shot by
+# `packaging/signal_path.sh` now, as a display attached to the desktop it stands
+# next to, and both of them come out of one frozen frame. Nothing here feeds the
+# site any more; these five are the App Store's.
 set -eu
 
 CANVAS_ONLY=0
@@ -308,14 +316,17 @@ BTN_TARGET_X=727;    BTN_ATTACH_X=1010;   BTN_SETTINGS_X=1208; BAR_Y=52
 BTN_MODULE_X=1322
 CLOSE_X=976;         CLOSE_ATTACH_Y=294
 
-# **Paired with SETTLE in packaging/macos/screenshot.sh.** `01-loudness` is the
-# website's tablet plate and it sits beside the desktop one under a paragraph
-# saying the meter across the room cannot disagree with the one under your hand
-# — so the two have to be at the same transport position, or the page argues
-# with itself. They cannot be simultaneous: the plugin dials one address and one
-# application holds 47822. They do not need to be, because the engine is
-# deterministic. This waits 74 on top of the 6 above and lands at about 1:19,
-# which is where that script lands too.
+# **This number used to be paired with one in packaging/macos/screenshot.sh, and
+# the pairing is what failed.** `01-loudness` was the website's tablet plate,
+# beside a desktop plate shot by that script, under a paragraph saying the meter
+# across the room cannot disagree with the one under your hand — matched by
+# transport position, on the argument that the engine is deterministic. It is,
+# and the two runs were still never at the same instant: they shipped reading
+# 00:01:19:21 and 00:01:20:03, so LUFS-M differed by 0.2 and the VU needles
+# pointed at different numbers. Both plates come out of one session now, one of
+# them a display of the other — see `packaging/signal_path.sh`. What is left here
+# is an App Store screenshot, and 74 seconds is simply enough programme to fill
+# the histogram.
 #
 # The activate is cursor-free — AppleScript, not a posted event — and it is here
 # because the app inside the simulator stops drawing when its window is hidden,

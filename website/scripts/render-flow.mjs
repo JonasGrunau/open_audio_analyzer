@@ -12,26 +12,23 @@
 //     npm run flow                # every stage that can be made on this machine
 //     npm run flow -- --only=desktop
 //
-// The three come from three different places, and only one of them is shot here:
+// The three come from two different places, and neither is shot here:
 //
-//   - plugin   `plugin/build/oaa_editor_snapshot`, a JUCE target that rasterises
-//              the real StatusPanel without a window server. It needs no DAW and
-//              no screen-recording grant, and takes about a second. Built by the
-//              full plugin build (`cmake --build plugin/build`), which is gated
-//              behind a release or a manual run — so it may simply not be there.
-//   - desktop  `packaging/macos/screenshot.sh`, which drives the real signed
-//              application on a real window server and photographs the window —
-//              chrome and all. It is not shot here and it is not the headless
-//              canvas render the hero uses: that one has no title bar, no status
-//              bar and no tab strip, so it is a picture of the modules and not
-//              of the program. Needs Screen Recording and Accessibility.
-//   - tablet   `packaging/ios/screenshots.sh`, which drives the fake DAW through
-//              the real VST3 into an iPad simulator and photographs the canvas.
-//              It needs Xcode, an iPad runtime, an Accessibility grant for the
-//              terminal and port 47822 free — and it **posts real mouse events**,
-//              which takes the pointer away from whoever is at the machine, so it
-//              is never run from
-//              here — this only picks up what it left behind.
+//   - plugin           `plugin/build/oaa_editor_snapshot`, a JUCE target that
+//                      rasterises the real StatusPanel without a window server.
+//                      It needs no DAW and no screen-recording grant, and takes
+//                      about a second. Built by the full plugin build
+//                      (`cmake --build plugin/build`), which is gated behind a
+//                      release or a manual run — so it may simply not be there.
+//   - desktop, tablet  `packaging/signal_path.sh`, and **both, from one
+//                      session**: the fake DAW plays a real track through the
+//                      real VST3 into the application on this Mac, an iPad
+//                      simulator attaches to it as a remote display, and both
+//                      are photographed from one frozen frame. That is the only
+//                      arrangement in which the two plates cannot disagree, and
+//                      the paragraph they sit under says they do not. Shot by
+//                      hand: it needs Xcode, a release build, the fake DAW, both
+//                      ports free and the machine to itself for two minutes.
 //
 // All three outputs are committed, like the module thumbnails and the hero
 // still, because making them needs Flutter, Chrome, cwebp, JUCE and Xcode and
@@ -115,44 +112,26 @@ if (wanted('plugin')) {
   }
 }
 
-// --- The tablet -------------------------------------------------------------
+// --- The desktop and the tablet ---------------------------------------------
+//
+// One script writes both, and they are picked up as a pair for the same reason:
+// the tablet is a display of that desktop, drawing the frame it published, so a
+// plate taken from a different run of the same script would be a picture of a
+// different instant. Nothing here enforces that beyond taking them together and
+// saying so.
 
-if (wanted('tablet')) {
-  // `01-loudness.png` and not `05-remote-display.png`, for two reasons. The
-  // plate wants the canvas rather than a panel sitting over it — and 05 is the
-  // frame with the ATTACH panel open. It also does not currently *have* that
-  // panel open: the script taps hardcoded coordinates read off a finished
-  // screenshot, and the row has moved twice since they were measured — it gained
-  // a FILE button, and then the readings left it for a status bar of their own —
-  // so the tap that should hit ATTACH lands somewhere else entirely.
-  // Both files are the same canvas until that is fixed; this one is the one
-  // that is meant to be.
-  const shot = join(REPO, 'build/packaging/screenshots/01-loudness.png');
+for (const name of ['desktop', 'tablet']) {
+  if (!wanted(name)) continue;
+  const shot = join(REPO, `build/packaging/screenshots/${name}.png`);
   if (!existsSync(shot)) {
     skipped.push(
-      'tablet   — build/packaging/screenshots/01-loudness.png is not there.\n' +
-        '             sh packaging/ios/screenshots.sh\n' +
-        '             (Xcode with an iPad Pro 13-inch runtime, an Accessibility\n' +
-        '              grant for the terminal, and nothing else on port 47822.)',
+      `${name.padEnd(8)} — build/packaging/screenshots/${name}.png is not there.\n` +
+        '             sh packaging/signal_path.sh\n' +
+        '             (A release build, a simulator build, the fake DAW, Screen\n' +
+        '              Recording, and both 47821 and 47822 free.)',
     );
   } else {
-    made.tablet = encode(shot, 'tablet');
-  }
-}
-
-// --- The desktop ------------------------------------------------------------
-
-if (wanted('desktop')) {
-  const shot = join(REPO, 'build/packaging/screenshots/desktop.png');
-  if (!existsSync(shot)) {
-    skipped.push(
-      'desktop  — build/packaging/screenshots/desktop.png is not there.\n' +
-        '             sh packaging/macos/screenshot.sh\n' +
-        '             (A release build, the fake DAW, and Screen Recording plus\n' +
-        '              Accessibility granted to the terminal that runs it.)',
-    );
-  } else {
-    made.desktop = encode(shot, 'desktop');
+    made[name] = encode(shot, name);
   }
 }
 
