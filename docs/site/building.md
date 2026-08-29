@@ -126,12 +126,24 @@ cmake -B plugin/build -S plugin -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build plugin/build
 ```
 
-Products land in `plugin/build/OaaPlugin_artefacts/Release/`. Nothing is copied
-into a system plugin folder unless you copy it — a build that installed itself
-would mean the DAW you have open is now running a binary you did not knowingly
-install. [Install](install.html#in-a-daw) says which folder that is on each
-platform. JUCE is fetched and pinned, not vendored, so a fresh clone builds
-without checking out a framework by hand.
+Products land in `plugin/build/OaaPlugin_artefacts/Release/`, one directory per
+format: **VST3** everywhere, **AU** on macOS, **AAX** on macOS and Windows, and
+a Standalone that exists so the socket path can be tested without opening a DAW.
+Nothing is copied into a system plugin folder unless you copy it — a build that
+installed itself would mean the DAW you have open is now running a binary you
+did not knowingly install. [Install](install.html#in-a-daw) says which folder
+that is on each platform. JUCE is fetched and pinned, not vendored, so a fresh
+clone builds without checking out a framework by hand — **including both plugin
+SDKs**, so neither the VST3 nor the AAX SDK is something you check out. Point
+`-DOAA_AAX_SDK_PATH=<path>` at a full Avid download if you want the
+documentation and examples the vendored copy leaves out.
+
+There is no AAX on Linux: Pro Tools does not run there and Avid ships no Linux
+SDK, so asking for the format on a third platform is a CMake error rather than a
+build that silently omits it. And an AAX bundle built here **is not signed for
+Pro Tools** — that needs PACE's `wraptool` and an Avid signing certificate,
+which is unrelated to `codesign` and which this project does not yet have. See
+[Install](install.html#the-aax-and-pro-tools).
 
 On macOS each bundle is signed once it is fully built, then verified with
 `codesign --verify --strict`, which fails the build rather than producing a
@@ -204,7 +216,7 @@ fingerprint.
 
 | Variable | For |
 | --- | --- |
-| `OAA_SIGNING_IDENTITY` | macOS Developer ID, e.g. `Developer ID Application: Name (TEAMID)`. Signs code — the app, the VST3 and the Audio Unit. It does **not** sign the package that carries them; that is the identity below |
+| `OAA_SIGNING_IDENTITY` | macOS Developer ID, e.g. `Developer ID Application: Name (TEAMID)`. Signs code — the app, the VST3, the Audio Unit and the AAX. It does **not** sign the package that carries them; that is the identity below, and it is **not** what an AAX needs to load in Pro Tools, which is a PACE `wraptool` signature this project does not yet have |
 | `OAA_INSTALLER_IDENTITY` | The *other* macOS Developer ID, e.g. `Developer ID Installer: Name (TEAMID)`. A distinct certificate from the one above and not interchangeable with it — that one signs code, this one signs a `.pkg` and nothing else. `keychain.sh` fails when this names an identity the `.p12` does not contain, rather than letting the run reach `productbuild` and stop there |
 | `OAA_NOTARY_PROFILE` | A `xcrun notarytool store-credentials` profile. Your own machine only — it lives in *that machine's* keychain, so a CI runner given this name finds nothing |
 | `OAA_NOTARY_APPLE_ID`, `OAA_NOTARY_TEAM_ID`, `OAA_NOTARY_PASSWORD` | The same credentials in a form a runner can be handed. The password is an [app-specific password](https://support.apple.com/en-us/102654), not the Apple ID's own |

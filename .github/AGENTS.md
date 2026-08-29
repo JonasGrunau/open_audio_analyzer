@@ -84,8 +84,16 @@ The jobs are split by what they need, and that split is deliberate:
   most expensive thing in the file by an order of magnitude. `sources_match.sh`
   in `checks` compares two text files and never invokes CMake, so before this
   job the VST3 and the AU were built by whoever last did it by hand, with a
-  JUCE dependency fetched by tag. AU is macOS-only and
-  `plugin/CMakeLists.txt` decides that, not this workflow.
+  JUCE dependency fetched by tag. AU is macOS-only and AAX is macOS and Windows,
+  and `plugin/CMakeLists.txt` decides both, not this workflow.
+
+  **The AAX is archived and not installed.** The Archive steps put it in
+  `oaa-plugin-<os>` beside the VST3, and no installer job takes it, because an
+  unsigned AAX is one a released Pro Tools does not list — see
+  `packaging/AGENTS.md` § AAX for what promoting it costs. The Windows Archive
+  step stages the bundles into `VST3\` and `AAX\` before zipping, which is why
+  `windows-installer` unpacks into `plugins` and no longer into `plugins\VST3`;
+  those two lines move together or the installer ships with no plug-in in it.
 
   It also builds `plugin/host/`, the fake DAW, and then runs
   `dart test` in `packages/oaa_wire` a second time — the same suite `checks`
@@ -118,7 +126,7 @@ The jobs are split by what they need, and that split is deliberate:
   still *writes* them, and both halves now run on a push in five seconds.
 
   What stays gated is what genuinely needs the framework: the VST3, the AU, the
-  fake DAW, the one `ctest` case that hosts the `AudioProcessor` itself
+  AAX, the fake DAW, the one `ctest` case that hosts the `AudioProcessor` itself
   (`transport_capture_invents_nothing` — the two branches no plugin format can
   ask for, see `plugin/test/transport_capture_test.cpp`), and every end-to-end
   case that drives them — so between releases the live path is not exercised at

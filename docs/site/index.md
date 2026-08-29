@@ -105,7 +105,10 @@ macOS and not on Windows or Linux. A code carries an address and nothing else: a
 display that scans one can still only watch.
 
 **A DAW.** A headless VST3 and Audio Unit plugin measures what your host is
-playing and streams it, with the transport, to the application. The plugin
+playing and streams it, with the transport, to the application. There is an AAX
+for Pro Tools as well, in the plugin archive rather than the installers, and not
+yet signed for a released Pro Tools — see
+[Installing](install.html#the-aax-and-pro-tools). The plugin
 measures and the app draws, which is what stops there being two implementations
 of every meter to drift apart. A connected plugin is an entry in the app's
 source picker, named after the host it is running in, so it is chosen and left

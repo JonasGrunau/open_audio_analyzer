@@ -1,4 +1,4 @@
-# plugin/ — the headless VST3 and Audio Unit
+# plugin/ — the headless VST3, Audio Unit and AAX
 
 ## What this is
 
@@ -26,6 +26,7 @@ anything linked into the plugin binary is AGPL.
 | `lib/` (the app) | GPL-3.0-or-later. **Never links JUCE** — it talks to this plugin over a socket, which is not linking. |
 | `plugin/` | AGPL-3.0-or-later, because it combines with JUCE. |
 | VST3 SDK | MIT. Steinberg relicensed it; JUCE vendors it. No second copyleft dependency. |
+| AAX SDK | **GPL-3.0**, which is the option Avid offers beside their commercial agreement. JUCE vendors it too. Same §13 argument as `engine/`, so it does not move the line either. |
 
 GPLv3 §13 expressly permits combining a GPLv3 work with AGPLv3 code, and
 everything outside this directory being GPL-3.0-**or-later** is what makes that
@@ -45,7 +46,7 @@ three consumers that never asked for JUCE.
 
 | File | Purpose |
 |------|---------|
-| `CMakeLists.txt` | JUCE, `liboaa`, and the three formats. The pinned JUCE tag is one line; bumping it is a decision. |
+| `CMakeLists.txt` | JUCE, `liboaa`, and the four formats. The pinned JUCE tag is one line; bumping it is a decision. |
 | `src/OaaWire.h/.cpp` | The wire protocol, producer side. No JUCE include — deliberately, so it is testable without a framework. |
 | `src/OaaTransportBox.h` | Seqlock handing one transport reading from the audio thread to the streaming thread, and the edge accumulator beside it — the only place a one-block flag may live. |
 | `src/OaaStreamer.h/.cpp` | Owns the engine. Drains the FIFO, measures, serialises, sends, reconnects. |
@@ -235,6 +236,93 @@ three consumers that never asked for JUCE.
   are two build descriptions because a plugin CI runner has no Flutter SDK.
   `test/sources_match.sh` fails the build if they drift.
 
+## AAX
+
+Pro Tools' format, built on macOS and Windows and nowhere else — there is no
+Pro Tools for Linux and Avid ships no Linux SDK. That is enforced at configure
+time rather than left to taste: `juce_set_aax_sdk_path` *returns without
+creating* the `juce_aax_sdk` target on a third platform, and JUCE then links a
+target that does not exist, so asking for AAX on Linux is a CMake error naming a
+JUCE internal rather than a build that quietly leaves the format out.
+
+**There is no SDK to check out.** JUCE 8 vendors a trimmed AAX SDK 2.9.0 under
+`modules/juce_audio_plugin_client/AAX/SDK`, the way it vendors the VST3 one, and
+finds it by itself. `-DOAA_AAX_SDK_PATH=<path>` builds against a full Avid
+download instead — worth doing when you want the documentation, the example
+plugins and the Utilities the trimmed copy leaves out, and not otherwise. It has
+to be set before `juce_add_plugin`, because JUCE claims the `juce_aax_sdk`
+target the first time an AAX target is created and refuses to be told twice.
+
+**Avid dual-licenses the AAX SDK — their commercial agreement, or GPLv3.** We
+take GPLv3, and it lands exactly where the VST3 SDK does: GPLv3 §13 is the
+clause that permits combining a GPLv3 work with the AGPLv3 one this directory
+is, and it is the same clause that already lets `engine/` be linked in here. AAX
+adds a third-party licence to the bundle and moves nothing.
+
+### What a build here cannot produce
+
+**A plugin a released Pro Tools will load.** An AAX bundle has to be signed by
+PACE's `wraptool` against an Avid developer account with a signing certificate;
+an unsigned one loads in a *Developer* build of Pro Tools and in Avid's own
+developer tools, and nowhere else. That signature is not `codesign` and the
+`OaaPlugin_AAX_signed` target does not stand in for it — the two are unrelated
+and the bundle needs both.
+
+The refusal is silent in the way this whole directory keeps warning about: the
+plugin is simply not in the insert menu, which is what a plugin in the wrong
+folder looks like, and what a plugin that failed to load looks like. So before
+concluding the bundle was built wrong, check whether it was signed at all.
+
+That is why the AAX is **in the release archive and not in the installers** —
+see `packaging/AGENTS.md` § AAX. When a certificate exists, the promotion is
+small and is written down there.
+
+### Checking it without Pro Tools
+
+Avid's developer tools carry an **AAX Validator**, which is this format's
+`auval` and loads unsigned plugins. It is not in this repository — it is a
+separate download under Avid's developer agreement, and it must not be vendored
+here — but it is the only thing short of Pro Tools that will tell you the bundle
+is real. With it unpacked at `~/aax-developer-tools`:
+
+```sh
+cd ~/aax-developer-tools/DigiShell/CommandLineTools
+xattr -dr com.apple.quarantine ~/aax-developer-tools/DigiShell   # once
+P="<repo>/plugin/build/OaaPlugin_artefacts/Release/AAX/Open Audio Analyzer.aaxplugin"
+printf 'load_dish aaxval\nruntest [test.describe_validation, "%s"]\nquit\n' "$P" | ./dsh
+```
+
+Four tests are worth the minutes, and all four pass as of this writing:
+
+| Test | What it proves |
+|---|---|
+| `info.support.general` | The bundle loads and describes itself: name, `OaaA`/`OaaM`, category, and one entry per channel layout — mono through the 7.1 variants and first-order ambisonics, which is `isBusesLayoutSupported` read back to you by a real host |
+| `test.describe_validation` | The Describe function is well-formed |
+| `test.data_model` | Every effect in the bundle instantiates and de-instantiates under every host context |
+| `test.load_unload` | The binary loads and unloads 1000 times. Worth running here specifically — this plugin owns a socket and a streaming thread, and that is the shape of thing a load/unload cycle leaks |
+
+**`describe_validation` passes with two warnings and both are expected.**
+`Plug-in category for the effect is AAX_ePlugInCategory_None` is the deliberate
+choice — AAX's category enumeration is fifteen kinds of processing and no
+measuring, so `None` is the honest slot and puts the plugin under **Other** in
+the insert menu, beside the other meters. `Algorithm context contains gaps
+between registered fields` comes from JUCE's wrapper and not from anything in
+`src/`; it is padding in a struct this repository does not lay out.
+
+**The developer tools are arm64-only** and will refuse a bundle with no arm64
+slice. Ours is universal, so this only bites if somebody configures with
+`-DCMAKE_OSX_ARCHITECTURES=x86_64` and then wonders why the validator cannot see
+a plugin that plainly exists.
+
+### `AAX_IDENTIFIER` is permanent
+
+It is `com.openaudioanalyzer.oaa.plugin`, written out in `CMakeLists.txt` rather
+than left to default to `BUNDLE_ID`. A host caches an AAX plugin by that string.
+Change it after a release and every Pro Tools session that had the plugin on a
+track opens with an empty insert slot — no error, no name, nothing to search
+for. It is in the same category as the bundle identifier rename that cost this
+project two TCC permissions.
+
 ## Building and testing
 
 ```sh
@@ -249,13 +337,14 @@ window and no sound card. Between releases nothing else does; see
 `host/AGENTS.md`.
 
 `ci.yml`'s `plugin` job runs exactly that on Linux, macOS and Windows — VST3 on
-all three, AU where JUCE builds one — **on a tag or a manual run, not on every
-push**, because three parallel JUCE builds is the most expensive thing in that
-workflow by an order of magnitude. The release attaches the bundles as one
-archive per platform, and three of the installers carry them: the `macos-pkg`,
-`windows-installer` and `linux-tarball` jobs `needs: plugin` and unpack what
-it built rather than building a second copy. The archive stays a release asset
-for anyone installing by hand.
+all three, AU on macOS, AAX on macOS and Windows — **on a tag or a manual run,
+not on every push**, because three parallel JUCE builds is the most expensive
+thing in that workflow by an order of magnitude. The release attaches the
+bundles as one archive per platform, and three of the installers carry them: the
+`macos-pkg`, `windows-installer` and `linux-tarball` jobs `needs: plugin` and
+unpack what it built rather than building a second copy. The archive stays a
+release asset for anyone installing by hand, and for the AAX it is the *only*
+route — see § AAX above.
 
 It is the only thing in CI that compiles the *plugin*. Every push does now
 configure this directory with `-DOAA_BUILD_PLUGIN=OFF` — no JUCE, no fetch, no

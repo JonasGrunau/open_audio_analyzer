@@ -55,9 +55,49 @@ Three of the five carry the plug-in and install it behind a checkbox — the
 `pkg`, the Windows `.exe` and the Linux tarball. They therefore cannot be
 built from the application alone, and their `ci.yml` jobs — `macos-pkg`,
 `windows-installer` and `linux-tarball` — `needs: plugin` and unpack the
-bundles that job already signed and notarised. The AppImage and the
-flatpak are the application on its own, because neither format can install a
-plug-in into a host DAW's search path; see the header of `linux/install.sh`.
+bundles that job already signed and notarised. **The VST3, and on macOS the
+Audio Unit — not the AAX**, which is a release-archive artefact only for as long
+as it is unsigned; see § AAX below. The AppImage and the flatpak are the
+application on its own, because neither format can install a plug-in into a host
+DAW's search path; see the header of `linux/install.sh`.
+
+## AAX, and why no installer carries it
+
+The plugin builds a fourth format as of this change — an `.aaxplugin` for Pro
+Tools, on macOS and Windows. It is in the release archive
+(`oaa-plugin-macOS.tar.gz`, `oaa-plugin-Windows.zip`) and in **none of the three
+installers**, which is deliberate.
+
+An AAX bundle has to be signed by PACE's `wraptool` against an Avid developer
+account holding a signing certificate. Without that signature a released Pro
+Tools does not load it and does not say why — the plugin is simply not in the
+insert menu. That is the exact failure mode this directory's comments spend the
+most words on, and it is the reason the pkg exists at all: a checkbox that
+copies a bundle into `/Library/Application Support/Avid/Audio/Plug-Ins` and
+leaves the user staring at a menu that has not changed is worse than no
+checkbox, because they have no way to tell it from having installed it wrong.
+
+So the archive carries it, for anyone with a Developer build of Pro Tools or
+Avid's own developer tools, and the installers do not.
+
+**Promoting it once a certificate exists** is four things, and they go together:
+
+1. A `wraptool sign` step in `ci.yml`'s `plugin` job, **above** the Notarise
+   step — wraptool re-signs the bundle, and a re-signed bundle is one whose
+   stapled notarisation ticket no longer describes it.
+2. `macos/make_pkg.sh`: a fourth `component` line, installing into
+   `/Library/Application Support/Avid/Audio/Plug-Ins`, plus the bundle in the
+   required/verify loops above it.
+3. `macos/pkg/distribution.xml`: a `choice` and a `pkg-ref`, and a row in
+   `choices-outline`.
+4. `windows/oaa.iss`: a component and a `Files` entry for
+   `{commoncf64}\Avid\Audio\Plug-Ins`, and `-Plugins` staging in
+   `make_installer.ps1`. The Windows plugin zip already carries `AAX\` beside
+   `VST3\` at its root, so there is nothing to change in the artefact.
+
+Then the download tables — `README.md`, `docs/site/install.md`, and `PLATFORMS`
+in `website/src/pages/index.astro` — which name what each installer holds and
+would all become wrong in the same commit.
 
 ## Rules
 

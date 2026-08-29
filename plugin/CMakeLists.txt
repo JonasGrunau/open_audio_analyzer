@@ -1,4 +1,4 @@
-# plugin/CMakeLists.txt — the headless VST3 / Audio Unit metering plugin.
+# plugin/CMakeLists.txt — the headless VST3 / Audio Unit / AAX metering plugin.
 #
 # SPDX-License-Identifier: AGPL-3.0-or-later
 #
@@ -24,25 +24,27 @@
 # AGPLv3 option, which is available to us and costs nothing we were not already
 # giving away, but it does change what this directory is licensed as:
 #
-#   engine/            MIT             unchanged; the plugin links it, so MIT
-#                                      flows in without obligation
-#   packages/oaa_core  MIT             unchanged, not involved here
-#   lib/ (the app)     GPL-3.0-or-later  unchanged — the app never links JUCE.
-#                                      It talks to this plugin over a socket,
-#                                      which is not linking, so nothing about
-#                                      JUCE reaches it
+#   engine/            GPL-3.0-or-later  the plugin links it; §13 below is what
+#                                      lets it combine with this directory
+#   packages/oaa_core  GPL-3.0-or-later  not involved here
+#   lib/ (the app)     GPL-3.0-or-later  the app never links JUCE. It talks to
+#                                      this plugin over a socket, which is not
+#                                      linking, so nothing about JUCE reaches it
 #   plugin/ (here)     AGPL-3.0-or-later  because it combines with JUCE
 #
 # GPLv3 section 13 expressly permits combining a GPLv3 work with AGPLv3 code,
-# and the app being "GPL-3.0-**or-later**" is what makes the combination clean
-# rather than merely arguable. The practical consequence of AGPL over GPL is its
-# network clause, and since Open Audio Analyzer publishes all of its source
-# anyway, that clause asks us for nothing we were not already doing.
+# and everything outside this directory being "GPL-3.0-**or-later**" is what
+# makes the combination clean rather than merely arguable. The practical
+# consequence of AGPL over GPL is its network clause, and since Open Audio
+# Analyzer publishes all of its source anyway, that clause asks us for nothing
+# we were not already doing.
 #
-# One piece of good news the plan did not anticipate: **Steinberg relicensed the
-# VST3 SDK to MIT**, and JUCE 8 vendors it (in juce_audio_processors_headless).
-# So there is no second copyleft dependency and no separate SDK checkout. JUCE
-# is the only reason this directory is AGPL.
+# **Neither plugin SDK needs a checkout and neither changes the answer.** JUCE 8
+# vendors both. Steinberg relicensed the VST3 SDK to MIT (it rides along in
+# juce_audio_processors_headless). Avid offers the AAX SDK under their
+# commercial agreement *or* GPLv3, and we take GPLv3 — copyleft, but the same
+# §13 case as `engine/`, so it combines here for the same reason. JUCE is still
+# the only reason this directory is AGPL rather than GPL.
 #
 # ---------------------------------------------------------------------------
 # Building
@@ -207,9 +209,62 @@ if(OAA_BUILD_PLUGIN)
 # it elsewhere is not a portability problem to solve — it is a request that
 # cannot be honoured. Standalone is built everywhere because it is how you test
 # the socket path without opening a DAW.
+#
+# **AAX is Pro Tools, and it is macOS and Windows only** — there is no Pro Tools
+# for Linux and Avid ships no Linux SDK. That is not a `if(NOT LINUX)` we are
+# choosing for tidiness: `juce_set_aax_sdk_path` *returns without creating the
+# `juce_aax_sdk` target* on any third platform, and the AAX branch of
+# `_juce_link_plugin_wrapper` then links a target that does not exist. So asking
+# for AAX on Linux is a CMake generate-time error naming a JUCE-internal target,
+# rather than a build that quietly leaves the format out. Better to not ask.
 set(OAA_FORMATS VST3 Standalone)
 if(APPLE)
   list(APPEND OAA_FORMATS AU)
+endif()
+if(APPLE OR WIN32)
+  list(APPEND OAA_FORMATS AAX)
+endif()
+
+# ---------------------------------------------------------------------------
+# The AAX SDK, and why this directory does not have to hold one
+#
+# JUCE 8 vendors the AAX SDK the same way it vendors the VST3 one — a trimmed
+# copy of 2.9.0 under `modules/juce_audio_plugin_client/AAX/SDK`, which
+# `_juce_init_bundled_aax_sdk()` finds by itself. There is nothing to check out
+# and nothing to configure for the ordinary build, which is why the line below
+# is a path override and not a requirement.
+#
+# **Avid dual-licenses the AAX SDK: their commercial agreement, or GPLv3.** We
+# take GPLv3, and it lands in exactly the place the VST3 paragraph at the top of
+# this file describes. GPLv3 §13 is what permits combining a GPLv3 work with the
+# AGPLv3 one this directory is, and it is the same clause that already lets the
+# GPL-3.0-or-later `engine/` be linked in here. So AAX adds a third-party
+# licence to the bundle and does not move the licensing line: `plugin/` is
+# AGPL-3.0-or-later, before and after.
+#
+# **What a build here cannot produce is a plugin a released Pro Tools will
+# load.** An AAX bundle has to be signed by PACE's `wraptool` against an Avid
+# developer account holding a signing certificate; an unsigned one loads in a
+# *Developer* build of Pro Tools and in Avid's own developer tools, and nowhere
+# else. That signature is not `codesign` and the signing block below does not
+# stand in for it — the bundle needs both. The refusal is silent in the ordinary
+# way, the plugin simply not being in the insert menu, so see
+# `plugin/AGENTS.md` § AAX — which is also where the AAX Validator run that
+# proves the bundle is otherwise sound is written down — before concluding it
+# was built wrong or copied to the wrong folder.
+#
+# `-DOAA_AAX_SDK_PATH=<path>` builds against a full SDK checkout instead of the
+# vendored copy — an Avid download, which carries the documentation, the example
+# plugins and the Utilities that the trimmed copy leaves out. It has to be set
+# before `juce_add_plugin`, because `_juce_init_bundled_aax_sdk` claims the
+# `juce_aax_sdk` target the first time an AAX target is created and refuses to
+# be called twice.
+set(OAA_AAX_SDK_PATH "" CACHE PATH
+  "Full AAX SDK checkout to build against. Empty uses the copy JUCE vendors.")
+
+if(OAA_AAX_SDK_PATH AND (APPLE OR WIN32))
+  message(STATUS "Open Audio Analyzer: AAX SDK at ${OAA_AAX_SDK_PATH}")
+  juce_set_aax_sdk_path("${OAA_AAX_SDK_PATH}")
 endif()
 
 juce_add_plugin(OaaPlugin
@@ -237,11 +292,32 @@ juce_add_plugin(OaaPlugin
   NEEDS_MIDI_OUTPUT         FALSE
   IS_MIDI_EFFECT            FALSE
 
+  # A host caches an AAX plugin by this string the way it caches the other two
+  # by BUNDLE_ID, and JUCE would default it to BUNDLE_ID anyway. Written out
+  # because a defaulted identifier is one nobody notices is load-bearing: change
+  # it after a release and every Pro Tools session that had the plugin on a
+  # track opens with an empty insert slot, no error and no name.
+  AAX_IDENTIFIER            "com.openaudioanalyzer.oaa.plugin"
+
   # The DAW's audio is the measurement; the plugin must not alter it. Declaring
   # this lets a host place the plugin on a bus without reserving a separate
   # output buffer, and documents the intent to the next reader.
   VST3_CATEGORIES           "Analyzer" "Tools"
   AU_MAIN_TYPE              kAudioUnitType_Effect
+
+  # **AAX has no analyzer category** — the enumeration is EQ, Dynamics,
+  # PitchShift, Reverb, Delay, Modulation, Harmonic, NoiseReduction, Dither,
+  # SoundField, HWGenerators, SWGenerators, WrappedPlugin, Effect, MIDIEffect,
+  # and None, which is every processing job a plugin can do and no measuring
+  # one. `None` puts it under **Other** in Pro Tools' insert menu, beside the
+  # other meters, and is the honest answer for a plugin that processes nothing.
+  # `Effect` would be the wrong claim rather than a friendlier one: it is the
+  # category a host offers when the user wants the signal changed.
+  #
+  # It is also JUCE's default here, and is written out for the same reason the
+  # identifier above is — the next reader should not have to know that to know
+  # what Pro Tools will show.
+  AAX_CATEGORY              None
 
   EDITOR_WANTS_KEYBOARD_FOCUS FALSE
 

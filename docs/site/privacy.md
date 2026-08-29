@@ -11,8 +11,8 @@ This page is the whole of it, written out rather than summarised, because a
 metering tool asks for a microphone and a camera and a local network and the
 honest thing to do is say what it does with each. It is also the privacy policy
 for the iPadOS listing on the App Store, for the desktop builds on macOS,
-Windows and Linux, for the `oaa` command-line analyser, for the VST3 and Audio
-Unit plugin, and for this website.
+Windows and Linux, for the `oaa` command-line analyser, for the VST3, Audio Unit
+and AAX plugin, and for this website.
 
 Everything below is checkable. The application is free software and the whole
 of it is public — the network code is in

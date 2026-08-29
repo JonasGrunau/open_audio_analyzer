@@ -81,7 +81,7 @@ built, and `CHANGELOG.md` for what shipped when.
 | `packages/oaa_ui/` | Design tokens and shared primitives. | GPL-3.0-or-later |
 | `lib/` | The application. | GPL-3.0-or-later |
 | `cli/` | The `oaa` command-line analyser. No Flutter binding. | GPL-3.0-or-later |
-| `plugin/` | Headless VST3 / AU. Measures the DAW's audio, streams it to the app. Contains `host/`, the fake DAW that drives it. | **AGPL-3.0-or-later** |
+| `plugin/` | Headless VST3 / AU / AAX. Measures the DAW's audio, streams it to the app. Contains `host/`, the fake DAW that drives it. The AAX is a release-archive artefact only until it is PACE-signed — see `plugin/AGENTS.md` § AAX. | **AGPL-3.0-or-later** |
 | `docs/` | `METRICS.md`, `ODR.md`, `WIRE.md`, and `site/`. Everything but `AGENTS.md` is published, unaltered and in place, at `open-audio-analyzer.com/docs`. | `ODR.md` CC BY 4.0 |
 | `tool/` | Repository scripts. Nothing here ships. | GPL-3.0-or-later |
 | `packaging/` | pkg, Windows installer, Linux tarball, AppImage, flatpak, the iPad IPA, the Android app bundle, and the app icon they all need. The first three carry the VST3 (and on macOS the AU) and so are built from the plugin job's artefacts, not from the app alone. The last two are the ones nobody downloads: an App Store IPA provisions no devices and an `.aab` is a publishing format, so both exist to be uploaded and `ci.yml` keeps them off the release. | GPL-3.0-or-later |
@@ -573,6 +573,7 @@ claim something about it:
 | A keyboard shortcut | Nothing by hand — regenerate with `UPDATE_DOCS=1 flutter test test/shortcuts_test.dart` and commit `docs/site/keyboard.md` in the same change. `README.md`'s Layout → Keyboard names a handful of them and is prose, not a list |
 | **When** the plugin sets a transport flag, without any byte moving | `docs/WIRE.md`'s prose for that bit, `CHANGELOG.md` 🐛, and a case in `packages/oaa_wire/test/plugin_e2e_test.dart`. The row above covers the wire's *layout*; this is the other half. A consumer depends on when a producer sets a bit as much as on where the bit lives, and none of that is visible in a byte table — the discontinuity bit was being set every block while the transport sat parked, and delivered on almost none of the blocks where it mattered, with the layout perfectly correct throughout |
 | The iOS build, its signing, or the TestFlight upload | `packaging/AGENTS.md`, `docs/site/building.md`'s credential table, `.github/AGENTS.md`, and `docs/site/install.md`'s iPadOS section. The IPA is **not** a release asset — if you make it one, `README.md`'s note and the publish step's exclusion both become wrong |
+| A plugin format added or removed | `plugin/CMakeLists.txt`'s `OAA_FORMATS`, `plugin/AGENTS.md` (title, licensing table, § AAX), the `plugin` job's Notarise and Archive steps in `ci.yml`, `.github/AGENTS.md`, `packaging/AGENTS.md`, and then every place that *enumerates* the formats to a user: `README.md`'s feature line, Installing table and **In a DAW**, `docs/site/install.md`, `docs/site/index.md`, and `website/src/pages/index.astro`. A format the build produces and no document names is one nobody will find; a format a document names and the build does not produce is worse |
 | A switch on the fake DAW | `plugin/host/AGENTS.md`, and `README.md` if it is one of the gestures a person cannot perform on cue. `--help` in `FakeDawOptions.h` is the exhaustive list and the only one that has to be; the other two name the interesting ones and are prose |
 | A page the documentation site publishes, or its filename | **Two lists that have to agree**: the manifest in `website/src/lib/docs.mjs` and the pattern in `website/src/content.config.ts`. Neither is a recursive glob over `docs/` — that publishes `AGENTS.md` to strangers the day somebody moves it. `docs.mjs` is written out page by page; `content.config.ts` is a scoped list (`docs/site/*.md` plus the three documents named individually), so it loads a superset and `docs.mjs` decides what is published. A renamed document therefore fails the website build instead of silently vanishing from it. The `website` job in `ci.yml` is what runs that build on every event |
 | A plate in the website's signal-path section | Nothing by hand — reshoot with `sh packaging/signal_path.sh`, then `cd website && npm run flow`, which writes the webps and `src/data/flow-shots.json`. **Both plates or neither**: they are one frozen frame of one session and re-encoding half a pair is how the two come to be photographs of different instants. Then the `FLOW` entry in `website/src/pages/index.astro` — its **alt text names readings**, so it is wrong the moment a plate is retaken, and nothing checks it. The plugin plate is the exception and comes from `oaa_editor_snapshot`; `npm run flow -- --only=plugin` is its own thing. |
@@ -688,10 +689,10 @@ cmake -B plugin/build-nojuce -S plugin -DOAA_BUILD_PLUGIN=OFF && \
   ctest --test-dir plugin/build-nojuce  # the plugin's C++ that needs no JUCE
 cmake -B plugin/build -S plugin -DCMAKE_BUILD_TYPE=Release && \
   cmake --build plugin/build && \
-  ctest --test-dir plugin/build       # the VST3, the AU and the fake DAW compile,
-                                      # each macOS bundle verifies against its
-                                      # own signature, and the plugin answers a
-                                      # host that says nothing
+  ctest --test-dir plugin/build       # the VST3, the AU, the AAX and the fake
+                                      # DAW compile, each macOS bundle verifies
+                                      # against its own signature, and the
+                                      # plugin answers a host that says nothing
 dart test packages/oaa_wire           # again, now that a built fake DAW makes
                                       # the end-to-end cases run instead of skip
 flutter test test/plugin_to_display_e2e_test.dart
@@ -702,15 +703,27 @@ cd website && npm ci && npm run build  # the website still builds, which is
                                       # is still where the manifest says
 ```
 
-**One suite is deliberately not a gate.**
-`packages/oaa_engine/test/vectors_test.dart` runs the official EBU and ITU
-vector files — 112 cases — and skips unless `OAA_VECTORS` and `OAA_VECTORS_ITU`
-name unzipped copies, because 811 MB that may not be redistributed here cannot
-be fetched by the suite that must never be flaky. **Run it by hand after
-touching `oaa_loudness.*`, `oaa_kweight.*` or `oaa_truepeak.*`**, and add
-whatever it catches to `conformance_test.dart` as well if a generated signal can
-express it — those two are the only reason CI would ever see the same defect
-again. See `docs/METRICS.md` § Conformance for where the material comes from.
+**Two checks are deliberately not gates, for the same reason** — neither's
+material may live in this repository, so CI cannot run either.
+
+The first is a suite. `packages/oaa_engine/test/vectors_test.dart` runs the
+official EBU and ITU vector files — 112 cases — and skips unless `OAA_VECTORS`
+and `OAA_VECTORS_ITU` name unzipped copies, because 811 MB that may not be
+redistributed here cannot be fetched by the suite that must never be flaky.
+**Run it by hand after touching `oaa_loudness.*`, `oaa_kweight.*` or
+`oaa_truepeak.*`**, and add whatever it catches to `conformance_test.dart` as
+well if a generated signal can express it — those two are the only reason CI
+would ever see the same defect again. See `docs/METRICS.md` § Conformance for
+where the material comes from.
+
+The second is the **AAX Validator**. Avid's developer tools are a separate
+download under their developer agreement, arm64 macOS only, and must not be
+vendored here — so nothing in CI runs them and nothing in CI can tell you the
+`.aaxplugin` is sound. **Run it by hand after touching anything the AAX bundle
+is made of**: `OAA_FORMATS`, the bus layouts, the processor's declarations.
+`plugin/AGENTS.md` § AAX has the four tests and the exact invocation. It is the
+AAX's `auval`, and like `auval` it is the only thing short of the host itself
+that will say the bundle is real.
 
 All thirteen gates are jobs in `ci.yml`, which is the only workflow. The repeated
 `dart test packages/oaa_wire` is not a fourteenth: it is the same suite, run

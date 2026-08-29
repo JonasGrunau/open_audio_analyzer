@@ -109,7 +109,8 @@ What ships today:
   the tablet finds it by itself, reads a pairing code off the screen, or takes
   an address typed by hand. Three routes, because the first one is what a
   venue's Wi-Fi blocks.
-- **A headless [VST3 / AU plugin](#-in-a-daw)** meters what your DAW is playing.
+- **A headless [VST3 / AU / AAX plugin](#-in-a-daw)** meters what your DAW is
+  playing.
 - **Your system's own output is metered with nothing to install** — WASAPI
   loopback on Windows, a Core Audio process tap on macOS 14.2+, a monitor source
   on Linux. No driver, and on macOS the audio still reaches your speakers while
@@ -713,7 +714,7 @@ packages/
 lib/               The application.                                          GPL
 assets/fonts/      Inter and Google Sans Code, with their licences.      SIL OFL
 cli/               The `oaa` command-line analyser.                          GPL
-plugin/            Headless VST3 + AU plugin.                              AGPL
+plugin/            Headless VST3 + AU + AAX plugin.                        AGPL
   host/            A fake DAW that plays a file through it. Ships nowhere.  AGPL
 docs/              METRICS.md, ODR.md, WIRE.md.
 ```
@@ -741,8 +742,10 @@ Copyleft throughout. Copyright © 2026 Jonas Grunau.
   AGPLv3-or-commercial (only JUCE 6 offered GPLv3), and Open Audio Analyzer
   takes the AGPLv3 option. It changes the licence of the plugin binary alone:
   the app talks to the plugin over a socket, which is not linking, and GPLv3
-  section 13 expressly permits the combination. Steinberg's VST3 SDK is MIT and
-  vendored inside JUCE, so there is no second copyleft dependency.
+  section 13 expressly permits the combination. Neither plugin SDK changes that
+  answer and neither needs a checkout: Steinberg's VST3 SDK is MIT, and Avid's
+  AAX SDK is offered under GPLv3 beside their commercial agreement — copyleft,
+  but the same section 13 case. Both are vendored inside JUCE.
 - **`docs/ODR.md` — CC BY 4.0.** The one document that is not GPL, because a
   specification is only open if another product's manual may reproduce it.
   The reference implementation stays GPL; the licence binds the code and not
@@ -781,6 +784,7 @@ are on the [documentation site](https://open-audio-analyzer.com/docs/install).
 | Linux | `Open.Audio.Analyzer-<version>-<arch>.AppImage` | — | One file, no root, GTK from the host. |
 | Linux | `Open.Audio.Analyzer-<version>-<arch>.flatpak` | — | Sandboxed, carries its own runtime. |
 | Any | `oaa-cli-<platform>.tar.gz` / `.zip` | — | `bin/oaa` beside the engine. No Flutter runtime. |
+| Any | `oaa-plugin-<platform>.tar.gz` / `.zip` | the bundles | For installing by hand, and the only place the **AAX** is. See [In a DAW](#-in-a-daw). |
 
 > [!TIP]
 > **The first three install the plugin as well, and the checkbox starts
@@ -877,10 +881,10 @@ cmake -B plugin/build-nojuce -S plugin -DOAA_BUILD_PLUGIN=OFF && \
   ctest --test-dir plugin/build-nojuce  # the plugin's C++ that needs no JUCE
 cmake -B plugin/build -S plugin -DCMAKE_BUILD_TYPE=Release && \
   cmake --build plugin/build && \
-  ctest --test-dir plugin/build       # the VST3, the AU and the fake DAW compile,
-                                      # each macOS bundle verifies against its
-                                      # own signature, and the plugin answers a
-                                      # host that says nothing
+  ctest --test-dir plugin/build       # the VST3, the AU, the AAX and the fake
+                                      # DAW compile, each macOS bundle verifies
+                                      # against its own signature, and the
+                                      # plugin answers a host that says nothing
 dart test packages/oaa_wire           # again: with a built fake DAW the
                                       # end-to-end cases run instead of skipping
 flutter test test/plugin_to_display_e2e_test.dart
@@ -902,12 +906,20 @@ Open Audio Analyzer is open.
 plugin, no fake DAW, and five seconds for the C++ tests that need none of them.
 It runs on every push; the full plugin build does not.
 
-One suite is deliberately not on that list.
+Two things are deliberately not on that list, for the same reason: neither's
+material may live in this repository.
+
 `packages/oaa_engine/test/vectors_test.dart` runs the
 [official EBU and ITU vectors](#-the-correctness-gate) and skips unless
 `OAA_VECTORS` and `OAA_VECTORS_ITU` say where they are, because 811 MB of
 material nobody may redistribute cannot be a gate. Run it after touching
 `engine/src/oaa_loudness.*`, `oaa_kweight.*` or `oaa_truepeak.*`.
+
+Avid's **AAX Validator** is the plugin's equivalent — this format's `auval`,
+and the only thing short of Pro Tools that will say the `.aaxplugin` is sound.
+The tools are a separate download under Avid's developer agreement and cannot be
+vendored here, so nothing in CI runs them. Run it after touching anything the
+AAX bundle is made of; `plugin/AGENTS.md` has the invocation.
 
 The engine tests are worth a look even if you never touch the C. A sine of
 amplitude *A* has a peak of *A* and an RMS of *A*/√2, exactly 3.0103 dB lower.
@@ -963,9 +975,10 @@ panel, so two people exporting the same report get the same picture.
 ## 🎹 In a DAW
 
 Open Audio Analyzer installs as a **VST3** and an **Audio Unit** that draws
-nothing. Insert it on a track, a bus or the master, and the desktop app meters
-what your DAW is playing, through the same engine, on the same canvas, with the
-same painters as a live input. The plugin measures and streams; the app
+nothing — and builds an **AAX** for Pro Tools, with the caveat below. Insert it
+on a track, a bus or the master, and the desktop app meters what your DAW is
+playing, through the same engine, on the same canvas, with the same painters as
+a live input. The plugin measures and streams; the app
 displays. That split is what stops there being two implementations of every
 meter drifting apart from each other.
 
@@ -1027,6 +1040,18 @@ cp -R plugin/build/OaaPlugin_artefacts/Release/VST3/*.vst3 ~/.vst3/
 On Windows the folder is `%CommonProgramFiles%\VST3`. **Ableton Live also has to
 be told to look there** — Preferences → Plug-Ins → *Use VST3 Plug-In System
 Folders*.
+
+**The AAX is built and is not signed, so Pro Tools will not load it.** An AAX
+bundle needs a signature from PACE's `wraptool`, made against an Avid developer
+account holding a signing certificate, and that is a different thing from the
+code signature every bundle here already carries. Unsigned, it loads in a
+*Developer* build of Pro Tools and in Avid's own developer tools, and nowhere
+else — and a released Pro Tools does not explain itself, it simply does not list
+the plugin. So the `.aaxplugin` is in the release archive and in none of the
+installers, because a checkbox that installs something no DAW will show is worse
+than no checkbox. Its folder, for when that changes, is
+`/Library/Application Support/Avid/Audio/Plug-Ins` on macOS and
+`%CommonProgramFiles%\Avid\Audio\Plug-Ins` on Windows.
 
 **If you unpacked a release archive on macOS, strip the quarantine flag.** A
 browser marks every file it downloads, the mark survives extraction, and
@@ -1228,12 +1253,16 @@ position" branch described above.
 - **Tablets are display-first.** FFI works fine on iPadOS and Android, but
   audio *input* selection differs sharply per platform. The tablet build's
   primary role is the remote display.
-- **Flutter cannot be a VST3/AU plugin GUI.** The plugin is a headless C++
-  wrapper around the same `liboaa`, streaming measurements and DAW transport to
-  the app over a local socket. It ships as **VST3 and Audio Unit**, the two
-  formats that reach every DAW people actually master in. AAX is out of scope:
-  it needs Avid's SDK and a registered developer account, neither of which a
-  free project can promise.
+- **Flutter cannot be a plugin GUI.** The plugin is a headless C++ wrapper
+  around the same `liboaa`, streaming measurements and DAW transport to the app
+  over a local socket. It ships as **VST3 and Audio Unit**, the two formats that
+  reach every DAW people actually master in.
+- **The AAX is built but not PACE-signed**, so a released Pro Tools will not
+  load it. The SDK stopped being the obstacle — Avid offers it under GPLv3 and
+  JUCE vendors it — but a bundle still needs a signature made against an Avid
+  developer account holding a signing certificate, and until there is one the
+  `.aaxplugin` ships in the release archive rather than in an installer. See
+  **In a DAW** above.
 - **A light skin does not lighten the window frame on Windows or Linux.**
   Everything Open Audio Analyzer paints follows the skin; the window frame
   belongs to the operating system, and Flutter has no supported desktop API for

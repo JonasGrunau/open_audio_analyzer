@@ -17,7 +17,7 @@ ticked. If you use a DAW, those are the ones to take.
 | Linux | `Open.Audio.Analyzer-<version>-<arch>.AppImage` | — | One file, no root. Application only. |
 | Linux | `Open.Audio.Analyzer-<version>-<arch>.flatpak` | — | Sandboxed, updates in place. Application only. |
 | Any | `oaa-cli-<platform>.tar.gz` / `.zip` | — | The command-line analyser. No Flutter runtime. |
-| Any | `oaa-plugin-<platform>.tar.gz` / `.zip` | — | The bare bundles, for installing by hand. See [In a DAW](#in-a-daw). |
+| Any | `oaa-plugin-<platform>.tar.gz` / `.zip` | — | The bare bundles, for installing by hand, and the only place the AAX is. See [In a DAW](#in-a-daw). |
 
 The AppImage and the flatpak cannot install a plugin, and that is a property of
 the formats rather than something left undone: an AppImage never installs
@@ -350,6 +350,10 @@ the buffer your DAW gives them and stream it to the desktop application, which
 displays it — so the app has to be running, and the plugin finds it by itself on
 `127.0.0.1:47822` whichever of the two you start first.
 
+There is an **AAX** for Pro Tools as well, in the `oaa-plugin-<platform>`
+archive and in none of the installers. It is not yet signed for Pro Tools —
+[see below](#the-aax-and-pro-tools).
+
 **The installers above do this for you** — the macOS pkg, the Windows `.exe`
 and the Linux tarball each carry the plugin and put it where your DAW looks, so
 everything in this section is the manual route. Take it if you are installing
@@ -357,15 +361,18 @@ the plugin on a machine that already has the application, or if you deliberately
 took the AppImage or the flatpak.
 
 `oaa-plugin-<platform>` is an archive, not an installer. Copy the *bundle* — the
-`.vst3` or `.component` itself, not the directory holding it — into the folder
-your DAW scans. On a machine that has never had a plugin installed, that folder
-does not exist yet:
+`.vst3`, `.component` or `.aaxplugin` itself, not the directory holding it —
+into the folder your DAW scans. On a machine that has never had a plugin
+installed, that folder does not exist yet:
 
-| Platform | VST3 | Audio Unit |
-| --- | --- | --- |
-| macOS | `~/Library/Audio/Plug-Ins/VST3` | `~/Library/Audio/Plug-Ins/Components` |
-| Windows | `%CommonProgramFiles%\VST3` | — |
-| Linux | `~/.vst3` | — |
+| Platform | VST3 | Audio Unit | AAX |
+| --- | --- | --- | --- |
+| macOS | `~/Library/Audio/Plug-Ins/VST3` | `~/Library/Audio/Plug-Ins/Components` | `/Library/Application Support/Avid/Audio/Plug-Ins` |
+| Windows | `%CommonProgramFiles%\VST3` | — | `%CommonProgramFiles%\Avid\Audio\Plug-Ins` |
+| Linux | `~/.vst3` | — | — |
+
+Pro Tools has no per-user plugin folder, which is why the AAX column names a
+machine-wide path on both platforms.
 
 The installers use the machine-wide equivalents of those — `/Library/Audio/…`
 on macOS, `C:\Program Files\Common Files\VST3` on Windows — which every DAW
@@ -408,6 +415,27 @@ present when it was built, and `xattr` works either way.
 **None of this applies to the pkg.** Files placed by an installer are not
 quarantined, so a plugin installed that way carries no flag to remove — which
 is the second reason the pkg exists.
+
+### The AAX and Pro Tools
+
+**The AAX bundle is built and is not signed, and a released Pro Tools will not
+load it.** This is not the quarantine flag above and `xattr` does not help.
+
+An AAX plugin needs a signature from PACE's `wraptool`, made against an Avid
+developer account that holds a signing certificate. That is a separate thing
+from the code signature every bundle in this archive already carries, and Open
+Audio Analyzer does not have the certificate yet. Without it the plugin loads in
+a **Developer** build of Pro Tools and in Avid's own developer tools, and
+nowhere else.
+
+Pro Tools does not explain the refusal. The plugin is simply not in the insert
+menu — the same thing you would see if you had copied it to the wrong folder, or
+not copied it at all.
+
+That is why it is in the archive and not in any installer: a ticked checkbox
+that installs something no DAW will show you is worse than no checkbox. When the
+certificate exists, the AAX will be installed the way the VST3 and the Audio
+Unit already are, and this section will say so.
 
 **Ableton Live also has to be told to look there** — Preferences → Plug-Ins →
 *Use VST3 Plug-In System Folders*. It then appears under **Open Audio

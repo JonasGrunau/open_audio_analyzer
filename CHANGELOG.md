@@ -10,6 +10,19 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### ✨ Added
+- **An AAX build for Pro Tools.** The plugin now builds a fourth format on macOS
+  and Windows, universal on macOS and targeting 14.2 like the other bundles, and
+  it ships in the `oaa-plugin-<platform>` release archive. **It is not signed
+  for Pro Tools**: an AAX bundle needs a signature from PACE's `wraptool` made
+  against an Avid developer account holding a signing certificate, which is a
+  different thing from the code signature every bundle already carries and which
+  this project does not have yet. Unsigned, it loads in a Developer build of Pro
+  Tools and in Avid's developer tools and nowhere else, and a released Pro Tools
+  refuses it by simply not listing it. That is why no installer carries it — a
+  ticked checkbox that installs something no DAW will show you is worse than no
+  checkbox. The bundle passes Avid's own AAX Validator: it describes itself,
+  its Describe function validates, every effect instantiates and de-instantiates
+  under every host context, and it survives a thousand load/unload cycles.
 - The website has a page at `/alternatives/decibel` for readers arriving from a
   search for a free alternative to Decibel by Process.Audio. It states what the
   two share, the four differences there is published evidence for, and the

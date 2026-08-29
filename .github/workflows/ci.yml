@@ -424,6 +424,11 @@ jobs:
       # contain it, and the download would be refused exactly as an
       # unnotarised one is. Without credentials this prints what that costs and
       # succeeds, so a fork's release still produces artefacts.
+      #
+      # The AAX bundle goes through here too. **If a PACE `wraptool sign` step
+      # is ever added, it belongs above this one and not below it** — wraptool
+      # re-signs the bundle, and a re-signed bundle is one whose stapled
+      # notarisation ticket no longer describes it.
       - name: Notarise
         if: runner.os == 'macOS'
         env:
@@ -434,32 +439,56 @@ jobs:
           cd plugin/build/OaaPlugin_artefacts/Release
           set -- VST3/*.vst3
           if [ -d AU ]; then set -- "$@" AU/*.component; fi
+          if [ -d AAX ]; then set -- "$@" AAX/*.aaxplugin; fi
           sh "$GITHUB_WORKSPACE/packaging/macos/notarize.sh" "$@"
 
-      # VST3 everywhere, AU where JUCE built one. Standalone is deliberately
-      # left out: it is a window around a plugin whose whole purpose is to
-      # stream to an application that is already running.
+      # VST3 everywhere, AU and AAX where JUCE built them. Standalone is
+      # deliberately left out: it is a window around a plugin whose whole
+      # purpose is to stream to an application that is already running.
+      #
+      # The AAX is in the archive and **not in the installers**, which is a
+      # deliberate asymmetry rather than an omission — see `packaging/AGENTS.md`
+      # § AAX. Until the bundle is signed by PACE, an installer checkbox for it
+      # would install something a released Pro Tools does not list, which is the
+      # exact failure that directory's comments spend the most words on.
       - name: Archive
         if: runner.os != 'Windows'
         run: |
           cd plugin/build/OaaPlugin_artefacts/Release
           formats=VST3
           [ -d AU ] && formats="$formats AU"
+          [ -d AAX ] && formats="$formats AAX"
           echo "archiving: $formats"
           tar -czf "$GITHUB_WORKSPACE/oaa-plugin-${{ runner.os }}.tar.gz" $formats
 
-      # The bundle, not the directory holding it. MSVC leaves an import library
-      # and an export file beside the .vst3 — `Open Audio Analyzer.lib` and
-      # `.exp` — and archiving the parent shipped both to anyone who downloaded
-      # the plugin. A DAW ignores them; a person copying `VST3\*` into their
-      # plugin folder does not know that.
+      # The bundles, not the directories holding them. MSVC leaves an import
+      # library and an export file beside the .vst3 — `Open Audio Analyzer.lib`
+      # and `.exp` — and archiving the parent shipped both to anyone who
+      # downloaded the plugin. A DAW ignores them; a person copying `VST3\*`
+      # into their plugin folder does not know that.
+      #
+      # **Staged rather than archived in place, because there are two formats
+      # now.** `Compress-Archive` given two paths writes both at the root of the
+      # zip, and a root holding `Open Audio Analyzer.vst3` beside `Open Audio
+      # Analyzer.aaxplugin` says nothing about which folder either belongs in —
+      # the format is in the *directory* name and Windows plugin folders are not
+      # interchangeable. So the zip now carries `VST3\` and `AAX\` at its root,
+      # which is the macOS tarball's shape and the build tree's shape, and the
+      # installer job below unpacks it one level higher than it used to.
       - name: Archive
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          Compress-Archive `
-            -Path 'plugin\build\OaaPlugin_artefacts\Release\VST3\*.vst3' `
-            -DestinationPath oaa-plugin-Windows.zip
+          $release = 'plugin\build\OaaPlugin_artefacts\Release'
+          $stage = 'plugin-stage'
+          New-Item -ItemType Directory -Force -Path "$stage\VST3" | Out-Null
+          Copy-Item -Recurse "$release\VST3\*.vst3" "$stage\VST3\"
+          if (Test-Path "$release\AAX") {
+            New-Item -ItemType Directory -Force -Path "$stage\AAX" | Out-Null
+            Copy-Item -Recurse "$release\AAX\*.aaxplugin" "$stage\AAX\"
+          }
+          Get-ChildItem -Name $stage
+          Compress-Archive -Path "$stage\*" -DestinationPath oaa-plugin-Windows.zip
 
       # `runner.os` and not `matrix.os`, so the artefact is named for the
       # platform rather than for the runner image: `oaa-plugin-Linux` and not
@@ -756,13 +785,19 @@ jobs:
           name: oaa-plugin-Windows
           path: plugin-artifact
 
-      # The zip holds the .vst3 bundle at its root — the plugin job archives
-      # the bundle rather than the directory containing it, so that nobody
-      # unpacking it by hand gets MSVC's stray .lib and .exp as well. The
-      # installer script wants the build tree's shape, so put it back.
-      - name: Unpack the plug-in
+      # The zip holds `VST3\` and `AAX\` at its root, each containing the bundle
+      # and not MSVC's stray .lib and .exp beside it — see the Archive step in
+      # the plugin job. That is already the build tree's shape, which is what
+      # make_installer.ps1's -Plugins wants, so this unpacks straight into it.
+      #
+      # **It unpacked into `plugins\VST3` until the AAX arrived**, because the
+      # zip's root *was* the VST3 folder's contents. If you are reading this
+      # after a Windows installer shipped with no plug-in in it, that is the
+      # line to check: the two have to move together, and nothing but the
+      # installer's own "no VST3 to package" refuses the mismatch.
+      - name: Unpack the plug-ins
         shell: pwsh
-        run: Expand-Archive plugin-artifact\oaa-plugin-Windows.zip -DestinationPath plugins\VST3
+        run: Expand-Archive plugin-artifact\oaa-plugin-Windows.zip -DestinationPath plugins
 
       - name: Build and package
         shell: pwsh
