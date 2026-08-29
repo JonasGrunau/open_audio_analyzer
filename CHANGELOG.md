@@ -808,6 +808,13 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The Open Graph card is rendered at 1280×640 rather than 1200×630, which is the
   size GitHub asks a repository's social preview for, so the same image serves
   the link unfurl and the repository page without being cropped.
+- The website's photographs are re-rendered against these modules: all fourteen
+  thumbnails and the front page's analyzer still at its five widths. They are
+  committed output rather than built in CI, so they go stale silently, and the
+  modules moved under them twice over — the Decibel pass and the readings above
+  it. The three signal-path plates are not among them and still show the
+  previous design: making one needs a signed application on a window server or
+  an iPad simulator, which the machine that renders the rest does not do.
 
 ## [0.14.0] — 2026-08-27
 
