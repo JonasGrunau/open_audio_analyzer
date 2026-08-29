@@ -55,11 +55,12 @@
 /// ---------------------------------------------------------------------------
 /// What is not in here
 ///
-/// The scope: the last 1024 stereo frames, which is to say the audio itself,
+/// The scope: the newest stereo frames, which is to say the audio itself,
 /// undecorated. Storing it would be storing a second copy of the track at
 /// 8 kB a frame — larger than everything else in the file put together — and
 /// the browser already has the audio, because it is playing it. See
-/// `ReplaySource.attachPcm`.
+/// `ReplaySource.attachPcm`, which assembles the window out of it, and which
+/// is where the width of that window is argued.
 library;
 
 import 'dart:typed_data';

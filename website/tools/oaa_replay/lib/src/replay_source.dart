@@ -36,11 +36,25 @@ import 'recording.dart';
 /// ---------------------------------------------------------------------------
 /// The scope is not in the recording
 ///
-/// It is the last 1024 stereo frames — the audio, unprocessed — and storing it
-/// would have doubled the file to send a browser a second copy of what it is
-/// already playing. [attachPcm] hands over the decoded track instead and the
-/// window is read straight out of it. That is not an approximation of what the
-/// engine's scope holds; it is the same samples by definition.
+/// It is the audio, unprocessed, and storing it would have doubled the file to
+/// send a browser a second copy of what it is already playing. [attachPcm]
+/// hands over the decoded track instead and the window is read straight out of
+/// it. That is not an approximation of what the engine's scope holds; it is the
+/// same samples by definition.
+///
+/// **It is a window and not a block, and that is what a reader is owed.**
+/// [MeterSource.scope] holds up to [MeterShape.maxScopeFrames] pairs — four
+/// analysis blocks — because a consumer works out what is new from
+/// [MeterSource.elapsedSeconds] and takes that many of the newest pairs; what
+/// time says arrived and the buffer does not hold is audio that was measured
+/// and lost, and the oscilloscope draws it as blank columns rather than
+/// inventing it. This published one [MeterShape.scopePoints] block per
+/// measurement while the recording advances at its own cadence, so at 20 fps
+/// and 44.1 kHz every frame claimed 2,205 samples and offered 1,024: the
+/// website's oscilloscope drew a comb, in bursts with a gap between every pair,
+/// on audio that had no gaps in it. Nothing here is a real-time producer with a
+/// block size — the track is sitting in memory — so the window is simply as
+/// wide as the contract allows and covers any cadence down to 11 fps.
 class ReplaySource implements MeterSource {
   ReplaySource(
     this.recording, {
@@ -50,7 +64,7 @@ class ReplaySource implements MeterSource {
        _spectrumPeak = Float32List(MeterShape.spectrumBands),
        _spectrumPan = Float32List(MeterShape.spectrumBands),
        _histogram = Float32List(MeterShape.histogramBins),
-       _scope = Float32List(MeterShape.scopePoints * 2),
+       _scope = Float32List(MeterShape.maxScopeFrames * 2),
        peak = Float32List(MeterShape.maxChannels),
        rms = Float32List(MeterShape.maxChannels),
        vu = Float32List(MeterShape.maxChannels),
@@ -102,9 +116,10 @@ class ReplaySource implements MeterSource {
   /// Hand over the decoded audio, so the oscilloscope and the phase scope have
   /// a waveform to draw.
   ///
-  /// [interleaved] is the whole excerpt, and [startSeconds] says where in it
-  /// the recording's first frame falls — the two are usually cut from the same
-  /// place and do not have to be.
+  /// [interleaved] is the whole excerpt, cut by the loop that measured it, so
+  /// its first sample is the recording's first frame. [sampleRate] is the rate
+  /// it was *decoded* at, which is the browser's business rather than the
+  /// track's — see `_fillScope` for what happens when the two differ.
   void attachPcm(
     Float32List interleaved, {
     required int sampleRate,
@@ -161,7 +176,14 @@ class ReplaySource implements MeterSource {
     }
   }
 
-  /// Copy the [MeterShape.scopePoints] stereo frames ending at [position].
+  /// Fill the window with the newest stereo pairs ending at [position], oldest
+  /// first, and say how many of them hold audio.
+  ///
+  /// Short only at the very start of the programme, where there is not yet a
+  /// window's worth behind the playhead. Those pairs are absent rather than
+  /// zero: silence is a reading and this is the lack of one, and a reader
+  /// counts back from the newest pair, so writing zeros in front of the audio
+  /// would put a flat line at the *old* end of the very first trace.
   bool _fillScope(double position) {
     final pcm = _pcm;
     if (pcm == null) {
@@ -169,22 +191,31 @@ class ReplaySource implements MeterSource {
       return false;
     }
 
-    const want = MeterShape.scopePoints;
+    // A step through the decoded audio per frame the reader is owed. The two
+    // rates are the same whenever the caller decoded at the recording's — both
+    // web targets ask their AudioContext for exactly that — and where a browser
+    // refuses the request, stepping proportionally keeps the window in the time
+    // base the reader measures it against: `elapsedSeconds` is the recording's
+    // clock, and a window of 48 kHz samples handed to a consumer counting at
+    // 44.1 kHz is nine per cent of the waveform quietly dropped every frame.
+    final step = _pcmRate / sampleRate;
+
     final totalFrames = pcm.length ~/ _pcmChannels;
     final end = (position * _pcmRate).round().clamp(0, totalFrames);
-    final start = end - want;
+    final available = (end / step).floor();
+    final have = available < MeterShape.maxScopeFrames
+        ? available
+        : MeterShape.maxScopeFrames;
 
-    for (var i = 0; i < want; i++) {
-      final frame = start + i;
-      final left = frame < 0 ? 0.0 : pcm[frame * _pcmChannels];
-      final right = frame < 0
-          ? 0.0
-          : pcm[frame * _pcmChannels + (_pcmChannels > 1 ? 1 : 0)];
-      _scope[i * 2] = left;
-      _scope[i * 2 + 1] = right;
+    final right = _pcmChannels > 1 ? 1 : 0;
+    for (var i = 0; i < have; i++) {
+      final frame = end - ((have - i) * step).round();
+      final base = (frame < 0 ? 0 : frame) * _pcmChannels;
+      _scope[i * 2] = pcm[base];
+      _scope[i * 2 + 1] = pcm[base + right];
     }
-    _scopeFrames = want;
-    return true;
+    _scopeFrames = have;
+    return have > 0;
   }
 
   // --- What the signal is ---------------------------------------------------

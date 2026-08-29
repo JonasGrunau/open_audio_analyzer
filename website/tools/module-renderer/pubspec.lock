@@ -398,21 +398,21 @@ packages:
       path: "../../.."
       relative: true
     source: path
-    version: "0.10.0+11"
+    version: "0.15.0+17"
   oaa_core:
     dependency: "direct main"
     description:
       path: "../../../packages/oaa_core"
       relative: true
     source: path
-    version: "0.10.0"
+    version: "0.11.0"
   oaa_engine:
     dependency: transitive
     description:
       path: "../../../packages/oaa_engine"
       relative: true
     source: path
-    version: "0.10.0"
+    version: "0.11.0"
   oaa_replay:
     dependency: "direct main"
     description:
@@ -426,14 +426,14 @@ packages:
       path: "../../../packages/oaa_ui"
       relative: true
     source: path
-    version: "0.10.0"
+    version: "0.11.0"
   oaa_wire:
     dependency: transitive
     description:
       path: "../../../packages/oaa_wire"
       relative: true
     source: path
-    version: "0.10.0"
+    version: "0.11.0"
   package_config:
     dependency: transitive
     description:

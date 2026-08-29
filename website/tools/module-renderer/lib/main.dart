@@ -62,8 +62,20 @@ Future<Uint8List> _fetchBytes(String url) async {
 
 @JS('AudioContext')
 extension type _AudioContext._(JSObject _) implements JSObject {
-  external factory _AudioContext();
+  external factory _AudioContext([_AudioContextOptions options]);
   external JSPromise<_AudioBuffer> decodeAudioData(JSArrayBuffer data);
+}
+
+/// Which rate to decode at: the recording's.
+///
+/// Without it the context adopts the output device's rate and
+/// `decodeAudioData` resamples to that, so a machine set to 48 kHz decodes
+/// 48,000 samples for every 44,100 the recording counts — and `ReplaySource`
+/// hands the oscilloscope a window in one time base while `elapsedSeconds`
+/// counts in another. Nothing is played here at all, so the request costs
+/// nothing but the asking.
+extension type _AudioContextOptions._(JSObject _) implements JSObject {
+  external factory _AudioContextOptions({int sampleRate});
 }
 
 extension type _AudioBuffer._(JSObject _) implements JSObject {
@@ -92,10 +104,18 @@ class _Audio {
 /// waveform, and failing every photograph because two of them would be empty is
 /// the wrong trade. The two that need it come out visibly blank, which is a
 /// failure somebody sees.
-Future<_Audio?> _decodeAudio(String url) async {
+Future<_Audio?> _decodeAudio(String url, int sampleRate) async {
   try {
     final bytes = await _fetchBytes(url);
-    final context = _AudioContext();
+    _AudioContext context;
+    try {
+      context = _AudioContext(_AudioContextOptions(sampleRate: sampleRate));
+    } on Object {
+      // A rate the implementation will not take, which there is no asking
+      // about beforehand. The window is still correct, at the cost of a
+      // resample — see `ReplaySource._fillScope`.
+      context = _AudioContext();
+    }
     // A copy: decodeAudioData detaches the buffer it is handed.
     final data = Uint8List.fromList(bytes);
     final buffer = await context.decodeAudioData(data.buffer.toJS).toDart;
@@ -153,7 +173,7 @@ class _RendererAppState extends State<RendererApp>
 
   /// The audio the recording was taken from.
   ///
-  /// The oscilloscope and the phase scope draw the last 1024 stereo frames,
+  /// The oscilloscope and the phase scope draw the newest stereo frames,
   /// which is the waveform itself and is deliberately not in the recording —
   /// see the note on the scope in `oaa_replay`. Decoding needs no interaction
   /// and no playback: this page never makes a sound, it just needs the samples.
@@ -194,7 +214,7 @@ class _RendererAppState extends State<RendererApp>
         loop: false,
       );
 
-      final audio = await _decodeAudio(_audioUrl);
+      final audio = await _decodeAudio(_audioUrl, recording.header.sampleRate);
       if (audio != null) {
         source.attachPcm(
           audio.samples,

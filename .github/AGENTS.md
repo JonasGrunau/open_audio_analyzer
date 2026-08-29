@@ -60,12 +60,19 @@ and six weeks of quiet rot.
 The jobs are split by what they need, and that split is deliberate:
 
 - **`checks`** runs `flutter analyze`, `dart format`, the `oaa_core` domain
-  tests, the `oaa_wire` protocol tests, `plugin/test/sources_match.sh`, the
-  framework-free half of `plugin/`'s own `ctest`, and then the widget tests. The
-  first four need **no C toolchain** — `oaa_core` and `oaa_wire` depend on
-  nothing, and the source-list check is a shell script — so they run first and a
-  regression in any of them is diagnosed without waiting on a native build. The
-  widget tests do compile the engine, because the app depends on `oaa_engine`.
+  tests, the `oaa_wire` protocol tests, the `oaa_replay` scope-window tests,
+  `plugin/test/sources_match.sh`, the framework-free half of `plugin/`'s own
+  `ctest`, and then the widget tests. The first five need **no C toolchain** —
+  `oaa_core`, `oaa_wire` and `oaa_replay` depend on nothing but each other, and
+  the source-list check is a shell script — so they run first and a regression
+  in any of them is diagnosed without waiting on a native build. The widget
+  tests do compile the engine, because the app depends on `oaa_engine`.
+
+  `oaa_replay` lives in `website/tools/` and is tested here rather than in
+  `website`, which runs `npm` and nothing else. It is also outside anything
+  `flutter analyze` reaches, being a separate package rather than a workspace
+  member — so between this step and `dart format`, which walks the whole tree,
+  that directory has the only coverage it gets.
 
   The `plugin/` step is `-DOAA_BUILD_PLUGIN=OFF`, which configures that
   directory with no JUCE: liboaa, the wire fixture and the transport box test,

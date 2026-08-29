@@ -17,6 +17,28 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   this project reimplements Decibel's ideas has been in `README.md` since the
   first commit and was on no page of the site.
 
+### 🐛 Fixed
+- **The oscilloscope on the website draws a continuous waveform.** It drew a
+  comb — half a beat of trace, a gap the same width, over and over — on both
+  the front page's still and the live analyzer behind it. The recording is not
+  at fault and carries no audio: the browser replays the engine's readings and
+  reads the waveform out of the track it is already playing, and it was handing
+  the module one 1,024-sample block for every 2,205 samples the clock said had
+  gone past. The module is right to draw the shortfall as blank columns —
+  audio that was measured and lost is not a straight line — so the fix is the
+  window, which is now the four blocks the interface allows for and covers any
+  cadence down to eleven frames a second. The waveform also no longer runs nine
+  per cent fast on a machine whose audio output is not at the track's sample
+  rate: both web targets now decode at the recording's rate, and where a
+  browser refuses that, the window is stepped into the reading's time base
+  instead. Nothing the application, the CLI or the plugin measures is affected
+  — this is the website's replay source alone, and it now has a test.
+
+### 🚧 Internal
+- `website/tools/oaa_replay` has a test suite, run by the `checks` job. That
+  package is not a workspace member, so `flutter analyze` never reached it and
+  the only thing that read it at all was `dart format`.
+
 ## [0.15.0] — 2026-08-29
 
 ### 📐 Measurement

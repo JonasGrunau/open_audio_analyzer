@@ -60,13 +60,26 @@ extension type _ResponseCtor._(JSObject _) implements JSObject {
 
 @JS('AudioContext')
 extension type AudioContext._(JSObject _) implements JSObject {
-  external factory AudioContext();
+  external factory AudioContext([_AudioContextOptions options]);
   external double get currentTime;
   external String get state;
   external JSPromise<JSAny?> resume();
   external JSPromise<AudioBuffer> decodeAudioData(JSArrayBuffer data);
   external AudioBufferSourceNode createBufferSource();
   external JSObject get destination;
+}
+
+/// Which rate to decode and play at.
+///
+/// The recording's, always. A context created without this adopts the output
+/// device's rate and `decodeAudioData` resamples the track to it, so on a Mac
+/// set to 48 kHz the browser would hand back 48,000 samples for every 44,100
+/// the recording counts — and the oscilloscope, which works out what is new
+/// from the recording's clock, would take nine per cent less audio per frame
+/// than went past. Asking for it here is exact and costs nothing: the output
+/// stage resamples instead, which is where a rate conversion belongs.
+extension type _AudioContextOptions._(JSObject _) implements JSObject {
+  external factory _AudioContextOptions({int sampleRate});
 }
 
 extension type AudioBuffer._(JSObject _) implements JSObject {
@@ -165,11 +178,15 @@ Future<Uint8List?> _fetchRecording(String url) async {
 /// continuous. Two clocks running side by side would drift, and a metering
 /// demo whose numbers lag its music by a second is worse than a silent one.
 class Playhead {
-  Playhead({required this.lengthSeconds});
+  Playhead({required this.lengthSeconds, required this.sampleRate});
 
   /// The recording's length. The audio loops at this too, so the position is
   /// taken modulo it in one place.
   final double lengthSeconds;
+
+  /// The rate the recording was measured at, which is the rate the excerpt is
+  /// decoded at. See [_AudioContextOptions].
+  final int sampleRate;
 
   final Stopwatch _silent = Stopwatch()..start();
 
@@ -203,10 +220,25 @@ class Playhead {
   /// Returns the buffer so the caller can hand its samples to the source: the
   /// same samples that will play, rather than a second copy fetched separately.
   Future<AudioBuffer?> prepare(Uint8List audio) async {
-    final context = _context ??= AudioContext();
+    final context = _context ??= _open();
     // A copy, because decodeAudioData detaches the buffer it is given.
     final data = Uint8List.fromList(audio);
     return _buffer = await context.decodeAudioData(data.buffer.toJS).toDart;
+  }
+
+  /// A context at the recording's rate, or the device's if that is refused.
+  ///
+  /// A rate outside what the implementation supports throws, and there is no
+  /// asking beforehand which those are. Falling back is safe rather than
+  /// merely tidy: `ReplaySource` reads what it was handed back off the decoded
+  /// buffer and steps through it accordingly, so a refusal costs a resample and
+  /// not a wrong picture.
+  AudioContext _open() {
+    try {
+      return AudioContext(_AudioContextOptions(sampleRate: sampleRate));
+    } on Object {
+      return AudioContext();
+    }
   }
 
   /// Start the audio from wherever the silent clock has reached.

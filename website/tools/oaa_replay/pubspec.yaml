@@ -15,3 +15,8 @@ dependencies:
   # read numbers out of.
   oaa_core:
     path: ../../../packages/oaa_core
+
+dev_dependencies:
+  # The scope window's arithmetic, which is the one thing this package
+  # synthesises rather than replays. See test/replay_source_test.dart.
+  test: ^1.25.0

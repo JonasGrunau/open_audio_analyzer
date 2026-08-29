@@ -187,7 +187,10 @@ class _AnalyzerDemoState extends State<AnalyzerDemo>
       if (!mounted) return;
 
       final recording = Recording.parse(programme.recordingBytes);
-      final playhead = Playhead(lengthSeconds: recording.seconds);
+      final playhead = Playhead(
+        lengthSeconds: recording.seconds,
+        sampleRate: recording.header.sampleRate,
+      );
       final source = ReplaySource(
         recording,
         positionSeconds: () =>
@@ -203,7 +206,7 @@ class _AnalyzerDemoState extends State<AnalyzerDemo>
       });
 
       // The waveform, before anybody asks for sound. The oscilloscope and the
-      // phase scope draw the last 1024 stereo frames — the audio itself — so
+      // phase scope draw the newest stereo frames — the audio itself — so
       // decoding it now means they are drawing from the first frame rather than
       // sitting empty until somebody presses a button. Decoding is allowed
       // without interaction; only playing is not.

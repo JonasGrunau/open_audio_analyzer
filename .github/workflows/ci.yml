@@ -143,6 +143,23 @@ jobs:
           dart pub get
           dart test
 
+      # The website's fourth MeterSource. It is here rather than in `website`
+      # because that job runs `npm` and nothing else — no Flutter, no Dart —
+      # and this needs neither: `oaa_replay` depends on `oaa_core` alone.
+      #
+      # What it pins is the scope window, which is the one thing that source
+      # synthesises rather than replays, and the one thing no other gate can
+      # see: `flutter analyze` does not reach into `website/tools/`, the site
+      # builds without a toolchain, and the demo's own photograph is committed.
+      # A window a block wide against a reader owed four blocks' worth put a
+      # comb where the front page's waveform should be, and it stood in the
+      # published still for a week.
+      - name: Replay source tests
+        working-directory: website/tools/oaa_replay
+        run: |
+          dart pub get
+          dart test
+
       # The engine has two build descriptions — hook/build.dart for the app and
       # engine/CMakeLists.txt for the plugin — and somebody adding a source file
       # will eventually add it to one. The failure that produces is an undefined

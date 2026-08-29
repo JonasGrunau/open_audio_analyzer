@@ -674,6 +674,11 @@ dart format --output=none --set-exit-if-changed .
 flutter test                          # widget and golden tests
 dart test packages/oaa_core           # domain, no toolchain needed
 dart test packages/oaa_wire           # the wire protocol, including the C++ golden
+cd website/tools/oaa_replay && dart test
+                                      # the website's fourth MeterSource, and
+                                      # the scope window it hands a reader.
+                                      # Outside `flutter analyze`'s reach — a
+                                      # separate package, not a workspace member
 cd packages/oaa_engine && dart test   # engine, through FFI
 cd cli && dart test                   # the `oaa` binary, as a subprocess
 cd cli && dart build cli -o build     # the CLI builds the way a release builds it
@@ -707,15 +712,15 @@ whatever it catches to `conformance_test.dart` as well if a generated signal can
 express it — those two are the only reason CI would ever see the same defect
 again. See `docs/METRICS.md` § Conformance for where the material comes from.
 
-All twelve gates are jobs in `ci.yml`, which is the only workflow. The repeated
-`dart test packages/oaa_wire` is not a thirteenth: it is the same suite, run
+All thirteen gates are jobs in `ci.yml`, which is the only workflow. The repeated
+`dart test packages/oaa_wire` is not a fourteenth: it is the same suite, run
 again where a built plugin turns its end-to-end cases from skipped into real.
 The line after it is one file of the `flutter test` suite for the same reason —
 `test/plugin_to_display_e2e_test.dart` skips without a built plugin, and it is
 the only thing anywhere that runs a DAW's audio through the plugin, the app and
 out to a display.
 
-Two of the twelve do not run on a push. `dart build cli` does, and is there
+Two of the thirteen do not run on a push. `dart build cli` does, and is there
 because nothing else builds the CLI the way a release does: `cli/test` runs it with
 `dart run`, so `dart compile exe` was broken for an unknown length of time and
 was found by tagging a release. **The full plugin build runs only on a release or a manual
