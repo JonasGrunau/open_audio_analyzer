@@ -11,7 +11,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### ✨ Added
 - The website has a page at `/alternatives/decibel` for readers arriving from a
-  search for a free alternative to Decibel by process.audio. It states what the
+  search for a free alternative to Decibel by Process.Audio. It states what the
   two share, the four differences there is published evidence for, and the
   repository's Known gaps rather than a softened version of them. The claim that
   this project reimplements Decibel's ideas has been in `README.md` since the

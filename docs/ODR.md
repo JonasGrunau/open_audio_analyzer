@@ -237,7 +237,7 @@ Notes to the cases:
 | Measure | Relation |
 |---|---|
 | **PSR / PLR** (AES TD1004) | The same arithmetic. This document fixes the peak (true, loudest channel), the window (aligned), the gate (−70 LUFS), the statistic (the minimum) and the display (§ 6), none of which the AES note specifies. |
-| **TrueDyn** (process.audio Decibel) | Described by its maker as "the equivalent of peak over average, but in the LUFS world", displayed beside `LUFS-S` and true peak on one rim of its Super Meter and beside `LUFS-I` and true peak max on the other — which is this pair, by that description. It is not published as a definition, so no parity is claimed. |
+| **TrueDyn** (Process.Audio Decibel) | Described by its maker as "the equivalent of peak over average, but in the LUFS world", displayed beside `LUFS-S` and true peak on one rim of its Super Meter and beside `LUFS-I` and true peak max on the other — which is this pair, by that description. It is not published as a definition, so no parity is claimed. |
 | **DR** (Pleasurize Music Foundation / TT Dynamic Range Meter) | A different measurement: per channel, sample peak (the second highest) minus the RMS of the loudest 20 % of 3 s blocks, channels averaged, rounded to an integer. Sample peak, unweighted RMS and an integer result put it a generation behind; it is not ODR and shall not be labelled as such. |
 | **LRA** (EBU Tech 3342) | How far the programme's short-term loudness *moves*, between its 10th and 95th percentiles. It says nothing about limiting: a programme can be crushed flat with a wide LRA, or breathe with a narrow one. |
 | **Crest factor** | Sample peak minus RMS over one block, unweighted. A property of a waveform, not of a programme. |

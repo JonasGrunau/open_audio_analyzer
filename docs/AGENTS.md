@@ -9,7 +9,7 @@
 
 `METRICS.md` is not optional documentation. Open Audio Analyzer does not
 implement Decibel's proprietary `TrueDyn`, and instead defines **Open Dynamic
-Range** — `ODR-S` / `ODR-I`, by process.audio's own description very probably
+Range** — `ODR-S` / `ODR-I`, by Process.Audio's own description very probably
 the same pair — in `ODR.md`, with every operand stated so anybody can check it.
 That definition lives there and nowhere else; `METRICS.md` and the README point
 at it. A metric that appears in the UI without an entry in `METRICS.md` is a

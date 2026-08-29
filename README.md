@@ -44,7 +44,7 @@ offline file analysis and a companion display that mirrors a tab to a tablet
 over Wi-Fi.
 
 It is a free reimplementation of the ideas in
-[Decibel](https://process.audio/products/decibel) by process.audio, whose
+[Decibel](https://process.audio/products/decibel) by Process.Audio, whose
 modular canvas is the best interaction model anybody has found for this problem.
 The measurement work, the architecture and the visual language are our own, and
 where Open Audio Analyzer cannot honestly match Decibel it says so rather than
@@ -304,7 +304,7 @@ and `DR-I`, which it was through 0.14.0 alongside `PSR` and `PLR`. Nor is it
 *TrueDyn*: Decibel's dynamics figure is "the equivalent of peak over average,
 but in the LUFS world", shown beside `LUFS-S` and true peak on one rim of its
 Super Meter and beside `LUFS-I` and true peak max on the other, which is, by
-process.audio's own description, this pair. It is not documented as one, so
+Process.Audio's own description, this pair. It is not documented as one, so
 nothing here claims to match its ballistics or its rounding; the numbers are
 published under their own name and checked against arithmetic instead.
 

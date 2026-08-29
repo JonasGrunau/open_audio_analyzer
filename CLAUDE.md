@@ -7,7 +7,7 @@
 A free and open-source loudness and spectrum analyzer for desktop and tablets —
 a modular canvas of meter modules, driven by presets, delivery targets and
 skins. A free reimplementation of the ideas in
-[Decibel](https://process.audio/products/decibel) by process.audio.
+[Decibel](https://process.audio/products/decibel) by Process.Audio.
 
 `README.md` is the real design document: the architecture, the DSP spec table,
 the licensing split and the honest list of gaps. Read it before changing

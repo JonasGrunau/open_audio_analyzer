@@ -432,7 +432,7 @@ void oaa_analyse(oaa_engine *engine, const float *interleaved,
    * nobody later "fixes" a dash by clamping one of these to zero. See
    * docs/METRICS.md for the definitions — Open Dynamic Range, ODR-S and ODR-I
    * in the application. The arithmetic is that of AES TD1004's PSR and PLR,
-   * and by process.audio's own description of it very probably that of
+   * and by Process.Audio's own description of it very probably that of
    * Decibel's TrueDyn too — but the latter is an inference from a product
    * page, not a specification, so nothing here claims parity.
    *

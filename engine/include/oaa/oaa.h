@@ -311,7 +311,7 @@ typedef struct oaa_snapshot {
    * window minus the loudness of the same window, in LU. Defined in
    * docs/METRICS.md and reproducible from the definition; the same arithmetic
    * as the PSR and PLR of AES TD1004, with the operands that note leaves open
-   * pinned down. Decibel's "TrueDyn" is, by process.audio's own description,
+   * pinned down. Decibel's "TrueDyn" is, by Process.Audio's own description,
    * most probably the same pair; it is not documented as one, so these are
    * published under their own name and claim no parity. The field names below
    * predate the name and stay, because the layout is what a consumer links.
