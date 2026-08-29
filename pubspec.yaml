@@ -1,7 +1,7 @@
 name: oaa
 description: "Open Audio Analyzer — a free and open-source loudness and spectrum analyzer."
 publish_to: 'none'
-version: 0.14.0+16
+version: 0.15.0+17
 
 environment:
   sdk: ^3.12.2

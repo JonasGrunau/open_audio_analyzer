@@ -9,6 +9,8 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.15.0] — 2026-08-29
+
 ### 📐 Measurement
 - **`Correlation` and `Balance` are now gated at −70 LUFS and read as a dash
   under it, where they read `0` before.** Both divide by the two channels'
@@ -4068,7 +4070,8 @@ meters do not exist yet. See the [roadmap](README.md#roadmap).
 - Licensing is split: MIT for `engine/`, `oaa_engine` and `oaa_core`;
   GPL-3.0-or-later for the application, UI, CLI and plugin.
 
-[unreleased]: https://github.com/JonasGrunau/open_audio_analyzer/compare/v0.14.0...HEAD
+[unreleased]: https://github.com/JonasGrunau/open_audio_analyzer/compare/v0.15.0...HEAD
+[0.15.0]: https://github.com/JonasGrunau/open_audio_analyzer/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/JonasGrunau/open_audio_analyzer/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/JonasGrunau/open_audio_analyzer/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/JonasGrunau/open_audio_analyzer/compare/v0.11.0...v0.12.0
