@@ -6,6 +6,7 @@ import 'dart:ui' as ui;
 
 import 'package:oaa_core/oaa_core.dart';
 import 'package:oaa_ui/oaa_ui.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
 
 import '../clock/meter_clock.dart';
@@ -28,6 +29,14 @@ import '../clock/meter_clock.dart';
 /// transients are far above its body, and a band that collapses to nothing is
 /// one that has been flattened — which is a mastering decision you can watch
 /// happening rather than infer from two numbers that moved.
+///
+/// **The band is drawn at a weight you can actually see.** It shipped at 0.05
+/// to 0.26 alpha against a fill that reaches 0.85, on the argument that the
+/// band is context rather than a second reading — and at that weight the gap,
+/// which is the whole reading, was invisible on a real programme. It is a wash
+/// now, not a whisper: the same alpha ramp, held back rather than extinguished.
+/// The short-term edge is still the strongest line on the module and still the
+/// thing the eye lands on, which is what that argument was actually protecting.
 ///
 /// Colour is the target and nothing else, said twice in two registers. The
 /// filled area under the calibration's LUFS target is the accent, everything
@@ -57,31 +66,63 @@ import '../clock/meter_clock.dart';
 /// the target split and the palette on purpose and do not share a scale.
 ///
 /// ---------------------------------------------------------------------------
-/// Why the history is kept here, at ten columns a second
+/// Why the history is kept here, at twenty columns a second
 ///
 /// The engine publishes an instant, not a past, so a time series has to be
-/// accumulated by whatever draws it. The engine publishes at about 47 Hz;
-/// storing every publish would be six times the resolution a one-pixel column
-/// can show, so five or so publishes are folded into each 100 ms column — the
-/// *latest* short-term reading, because a 3 s window barely moves in 100 ms,
-/// and the *loudest* momentary, because that band is a statement about what the
-/// fast meter reached and a mean would erase exactly the transient it exists to
+/// accumulated by whatever draws it. The engine publishes at about 47 Hz, so
+/// two or three publishes are folded into each 50 ms column — the *latest*
+/// short-term reading, because a 3 s window barely moves in 50 ms, and the
+/// *loudest* momentary, because that band is a statement about what the fast
+/// meter reached and a mean would erase exactly the transient it exists to
 /// show.
 ///
-/// The ring is a fixed 4096 columns — about seven minutes — and it is sized in
+/// It was 100 ms a column until the plot could be zoomed. A column is the
+/// finest thing the module can ever show, so it is also the floor on what
+/// zooming in can reveal: at 100 ms, magnifying a phrase drew a staircase of
+/// ten steps a second and no more detail than the unzoomed plot had. 50 ms is
+/// half of the shortest window either band measures over, which is the point
+/// past which a finer column would be storing the same measurement twice.
+///
+/// The ring is a fixed 8192 columns — about seven minutes — and it is sized in
 /// **columns of measurement, never in pixels**. That is the one thing the
 /// spectrogram cannot do: it stores runs in pixel rows, so a resize costs it
 /// its whole history. Loudness is resolution-free, so this survives a resize,
 /// and the module can be dragged from a corner to full screen without the
 /// programme so far disappearing.
 ///
-/// The plot shows the ring's newest columns; the **overview strip** along the
-/// bottom shows the whole ring at once, with a frame over the slice the plot is
-/// showing. It is a map, not a second meter: the whole recorded programme
-/// compressed to the strip's width, each pixel taking the loudest column it
-/// covers — the same choice, for the same reason, that the engine makes
-/// mapping transform bins into spectrum bands, because a mean at a coarser
-/// resolution hides exactly the spike worth scrolling back for.
+/// ---------------------------------------------------------------------------
+/// The overview strip is the scrollbar, and the plot is a window over the ring
+///
+/// The **overview strip** along the bottom shows the whole ring at once, with a
+/// frame over the slice the plot is showing. It is a map, not a second meter:
+/// the whole recorded programme compressed to the strip's width, each pixel
+/// taking the loudest column it covers — the same choice, for the same reason,
+/// that the engine makes mapping transform bins into spectrum bands, because a
+/// mean at a coarser resolution hides exactly the spike worth scrolling back
+/// for.
+///
+/// That frame is a handle. **Drag it and the plot scrolls back through the
+/// programme; scroll, pinch or wheel over the strip and the frame changes
+/// size**, which is the plot's zoom. Both are view state and neither touches the ring: the
+/// module keeps recording at the same rate into the same columns while you are
+/// looking at a chorus four minutes ago, and dragging the frame back against
+/// the right-hand edge re-attaches it to the newest column.
+///
+/// The window is held as the **absolute index of its newest visible column**,
+/// not as an age. An age would have to be advanced by hand every time a column
+/// closed, and a view that forgot to would slide backwards through the
+/// programme at twenty columns a second while its user was reading it. An index
+/// simply stays where it was put, and *following* is the one case that needs a
+/// rule: the anchor tracks the newest column while the frame is against the
+/// right edge and stops the moment it is dragged off it.
+///
+/// **A pixel may cover more than one column, and the two bands fold
+/// differently.** Zoomed out far enough that the window is wider than the plot,
+/// a pixel's short-term is the *mean* of the columns it covers and its
+/// momentary is the *loudest* — the same split, for the same reason, that
+/// [_LoudnessHistory.accumulate] makes folding publishes into columns. A level
+/// averaged over the span it is drawn across is honest; a maximum averaged with
+/// its neighbours is the transient thrown away twice.
 ///
 /// Nothing here accumulates into an image. See the header of `spectrogram.dart`
 /// for what that costs — the short version is 266 GB and a dead raster thread.
@@ -128,32 +169,53 @@ class HistogramModule extends StatefulWidget {
   /// The overview strip's height inside a module [height] tall, and zero where
   /// there is no room for one — a strip on a module too short to keep a plot
   /// above it would be a map of a territory that is not shown.
-  ///
-  /// Public because the tests anchor their pixel reads to the plot's floor,
-  /// which sits directly above the strip; a second copy of this arithmetic in
-  /// the test is a copy that silently stops describing the module.
   static double overviewHeight(double height) =>
       height > 120 ? (height * 0.12).clamp(16.0, 28.0) : 0.0;
+
+  /// Clear space between the plot's floor and the top of the overview strip.
+  ///
+  /// Wider than the [Space.xs] it shipped as. The strip is a *different
+  /// picture* of the programme, at a different scale, and four pixels below the
+  /// plot read as the plot's own bottom margin — so the resting line of one and
+  /// the border of the other sat close enough to be taken for a single piece of
+  /// furniture. It is the body's own inset now, which is the gap between
+  /// unrelated things everywhere else on a module.
+  static const double overviewGap = Space.smd;
+
+  /// The bottom of the plot inside a module [height] tall — the strip and the
+  /// gap above it, taken off.
+  ///
+  /// Public because the tests anchor their pixel reads to it; a second copy of
+  /// this arithmetic in the test is a copy that silently stops describing the
+  /// module.
+  static double plotFloor(double height) {
+    final overview = overviewHeight(height);
+    return height - (overview > 0 ? overview + overviewGap : 0);
+  }
 
   @override
   State<HistogramModule> createState() => _HistogramModuleState();
 }
 
-/// One column per 100 ms of measured signal, or 10 Hz.
-/// Fast enough that a short-term line looks continuous, slow enough that
-/// a wide module holds minutes rather than seconds.
-const double _secondsPerColumn = 0.1;
+/// One column per 50 ms of measured signal, or 20 Hz. Half the shortest window
+/// either band measures over — see the class comment.
+const double _secondsPerColumn = 0.05;
 
-/// Columns retained regardless of how small the module is. 4096 of them is
-/// 6m 50s, and two `Float32List`s of it is 32 KB.
-const int _capacity = 4096;
+/// Columns retained regardless of how small the module is. 8192 of them is
+/// 6m 50s, and two `Float32List`s of it is 64 KB.
+const int _capacity = 8192;
+
+/// The narrowest window the plot may be zoomed to, in columns. Five seconds:
+/// past that the two bands are being read as one transient rather than as a
+/// programme, and there are meters on the canvas for that.
+const int _minSpan = 100;
 
 /// The tick intervals the time axis may use, in seconds.
 ///
-/// Nothing below 10 s appears: at 10 columns a second a 5 s tick is 50 px
-/// apart, which is narrower than its own label plus a gap, so it could never be
-/// chosen and listing it would only suggest it could.
-const _timeLadder = <int>[10, 15, 30, 60, 120, 300];
+/// The short rungs exist for a zoomed-in plot and only for one: which rung is
+/// chosen is decided against the *measured* spacing in pixels, so a 1 s tick is
+/// unreachable at any zoom that would crowd it and is simply never picked.
+const _timeLadder = <int>[1, 2, 5, 10, 15, 30, 60, 120, 300];
 
 /// The most ticks the axis carries, however wide the module gets. Without a cap
 /// a full-width module on a large display draws two dozen of them and the axis
@@ -170,10 +232,20 @@ const int _bandTints = 8;
 /// happens in; past that the band is simply red.
 const double _bandTintSpan = 12;
 
-/// "10:30:48" — the wall-clock time a tick's column was recorded at.
-String _clockText(DateTime at) {
-  String pad(int value) => value < 10 ? '0$value' : '$value';
-  return '${pad(at.hour)}:${pad(at.minute)}:${pad(at.second)}';
+/// "45s", "1m15s", "1h20m" — how far into the programme a tick's column is.
+///
+/// Two units at most and never a zero one, which is what keeps the axis a row
+/// of short labels rather than a row of timestamps. The seconds are dropped
+/// past an hour: at that distance the interval between ticks is minutes and a
+/// trailing "07s" is precision about a gridline nobody placed.
+String _elapsedText(double seconds) {
+  final total = seconds.round();
+  final hours = total ~/ 3600;
+  final minutes = total % 3600 ~/ 60;
+  final rest = total % 60;
+  if (hours > 0) return minutes == 0 ? '${hours}h' : '${hours}h${minutes}m';
+  if (minutes > 0) return rest == 0 ? '${minutes}m' : '${minutes}m${rest}s';
+  return '${rest}s';
 }
 
 class _HistogramModuleState extends State<HistogramModule> {
@@ -192,13 +264,14 @@ class _HistogramModuleState extends State<HistogramModule> {
   ScaleGraticule? _graticule;
   ui.Paragraph? _unit;
 
-  /// One cached paragraph per tick of the time axis. The labels are wall-clock
-  /// times now — the moment the column under the tick was recorded — so their
-  /// strings move once a second, and [ValueParagraph] is what keeps that from
-  /// being a paragraph layout per frame: the other fifty-odd frames reuse the
-  /// laid-out text.
+  /// One cached paragraph per tick of the time axis. The ticks are pinned to
+  /// the programme rather than to the right-hand edge, so they slide leftwards
+  /// as it plays and the string at a given index changes every time one leaves
+  /// the plot; [ValueParagraph] is what keeps that from being a paragraph
+  /// layout per frame. One longer than [_maxTimeTicks], because the cap is on
+  /// the gaps between ticks and there is a tick at each end of them.
   final List<ValueParagraph> _timeValues = List.generate(
-    _maxTimeTicks,
+    _maxTimeTicks + 1,
     (_) => ValueParagraph(),
   );
   double _widestTimeLabel = 0;
@@ -206,6 +279,36 @@ class _HistogramModuleState extends State<HistogramModule> {
   /// Generation 0 is "nothing has been measured yet" rather than a measurement
   /// that happens to be zero — see the same field on the spectrogram.
   int lastGeneration = 0;
+
+  // --- The window the plot is showing ---------------------------------------
+
+  /// Columns the plot's window covers, or zero for "one column per pixel" —
+  /// what the module does until somebody zooms it, and what makes a wider
+  /// module show more of the programme rather than the same slice larger.
+  int _span = 0;
+
+  /// Absolute index of the newest visible column, counting from the first
+  /// column written since the last reset. See the class comment for why this is
+  /// an index and not an age.
+  int _anchor = 0;
+
+  /// Whether [_anchor] tracks the newest column there is. True until the strip
+  /// is dragged off the right-hand edge, and true again as soon as it is
+  /// dragged back against it.
+  bool _following = true;
+
+  /// The span and the strip's own mapping, as the last frame resolved them.
+  /// Written by the painter and read by the strip's gestures, which have to
+  /// turn a pointer's pixels into columns and cannot recompute either without
+  /// the plot's width.
+  int _spanShown = _minSpan;
+  int _overviewColumns = 1;
+
+  /// Columns a drag has moved that have not been spent yet. A drag delivers
+  /// fractions of a column at a time and [_anchor] is an integer; rounding each
+  /// delta on its own loses the whole gesture on a zoomed-out strip, where one
+  /// pixel is several columns and every delta rounds to zero.
+  double _dragColumns = 0;
 
   // --- Buffers, allocated on resize and never on a frame --------------------
 
@@ -217,12 +320,12 @@ class _HistogramModuleState extends State<HistogramModule> {
   /// frame and are then reused — see [PointBuckets].
   final _bands = PointBuckets(_bandTints);
 
-  /// The two bands as they are drawn — the ring's columns through the
-  /// smoothing window. One value per visible column, newest first, which is the
-  /// order [_LoudnessHistory] indexes in.
-  Float32List _shortShown = Float32List(0);
-  Float32List _momentaryShown = Float32List(0);
-  int _builtColumns = -1;
+  /// The two bands as they are drawn — the window's columns through the
+  /// smoothing window, newest first. Sized to the ring rather than to the plot,
+  /// because a zoomed-out window is wider than the module is.
+  final Float32List _shortShown = Float32List(_capacity);
+  final Float32List _momentaryShown = Float32List(_capacity);
+  int _builtPixels = -1;
 
   /// The whole ring, read raw for the overview strip, and the strip's own
   /// polyline. The ring buffer is fixed-size and allocated once; the polyline
@@ -231,14 +334,72 @@ class _HistogramModuleState extends State<HistogramModule> {
   Float32List _overview = Float32List(0);
   int _overviewPixels = -1;
 
-  void _ensureColumns(int columns) {
-    if (columns == _builtColumns) return;
-    _builtColumns = columns;
-    _shortBars = Float32List(columns * 4);
-    _curve = Float32List(columns * 2);
-    _dashes = Float32List((columns / _dashPeriod).ceil() * 4);
-    _shortShown = Float32List(columns);
-    _momentaryShown = Float32List(columns);
+  void _ensurePixels(int pixels) {
+    if (pixels == _builtPixels) return;
+    _builtPixels = pixels;
+    _shortBars = Float32List(pixels * 4);
+    _curve = Float32List(pixels * 2);
+    _dashes = Float32List((pixels / _dashPeriod).ceil() * 4);
+  }
+
+  /// Settles the window over the ring for this frame and returns its span in
+  /// columns. Clamps [_anchor] into what the ring still holds, which is what
+  /// makes a reset — where the ring empties under a view scrolled back into it
+  /// — re-attach to the newest column instead of drawing an empty plot.
+  int _resolveWindow(int pixels, _LoudnessHistory history) {
+    final span = _span == 0 ? pixels : _span;
+    final written = history.written;
+    if (_following || _anchor > written - 1) _anchor = written - 1;
+    // The oldest column the ring still holds, and the oldest the window's left
+    // edge may reach without running off the end of it.
+    final oldest = written - history.filled;
+    final floor = math.min(written - 1, oldest + span - 1);
+    if (_anchor < floor) _anchor = floor;
+    _spanShown = span;
+    return span;
+  }
+
+  // --- The overview strip's gestures ----------------------------------------
+
+  /// Moves the window by [dx] pixels of the strip. Right is newer.
+  void _panBy(double dx, double stripWidth) {
+    if (stripWidth <= 0) return;
+    _dragColumns += dx * _overviewColumns / stripWidth;
+    final whole = _dragColumns.truncate();
+    if (whole == 0) return;
+    _dragColumns -= whole;
+    setState(() {
+      _anchor += whole;
+      _following = _anchor >= _history.written - 1;
+    });
+  }
+
+  /// Changes how much of the programme the plot shows. [dy] is a scroll
+  /// delta — down widens the window, which is zooming out.
+  ///
+  /// Multiplicative, so a notch covers the same *proportion* of the window at
+  /// every zoom: additive columns would crawl at a seven-minute span and jump
+  /// the whole window at a five-second one. The newest visible column is the
+  /// anchor either way, so the right-hand edge of the plot holds still.
+  void _zoomBy(double dy) => _zoomTo(_spanShown * math.pow(1.0025, dy));
+
+  /// The window a pinch began at. A trackpad reports a pinch's `scale`
+  /// cumulatively from where the gesture started, so it has to be applied to
+  /// the span the fingers went down on and not to the current one — compounding
+  /// it frame by frame squares it, and the plot arrives at its stop in three
+  /// updates.
+  int _pinchSpan = _minSpan;
+
+  void _pinchStart() => _pinchSpan = _spanShown;
+
+  void _pinchTo(double scale) {
+    if (scale > 0) _zoomTo(_pinchSpan / scale);
+  }
+
+  void _zoomTo(num span) {
+    final next = span.round().clamp(_minSpan, _capacity);
+    if (next == _spanShown) return;
+    setState(() => _span = next);
   }
 
   // --- The fills, and the gradients they share -------------------------------
@@ -290,12 +451,19 @@ class _HistogramModuleState extends State<HistogramModule> {
     _fillUnder = area(colors.accent);
     _fillOver = area(colors.over);
 
-    // The momentary band is the same alpha ramp held well back. It is context
-    // for the short-term line, not a second reading, and at equal weight the
-    // eye reads the *top* of the band as the measurement — which is the fast
-    // meter, the one a loudness display exists to look past. One paint per
-    // tint of the accent-to-over ramp; which tint a column takes is decided
-    // when its segment is bucketed, not here.
+    // The momentary band is the same alpha ramp held back. It is context for
+    // the short-term line, not a second reading, and at equal weight the eye
+    // reads the *top* of the band as the measurement — which is the fast meter,
+    // the one a loudness display exists to look past. One paint per tint of the
+    // accent-to-over ramp; which tint a column takes is decided when its
+    // segment is bucketed, not here.
+    //
+    // Held back is not extinguished, and the first attempt was: 0.26 fading to
+    // 0.05 across the plot, under a fill that reaches 0.85, put the band below
+    // the noise floor of the display it was drawn on. The ramp is shallow now
+    // as well as stronger — the band is a *short* segment sitting at whatever
+    // height the programme put it, so a steep canvas-space gradient does not
+    // shade the band, it decides whether a quiet passage has one at all.
     _bandPaints = [
       for (var tint = 0; tint < _bandTints; tint++)
         fill(
@@ -304,12 +472,12 @@ class _HistogramModuleState extends State<HistogramModule> {
               colors.accent,
               colors.over,
               tint / (_bandTints - 1),
-            )!.withValues(alpha: 0.26),
+            )!.withValues(alpha: 0.52),
             Color.lerp(
               colors.accent,
               colors.over,
               tint / (_bandTints - 1),
-            )!.withValues(alpha: 0.05),
+            )!.withValues(alpha: 0.28),
           ],
           const [0.0, 1.0],
         ),
@@ -353,12 +521,12 @@ class _HistogramModuleState extends State<HistogramModule> {
 
       final style = OaaType.tick.copyWith(color: colors.textFaint);
       _unit = layoutParagraph('LUFS', style);
-      // Measured once from the widest string a clock can produce; the live
-      // labels are laid out into [_timeValues] as they change.
-      _widestTimeLabel = layoutParagraph('88:88:88', style).longestLine;
+      // Measured once from the widest string [_elapsedText] can produce; the
+      // live labels are laid out into [_timeValues] as they change.
+      _widestTimeLabel = layoutParagraph('88m88s', style).longestLine;
     }
 
-    return MeterBody(
+    final body = MeterBody(
       painter: _HistogramPainter(
         engine: widget.engine,
         calibration: widget.calibration,
@@ -368,6 +536,108 @@ class _HistogramModuleState extends State<HistogramModule> {
         smoothing: widget.smoothing,
         state: this,
         repaint: widget.clock,
+      ),
+    );
+
+    // The strip's handle is the one place on this module that takes input, and
+    // it is laid over the strip rather than around the whole body on purpose:
+    // the canvas puts a module's select, drag and context-menu affordances
+    // *behind* it, so every pixel a module claims is a pixel the canvas loses.
+    // A `LayoutBuilder` rather than a fraction of the body, because the strip's
+    // height is not linear in the module's — see [HistogramModule.overviewHeight]
+    // — and because the strip's own width is what a drag has to be measured in.
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final overview = HistogramModule.overviewHeight(constraints.maxHeight);
+        if (overview <= 0) return body;
+        return Stack(
+          children: [
+            Positioned.fill(child: body),
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              height: overview,
+              child: _OverviewHandle(
+                width: constraints.maxWidth,
+                onPanStart: () => _dragColumns = 0,
+                onPan: _panBy,
+                onZoom: _zoomBy,
+                onPinchStart: _pinchStart,
+                onPinch: _pinchTo,
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// The overview strip, as something you can grab.
+///
+/// Nothing is drawn here — the strip and the frame over it are the painter's,
+/// and a widget that redrew either would be a second opinion about where the
+/// window is. This is the hit target and the two gestures over it.
+class _OverviewHandle extends StatelessWidget {
+  const _OverviewHandle({
+    required this.width,
+    required this.onPanStart,
+    required this.onPan,
+    required this.onZoom,
+    required this.onPinchStart,
+    required this.onPinch,
+  });
+
+  final double width;
+  final VoidCallback onPanStart;
+  final void Function(double dx, double stripWidth) onPan;
+  final void Function(double dy) onZoom;
+  final VoidCallback onPinchStart;
+  final void Function(double scale) onPinch;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.grab,
+      child: Listener(
+        // **A trackpad does not send a scroll event, and neither does a Magic
+        // Mouse.** macOS marks a scroll that came off a touch surface with a
+        // phase, and Flutter turns those into pan-zoom events instead — so a
+        // [PointerScrollEvent] arrives from a click-wheel mouse and from
+        // nothing else on this platform. Wiring the signal alone left the zoom
+        // working on hardware most of the people using this do not own, which
+        // is indistinguishable from it not being wired at all.
+        onPointerSignal: (event) {
+          if (event is PointerScrollEvent) onZoom(event.scrollDelta.dy);
+        },
+        onPointerPanZoomStart: (_) => onPinchStart(),
+        onPointerPanZoomUpdate: (event) {
+          // A pinch and a two-finger scroll arrive down the same channel and
+          // are told apart by which field moved. `scale` is cumulative over the
+          // gesture and `panDelta` is not, which is why they are handled by two
+          // different calls rather than one.
+          if (event.scale != 1.0) {
+            onPinch(event.scale);
+          } else {
+            // Negated: `panDelta` follows the fingers, where `scrollDelta`
+            // opposes them. Both directions then mean the same thing, which is
+            // the only way one module can be zoomed by both.
+            onZoom(-event.panDelta.dy);
+          }
+        },
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          // Or the window trails the pointer by the drag slop for the whole
+          // gesture — the same reason the canvas's own handles set it.
+          dragStartBehavior: DragStartBehavior.down,
+          // Or a two-finger gesture over the strip scrolls the plot, including
+          // the one macOS sends as a right click. See [kDragDevices].
+          supportedDevices: kDragDevices,
+          onHorizontalDragStart: (_) => onPanStart(),
+          onHorizontalDragUpdate: (details) => onPan(details.delta.dx, width),
+          child: const SizedBox.expand(),
+        ),
       ),
     );
   }
@@ -386,6 +656,19 @@ class _LoudnessHistory {
   /// How many columns of the ring hold audio. Never more than [_capacity].
   int filled = 0;
 
+  /// How many columns have been closed since the last [clear], including the
+  /// ones that have already scrolled out of the ring. The view's anchor is an
+  /// index into this rather than an age — see the class comment — so it has to
+  /// keep counting past [_capacity].
+  int written = 0;
+
+  /// The elapsed second column zero begins at. Zero for a programme played
+  /// from its start, and *not* zero for one that fell so far behind that the
+  /// ring was resynchronised — see [accumulate]. The time axis is labelled from
+  /// this, so a ring that forgot it would print an elapsed time the transport
+  /// never showed.
+  double origin = 0;
+
   /// The column being accumulated, and the elapsed second it closes at.
   double _shortAcc = double.nan;
   double _momentaryAcc = double.nan;
@@ -395,6 +678,8 @@ class _LoudnessHistory {
   void clear() {
     _next = 0;
     filled = 0;
+    written = 0;
+    origin = 0;
     _shortAcc = double.nan;
     _momentaryAcc = double.nan;
     _boundary = _secondsPerColumn;
@@ -421,6 +706,7 @@ class _LoudnessHistory {
     if (elapsed - _boundary > _capacity * _secondsPerColumn) {
       clear();
       _boundary = elapsed + _secondsPerColumn;
+      origin = elapsed;
     }
 
     _shortAcc = short;
@@ -433,6 +719,7 @@ class _LoudnessHistory {
       _short[_next] = _shortAcc;
       _momentary[_next] = _momentaryAcc;
       _next = (_next + 1) % _capacity;
+      written++;
       if (filled < _capacity) filled++;
       // Short-term carries into the next column — it is a level, and the level
       // did not stop existing. Momentary does not: it is a maximum *over the
@@ -446,16 +733,19 @@ class _LoudnessHistory {
   /// Age 0 is the newest column.
   int _slot(int age) => (_next - 1 - age + _capacity * 2) % _capacity;
 
-  /// The newest [count] short-term columns, each averaged over ±[radius].
-  void shortInto(Float32List out, int count, int radius) =>
-      _average(_short, out, count, radius);
+  /// The elapsed second the column at absolute [index] begins at.
+  double secondsAt(int index) => origin + index * _secondsPerColumn;
 
-  /// The newest [count] momentary columns, each averaged over ±[radius].
-  void momentaryInto(Float32List out, int count, int radius) =>
-      _average(_momentary, out, count, radius);
+  /// [count] short-term columns from age [from], each averaged over ±[radius].
+  void shortInto(Float32List out, int from, int count, int radius) =>
+      _average(_short, out, from, count, radius);
+
+  /// [count] momentary columns from age [from], each averaged over ±[radius].
+  void momentaryInto(Float32List out, int from, int count, int radius) =>
+      _average(_momentary, out, from, count, radius);
 
   /// Fills `out[0..count)` with a centred mean of [source] over ±[radius]
-  /// columns, in the same newest-first order [shortAt] reads in.
+  /// columns, for ages [from] to `from + count - 1`, newest first.
   ///
   /// Two pointers over one running sum, so the cost is the number of columns
   /// drawn and not that times the window — a wide module at the broadest
@@ -476,10 +766,17 @@ class _LoudnessHistory {
   ///     programme instead of changing the columns already on screen.
   ///   - **A radius of zero copies.** `Off` has to be the measured columns
   ///     exactly, not a one-tap filter that rounds like one.
-  void _average(Float32List source, Float32List out, int count, int radius) {
+  void _average(
+    Float32List source,
+    Float32List out,
+    int from,
+    int count,
+    int radius,
+  ) {
+    if (count <= 0) return;
     if (radius == 0) {
-      for (var age = 0; age < count; age++) {
-        out[age] = source[_slot(age)];
+      for (var i = 0; i < count; i++) {
+        out[i] = source[_slot(from + i)];
       }
       return;
     }
@@ -490,10 +787,11 @@ class _LoudnessHistory {
     // The window over ages [low, high], both inclusive and both monotonic in
     // age, which is what lets one pass do it. `high` starts one short of the
     // first window so that the loop's own advance fills it.
-    var low = 0;
-    var high = -1;
+    var low = math.max(0, from - radius);
+    var high = low - 1;
 
-    for (var age = 0; age < count; age++) {
+    for (var i = 0; i < count; i++) {
+      final age = from + i;
       final wanted = age + radius >= filled ? filled - 1 : age + radius;
       while (high < wanted) {
         high++;
@@ -512,7 +810,7 @@ class _LoudnessHistory {
         }
         low++;
       }
-      out[age] = finite == 0 ? double.nan : sum / finite;
+      out[i] = finite == 0 ? double.nan : sum / finite;
     }
   }
 }
@@ -564,10 +862,6 @@ class _HistogramPainter extends MeterPainter {
          ..strokeCap = StrokeCap.butt
          ..isAntiAlias = false),
        _overviewFill = (Paint()..color = colors.panelRaised),
-       _overviewBorder = (Paint()
-         ..color = colors.hairline
-         ..strokeWidth = OaaStroke.hairline
-         ..isAntiAlias = false),
        // The overview's trace is the accent held back: it is the same
        // measurement as the plot above it, at a size where it is a map rather
        // than a meter.
@@ -581,8 +875,12 @@ class _HistogramPainter extends MeterPainter {
          ..style = PaintingStyle.stroke
          ..strokeWidth = OaaStroke.hairline
          ..isAntiAlias = false),
+       _windowFill = (Paint()
+         ..color = colors.hairlineStrong.withValues(alpha: 0.10)
+         ..isAntiAlias = false),
        _tickStyle = OaaType.tick.copyWith(color: colors.textFaint),
        _targetStyle = OaaType.tick.copyWith(color: colors.over),
+       _border = PlotBorder(colors),
        super(repaint: repaint);
 
   final MeterSource engine;
@@ -598,11 +896,16 @@ class _HistogramPainter extends MeterPainter {
   final Paint _grid;
   final Paint _target;
   final Paint _overviewFill;
-  final Paint _overviewBorder;
   final Paint _overviewLine;
   final Paint _window;
+  final Paint _windowFill;
   final TextStyle _tickStyle;
   final TextStyle _targetStyle;
+
+  /// Drawn twice: around the plot, and around the overview strip. The strip is
+  /// a second picture of the same recording rather than the plot's footer, and
+  /// two pictures with one box between them read as one.
+  final PlotBorder _border;
 
   /// One 100 ms column is one logical pixel. A 1200 px module holds two
   /// minutes.
@@ -638,17 +941,26 @@ class _HistogramPainter extends MeterPainter {
 
     final labelHeight = OaaType.tick.fontSize! + Space.sm;
     final overview = HistogramModule.overviewHeight(size.height);
-    final plot = Rect.fromLTRB(
+    // The box, and the plot inside it — see [PlotBorder]. The newest column of
+    // the programme lands against the right-hand edge, so the box goes round
+    // it rather than over it.
+    final box = Rect.fromLTRB(
       math.max(graticule.gutter, targetLabel.longestLine + Space.xs),
       labelHeight,
       size.width,
-      size.height - (overview > 0 ? overview + Space.xs : 0),
+      HistogramModule.plotFloor(size.height),
     );
+    final plot = PlotBorder.inside(box);
     if (plot.width < 80 || plot.height < 40) return;
 
-    final columns = (plot.width / columnWidth).floor();
-    state._ensureColumns(columns);
+    final pixels = (plot.width / columnWidth).floor();
+    state._ensurePixels(pixels);
     state._ensureFills(plot, colors);
+
+    // The window over the ring: how many columns the plot covers, and how far
+    // behind the newest column its right-hand edge sits.
+    final span = state._resolveWindow(pixels, history);
+    final firstAge = history.written - 1 - state._anchor;
 
     graticule.paint(canvas, plot);
 
@@ -659,11 +971,13 @@ class _HistogramPainter extends MeterPainter {
     final unit = state._unit!;
     canvas.drawParagraph(unit, Offset(0, plot.top - unit.height - Space.xs));
 
-    _paintTimeAxis(canvas, plot, unit.longestLine + Space.sm);
+    _paintTimeAxis(canvas, plot, unit.longestLine + Space.sm, pixels, span);
 
     final targetY = _y(plot, calibration.lufsTarget);
-    _paintProgramme(canvas, plot, columns, targetY);
+    _paintProgramme(canvas, plot, pixels, span, firstAge, targetY);
     _paintTarget(canvas, plot, targetY, targetLabel);
+    // After the programme; before the strip, which is boxed separately.
+    _border.paint(canvas, box);
     // Edge to edge, under the axis gutter as well: the strip is a map of the
     // whole recording, not a part of the plot above it, and a map that starts
     // where the plot's first column does reads as the plot's footer.
@@ -671,25 +985,48 @@ class _HistogramPainter extends MeterPainter {
       _paintOverview(
         canvas,
         Rect.fromLTRB(0, size.height - overview, size.width, size.height),
+        span,
+        firstAge,
       );
     }
   }
 
-  /// Vertical gridlines, labelled with the wall-clock time the column under
-  /// them was recorded — Decibel's convention, and the useful one in a session:
-  /// "the chorus was loud at 10:30:58" is a statement someone can act on where
-  /// "28 seconds ago" has already expired by the time it is read out.
+  /// Vertical gridlines, labelled with **how far into the programme** the
+  /// column under them is — "45s", "1m15s" — which is Decibel's axis and the
+  /// one a scrollable plot can keep.
+  ///
+  /// It was the wall-clock time the column was recorded at, on the argument
+  /// that "the chorus was loud at 10:30:58" outlives "28 seconds ago". That
+  /// argument survives only while the plot is pinned to the newest column: the
+  /// moment it can be scrolled, a clock counting back from `DateTime.now()`
+  /// labels a chorus four minutes ago with the time it is being *looked* at.
+  /// Elapsed time is a property of the column, so it is right at every scroll
+  /// position and at every zoom, and it is the number the transport shows.
+  ///
+  /// The ticks are pinned to the programme rather than to the right-hand edge,
+  /// which is why they are placed by walking back from the newest **multiple of
+  /// the interval** rather than from the edge itself: a gridline at a round
+  /// number that slides with the material is a mark you can read a position
+  /// off, where one nailed to the edge is a ruler that renumbers itself every
+  /// frame.
   ///
   /// [leftLimit] is where the axis unit ends; a tick whose label would reach it
-  /// is the oldest one drawn. The ticks run right to left from *now*, so the
-  /// one that gets dropped is always the least interesting.
-  void _paintTimeAxis(Canvas canvas, Rect plot, double leftLimit) {
+  /// is the oldest one drawn.
+  void _paintTimeAxis(
+    Canvas canvas,
+    Rect plot,
+    double leftLimit,
+    int pixels,
+    int span,
+  ) {
     // The finest interval whose ticks are far enough apart to label and few
     // enough to read. Measured against the widest label rather than guessed at,
-    // for the same reason the spectrum analyser measures its own.
+    // for the same reason the spectrum analyser measures its own — and against
+    // the *zoom*, which is what decides how many seconds a pixel is worth.
+    final secondsPerPixel = span * _secondsPerColumn / pixels;
     var rung = _timeLadder.length - 1;
     for (var i = 0; i < _timeLadder.length; i++) {
-      final spacing = _timeLadder[i] / _secondsPerColumn * columnWidth;
+      final spacing = _timeLadder[i] / secondsPerPixel;
       if (spacing >= state._widestTimeLabel + Space.lg &&
           plot.width / spacing <= _maxTimeTicks) {
         rung = i;
@@ -697,16 +1034,28 @@ class _HistogramPainter extends MeterPainter {
       }
     }
 
-    final spacing = _timeLadder[rung] / _secondsPerColumn * columnWidth;
-    final now = DateTime.now();
+    final interval = _timeLadder[rung];
+    final rightSeconds = history.secondsAt(state._anchor);
 
-    for (var tick = 1; tick <= _maxTimeTicks; tick++) {
-      final x = plot.right - tick * spacing;
-      final label = state._timeValues[tick - 1].of(
-        _clockText(now.subtract(Duration(seconds: _timeLadder[rung] * tick))),
+    // The newest round number at or before the plot's right-hand edge, then
+    // leftwards one interval at a time. Nothing before the start of the
+    // programme: the resting line to the left of the history is a convention
+    // and not a time anything was measured at.
+    var tick = (rightSeconds / interval).floor();
+    for (var drawn = 0; drawn <= _maxTimeTicks && tick >= 0; drawn++, tick--) {
+      final seconds = (tick * interval).toDouble();
+      final x = plot.right - (rightSeconds - seconds) / secondsPerPixel;
+      final label = state._timeValues[drawn].of(
+        _elapsedText(seconds),
         _tickStyle,
       );
-      final left = x - label.longestLine / 2;
+      // Centred on its gridline, but kept inside the plot: the newest tick can
+      // land on the right-hand edge itself, and half a label past it is half a
+      // label the module's own clip takes off.
+      var left = x - label.longestLine / 2;
+      if (left + label.longestLine > plot.right) {
+        left = plot.right - label.longestLine;
+      }
       if (x < plot.left || left < leftLimit) break;
 
       canvas.drawLine(Offset(x, plot.top), Offset(x, plot.bottom), _grid);
@@ -717,9 +1066,21 @@ class _HistogramPainter extends MeterPainter {
     }
   }
 
-  /// The two bands and the short-term curve, newest column at the right edge.
-  void _paintProgramme(Canvas canvas, Rect plot, int columns, double targetY) {
-    final visible = math.min(history.filled, columns);
+  /// The two bands and the short-term curve, the window's newest column at the
+  /// right edge.
+  void _paintProgramme(
+    Canvas canvas,
+    Rect plot,
+    int pixels,
+    int span,
+    int firstAge,
+    double targetY,
+  ) {
+    // How much of the window the ring actually holds. Everything past it is
+    // programme that has not happened yet — a window scrolled to the very start
+    // of a short recording has its left-hand columns unmeasured, exactly as an
+    // unzoomed plot does before the first minute is over.
+    final visible = (history.filled - firstAge).clamp(0, span);
 
     // The ring through the smoothing window, once for each band, before
     // anything is positioned. Only the measured columns go through it: the
@@ -730,8 +1091,8 @@ class _HistogramPainter extends MeterPainter {
     final radius = smoothing.radiusInColumns(_secondsPerColumn);
     final shortShown = state._shortShown;
     final momentaryShown = state._momentaryShown;
-    history.shortInto(shortShown, visible, radius);
-    history.momentaryInto(momentaryShown, visible, radius);
+    history.shortInto(shortShown, firstAge, visible, radius);
+    history.momentaryInto(momentaryShown, firstAge, visible, radius);
 
     final shortBars = state._shortBars;
     final curve = state._curve;
@@ -745,8 +1106,27 @@ class _HistogramPainter extends MeterPainter {
     final curveTop = plot.top + OaaStroke.mark / 2;
     final curveBottom = plot.bottom - OaaStroke.mark / 2;
 
-    for (var i = 0; i < columns; i++) {
+    for (var i = 0; i < pixels; i++) {
       final x = plot.right - (i + 0.5) * columnWidth;
+
+      // The columns this pixel covers. One of them at a zoom of a column to the
+      // pixel or finer, several when the window is wider than the plot — and
+      // then the short-term is their mean and the momentary their loudest. See
+      // the class comment for why the two fold differently.
+      final from = i * span ~/ pixels;
+      final to = math.max(from, ((i + 1) * span / pixels).ceil() - 1);
+      var sum = 0.0;
+      var finite = 0;
+      var loudest = double.nan;
+      for (var column = from; column <= to && column < visible; column++) {
+        final level = shortShown[column];
+        if (!level.isNaN) {
+          sum += level;
+          finite++;
+        }
+        final peak = momentaryShown[column];
+        if (!peak.isNaN && (loudest.isNaN || peak > loudest)) loudest = peak;
+      }
 
       // Past the oldest measured column the line rests on the floor of the
       // scale and runs flat to the left edge, so the curve spans the plot from
@@ -761,9 +1141,8 @@ class _HistogramPainter extends MeterPainter {
       // Every slot is written either way, which is what lets the whole buffer
       // be handed over as it is; a `sublistView` would be an allocation per
       // frame.
-      final measured = i < visible;
-      final shortY = measured ? _y(plot, shortShown[i]) : plot.bottom;
-      var momentaryY = measured ? _y(plot, momentaryShown[i]) : plot.bottom;
+      final shortY = finite == 0 ? plot.bottom : _y(plot, sum / finite);
+      var momentaryY = loudest.isNaN ? plot.bottom : _y(plot, loudest);
       // Momentary quieter than short-term is an ordinary reading, not an error,
       // and it has no band — the area is only ever drawn upwards from the line.
       if (momentaryY > shortY) momentaryY = shortY;
@@ -777,10 +1156,11 @@ class _HistogramPainter extends MeterPainter {
       // reading stood over the target. At or under the target the tint is the
       // accent itself; the ramp to [OaaColors.over] tops out [_bandTintSpan]
       // LU past it.
-      if (measured && momentaryY < shortY) {
-        final over =
-            ((momentaryShown[i] - calibration.lufsTarget) / _bandTintSpan)
-                .clamp(0.0, 1.0);
+      if (momentaryY < shortY) {
+        final over = ((loudest - calibration.lufsTarget) / _bandTintSpan).clamp(
+          0.0,
+          1.0,
+        );
         bands.run((over * (_bandTints - 1)).round(), x, momentaryY, shortY);
       }
 
@@ -872,9 +1252,17 @@ class _HistogramPainter extends MeterPainter {
   /// worth finding. Pixels older than the recording repeat the oldest point,
   /// which draws nothing: a polyline cannot carry a gap, and a resting line
   /// across territory nobody measured would claim silence at −∞ was recorded.
-  void _paintOverview(Canvas canvas, Rect strip) {
+  ///
+  /// The frame is the handle the strip is dragged and zoomed by — see
+  /// [_OverviewHandle], which is the same rectangle as a hit target.
+  void _paintOverview(Canvas canvas, Rect strip, int span, int firstAge) {
+    // The surface fills the strip; everything drawn on it lives inside the box
+    // — see [PlotBorder]. The window frame in particular: it is a control, it
+    // is drawn in the strong hairline, and it used to run along the strip's
+    // own top and bottom edges, so a box on those edges would be dimmed by it
+    // wherever the window happened to be and would read as a broken rule.
     canvas.drawRect(strip, _overviewFill);
-    canvas.drawLine(strip.topLeft, strip.topRight, _overviewBorder);
+    final inner = PlotBorder.inside(strip);
 
     // The strip spans the recording so far — the whole ring once it has
     // filled, and never less than the plot's own window. Mapped to the ring's
@@ -882,28 +1270,32 @@ class _HistogramPainter extends MeterPainter {
     // at the strip's right end with seven blank minutes beside it, which is a
     // map of time that has not happened.
     final filled = history.filled;
-    final visible = math
-        .min(state._builtColumns, _capacity)
-        .clamp(0, _capacity);
-    final columns = math.max(filled, visible).clamp(1, _capacity);
+    final columns = math.max(filled, span).clamp(1, _capacity);
+    state._overviewColumns = columns;
 
-    // The frame over what the plot is showing, anchored to the newest edge.
-    // Drawn on an empty strip too: the window is a statement about the plot,
-    // and the plot is there.
-    final windowWidth = strip.width * visible / columns;
-    canvas.drawRect(
-      Rect.fromLTRB(
-        strip.right - windowWidth,
-        strip.top,
-        strip.right,
-        strip.bottom,
-      ),
-      _window,
+    // The frame over what the plot is showing. Age 0 is the strip's right-hand
+    // edge, so a window scrolled back sits further left by exactly the columns
+    // it is behind. Drawn on an empty strip too: the window is a statement
+    // about the plot, and the plot is there.
+    final right = inner.right - inner.width * firstAge / columns;
+    final window = Rect.fromLTRB(
+      right - inner.width * span / columns,
+      inner.top,
+      right,
+      inner.bottom,
     );
+    // Filled as well as outlined, faintly. An outline alone is a *marker*, and
+    // this one is a control: the fill is what says the rectangle is the thing
+    // to grab rather than a note about where you are.
+    canvas.drawRect(window, _windowFill);
+    canvas.drawRect(window, _window);
 
-    if (filled == 0) return;
+    if (filled == 0) {
+      _border.paint(canvas, strip);
+      return;
+    }
 
-    final pixels = strip.width.floor();
+    final pixels = inner.width.floor();
     if (pixels <= 0) return;
     if (state._overviewPixels != pixels) {
       state._overviewPixels = pixels;
@@ -911,14 +1303,15 @@ class _HistogramPainter extends MeterPainter {
     }
 
     // The ring raw — the overview is a map, and smoothing a map redraws the
-    // territory. 4096 reads and a pass over the strip's width, per frame.
-    history.shortInto(state._overviewShown, filled, 0);
+    // territory. One read per stored column and a pass over the strip's width,
+    // per frame.
+    history.shortInto(state._overviewShown, 0, filled, 0);
 
     final line = state._overview;
-    final top = strip.top + 2;
-    final span = strip.height - 4;
-    var lastX = strip.right - 0.5;
-    var lastY = strip.bottom - 2;
+    final top = inner.top + 2;
+    final trackHeight = inner.height - 4;
+    var lastX = inner.right - 0.5;
+    var lastY = inner.bottom - 2;
     for (var px = 0; px < pixels; px++) {
       final from = px * columns ~/ pixels;
       final to = ((px + 1) * columns / pixels).ceil() - 1;
@@ -930,13 +1323,14 @@ class _HistogramPainter extends MeterPainter {
         }
       }
       if (!loudest.isNaN) {
-        lastX = strip.right - px - 0.5;
-        lastY = top + (1 - graticule.scale.fractionOf(loudest)) * span;
+        lastX = inner.right - px - 0.5;
+        lastY = top + (1 - graticule.scale.fractionOf(loudest)) * trackHeight;
       }
       line[px * 2] = lastX;
       line[px * 2 + 1] = lastY;
     }
     canvas.drawRawPoints(ui.PointMode.polygon, line, _overviewLine);
+    _border.paint(canvas, strip);
   }
 
   double _y(Rect plot, double lufs) =>

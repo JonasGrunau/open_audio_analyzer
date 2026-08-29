@@ -538,6 +538,7 @@ class _DistributionPainter extends MeterPainter {
          ..strokeWidth = OaaStroke.mark
          ..strokeCap = StrokeCap.butt
          ..isAntiAlias = false),
+       _border = PlotBorder(colors),
        super(repaint: repaint);
 
   final MeterSource engine;
@@ -551,16 +552,19 @@ class _DistributionPainter extends MeterPainter {
   final Paint _edgeUnder;
   final Paint _edgeOver;
   final Paint _target;
+  final PlotBorder _border;
 
   @override
   void paint(Canvas canvas, Size size) {
     final unit = state._unit!;
-    final plot = Rect.fromLTRB(
+    // The box, and the plot inside it — see [PlotBorder].
+    final box = Rect.fromLTRB(
       0,
       unit.height + Space.xs,
       size.width,
       size.height - graticule.gutter,
     );
+    final plot = PlotBorder.inside(box);
     if (plot.width < 80 || plot.height < 32) return;
 
     final columns = (plot.width / _columnWidth).floor();
@@ -588,6 +592,10 @@ class _DistributionPainter extends MeterPainter {
     final targetX = _x(plot, calibration.lufsTarget);
     final clearTo = _paintDistribution(canvas, plot, columns, targetX);
     _paintTarget(canvas, plot, targetX, clearTo);
+
+    // Under the caliper, for the same reason the caliper is last: it is the
+    // reading, and nothing is drawn over the reading.
+    _border.paint(canvas, box);
 
     // Last, so that nothing is ever drawn over the reading. The percentile marks
     // and their labels were painted *before* the bars, which was survivable
@@ -761,11 +769,18 @@ class _DistributionPainter extends MeterPainter {
   /// pair of labels had to give way to — and the bracket becomes a narrow one
   /// with its reading beside it rather than an annotation that vanishes.
   void _paintCaliper(Canvas canvas, Rect plot, double low, double high) {
+    // In the caliper's own ink, measured or not. This reading is *part of the
+    // dimension line* — the two marks and the number between them are one
+    // annotation, and the accent broke it into a line and a separate label
+    // that happened to be collinear. It is the one reading in the application
+    // whose neighbours to left and right are strokes of the same annotation,
+    // which is why [inkForReading] is not asked here: there is no state to
+    // carry, because the unmeasured ink is this ink.
     final label = state._rangeValue.of(
       '${Metric.loudnessRange.label} '
       '${Metric.loudnessRange.format(engine.loudnessRange)} '
       '${Metric.loudnessRange.unit}',
-      OaaType.tick.copyWith(color: colors.textPrimary),
+      OaaType.tick.copyWith(color: colors.textMuted),
     );
 
     final left = _x(plot, low);

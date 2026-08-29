@@ -71,6 +71,7 @@ class DisplayHost {
     if (identical(value, _source)) return;
     _source = value;
     _collected = -1;
+    _collectedElapsed = -1;
     _runFrames = 0;
   }
 
@@ -391,6 +392,15 @@ class DisplayHost {
   /// consume each other's answer — the same rule as `MeterClock`.
   int _collected = -1;
 
+  /// The engine time [_collect] last took audio up to.
+  ///
+  /// A source's `scope` is a window of its newest few blocks, not the one
+  /// block this measurement added — see `MeterSource.scopeFrames` — so how
+  /// much of it is new is the difference between two reads of
+  /// `elapsedSeconds`, the same arithmetic the oscilloscope does. Appending
+  /// the whole window per generation would send every block four times over.
+  double _collectedElapsed = -1;
+
   void _collect() {
     final source = this.source;
     if (source == null) return;
@@ -399,8 +409,32 @@ class DisplayHost {
     if (source.generation == _collected) return;
     _collected = source.generation;
 
-    final frames = source.scopeFrames;
+    final held = source.scopeFrames;
+    if (held <= 0) return;
+
+    // On the first look, and after a reset has taken the clock backwards, one
+    // block's worth: there is nothing to measure a difference against. A
+    // source gone stale reports NaN seconds and a block of NaN, and that block
+    // goes out as it is — it is the unavailable state, and the display should
+    // have it.
+    final elapsed = source.elapsedSeconds;
+    final rate = source.sampleRate;
+    final measurable =
+        !elapsed.isNaN &&
+        rate > 0 &&
+        _collectedElapsed >= 0 &&
+        elapsed >= _collectedElapsed;
+    final fresh = measurable
+        ? ((elapsed - _collectedElapsed) * rate).round()
+        : MeterShape.scopePoints;
+    if (!elapsed.isNaN) _collectedElapsed = elapsed;
+
+    // More owed than held is audio the window has already dropped. It is not
+    // made up here: the display works out the same shortfall from the elapsed
+    // time it is sent and draws it as the gap it is.
+    final frames = fresh < held ? fresh : held;
     if (frames <= 0) return;
+    final first = held - frames;
 
     final capacity = MeterShape.maxScopeFrames;
     if (_runFrames + frames > capacity) {
@@ -415,7 +449,12 @@ class DisplayHost {
       }
     }
 
-    _run.setRange(_runFrames * 2, (_runFrames + frames) * 2, source.scope);
+    _run.setRange(
+      _runFrames * 2,
+      (_runFrames + frames) * 2,
+      source.scope,
+      first * 2,
+    );
     _runFrames += frames;
   }
 

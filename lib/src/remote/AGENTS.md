@@ -323,12 +323,18 @@ halves live here.
   not the same clock.** `_pump` runs every 5 ms and appends `scope` whenever the
   source's generation moves; `_timer` runs at the link rate and sends what has
   accumulated. That is not an optimisation — it is the only way the waveform is
-  continuous. A snapshot carries one analysis block, 1,024 frames, and a link at
+  continuous. A measurement adds one analysis block, 1,024 frames, and a link at
   30 Hz stands for 1,600 of them at 48 kHz: forwarding the newest block delivers
   64 % of the audio, and the oscilloscope, which works out how much elapsed from
   `elapsedSeconds`, correctly reads the shortfall as a discontinuity and clears
   its ring. Every frame, silently, at every rate but 60. See
   `MeterSource.scopeFrames` and `docs/WIRE.md` § The scope run.
+
+  The pump takes from the source's `scope` only what `elapsedSeconds` says is
+  new since its last look, the same arithmetic as the oscilloscope. The
+  source's buffer is a window of its newest four blocks — see
+  `MeterSource.scopeFrames` — and appending the whole of it per generation
+  would send every block four times over.
 
   Two details that are load-bearing. The run is **kept when a frame is dropped**
   — the audio was measured, and clearing it would turn a dropped frame into a

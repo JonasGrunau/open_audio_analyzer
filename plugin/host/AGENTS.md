@@ -140,10 +140,9 @@ none of the modules that need real material.
 
 ## What it found
 
-Six things, all of which had been unobservable. Five were defects in code that
-had shipped, and all five are fixed. The last of them is in this directory
-rather than in the plugin: the instrument was inventing the very thing it exists
-to measure.
+Seven things, all of which had been unobservable. Six were defects in code that
+had shipped, and all six are fixed. One of them is in this directory rather than
+in the plugin: the instrument was inventing the very thing it exists to measure.
 
 - **A parked transport was reported as a relocate, continuously.** *Fixed.*
   A stopped DAW still runs its graph and reports the position it sits at,
@@ -229,6 +228,31 @@ to measure.
   visible at all. `docs/WIRE.md` specifies that field as UTF-8, so it was a
   protocol defect rather than a typographical one. See the `juce::String` rule
   in `../AGENTS.md`.
+
+- **Half the audio never left the DAW at a 2048-frame buffer.** *Fixed.* The
+  streaming thread drained the FIFO in engine-sized blocks, pushing each — and
+  every push publishes a snapshot whose `scope` is exactly the block just
+  pushed — then acquired and sent *one* snapshot after the drain. A host buffer
+  of two engine blocks therefore pushed two and sent the second, and the first
+  block's 1024 frames of audio existed nowhere but in the DAW's memory. Every
+  measurement was right throughout, because loudness, peak and the spectrum
+  hold are integrals the second push carried; only the oscilloscope could see
+  it, and it did — it turns the engine clock into a count of frames it should
+  have been handed, draws the difference as silence, and showed a waveform in
+  bursts with a gap between every pair. Reported from a DAW by eye; `--block=2048`
+  reproduces it here without one, and `plugin_e2e_test.dart` now asserts, frame
+  by frame, that the clock advanced by exactly the audio the scope run carries.
+  `Streamer::publish` runs once per push.
+
+  That was half of it, and the half a fake DAW can show. The other half was on
+  the reader's side: the app took one snapshot per display tick, so the two
+  frames a 2048-frame buffer now sends per callback arrived microseconds apart
+  and the second still overwrote the first before anyone read it — the same
+  gaps, from the same DAW, after the fix above had shipped to it. Every
+  source's `scope` is a four-block window since ABI 7, and a reader takes what
+  `elapsedSeconds` says it is owed; see `MeterSource.scopeFrames`. Worth
+  knowing because the e2e case passed throughout: it decodes every frame the
+  wire carries, and the loss was in what happened to a frame after that.
 
 - **The plugin's "host supplies no position" branch is unreachable from here,
   and from any DAW.** *Not a defect in either end.* `--no-playhead` makes this

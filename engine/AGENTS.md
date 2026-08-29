@@ -47,9 +47,40 @@ reach a single list.
   the Dart bindings. The Dart side asserts it at startup, because a stale
   library does not crash — it reads a reordered struct and shows plausible wrong
   numbers, which is the worst failure a measurement tool has.
+- **`scope` is a window of four blocks, not the block just measured.** A
+  snapshot is a seqlock with one slot and its readers run at the display's
+  rate, so a publish nobody read before the next is gone — at 96 kHz that is
+  one in three, and an engine catching up after a stall publishes back to
+  back. A one-block scope handed every such reader the second block and lost
+  the first, which the oscilloscope drew as silence. `OAA_SCOPE_FRAMES` holds
+  four so the missed block is still there; `scope_frames` counts what is
+  audio, packed from index 0, and a reader takes the newest pairs that
+  `elapsed_seconds` says it is owed. `OAA_SCOPE_POINTS` is still one block —
+  the most a push adds, and what a plugin sends per frame.
 - **Only `oaa_engine_create` allocates.** Nothing on the analysis path calls
   `malloc`, and nothing at all on the audio path does.
-- **Everything exported is prefixed `oaa_`.** There are no globals.
+- **Everything exported is prefixed `oaa_`.** Two file-static globals exist and
+  no more, both of them lists of things this *process* owns rather than state
+  any measurement reads: the live engines that `oaa_engine_reset_all` reclaims
+  (`oaa_engine.c`) and the aggregate devices a tap built, which enumeration has
+  to leave out (`oaa_tap_macos.m`). Each is guarded by a mutex, and neither is
+  touched by the analysis thread or an audio callback. Anything on the
+  measurement path stays reachable through the handle.
+- **The tap's aggregate device is not a capture device, and enumeration says
+  so.** A process tap is read through a private aggregate, and private means
+  private to every process but the one that made it — which is the process
+  drawing the source menu. miniaudio enumerates it as an ordinary input, so
+  every running tap offered the user "Open Audio Analyzer System Capture"
+  underneath the System Output entry that had built it. `oaa_tap_owns_device_uid`
+  is what `oaa_devices_enumerate` asks; it compares UIDs, because the name is a
+  string we chose and a user may have chosen it too.
+- **Nothing here is freed when a process outlives the code that owns it, so
+  `oaa_engine_reset_all` exists.** A Flutter hot restart discards the Dart
+  isolate and re-runs `main` in the same process: no `dispose`, no finalizer,
+  and this library plus every thread it started carries on. The orphaned engine
+  meters forever and keeps a Core Audio tap alive with it. The call is for an
+  entry point and nowhere else — it dangles every handle its caller holds, which
+  is harmless only because a fresh isolate holds none.
 - **The snapshot is plain old data.** No pointers, no bitfields, no `bool`,
   fixed-size arrays only, widest members first, new fields appended. `dart:ffi`
   reproduces this struct byte for byte.

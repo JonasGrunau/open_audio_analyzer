@@ -10,6 +10,70 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### 📐 Measurement
+- **`Correlation` and `Balance` are now gated at −70 LUFS and read as a dash
+  under it, where they read `0` before.** Both divide by the two channels'
+  energy, so with nothing there they are `0/0` and `0` was a reading nobody
+  took. Correlation was the visible half: its 200 ms smoother approaches a
+  target asymptotically and never arrives, so a substituted `0` left the
+  published value carrying the *sign* of the last audio for as long as the
+  silence lasted. A track that fades out on a wide reverb tail ends slightly
+  out of phase, and the Phase Scope then held its correlation marker off centre
+  and lit it in the warning colour — asserting anti-phase content in a signal
+  that had stopped — for the twenty-odd seconds the exponential took to
+  underflow. The line is R128's own absolute gate, per channel: correlation
+  needs both channels above it and balance needs either, so a hard-panned
+  source now reports a balance and no correlation. A gate rather than a guard
+  against dividing by zero, because a live input is never exactly zero — it
+  sits on a converter's noise floor, whose correlation is a random number near
+  zero whose sign falls whichever way the block did, and an idle desk reported
+  those as readings. An offline report's correlation range and mean now
+  describe the programme rather than the file: a master with silence or room
+  tone at either end no longer reports a minimum of `0.00` it never reached,
+  and its mean is no longer pulled towards zero by however much of the file is
+  lead-in and tail. An Alert Meter on either metric no longer latches silence.
+  Re-run a report for the corrected range and mean; nothing about the audio
+  itself changed, no reading above the gate moved, and a mono source still
+  reports `+1` and `0`, which is true rather than substituted.
+- **A true-peak ceiling is no longer passed by silence.** True peak max is a
+  running maximum, so unlike the gated readings it carries a number from the
+  first block — the −144 dB floor every level is clamped to — and that number
+  satisfies every ceiling a target states. Both places a verdict is given said
+  so: the Validator printed `-144.0 … PASS` for an idle input, the one green
+  line on a table whose every other row was still waiting, and the delivery
+  report's true-peak check passed for a file with no programme in it. A true
+  peak at the floor now reads as not measured in both. **No measured value
+  changes and no verdict changes where a programme exists** — anything above
+  the −70 LUFS gate puts true peak above the floor — so this can only turn a
+  vacuous pass into a dash, and no re-measure is warranted. `oaa`'s exit code
+  is unaffected: a file with nothing in it already failed to be compliant on
+  `LUFS-I`.
+- **An Alert Meter on `Crest` now holds the most squashed block of a session
+  rather than the most open one.** Crest is sample peak minus RMS, so a high
+  reading is a dynamic passage and a low one is a limited passage — and the
+  module held the maximum, printing the best moment of a programme as the
+  worst of it. The same defect the two dynamics ratios had through 0.14.0.
+  `Balance` is now held by distance from centre rather than by signed value,
+  so a mix pulled hard left registers where before only a right-leaning one
+  could. Neither metric is judged against a target, so neither reading was
+  ever coloured — what changes is which number is held, by however far the
+  session swung.
+- **An Alert Meter on `ODR-I`, `LUFS-I`, `LRA`, `TP Max` or `Peak Max` now
+  prints what the engine holds, rather than the most extreme value that
+  reading passed through.** Those five are accumulated over the programme
+  since the last reset, and three of them converge rather than climb — so the
+  module was latching an artefact of the first seconds. `ODR-I` is
+  `TP Max − LUFS-I`, and integrated loudness clears the −70 LUFS absolute gate
+  while a track is still room tone: on a 322-second master whose `ODR-I` is
+  8.6 LU, the reading swung between 33.5 and 7.6 inside the first second and
+  the module then printed **7.6 LU** for the remaining five minutes —
+  disagreeing with the Number Box beside it, with the Validator and with the
+  delivery report, and lit red under a floor the programme cleared. `LUFS-I`
+  had the same failure on any programme that starts louder than it ends.
+  Readings on those five change by however far the swing went; nothing else
+  in the application reported them and no re-measure is warranted. The nine
+  metrics measured moment by moment — momentary and short-term loudness, the
+  live true peak, `ODR-S`, crest, correlation, balance and the two per-channel
+  levels — still latch their worst, which is what the module is for.
 - **The two dynamics readings are Open Dynamic Range: `ODR-S` and `ODR-I`.**
   They were `PSR` and `PLR`, and also `DR-S` and `DR-I` — four names for two
   numbers. The arithmetic is unchanged and every reading that was defined
@@ -44,8 +108,90 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   and the floor on Side; an anti-phase one the reverse. On a one-channel
   source Right, Mid and Side are not measured rather than reported as the
   channel twice. Nothing previously reported changes.
+- **The Histogram records a column every 50 ms, where it recorded one every
+  100 ms.** Its short-term line is unchanged to within the width of the stroke
+  — a 3 s window does not move in 50 ms — but its momentary band is a maximum
+  *over the column*, so a shorter column can only lower it: the band's top now
+  reads up to a few tenths of an LU below where it did on transient material,
+  and exactly where it did on steady material. The reading it is drawn from is
+  unchanged, and no re-measure is warranted; what changed is how finely the
+  module samples it, which is what makes zooming in show anything.
+- **`LUFS-M` and `LUFS-S` are clamped at the −144 dB floor, which they were
+  not.** Both floored their reading by testing it against −infinity, which is
+  what an energy of *exactly* zero produces and nothing else does. A window
+  that has just emptied holds something else: the K-weighting filters ring on
+  after the signal stops, so a window carrying nothing but that tail has an
+  energy of around 1e-90, and it was published faithfully as −1,860 LUFS. The
+  reading then fell further for as long as the ringing took to age out of the
+  window, and jumped back up to −144.0 at the moment the last of it left — a
+  second later for momentary, three for short-term. Those figures reached the
+  wire and the JSON report as well as the meters. Both readings now clamp the
+  way every other dB quantity in the engine already did. **Nothing audible is
+  affected**: the excursion starts below −144 LUFS and only in the seconds
+  after a signal stops, so no reading of programme material moves and no
+  re-measure is warranted.
+- **The Spectrogram records every published measurement.** One column is one
+  publish, but the record advanced when the module was *repainted*, and
+  repaints are throttled to the meter frame rate — so at 30 fps, and under the
+  platform's reduce-motion preference, one publish in three never reached the
+  record at all and a transient that fell in a skipped one was simply absent
+  from the picture. The record is now advanced from the unthrottled
+  measurement, so the display is the same at 30, 60 and 120 fps and holds
+  every band the engine published. Nothing about how a level is measured or
+  coloured changed; what changed is how much of the signal reaches the
+  display.
 
 ### ✨ Added
+- **The Spectrum Analyzer has a cursor.** Click or tap anywhere on the plot and a
+  line stands at that frequency with a tag beside it: the frequency, the level
+  there, its peak hold, and the level in dB(A). Drag the line to move it; tap
+  it, or click anywhere away from the module, to dismiss it. The two levels are
+  read off the curve and the hold at that band
+  — the lines the cursor crosses — and are the measured values, untilted, so
+  under a `Tilt` the tag reads the true level where the axis cannot. dB(A) is
+  the band's level plus the IEC 61672-1 A-weighting curve at its centre
+  frequency, which is exact for a single band and is the one weighted reading
+  in the application; the curve itself stays unweighted. A right click on the
+  plot is still the module's menu, and a click still selects the module.
+- **The Oscilloscope's overlaid channels can be swapped front to back.** Two
+  traces around one centre line hide one another wherever they cross, and the
+  right channel was always the dimmed one behind — so it was the one you could
+  not read. The `L R` legend is now the control: it sits at the left of the
+  slider row, names the front channel first and in the brighter ink, and
+  clicking it puts the other one in front. It is remembered in the layout.
+- **The Histogram scrolls and zooms.** The overview strip along its floor was a
+  map of the recording; it is now the control as well. Drag the frame on it and
+  the plot scrolls back through the programme — it keeps recording while you
+  look, and dragging the frame back against the right-hand edge re-attaches it
+  to the newest reading. Scroll, pinch or wheel over the strip — a trackpad, a
+  Magic Mouse and a click-wheel mouse all reach it — and the frame resizes,
+  which is the plot's zoom: anything from five seconds across the module to the
+  whole seven minutes the ring holds.
+- **A Validator chooses which criteria it judges.** `Checks` in its menu, one
+  row per delivery criterion, ticked and unticked in a menu that **stays open**
+  — every other menu in the application closes on the tap that chooses, and
+  choosing four of five that way is four trips through a right click. A
+  criterion switched off leaves the verdict as well as the table, which is the
+  point: a NOT READY that is really "the LRA of a podcast is 4 LU" is a red
+  light people learn to ignore. A module with nothing left to check says
+  NOTHING CHECKED rather than READY TO DELIVER. Existing presets are unchanged
+  — a Validator that has never been told otherwise checks everything the target
+  states — and a dynamics floor the target does not set is greyed in the menu
+  rather than dropped from it.
+- **The Alert Meter chooses what it watches.** `Metric` in its menu, the row a
+  Number Box has always had: the three readings a delivery is decided by are
+  LUFS-I, LRA and true peak max, and any of the fourteen metrics works. The
+  metric was stored in the preset, read and drawn the whole time — there was
+  nowhere to choose it, so every Alert Meter ever placed watched true peak.
+- **The Alert Meter can print the distance from the target instead of the
+  reading.** `Delta` in its menu: `+0.6` where the module showed `−0.4 dBTP`
+  against a −1.0 ceiling, signed so that positive is always above the line
+  whichever way the comparison runs, and in the unit of the difference — `dB`
+  from a peak ceiling, `LU` from a loudness target. The latch and the colours
+  are decided from the measurement either way, so a module in delta turns red
+  at the same moment and agrees with the one beside it that is not. A metric
+  the target draws no line for — and an `ODR` floor this target does not state
+  — reads as a dash rather than as a distance from nothing.
 - **A delivery target can set an `ODR-I` floor and an `ODR-S` floor.** `odr_i_min` and
   `odr_s_min` in the target's file, or the two rows of the editor's new Dynamics
   section — the limits that run the other way, and the ones no platform
@@ -97,8 +243,148 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   choice; changing the spectrogram's clears its record, because a picture
   that is one signal on the left and another on the right is a measurement
   nobody took. A source the signal cannot provide says **MONO SOURCE**.
+- **The Spectrum Analyzer has a `Range` setting** — 60, 90 or 120 dB below
+  full scale, 90 by default, the values and the default Pro-Q uses — as the
+  last row of its menu. The dB axis is linear over the chosen range, labelled
+  every 6, 10 or 12 dB, and the range is printed in the plot's top-right
+  corner, opposite the tilt.
 
 ### ⚡ Changed
+- **Clicking anywhere outside the selected module clears the selection.** Only a
+  click on empty canvas did, and only on the release; a click on the menu bar,
+  the tab strip or the status bar left the module outlined, because nothing on
+  the canvas could see it. The selection now lets go on the *press*, wherever
+  it lands — empty canvas, the bars, another module — with one exception: a
+  module's own menu, and any panel standing open, are not "elsewhere", so
+  choosing an option for a module leaves it selected, and the click that closes
+  its menu does too.
+- **A level standing at the dB floor now reads `-∞` rather than `-144.0`.**
+  Every dB level is clamped to −144 before it leaves the engine, so that is a
+  sentinel and not a reading: printed to four significant figures it was
+  precise, plausible and measured by nobody, and it disagreed on screen with
+  the meter beside it, whose scale labels that same end `-∞` already. Every
+  level readout in the application changes together — the Number Boxes, the
+  LUFS Meter, the Digital Meter's peak and RMS rows, the Super Meter's centre,
+  the Validator's table and the `oaa` text report — because all of them format
+  through one function. Ranges and differences are untouched: `LRA`, `Crest`,
+  `ODR-S` and `ODR-I` are subtractions of two levels and never reach the
+  clamp. Silence is a measurement, so it is `-∞` and not the em dash that
+  marks a quantity nobody measured. The snapshot, the wire protocol and the
+  JSON report still carry −144.0.
+- **The Super Meter's three centre sections stand apart.** The short-term pair,
+  the integrated pair and the true peak were packed at a fixed eight pixels
+  while the lower part of the dial's clear disc stood empty, because the stack
+  is sized by the width a row has to fit across and the height it did not need
+  simply went unspent. It is divided between the two gaps now. The figures are
+  the size they always were, and on a small module the ceiling's printed value
+  yields to the true peak row rather than crowd it — the red zone and its tick
+  still mark where the ceiling is.
+- **The Loudness Distribution prints its LRA in the caliper's grey rather than
+  in the accent.** The number sits between the two marks of the dimension line
+  that measures it, and in the signal hue it read as a separate label that
+  happened to be collinear with them rather than as part of the annotation.
+  The reading is unchanged; only its ink is.
+- **The Super Meter's dynamics arcs end in nothing.** `ODR-S` and `ODR-I` each
+  ran into a grey radial tick at the true peak, which put a third mark on a
+  dial whose other two — the target and the ceiling — are values somebody set.
+  Where the arc stops still says where the peak stands, and the number itself
+  is printed in the centre.
+- **The LUFS Meter's overshoot is the same solid as the bar under it.** The
+  stretch standing above the delivery target was flat paint laid over a bar
+  that is modelled across its width, so it read as a cap sitting on the meter
+  rather than as the top of the reading. It now carries that same modelling in
+  the same red: a bar crossing the target changes colour and nothing else.
+- **A new Alert Meter watches the live true peak rather than `TP Max`.** Both
+  print the same number — the largest three-second peak of a session is that
+  session's peak — but only one of them is the module doing its job: `TP Max`
+  is held by the engine, so an Alert Meter on it read rather than latched, and
+  the module shipped with the one behaviour it exists for switched off. The
+  name above the digits reads `TRUE PEAK` where it read `TP MAX`. An Alert
+  Meter already on the canvas, or in a saved preset, keeps the metric it was
+  given.
+- **The Oscilloscope's time base and overlaid legend moved onto the control
+  row.** Both were printed over the corners of the waveform. The legend is now
+  at the left of the row, ahead of the height slider, and the time base at its
+  right-hand end, under the axis it measures. A module too narrow to hold both
+  beside the sliders, and a tablet showing a remote canvas, draw them in the
+  corners as before; the lane letters are unchanged, because a lane's letter
+  belongs in its lane.
+- **Every number a module prints is the signal hue.** Readings were white —
+  the same ink as a menu label, a panel's body text and the module's own title
+  — so the one thing a meter exists to show was the colour of the chrome
+  around it. A value now carries the accent whether or not a target applies to
+  it, and the palette's other colours say what is *wrong* with one: amber
+  approaching a limit, red past it, a muted em dash for a quantity nobody
+  measured. The Digital Meter's peak and RMS rows, the VU Meter's readout, the
+  LUFS Meter's momentary and short-term values, the Loudness Distribution's
+  LRA, the Number Box, the Alert Meter, the Super Meter's centre and the
+  Validator's table all move together; nothing on a module borrows the hue
+  that is not a measurement. One consequence worth knowing: a reading under
+  its target and a reading in spec are now the same colour, and the verdict is
+  the Validator's, the Alert Meter's and the delivery report's to state in
+  words.
+- **The Validator colours a row by its own verdict.** The measured value and
+  the Δ beside it take the accent when the row passes, the over colour when it
+  fails, and the muted dash while the measurement is still undefined — so the
+  table can be read at a glance rather than only when something is wrong.
+- **Every module's panel is lit from its top-left corner**, the way Decibel's
+  are: a soft highlight, brightest in the corner behind the title and fading
+  back to the panel colour four fifths of the way across and down. The panel
+  was one flat colour. Skins carry it with no new colour role — the light is
+  the skin's own panel colour lifted — and a light skin, whose panel is already
+  near white, is barely lit at all.
+- **The Histogram's time axis is elapsed time — `45s`, `1m15s` — where it was
+  the wall-clock time a column was recorded at.** A clock is only right while
+  the plot is pinned to the newest column: now that it scrolls, one counting
+  back from the present would label a chorus four minutes ago with the time you
+  are looking at it. The gridlines are pinned to the programme rather than to
+  the edge of the plot, so they slide with the material instead of renumbering
+  themselves.
+- **The Histogram's momentary band is drawn at a weight you can see.** It was
+  0.05 to 0.26 alpha under a fill that reaches 0.85, which put the gap between
+  the two bands — the whole reading — below the noise floor of the display it
+  was drawn on. The short-term edge is still the strongest line on the module.
+- **The Histogram's overview strip sits a full gutter below the plot** rather
+  than four pixels, and the frame on it is filled as well as outlined, so it
+  reads as something to grab rather than as the plot's own bottom margin.
+- **The Alert Meter's reading is labelled with the metric's own name.** It read
+  `WORST TP MAX`, which labelled the only thing the module does — the title bar
+  above it already says which module this is, and the digits and the panel's
+  light are now one held verdict, so nothing on the tile reads as a live value
+  for the word to correct.
+- **The Alert Meter's panel is washed in light off its left edge, in the colour
+  of the worst reading it has caught.** It replaces a two-pixel rule down that
+  edge — the same statement in a hundredth of the area, a gutter inside the
+  panel's own edge, on the one module built to be read from across a room and
+  out of the corner of an eye. It is the Number Box's glow turned on its side,
+  and one shader draws both. The light and the digits are **one verdict in two
+  sizes**: both are decided from the latch, both are cleared by the engine's
+  reset and by any setting that changes what the module is showing, so a red
+  panel across the room and the number on it can never disagree. A module that
+  has caught nothing is not lit at all.
+- **A Number Box and an Alert Meter with no reading are no longer lit.** The
+  wash under the digits is a verdict on a number, and an em dash — nothing
+  measured yet, a link gone quiet, a quantity this build does not compute — has
+  none. It glowed in the accent, which is the colour that means "measured, and
+  nothing says it is wrong", so a module that had measured nothing at all
+  looked like one that was fine.
+- **The Validator's Δ is printed at the size of the number it marks** rather
+  than at a graticule tick's, which read as a superscript on the reading to its
+  left instead of as the label of the one to its right.
+- **The Alert Meter shows the worst reading and no longer the live one.** The
+  big number was the live value with the latch a small line beneath it, which
+  made this a Number Box carrying a footnote — and the canvas already has a
+  Number Box that says the live value better. The latch is now the module's one
+  number, at the size the live one had, under the metric's own name — and the
+  panel's light is that same held verdict, so nothing on the module reads as
+  live. Nothing stopped being measured: the live reading is read every frame and it is what the latch is
+  taken from. It is simply no longer what the module prints.
+- **The Alert Meter prints the unit after its reading**, and sets its label in
+  the grey the Number Box uses for its own name and unit rather than in the
+  fainter one a graticule tick gets. In `Delta` the unit is the
+  **difference's** — `+0.8 dB` under a dBTP ceiling, `−0.6 LU` from a loudness
+  target — because the reference cancels in a subtraction and `+0.8 dBTP` would
+  name a clipped master rather than eight tenths of a decibel over the line.
 - **A source can be changed while a plugin is connected.** A plugin used to take
   the canvas for as long as it was connected, which left every input on the
   machine unreachable until it was removed from the DAW — the app asked the link
@@ -125,54 +411,134 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `10^(dB/60)` — the labelled ticks crowd the top, and the bottom of a track
   means silence rather than "−48, or quieter, who knows". One taper for the
   whole application, so two meters side by side still agree about where −12 is.
+  The Spectrum Analyzer is the one level axis that is not tapered: a range
+  setting on a taper would move nothing but the bottom tenth of the plot, so
+  its axis is linear over the `Range` it is set to.
 - **The LUFS Meter draws three bars — momentary, short-term, integrated — with
   their values printed beneath.** Integrated was a line across the other two
   and its number sat in a readout row; the bars now carry their names up their
   own faces, the scale is labelled on both edges, and the target line is
   dashed in the over colour with the target value printed on the axis. The LRA
   readout moved off this module; it stays on the Loudness Distribution, the
-  Super Meter's tall layout, the Validator and any Number Box.
+  Validator and any Number Box.
 - **The Super Meter is a half-gauge on which loudness and dynamics meet at the
   true peak.** Short-term and integrated LUFS fill from the left end; ODR-S
   and ODR-I continue from each loudness tip on the same dB scale as thinner
   arcs, ending at the true peak with a grey tick, so the dark rest of a ring
   is its true-peak headroom — a dynamics arc reaching the right end is a peak
   at 0 dBTP. `LUFS-S` and `ODR-S` ride the outer ring's tips as engraved
-  names, every arc prints its reading in the lane inside it, the delivery
-  ceiling is a red zone at the right end with its value on a tick, the target
-  keeps its tick with the value beside it, and the centre prints LUFS, ODR
-  and TRUEPEAK MAX, with LRA as a fourth row where the module is tall.
+  names and nothing else is printed on the rings; with nothing measured both
+  rest together at the silent end, since a name parked at the other end of an
+  empty dial reads as a tip standing at full scale; the delivery ceiling is a
+  red zone at the right end with its value on a tick, the target keeps its
+  tick with the value beside it, and the centre prints five readings in
+  three rows — `LUFS-S` and `ODR-S` small on top, in the accent and judged
+  by nothing, `LUFS-I` and `ODR-I` under them in their verdict colours, TRUE
+  PEAK below — every one of the five printing its unit beside it and every
+  row labelled with its reading's full name rather than under an INTEGRATED
+  heading, and a module too small for three rows keeps the two that are
+  delivered. It printed every arc's reading in the lane beside
+  it and LRA as a fourth row for part of this cycle, and read as crowded;
+  the short-term pair also spent a day cut into its arcs, where an upright
+  figure clips to a sliver whenever a tip stands near the dial's vertical
+  ends.
+- **The Super Meter's arcs arrive from the silent end.** A reading that has
+  just become defined — LUFS-S and ODR-S three seconds after a reset or the
+  start of a song, LUFS-I and ODR-I after the first gated block — used to put
+  its arc into the middle of the dial at once, which read as a glitch. The arc
+  now starts at the left end and sweeps to its value over about half a second,
+  then follows the reading as before. The numbers in the centre are unchanged
+  and show the measurement from the first frame.
+- **The three level meters are drawn in a darker shade of the skin's accent,
+  deepening towards the floor.** The LUFS Meter's bars, the Digital Meter's
+  bars and the Super Meter's loudness arcs are the accent at 70 % of its
+  lightness at the reading; they were the grey `meter_fill`, a step above the
+  grey track, and read as a level you had to look for. Down each fill the
+  ink runs flat for the top three tenths and then to a floor colour that is
+  the ink fully saturated and darker, in the same hue — the ramp measured off
+  Decibel's bars, whose floor is a deeper colour rather than a shaded one.
+  The one gradient before it dimmed from the reading
+  downward and reached its darkest only a full scale below it, so a bar at
+  two thirds of its track was one flat colour with a lit edge. The LUFS
+  Meter's bars are also shaded across their width as tubes, a little darker at
+  both edges on the reference's curve, tightened towards the edges so that the
+  middle of a bar — the strip a name is printed up — carries the ink
+  undimmed. The Super Meter's arcs
+  carry the same ramp swept around the dial, where they were flat. Both
+  colours are derived from `accent` rather than new skin roles, so a skin
+  that sets its accent gets meters to match; `meter_fill` still colours the
+  VU needle and the report's bars, so a skin that sets it is unaffected
+  there.
+- **The Super Meter's loudness arcs keep their colour past the target.** The
+  part of an arc standing past the target tick was redrawn in red; it is now
+  the arc's own ink to its tip, and the tick alone marks the target — a ring
+  that turned red at its tip was a warning laid over a level, on a gauge
+  whose centre already prints the verdict. The LUFS Meter's bars, the
+  Histogram and the Loudness Distribution still cut to red at the target.
 - **The Digital Meter prints peak and RMS per channel above the bars.** The
   bars are lit as segments under one gradient, the peak mark warms from the
   fill colour to red as it nears full scale, and the fixed top-of-scale
   warning region is gone — the mark that is actually hot carries the warning.
+- **The Digital Meter lights whole segments only.** Its bars were drawn to the
+  measurement with the segment gaps laid over them, so the row at the top of a
+  column was whatever fraction of a segment the reading landed on — less ink
+  than every row under it, which reads as the paint thinning out rather than as
+  a level — and the peak was a two-pixel hairline free to sit across a gap
+  between two rows. A column now stops at the top of the last row it fills
+  completely, and the peak is one whole lit row on the same grid, so what
+  stands between the two is a whole number of segments. **The scale is ruled on
+  that grid too**: its gridlines were drawn on their exact values, which put a
+  line through the middle of a segment as often as not — a second ruling
+  beating against the first — and each one now stands in the segment gap
+  nearest its value, at most two pixels from where it was, with its label
+  moved to match. A labelled value is one of the meter's own gaps in a lighter
+  grey, so the scale reads across a lit bar as well as an empty one, where
+  before it was covered by the fill. The column's resolution is one row; the
+  peak and RMS printed above it are unchanged and carry the measurement itself,
+  rounded by nothing.
 - **The Histogram's time axis is wall-clock time, and an overview strip along
   its floor shows the whole recording** with a frame over the slice the plot
   is showing. The momentary band is tinted by how far over target each column
   stands, from the accent into the over colour.
 - The Spectrum Analyzer's frequency labels moved to the top of the plot and
   cover the 1-2-3-5-7 series from 20 Hz to 20 kHz; the dB labels moved to the
-  left; the tilt caption left the plot, and the setting is unchanged.
-- The Spectrogram gained its axes: frequency labels and gridlines on the left,
-  time along the top.
-- **The skin colour ramp is monochrome** — the module's ground through the
-  accent to a bright tip — so the warn and over colours keep their meaning on
-  modules that paint level as colour. The Full RGB rainbow is unchanged, and
-  switching still re-paints history without moving a cell.
-- **The Phase Scope is a square goniometer drawn as a connected trace**, with
+  left and run over the chosen `Range` rather than a fixed 96 dB; the tilt
+  caption sits inset in the plot's top-left corner, with the range in the
+  top-right. The setting is unchanged.
+- The Spectrogram gained its axes: frequency labels ticked down the left, time
+  along the top. Nothing is drawn over the field itself.
+- **The Phase Scope is a square goniometer**, with
   balance riding its bottom edge and correlation its right edge as markers —
   the correlation marker in the warning colour below zero, as the bar it
   replaces was — and `L`, `R` and `M` engraved at the ends of the axes they
   name. The correlation bar under the plot is gone. On a mono source the
   markers are withheld beside the notice, as the bar was.
 - The Number Box names its metric inside the body and glows at its foot in the
-  reading's verdict colour.
+  reading's verdict colour, out to the panel's own edges and fading over four
+  fifths of its height whatever shape the module has been given.
 - Every Validator row prints the signed distance between its reading and the
   limit that judges it, beside the limit.
 - **The VU Meter wears the standard face** — labelled −20 −10 −7 −5 −3 −1 0 +1
   +2 with the pin at +3 and − and + at the ends, a peak lamp that lights while
   the held peak stands over 0 VU, and its reading in a box under the needle.
   The machined hub is gone; the needle wears the instrument colour.
+- The VU Meter prints a dash when the programme is below the bottom of its
+  scale, in the muted voice every unreported quantity wears, rather than `<-20`
+  in the colour of a measurement. The two signs ran together into a mark that
+  read as a left arrow, and a needle resting on its stop was printed with the
+  weight of a figure the programme had made. The two states are still distinct
+  on the face: below the scale the needle is there, on its bottom stop;
+  unmeasured, there is no needle at all.
+- **The VU Meter's peak lamp is set into the face**, under the end of the red
+  and inside the rim, rather than pinned to the right edge of the tile at half
+  the face's height — where it was level with nothing, attached to nothing, and
+  read as a stray dot beside the instrument. It scales with the dial, and gives
+  way to the reading on a tile too small for both.
+- The VU Meter's face says which way it runs more plainly: the `−` and `+` past
+  the last marks are larger, the `−` is grey rather than in the accent colour —
+  it was the one teal thing on an instrument that has no other — and 0 is red
+  like the numbers above it, on the heaviest tick of the scale, because 0 is
+  where the red begins.
 - **The Super Meter's ends are square again**, and every printed value on it
   wears its arc's own ink — the integrated tip value is neutral past the
   target, the way its arc is — so the one red number on the dial is the
@@ -187,6 +553,27 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   power balance itself, which is steepest at the centre — a three-decibel
   lean is a fifth of the way over now, not a third — and only the top 30 dB
   of a frame place a mark, cubed, so the picture is the bands that matter.
+  Its frequency scale sits in a gutter beside the field and `L`, `C`, `R` in
+  a strip below it, both outside the box around the field, as Decibel lays it
+  out.
+- **Six modules are boxed.** The Spectrum Analyzer, the Oscilloscope, the
+  Spectrogram, the Histogram — twice, once round the plot and once round the
+  overview strip along its floor — the Loudness Distribution and the Stereo
+  Cloud each draw a hairline box around their picture, in the same ink as the
+  gridlines inside it. They ruled whichever one or two sides a scale happened
+  to sit against, in whatever weight looked right there, and a rule that stops
+  where the picture stops on two sides of four reads as an unfinished box
+  rather than as an edge. The box is drawn *around* the picture rather than
+  over it, so the newest column of a spectrogram and the newest sample of a
+  scope — both hard against the right-hand edge — are framed instead of hidden
+  under a hairline; each plot gives up a pixel on every side to make room.
+- **A Spectrogram's floor is the panel it is drawn on.** The skin ramp's level
+  0 was an opaque copy of the panel colour, which was the same pixel until a
+  module's panel stopped being flat: it now carries a light across its top-left
+  corner, and a field painted in the unlit colour cut a rectangle out of it and
+  read as a lid laid over the module. Cells the signal reached are unchanged —
+  the ramp's colours are the same colours, composited rather than mixed — and
+  the `Full RGB` ramp still declares and paints its own near-black ground.
 - **The Phase Scope fills its module.** It reserved the label band on all
   four sides to stay centred as a square; the figure with its two label bands
   is what is centred now, and the square is a quarter taller for it.
@@ -215,12 +602,145 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   sentence naming both numbers. Decoding is keyed to the frame's version
   rather than its length, because a long version-4 relay frame can be the
   size of a version-5 one. `docs/WIRE.md` is the specification.
+- **The LUFS Meter's bar names are set to the module.** MOMENTARY, SHORT and
+  INTEGRATED were written up the bars at one fixed 10 px whatever the module's
+  own size, so on a small module the word filled a narrow bar edge to edge and
+  read as a label of the meter rather than as one written on a bar. The face is
+  now a base plus a share of the track's height — 6 px to 12 px, held under
+  what the bar's width and the track's length will carry — so a module resized
+  down takes its names with it and one resized up sets them a little larger.
+  The default five-cell module lands where it always was. The single letters
+  under the bars are still the fallback, now for a bar too narrow to carry a
+  word rather than for a module too short.
+- **A LUFS Meter bar is lit down its centre line.** The fill was shaded at both
+  edges and left at the ink in the middle; the middle is now lifted as well, so
+  a bar reads as a round solid rather than a flat one with dark sides. The
+  stretch standing above the target keeps the shading it had and takes no
+  light: it is the one thing in the module wearing the over colour, and what
+  has to be seen there is the edge carrying the reading. No other module
+  changes — the LUFS Meter is the only one whose fill is shaded across its
+  width at all.
 
 ### 🐛 Fixed
-- An Alert Meter watching `ODR-S` or `ODR-I` latches the **lowest** reading under
-  WORST. It latched the highest — the most open moment of the session — because
-  every metric but correlation was taken to be worse when higher, and a ratio a
-  floor is set under is the other way round.
+- **A meter with nothing to show no longer leaves a hairline of fill at the
+  foot of its track.** The level scale is tapered and its bottom is −∞, which
+  no finite reading reaches — but the floor every dB quantity is clamped to is
+  −144.0, a finite number, and the taper puts that four tenths of one percent
+  up the track rather than at the end of it. So digital silence drew a line of
+  lit accent a pixel or two tall along the bottom of every bar, seconds after
+  the music stopped. A reading at or below the floor now sits where the scale
+  labels it, at −∞. The LUFS Meter is where it was reported; the Digital Meter
+  and the Super Meter's arcs are drawn on the same scale and had the same
+  hairline.
+- **The LUFS Meter's bars no longer change height while the readings fall.**
+  The row of numbers under the bars was fitted to whatever string was printed
+  at that moment, and the bars stand on that row — so a reading below −100,
+  which is one glyph wider, shortened all three bars, and at the size the
+  module ships at it took the numbers under their legibility floor and removed
+  them entirely until the reading passed. Every meter goes through that decade
+  on its way down when the audio stops, so it showed up as a twitch each time.
+  The row is now fitted to a fixed budget and only the digits themselves shrink
+  to hold a longer number.
+- **The Phase Scope's correlation marker and a Number Box on `Correlation` no
+  longer paint a reading of `-0.00` as anti-phase.** The rule was the sign bit,
+  and correlation prints two decimals — so a signal whose channels are simply
+  unrelated sat dead centre and changed colour as the sign fell one way or the
+  other, and a value a thousandth below zero was coloured like one at −0.9. The
+  warning now starts at the first hundredth the reading actually prints, and
+  both readouts go through one function so that two views of one number cannot
+  disagree.
+- **An Alert Meter in `Delta` no longer reads an em dash for ever on `ODR-S` or
+  `ODR-I`.** `Delta` prints a reading as its distance from the line the target
+  draws, and the two dynamics floors are the target's to state: no built-in
+  target states an `ODR-I` floor and only `Dynamic master` states an `ODR-S`
+  one. The menu offered the setting anyway, on the metric alone, so switching
+  it on under any other target — including the `Streaming (−14 LUFS)` the
+  application starts with — left the module printing a dash from the first
+  frame to the last, with a disabled menu row as its only way out. The row now
+  follows the target as the Validator's checks already did, and a stored
+  `delta` a target cannot satisfy prints the reading itself rather than
+  nothing. The choice is kept, not corrected: pick a target that states the
+  floor and the distance comes back.
+- **The source menu no longer offers "Open Audio Analyzer System Capture".**
+  Metering System Output on macOS builds a private Core Audio aggregate device
+  to read the process tap through, and private means private to every
+  application except this one — so the application listed its own plumbing as
+  something to capture from, directly beneath the System Output entry that had
+  created it. Selecting it read the tap back through a second path that was
+  never designed. Enumeration now leaves out any aggregate this process built,
+  matched by device UID rather than by name so that an aggregate of your own
+  called the same thing is still offered.
+- **`Save` overwrites the preset it opened, on the next launch as well as this
+  one.** The session brought the layout back but not the file it came from, so
+  the first ⌘S of a morning opened a save panel for a preset that already had a
+  home — and the obvious answer, accepting the name the panel offered, wrote a
+  second copy of it beside the first. `session.json` now records the open
+  preset's path, and the canvas adopts it on the way up: `Save` writes back to
+  that file without asking, and only a layout that has never been saved, or
+  `Save as…`, opens a panel. A remembered file that has since been renamed,
+  deleted or left on an unmounted drive is dropped at launch, so `Save` asks
+  where it should go rather than recreating it.
+- **The spectrogram's age axis stands still, and stands in the same place on
+  the next launch.** The ticks and their labels were laid out from a rate
+  re-derived on every published frame — one column is one measurement, and how
+  long a column covers can only be measured — so they crept a pixel one way and
+  back on every frame, worst in the first seconds after a module was mounted
+  and never quite still afterwards. The rate is now adopted in steps of two per
+  cent; a tick can stand up to that far from the age it is labelled with, which
+  it always could.
+- **And the axis is the same picture every time the application starts.** The
+  first fix adopted whatever the first third of a second measured and then
+  defended it for the rest of the session, which made the axis a photograph of
+  the device's spin-up: the engine's clock advances in whole audio callbacks, so
+  that early mean lands on one of a handful of quantised values depending on
+  where the callbacks fell, and it was never corrected afterwards. Launches
+  differing in nothing else spread 2.2 per cent, which at a 2 s rung puts the
+  sixth tick anywhere in a 12 px band, and where the spread crossed the
+  label-spacing threshold the rung itself flipped and the number of labels
+  changed. The measured rate is now weighed against the rate on screen —
+  including the nominal one it starts at — so an engine publishing within two
+  per cent of nominal draws the identical axis on every launch, while a remote
+  host at a genuinely different rate is still corrected to.
+- **The Spectrum Analyzer's right-hand edge is one line rather than two.** The
+  frequency gridlines are drawn at band *centres*, so the top of the range —
+  20 kHz — sat half a band inside the plot's own border, in the border's colour
+  and at its weight: on a module of ordinary width the two were adjacent and the
+  right edge came out twice as thick as the other three, and on a wide one they
+  separated into a rule standing beside the border. The gridline at each end of
+  the range is now the border, which is where it was always trying to be.
+- **The Alert Meter drops what it has latched when it is asked to show
+  something else.** A different metric, Delta on or off, or a different
+  delivery target each left the previous setting's worst case standing: a
+  true-peak maximum in dBTP printed under LUFS-I as the worst loudness of the
+  programme, or a peak latched as over a −1.0 ceiling still red under a −2.0
+  one. Switching source does too — the desktop swaps its engine for a plugin's
+  the moment a DAW connects, and the two elapsed clocks have no relationship,
+  so the reset the module already watched for could not see it.
+- **The spectrum analyser's peak hold no longer carries across a change of
+  `Source`.** The line over Right was the maximum of Right and whatever Left
+  had just been doing — standing at a level Right never reached and sinking
+  towards the truth at twelve decibels a second. The curve reseats across a
+  discontinuity of the clock for exactly this reason and a source change is not
+  one; the spectrogram, reading the same bands from the same setting, has
+  cleared its record on it since the setting existed. `Tilt` and `Range` still
+  keep the hold, being views of the measurement rather than a different one.
+- **The oscilloscope no longer loses a block of audio whenever two measurements
+  land inside one display tick.** One picture — a waveform in bursts, with a gap
+  between every pair — and two causes. The plugin's streaming thread pushed
+  every block a host buffer held and sent one snapshot per drain, so at a
+  2048-frame buffer every other block never left the DAW; it now sends every
+  push. And every reader in the application took one snapshot per look while a
+  snapshot carried only the newest block, so two publishes between two looks
+  lost the first even once the plugin sent both — which also cost a third of
+  the waveform at 88.2 kHz and above on a device, and a block whenever an
+  engine caught up after a stall. Every source's scope buffer is now a window
+  of its newest four blocks, and a reader takes from it what the elapsed time
+  says it is owed. Every other reading was right throughout, because those are
+  integrals; nothing needs re-measuring.
+- An Alert Meter watching `ODR-S` or `ODR-I` latches the **lowest** reading. It
+  latched the highest — the most open moment of the session, printed as the
+  worst of it — because every metric but correlation was taken to be worse when
+  higher, and a ratio a floor is set under is the other way round.
 - `--open-panel=settings` opens the settings panel again. It asserted "No
   RemoteDisplayScope in scope" and opened nothing, because the flag is acted on
   from a context above the scopes the panel needs — which is the debug build's
@@ -240,6 +760,20 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The Digital Meter's `dB` sits on the same baseline as `PEAK`, `RMS` and
   their values. The three faces in the row have three line heights, and
   top-aligned the unit floated above the reading it belongs to.
+- **The Spectrogram's time axis no longer changes its spacing or its
+  labelling while it runs.** The ages along the top are labelled at the finest
+  interval whose ticks stay legibly apart, and the interval was chosen by a
+  bare comparison against a rate the display measures for itself. A column is
+  one pixel and one publish, so that comparison falls on its threshold exactly
+  at the ordinary rates — a 30 Hz remote host, a 60 Hz one, and any machine set
+  to 30 fps — and the last digit of the estimate decided whether the axis read
+  `2s 4s 6s` or `5s 10s 15s`. It landed one way on one launch and the other way
+  on the next, and a rate correction mid-session relabelled the whole axis. The
+  comparison now carries the tolerance the rate itself does, and the interval
+  already on screen is kept on a looser threshold still, so every rate lands on
+  the finest legible interval and stays there: a 30 Hz host reads `2s 4s 6s`,
+  a 60 Hz one `1s 2s 3s`, and the local engine's 47 Hz is unchanged at
+  `2s 4s 6s`.
 
 ### 🔥 Removed
 - **`PSR`, `PLR`, `DR-S` and `DR-I` as names**, and `plr` and `dr_i` as keys of
@@ -251,6 +785,19 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   both carry the one value, as every producer already wrote them.
 
 ### 🚧 Internal
+- `OAA_ABI_VERSION` is 8, and this release moves it twice.
+- `oaa_engine_reset_all` destroys every engine the process created and did not
+  destroy, and the application calls it from `main`. It reclaims nothing in a
+  shipping run: it exists for a Flutter hot restart, which re-runs `main` in a
+  process that never exited, so nothing disposed the previous isolate's engine
+  and it went on running its analysis thread — and holding a macOS process tap
+  and the aggregate device under it — for the rest of the session. A
+  development afternoon left a dozen of them metering at once.
+- `oaa_snapshot.scope` holds 4,096 stereo pairs rather than 1,024 and
+  `scope_frames` counts how many are audio. The wire protocol is unchanged at
+  version 5 — a plugin still sends one block per frame, the newest of the
+  window — and the engine's tests hold the window's order, its slide and its
+  reset.
 - The CLI suite decodes the tool's output as UTF-8, which is what the tool
   writes. It was decoded with the system encoding — on Windows the ANSI code
   page — so the two dynamics-floor tests, the first to assert a line carrying

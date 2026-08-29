@@ -339,6 +339,15 @@ OfflineResult _run(
         ),
       );
 
+      // **Which readings may be summarised by an extreme is `Metric`'s to
+      // say**, and it says it as `isAccumulated`: these four are windows that
+      // have moved on by the next sub-block, so the extreme over the run is
+      // the only way to keep what they saw. The five it calls accumulated are
+      // taken whole below, off the engine, because it is already holding them
+      // — `odrIntegrated` is derived from two of those and never sampled here
+      // at all, which is the same rule the Alert Meter's latch follows one
+      // package over. It cost five minutes of a wrong ODR-I on that module
+      // when the two were written apart.
       momentaryMax = runningMax(momentaryMax, engine.lufsMomentary);
       shortTermMax = runningMax(shortTermMax, engine.lufsShort);
       shortTermMin = runningMin(shortTermMin, engine.lufsShort);

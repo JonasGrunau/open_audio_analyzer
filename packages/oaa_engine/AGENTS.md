@@ -108,6 +108,21 @@ Dart bindings for the engine, plus the build hook that compiles it.
 
 - **The typed lists are windows onto native memory, not copies.** Writing to one
   corrupts the engine's snapshot. They are valid only until `dispose()`.
+- **There is no `NativeFinalizer`, and adding one would not help.** `dispose()`
+  is the only thing that frees an engine, and the case that motivates a
+  finalizer is the case a finalizer cannot reach: a Flutter hot restart throws
+  the isolate away rather than collecting it, so nothing runs — not a finalizer,
+  not a `State.dispose`, not a `finally`. Meanwhile this library and every
+  thread it started survive, because the *process* did. The orphan goes on
+  metering, and on macOS goes on owning a Core Audio process tap and the private
+  aggregate device beneath it, which the source menu used to offer straight back
+  to the user, one entry per restart.
+  `OaaEngine.resetAll()` is the answer, and `lib/main.dart` is its only caller:
+  an entry point is the one place where reclaiming every engine in the process
+  is safe, because a fresh isolate holds no handles to dangle. It returns 0 in
+  every shipping run. **Do not reach for it to close an engine that is still in
+  use** — the object left behind holds a freed handle and disposing it is a
+  double free.
 - **`spectrumOf` returns a view built at construction, never a list built on
   the call.** It is read on the frame path by three modules, and the accessor
   behind it takes the source as an `int32_t` — `oaa_spectrum_source` is kept

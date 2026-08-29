@@ -119,9 +119,14 @@ void writeSnapshotFrame(std::vector<uint8_t>& out, const oaa_snapshot& s,
   w.dbArray(s.spectrum_side, kBands);
   w.dbArray(s.spectrum_side_peak, kBands);
 
-  /* Last, and length-prefixed. A plugin always sends exactly one block. */
+  /* Last, and length-prefixed. A plugin always sends exactly one block — the
+   * newest of the four the engine's window holds since ABI 7, because a push
+   * is a block and every push is published. The window exists for readers
+   * that miss a publish, and this producer misses none. */
   w.u32(static_cast<uint32_t>(kScopeFrames));
-  w.sampleArray(s.scope, kScope);
+  const size_t newest =
+      s.scope_frames > kScopeFrames ? s.scope_frames - kScopeFrames : 0;
+  w.sampleArray(s.scope + newest * 2, kScope);
 
   /* Cheap, and it catches the one bug this file can plausibly have: a field
    * transcribed in the wrong order still totals correctly, but a field *missed*

@@ -5,11 +5,11 @@ The arrangeable canvas. GPL-3.0-or-later.
 | File | Purpose |
 |------|---------|
 | `workspace.dart` | `Workspace` state, the Riverpod controller every layout edit goes through, undo/redo, and the default preset. |
-| `grid_canvas.dart` | The canvas: positioning, drag, resize, selection, the drag preview overlay, and the six-layer stack per module that decides what a pointer over one means. |
+| `grid_canvas.dart` | The canvas: positioning, drag, resize, selection, the drag preview overlay, and the six-layer stack per module that decides what a pointer over one means — wrapped in the `TapRegion` that clears a selection on a press anywhere else. |
 | `canvas_notice.dart` | The one line the canvas says out loud. Refusals only. |
 | `module_host.dart` | The only place that knows which `ModuleKind`s exist as code, and where "too small" is decided — in cells *and* in pixels. |
 | `tab_strip.dart` | Tabs, inline rename, and the add/undo/redo buttons. Three of the four are a word with a `OaaMark` or a `+` beside it; only the tab plus stands alone. |
-| `menus.dart` | The popup menus the canvas and the strip share. |
+| `menus.dart` | The popup menus the canvas and the strip share, including `showOaaToggleMenu` — the one that holds a set rather than a value and so stays open while its rows are ticked. |
 
 The placement rules themselves are **not here** — they are pure functions over
 `TabSpec` in `oaa_core/src/grid.dart`, so the same rules hold for a preset
@@ -79,6 +79,23 @@ that decides *what a pointer means* belongs here.
 
 - **Selection is not an edit.** It never enters the undo history. Undo that
   walks back through every click before it undoes anything is undo nobody uses.
+
+- **A selection is cleared by a press anywhere else, and "anywhere else" is
+  decided by hit testing, not by the canvas.** Each `_ModuleSlot` is a
+  `TapRegion` in a group named by the module's id, and the selected one clears
+  itself from `onTapOutside` — which Flutter fires on the press for a pointer
+  that hit nothing in that group, wherever it landed: empty canvas, the menu
+  bar, the tab strip, another module. The canvas used to clear on a tap on
+  empty canvas alone, on the release, and could not have done more: a detector
+  on the canvas cannot see a press on the tab strip. Two things keep this
+  honest. **The group**, which is what makes a press on the module's own grip
+  or plot not a press away, and which a body joins through `ModuleTapGroup` —
+  the spectrum analyser's cursor dismisses on the same press by the same rule.
+  And **`isPressAway`**, asked before acting: every module menu and every panel
+  is a route above the canvas and `TapRegionSurface` sits above the
+  `Navigator`, so a press on a menu item is "outside" too, and a module that
+  deselected itself when its own menu was used could not be configured. Both
+  are in `packages/oaa_ui/lib/src/module_tap_group.dart`.
 
 - **Every affordance needs a non-keyboard, non-right-click route.** Open Audio
   Analyzer runs on tablets. Add, undo and redo are buttons in the tab strip for

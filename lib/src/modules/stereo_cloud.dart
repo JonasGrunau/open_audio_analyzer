@@ -149,6 +149,9 @@ class _StereoCloudModuleState extends State<StereoCloudModule> {
   ui.Paragraph? _mono;
   List<ui.Paragraph> _frequencyLabels = const [];
 
+  /// The widest frequency label, which is what the gutter is sized by.
+  double _frequencyInk = 0;
+
   /// Which [kHzGrid] values carry a label at the current plot height, solved
   /// when the plot resizes rather than per frame — by [fitHzLabels], the one
   /// rule every frequency axis fits by. The gridlines are all drawn; only the
@@ -238,6 +241,12 @@ class _StereoCloudModuleState extends State<StereoCloudModule> {
       _frequencyLabels = [
         for (final hz in kHzGrid) layoutParagraph(formatHz(hz), style),
       ];
+      _frequencyInk = 0;
+      for (final label in _frequencyLabels) {
+        if (label.longestLine > _frequencyInk) {
+          _frequencyInk = label.longestLine;
+        }
+      }
       _labelledFor = -1;
     }
 
@@ -266,6 +275,11 @@ class _StereoCloudPainter extends MeterPainter {
          ..color = colors.hairlineStrong
          ..strokeWidth = OaaStroke.hairline
          ..isAntiAlias = false),
+       // Two dividers stood here instead — one right of the frequency scale,
+       // one above the L/C/R strip, both in the strong hairline. See
+       // [PlotBorder] for why the field is boxed rather than ruled, and why
+       // the box is the gridlines' own ink.
+       _border = PlotBorder(colors),
        super(repaint: repaint);
 
   final MeterSource engine;
@@ -274,6 +288,7 @@ class _StereoCloudPainter extends MeterPainter {
 
   final Paint _guide;
   final Paint _centreGuide;
+  final PlotBorder _border;
 
   /// Bands quieter than this contribute nothing, whatever the frame's maximum
   /// is. The relative window below carries the picture; this absolute floor is
@@ -288,13 +303,26 @@ class _StereoCloudPainter extends MeterPainter {
   /// hit. Only what stands out of the mix places itself; see the header.
   static const double _window = 30;
 
-  static const double _labelStrip = 12;
-
   @override
   void paint(Canvas canvas, Size size) {
     if (state._passes.isEmpty) return;
 
-    final plot = Size(size.width, size.height - _labelStrip);
+    // The frequency scale in a gutter on the left and L, C, R in a strip
+    // below, both outside the field's border — the scales beside the field
+    // rather than over it, which is how Decibel lays the module out and what
+    // keeps a label from ever sitting on a mark. Below the size floor the spectrogram uses
+    // for the same decision, the gutter goes and the field is the whole width;
+    // the strip stays, because a cloud without its L and R cannot be read at
+    // all. Decided from the size alone, so nothing about the signal can flip
+    // the layout.
+    final left = state._left!;
+    final axes = size.width >= 140 && size.height >= 80;
+    final gutter = axes ? state._frequencyInk + Space.xs : 0.0;
+    final strip = Space.xs + left.height;
+    // The box, and the field inside it — see [PlotBorder]. The ring of marks
+    // is emitted in the field's own coordinates, so it moves with it.
+    final box = Rect.fromLTRB(gutter, 0, size.width, size.height - strip);
+    final plot = PlotBorder.inside(box);
     if (plot.height < 40 || plot.width <= 0) return;
 
     // A one-channel source has no stereo position to plot, and the engine says
@@ -306,7 +334,7 @@ class _StereoCloudPainter extends MeterPainter {
     // freezing it.
     final stereo = engine.channels >= 2;
 
-    var stale = state._emittedFor != plot;
+    var stale = state._emittedFor != plot.size;
 
     if (engine.generation != 0 && engine.generation != state.lastGeneration) {
       state.lastGeneration = engine.generation;
@@ -318,13 +346,16 @@ class _StereoCloudPainter extends MeterPainter {
       stale = true;
     }
 
-    if (stale) state.emit(plot);
+    if (stale) state.emit(plot.size);
 
     // The marks, as diamonds — see [_StereoCloudModuleState.emit] for the
-    // rotation. Clipped to the plot, because a mark half off its edge would
-    // otherwise be drawn over the label strip.
+    // rotation; the ring is emitted in the plot's own coordinates, so the
+    // canvas is moved to the plot's corner before it is turned. Clipped to the
+    // plot, because a mark half off its edge would otherwise be drawn into
+    // the gutter or the strip.
     canvas.save();
-    canvas.clipRect(Offset.zero & plot);
+    canvas.clipRect(plot);
+    canvas.translate(plot.left, plot.top);
     canvas.rotate(math.pi / 4);
     state._marks.draw(canvas, ui.PointMode.points, state._passes);
     canvas.restore();
@@ -339,39 +370,43 @@ class _StereoCloudPainter extends MeterPainter {
     // one that resolves in front is the one carrying the meaning.
     //
     // A gridline for every value of the shared series; a label only where the
-    // plot is tall enough for it — solved on resize, not per frame.
+    // plot is tall enough for it — solved on resize, not per frame — and only
+    // where there is a gutter to put it in.
     state.solveAxis(plot.height);
     for (var i = 0; i < kHzGrid.length; i++) {
       final y = _y(plot, bandOfHz(kHzGrid[i]));
-      if (y > 0.5 && y < plot.height - 0.5) {
-        canvas.drawLine(Offset(0, y), Offset(plot.width, y), _guide);
+      if (y > plot.top + 0.5 && y < plot.bottom - 0.5) {
+        canvas.drawLine(Offset(plot.left, y), Offset(plot.right, y), _guide);
       }
-      if (i < state._labelled.length && state._labelled[i]) {
-        // Centred on its line and kept inside the plot, as the spectrogram's
-        // are: the same series on two modules side by side has to sit the
-        // same way against the same lines.
+      if (axes && i < state._labelled.length && state._labelled[i]) {
+        // Right-aligned against the border, centred on its line and kept
+        // inside the plot, as the spectrogram's are: the same series on two
+        // modules side by side has to sit the same way against the same lines.
         final label = state._frequencyLabels[i];
         canvas.drawParagraph(
           label,
           Offset(
-            Space.xxs,
-            (y - label.height / 2).clamp(0.0, plot.height - label.height),
+            plot.left - Space.xs - label.longestLine,
+            (y - label.height / 2).clamp(plot.top, plot.bottom - label.height),
           ),
         );
       }
     }
 
+    // Drawn after the gridlines so every corner resolves in its favour.
+    _border.paint(canvas, box);
+
     final pair = state._pair!;
     canvas.drawParagraph(
       pair,
-      Offset(plot.width - pair.longestLine - Space.xs, Space.xxs),
+      Offset(plot.right - pair.longestLine - Space.sm, plot.top + Space.sm),
     );
 
-    final centre = plot.width / 2;
+    final centre = plot.center.dx;
     if (stereo) {
       canvas.drawLine(
-        Offset(centre, 0),
-        Offset(centre, plot.height),
+        Offset(centre, plot.top),
+        Offset(centre, plot.bottom),
         _centreGuide,
       );
     } else {
@@ -380,31 +415,31 @@ class _StereoCloudPainter extends MeterPainter {
       // notice says.
       final gap = state._mono!.height / 2 + Space.xs;
       canvas.drawLine(
-        Offset(centre, 0),
-        Offset(centre, plot.height / 2 - gap),
+        Offset(centre, plot.top),
+        Offset(centre, plot.center.dy - gap),
         _centreGuide,
       );
       canvas.drawLine(
-        Offset(centre, plot.height / 2 + gap),
-        Offset(centre, plot.height),
+        Offset(centre, plot.center.dy + gap),
+        Offset(centre, plot.bottom),
         _centreGuide,
       );
     }
 
-    final left = state._left!;
+    // L under the plot's left edge, R under its right, C under the centre
+    // line — under the *plot*, not the module, so each letter names the edge
+    // of the field it labels.
     final centreLabel = state._centre!;
     final right = state._right!;
-    canvas.drawParagraph(left, Offset(0, plot.height + Space.xxs));
+    final stripTop = plot.bottom + Space.xs;
+    canvas.drawParagraph(left, Offset(plot.left, stripTop));
     canvas.drawParagraph(
       centreLabel,
-      Offset(
-        (size.width - centreLabel.longestLine) / 2,
-        plot.height + Space.xxs,
-      ),
+      Offset(centre - centreLabel.longestLine / 2, stripTop),
     );
     canvas.drawParagraph(
       right,
-      Offset(size.width - right.longestLine, plot.height + Space.xxs),
+      Offset(plot.right - right.longestLine, stripTop),
     );
 
     if (!stereo) {
@@ -415,8 +450,8 @@ class _StereoCloudPainter extends MeterPainter {
       canvas.drawParagraph(
         mono,
         Offset(
-          (plot.width - mono.longestLine) / 2,
-          (plot.height - mono.height) / 2,
+          plot.center.dx - mono.longestLine / 2,
+          plot.center.dy - mono.height / 2,
         ),
       );
     }
@@ -467,8 +502,8 @@ class _StereoCloudPainter extends MeterPainter {
   }
 
   /// Low frequencies at the bottom, as on the analyser.
-  double _y(Size plot, double band) =>
-      plot.height * (1 - band / MeterShape.spectrumBands);
+  double _y(Rect plot, double band) =>
+      plot.bottom - plot.height * band / MeterShape.spectrumBands;
 
   @override
   bool shouldRepaint(_StereoCloudPainter oldDelegate) =>

@@ -35,6 +35,21 @@ typedef pthread_t oaa_thread;
 int oaa_thread_start(oaa_thread *thread, void *(*entry)(void *), void *arg);
 void oaa_thread_join(oaa_thread thread);
 
+/* A mutex, statically initialised, for the one thing in this engine that needs
+ * one: the list of live engines that oaa_engine_reset_all walks. Nothing on the
+ * measurement path takes a lock — the snapshot is a seqlock and the ring is
+ * lock-free — and nothing on the measurement path may start. */
+#if defined(_WIN32)
+typedef SRWLOCK oaa_mutex;
+#define OAA_MUTEX_INIT SRWLOCK_INIT
+#else
+typedef pthread_mutex_t oaa_mutex;
+#define OAA_MUTEX_INIT PTHREAD_MUTEX_INITIALIZER
+#endif
+
+void oaa_mutex_lock(oaa_mutex *mutex);
+void oaa_mutex_unlock(oaa_mutex *mutex);
+
 /* Monotonic seconds. Used only for pacing a synthetic source against real
  * time; measurements themselves are counted in samples, never in wall clock,
  * because a file analysed at 200x real time must produce the same numbers as
@@ -71,6 +86,13 @@ typedef struct {
 
 struct oaa_engine {
   oaa_config cfg;
+
+  /* The process-wide list of engines that were created and not destroyed, so
+   * that a hot restart's orphans can be reclaimed by the next `main`. Written
+   * only under the registry's mutex in oaa_engine.c, and NULL for an engine
+   * that failed to build — registration is the last thing oaa_engine_create
+   * does. See oaa_engine_reset_all in oaa.h. */
+  struct oaa_engine *next_live;
 
   /* --- The seqlock ----------------------------------------------------- */
   /* Odd while a publish is in flight, even when `shared` is consistent. The
@@ -167,10 +189,6 @@ struct oaa_engine {
   double tone_time;     /* seconds of generated signal, for the modulators */
   uint64_t frames_done; /* since the last reset */
   uint64_t generation;
-
-  double corr_sum_lr; /* running products for Pearson correlation */
-  double corr_sum_ll;
-  double corr_sum_rr;
 
   float sample_peak_max_linear;
 

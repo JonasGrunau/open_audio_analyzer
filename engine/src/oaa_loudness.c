@@ -189,13 +189,34 @@ void oaa_loudness_process(oaa_loudness *l, const float *interleaved,
 
 /* --- Readings ------------------------------------------------------------- */
 
+/* The floor, applied the way oaa_db_from_linear applies it to every other dB
+ * quantity the engine publishes.
+ *
+ * **A comparison against -HUGE_VAL is not a floor**, and that is what these two
+ * readings had. It catches digital silence — an energy of exactly zero — and
+ * nothing else, while the window that matters here is almost never exactly
+ * zero: the K-weighting filters ring on after the signal stops, so a window
+ * holding nothing but the tail of that ringing carries an energy of 1e-90 and
+ * reports it, faithfully, as -1860 LUFS. The reading then keeps falling as the
+ * ringing ages out of the window, and jumps back *up* to the floor at the
+ * moment the last of it leaves — a second later for momentary, three for
+ * short-term.
+ *
+ * What that looks like on screen is the whole reason it was found: a bar that
+ * falls off the bottom of its scale, stays gone, and then puts a hairline of
+ * fill back at the foot of the track seconds after the music stopped. It also
+ * reached the wire and the JSON report, where a four-figure LUFS reading is a
+ * measurement of nothing at all. */
+static double floored(double loudness) {
+  return loudness < (double)OAA_DB_FLOOR ? (double)OAA_DB_FLOOR : loudness;
+}
+
 double oaa_loudness_momentary(const oaa_loudness *l) {
   const double energy = window_energy(l, OAA_MOMENTARY_SUBBLOCKS);
   if (energy < 0.0) {
     return NAN;
   }
-  const double loudness = loudness_from_energy(energy);
-  return loudness == -HUGE_VAL ? (double)OAA_DB_FLOOR : loudness;
+  return floored(loudness_from_energy(energy));
 }
 
 double oaa_loudness_shortterm(const oaa_loudness *l) {
@@ -203,8 +224,7 @@ double oaa_loudness_shortterm(const oaa_loudness *l) {
   if (energy < 0.0) {
     return NAN;
   }
-  const double loudness = loudness_from_energy(energy);
-  return loudness == -HUGE_VAL ? (double)OAA_DB_FLOOR : loudness;
+  return floored(loudness_from_energy(energy));
 }
 
 /* Mean energy of every block at or above `from_bin`. */

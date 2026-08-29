@@ -149,6 +149,21 @@ class ConfigStore {
   Future<Map<String, Object?>?> readJsonAt(String absolutePath) =>
       _read(File(absolutePath));
 
+  /// Whether a file the user chose is still where it was.
+  ///
+  /// For the one question that is not a read: the session remembers which
+  /// preset file the canvas is open on, and a path to a file that has been
+  /// renamed, deleted or left on an unmounted drive must not become the target
+  /// of the next `Save`. False on anything that cannot be answered, because
+  /// "cannot tell" and "not there" lead to the same place — a save panel.
+  Future<bool> existsAt(String absolutePath) async {
+    try {
+      return await File(absolutePath).exists();
+    } on FileSystemException {
+      return false;
+    }
+  }
+
   Future<Map<String, Object?>?> _read(File file) async {
     try {
       if (!await file.exists()) return null;

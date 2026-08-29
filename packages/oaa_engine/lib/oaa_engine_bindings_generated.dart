@@ -48,6 +48,33 @@ external ffi.Pointer<oaa_engine> oaa_engine_create(ffi.Pointer<oaa_config> cfg);
 @ffi.Native<ffi.Void Function(ffi.Pointer<oaa_engine>)>()
 external void oaa_engine_destroy(ffi.Pointer<oaa_engine> engine);
 
+/// Destroys every engine this process created and did not destroy, and returns
+/// how many there were.
+///
+/// This exists for exactly one caller: an application's entry point, run before
+/// it creates its first engine. Nothing in a shipping run ever has anything to
+/// reclaim — the count is zero at process start and `oaa_engine_destroy` keeps
+/// it that way — so this is a no-op everywhere except the one place it is not.
+///
+/// That place is a Flutter hot restart. It discards the Dart isolate and re-runs
+/// `main` **in the same process**, so no Dart finalizer and no `dispose` runs,
+/// while this library and every thread it started carry on untouched. The
+/// orphaned engine goes on running its analysis thread against a monotonic clock
+/// for the life of the process, and on macOS it also goes on owning a Core Audio
+/// process tap and the private aggregate device underneath it — which
+/// `oaa_devices_enumerate` then offers back to the user as a capture device
+/// named "Open Audio Analyzer System Capture", one per restart. Fifteen
+/// development restarts is fifteen live aggregates, fifteen analysis threads and
+/// a machine at full tilt.
+///
+/// **Any handle the caller still holds is dangling once this returns**, which is
+/// why the entry point is the only sound place to call it: a fresh isolate holds
+/// none, and everything this frees belongs to an isolate that no longer exists.
+/// It is not a way to close engines that are still in use, and it is not a
+/// substitute for `oaa_engine_destroy`.
+@ffi.Native<ffi.Uint32 Function()>()
+external int oaa_engine_reset_all();
+
 @ffi.Native<ffi.Int32 Function(ffi.Pointer<oaa_engine>)>()
 external int oaa_engine_start(ffi.Pointer<oaa_engine> engine);
 
@@ -527,12 +554,18 @@ final class oaa_snapshot extends ffi.Struct {
   @ffi.Array.multi([512])
   external ffi.Array<ffi.Float> spectrum_pan;
 
-  /// The last OAA_SCOPE_POINTS stereo frames, interleaved x=left, y=right,
-  /// oldest first. Raw sample values, **not** rotated into goniometer axes:
-  /// that rotation is a display choice, and doing it here would bake one
-  /// module's convention into the ABI every other consumer has to undo. Mono
-  /// publishes the same value in both, which draws the diagonal it should.
-  @ffi.Array.multi([2048])
+  /// The last OAA_SCOPE_FRAMES stereo frames, interleaved x=left, y=right,
+  /// oldest first; `scope_frames` of them hold audio, from index 0. Raw sample
+  /// values, **not** rotated into goniometer axes: that rotation is a display
+  /// choice, and doing it here would bake one module's convention into the ABI
+  /// every other consumer has to undo. Mono publishes the same value in both,
+  /// which draws the diagonal it should.
+  ///
+  /// A reader that missed a publish finds the missed block still here, ahead
+  /// of the newest — see OAA_SCOPE_FRAMES. It knows how much is new from
+  /// `elapsed_seconds`, and takes that many pairs from the end. Grown from one
+  /// block in ABI 7, which is the one field of this struct whose size moved.
+  @ffi.Array.multi([8192])
   external ffi.Array<ffi.Float> scope;
 
   /// Fraction of the gated short-term blocks that fell in each bin, so the bins
@@ -580,6 +613,16 @@ final class oaa_snapshot extends ffi.Struct {
 
   @ffi.Array.multi([512])
   external ffi.Array<ffi.Float> spectrum_side_peak;
+
+  /// --- Appended in ABI 7 ------------------------------------------------- */
+  /// /* How many pairs of `scope`, from index 0, hold measured audio. Climbs from
+  /// zero at oaa_engine_reset to OAA_SCOPE_FRAMES and stays there; anything
+  /// past it is whatever was there before, never a sample somebody played.
+  @ffi.Uint32()
+  external int scope_frames;
+
+  @ffi.Uint32()
+  external int reserved7;
 }
 
 /// Which signal a spectrum is read from — the argument to
@@ -754,7 +797,7 @@ final class oaa_file_info extends ffi.Struct {
 
 final class oaa_file extends ffi.Opaque {}
 
-const int OAA_ABI_VERSION = 6;
+const int OAA_ABI_VERSION = 8;
 
 const int OAA_MAX_CHANNELS = 8;
 
@@ -765,6 +808,8 @@ const double OAA_SPECTRUM_HZ_LOW = 20.0;
 const double OAA_SPECTRUM_HZ_HIGH = 20000.0;
 
 const int OAA_SCOPE_POINTS = 1024;
+
+const int OAA_SCOPE_FRAMES = 4096;
 
 const int OAA_HISTOGRAM_BINS = 120;
 

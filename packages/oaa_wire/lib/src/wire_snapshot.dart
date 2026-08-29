@@ -81,14 +81,28 @@ class WireSnapshot implements MeterSource {
   };
 
   @override
-  /// Allocated at the largest a frame may carry, and only partly filled — read
-  /// [scopeFrames], never `scope.length`. Allocated once like every array here,
-  /// because a painter may hold it across a frame.
+  /// A window of the newest runs decoded, oldest first, and only partly
+  /// filled — read [scopeFrames], never `scope.length`. Allocated once like
+  /// every array here, because a painter may hold it across a frame.
   final Float32List scope = Float32List(MeterShape.maxScopeFrames * 2);
 
+  /// How much of the window holds audio. **Every run appends; nothing here
+  /// replaces.** Two frames can land between two display ticks — a plugin at a
+  /// 2048-frame host buffer sends two per callback, microseconds apart — and a
+  /// snapshot that held only the newest run handed the oscilloscope the second
+  /// block and lost the first, on every callback, which it drew as silence.
+  /// The window keeps both, and a reader takes what `elapsedSeconds` says is
+  /// new from the end; see `MeterSource.scopeFrames`. A run after a stale
+  /// spell starts the window over, and a window that fills drops its oldest.
   @override
   int get scopeFrames => _scopeFrames;
   int _scopeFrames = 0;
+
+  /// The pairs the most recent [decode] appended — what one frame carried, as
+  /// opposed to what the window holds. Diagnostics: it is how a test tells a
+  /// relay that sent several blocks in one frame from one that did not.
+  int get lastRunFrames => _lastRunFrames;
+  int _lastRunFrames = 0;
 
   @override
   final Float32List histogram = Float32List(MeterShape.histogramBins);
@@ -274,8 +288,8 @@ class WireSnapshot implements MeterSource {
         offset + SnapshotWireLegacy.offsetScope,
         scope,
         MeterShape.scopePoints * 2,
+        _beginRun(MeterShape.scopePoints) * 2,
       );
-      _scopeFrames = MeterShape.scopePoints;
       _readFloats(
         payload,
         offset + SnapshotWireLegacy.offsetHistogram,
@@ -353,16 +367,38 @@ class WireSnapshot implements MeterSource {
       if (frames > MeterShape.maxScopeFrames) {
         frames = MeterShape.maxScopeFrames;
       }
-      _scopeFrames = frames;
       _readSamples(
         payload,
         offset + (v4 ? SnapshotWireV4.offsetScope : SnapshotWire.offsetScope),
         scope,
         frames * 2,
+        _beginRun(frames) * 2,
       );
     }
 
     _stale = false;
+  }
+
+  /// Makes room at the end of the window for a run of [frames] pairs and
+  /// returns the pair it is written from. See [scopeFrames].
+  int _beginRun(int frames) {
+    // A run after a stale spell starts the window over: the block of NaN that
+    // going stale left here is the unavailable state, not audio that came
+    // before this run.
+    if (_stale) _scopeFrames = 0;
+
+    const capacity = MeterShape.maxScopeFrames;
+    var held = _scopeFrames;
+    if (held + frames > capacity) {
+      // Keep the newest. A copy of at most one window, and only on a link
+      // that outran a reader by four blocks.
+      final kept = capacity - frames;
+      if (kept > 0) scope.setRange(0, kept * 2, scope, (held - kept) * 2);
+      held = kept > 0 ? kept : 0;
+    }
+    _scopeFrames = held + frames;
+    _lastRunFrames = frames;
+    return held;
   }
 
   /// The per-source spectra to "not measured".
@@ -439,8 +475,10 @@ class WireSnapshot implements MeterSource {
     scope.fillRange(0, scope.length, double.nan);
     // A block's worth of NaN rather than nothing, so the trail-keeping modules
     // are handed the unavailable state and clear rather than holding their last
-    // picture — which is the whole point of going stale. See [markStale].
+    // picture — which is the whole point of going stale. See [markStale]. The
+    // next run decoded starts the window over rather than appending to it.
     _scopeFrames = MeterShape.scopePoints;
+    _lastRunFrames = 0;
     histogram.fillRange(0, histogram.length, double.nan);
   }
 
@@ -456,14 +494,19 @@ class WireSnapshot implements MeterSource {
     }
   }
 
+  /// [count] samples into [into] from index [start] — the scope's run lands at
+  /// the end of its window, not at zero.
   static void _readSamples(
     ByteData from,
     int at,
     Float32List into, [
     int? count,
+    int start = 0,
   ]) {
     for (var i = 0; i < (count ?? into.length); i++) {
-      into[i] = Quantise.sampleBack(from.getInt16(at + i * 2, Endian.little));
+      into[start + i] = Quantise.sampleBack(
+        from.getInt16(at + i * 2, Endian.little),
+      );
     }
   }
 
@@ -480,9 +523,10 @@ class WireSnapshot implements MeterSource {
     int at,
     Float32List into, [
     int? count,
+    int start = 0,
   ]) {
     for (var i = 0; i < (count ?? into.length); i++) {
-      into[i] = from.getFloat32(at + i * 4, Endian.little);
+      into[start + i] = from.getFloat32(at + i * 4, Endian.little);
     }
   }
 

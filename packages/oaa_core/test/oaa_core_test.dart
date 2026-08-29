@@ -23,6 +23,57 @@ void main() {
       expect(Metric.values.map((m) => m.label), isNot(contains('DR-I')));
     });
 
+    test('the five the engine accumulates are named, and only those', () {
+      // The line is "since reset" against "a window that has already moved
+      // on", and it decides what a summary of a programme may take an extreme
+      // over — an Alert Meter's latch at one end, `analyseFile`'s running
+      // minima at the other.
+      expect(Metric.values.where((m) => m.isAccumulated).toSet(), {
+        Metric.lufsIntegrated,
+        Metric.loudnessRange,
+        Metric.truePeakMax,
+        Metric.samplePeakMax,
+        Metric.odrIntegrated,
+      });
+      // The pair that has to fall on opposite sides, and the reason any of
+      // this is written down: ODR-S is a three-second window whose minimum is
+      // a real passage of the programme, and ODR-I is derived from two figures
+      // the engine is still converging on.
+      expect(Metric.odrShort.isAccumulated, isFalse);
+      expect(Metric.odrIntegrated.isAccumulated, isTrue);
+    });
+
+    test('worse is the direction the quantity actually fails in', () {
+      // Louder is worse for a level.
+      expect(Metric.lufsShort.isWorse(-8.0, -14.0), isTrue);
+      expect(Metric.truePeak.isWorse(-6.0, -1.0), isFalse);
+
+      // Lower is worse for a ratio a floor is set under, and for correlation,
+      // which fails into anti-phase.
+      expect(Metric.odrShort.isWorse(6.0, 9.0), isTrue);
+      expect(Metric.correlation.isWorse(-0.4, 0.2), isTrue);
+
+      // **Crest is one of those, and read the other way until 0.14.1.** It is
+      // peak minus RMS, so the highest crest of a session is its most open
+      // moment — held up and printed as the worst of it.
+      expect(
+        Metric.crestFactor.isWorse(4.0, 14.0),
+        isTrue,
+        reason: 'a squashed block is the failure, not the open one',
+      );
+      expect(Metric.crestFactor.isWorse(18.0, 14.0), isFalse);
+
+      // Balance fails in both directions, being signed around a centre. A
+      // plain `>` never noticed a mix pulled hard left at all.
+      expect(Metric.balance.isWorse(-0.6, 0.3), isTrue);
+      expect(Metric.balance.isWorse(0.1, -0.5), isFalse);
+
+      // Nothing measured yet loses to everything, on every metric.
+      for (final metric in Metric.values) {
+        expect(metric.isWorse(0.0, double.nan), isTrue, reason: metric.label);
+      }
+    });
+
     test('every id round-trips', () {
       for (final metric in Metric.values) {
         expect(Metric.fromId(metric.id), metric);
@@ -44,6 +95,36 @@ void main() {
     test('infinities are shown as infinities', () {
       expect(Metric.rms.format(double.negativeInfinity), '-∞');
       expect(Metric.rms.format(double.infinity), '∞');
+    });
+
+    test('a level at the floor is silence, not a four-figure reading', () {
+      // The engine clamps every dB level at the floor, so `-144.0` reaching
+      // the formatter means "at or below it" and never "measured −144".
+      // Printed as a number it is precise, plausible and nobody's
+      // measurement — and it disagrees with the scale beside it, whose
+      // bottom tick already reads `-∞`.
+      expect(Metric.rms.format(MeterShape.dbFloor), '-∞');
+      expect(Metric.lufsIntegrated.format(MeterShape.dbFloor), '-∞');
+      expect(Metric.truePeakMax.format(MeterShape.dbFloor), '-∞');
+      expect(Metric.peak.format(MeterShape.dbFloor - 10), '-∞');
+      // A hair above it is a level again, and prints as one.
+      expect(Metric.rms.format(MeterShape.dbFloor + 0.1), '-143.9');
+    });
+
+    test('a difference at the floor is a difference', () {
+      // The ranges and the two dynamics readings are subtractions of two
+      // levels, so they never reach the clamp: −144 LU is an ordinary — if
+      // absurd — reading and must print as one. Listing one of these as an
+      // absolute level would silently turn it into `-∞`.
+      for (final metric in [
+        Metric.loudnessRange,
+        Metric.crestFactor,
+        Metric.odrShort,
+        Metric.odrIntegrated,
+      ]) {
+        expect(metric.isAbsoluteLevel, isFalse, reason: metric.id);
+        expect(metric.format(MeterShape.dbFloor), '-144.0', reason: metric.id);
+      }
     });
   });
 
@@ -286,6 +367,161 @@ void main() {
     });
   });
 
+  group('the Alert Meter\'s settings', () {
+    ModuleSpec alert(Map<String, Object?> options) => ModuleSpec(
+      id: 'm',
+      kind: ModuleKind.alertMeter,
+      rect: const GridRect(column: 0, row: 0, columns: 4, rows: 3),
+      options: options,
+    );
+
+    test('watches true peak until it is told otherwise', () {
+      // The kind's own default, and the reason the module existed for four
+      // phases with no metric row in its menu: it was the only reading it
+      // could ever have been showing.
+      //
+      // The **live** reading, not the maximum since reset. Both print the same
+      // number on a latch — the largest windowed peak of a session is that
+      // session's peak — but only one of them is latched at all: `TP Max` is
+      // the engine's to hold, so an Alert Meter on it reads rather than
+      // latches, and the module shipped by default with the one behaviour it
+      // exists for switched off.
+      expect(alert(const {}).metric, Metric.truePeak);
+      expect(alert(const {}).metric.isAccumulated, isFalse);
+      expect(alert({'metric': 'lufs_i'}).metric, Metric.lufsIntegrated);
+      expect(alert({'metric': 'lra'}).metric, Metric.loudnessRange);
+    });
+
+    test('states what it measured until it is asked for the distance', () {
+      expect(alert(const {}).alertDelta, isFalse);
+      expect(alert({'delta': true}).alertDelta, isTrue);
+      expect(alert({'delta': false}).alertDelta, isFalse);
+      // Anything that is not the boolean is off — the same rule the
+      // oscilloscope's box follows, and what every preset written before this
+      // existed meant.
+      expect(alert({'delta': 'on'}).alertDelta, isFalse);
+      expect(alert({'delta': 1}).alertDelta, isFalse);
+    });
+
+    test('carries both settings through a round trip', () {
+      final spec = alert({'metric': 'lufs_i', 'delta': true});
+      final back = ModuleSpec.fromJson(spec.toJson())!;
+      expect(back.metric, Metric.lufsIntegrated);
+      expect(back.alertDelta, isTrue);
+    });
+  });
+
+  group('the Validator\'s checks', () {
+    ModuleSpec validator(Map<String, Object?> options) => ModuleSpec(
+      id: 'm',
+      kind: ModuleKind.validator,
+      rect: const GridRect(column: 0, row: 0, columns: 6, rows: 4),
+      options: options,
+    );
+
+    test('judges everything until it is told otherwise', () {
+      // What every preset written before the setting existed meant, and what a
+      // freshly placed Validator opens on: a delivery table that starts by
+      // leaving something out is one whose verdict cannot be read without
+      // opening the menu first.
+      expect(validator(const {}).validatorChecks, ValidatorCheck.values);
+    });
+
+    test('keeps an empty list empty', () {
+      // The statement that separates "nothing chosen" from "nothing said". A
+      // module the user emptied on purpose that silently refilled itself would
+      // be the only setting here that does not stay put.
+      expect(validator({'checks': const []}).validatorChecks, isEmpty);
+    });
+
+    test('reads the chosen ones in the order the table prints them', () {
+      // Declaration order, not the file's. A preset lists whatever order the
+      // rows were ticked in, and a table that reordered itself to match would
+      // stop mirroring the report it exists to agree with.
+      expect(
+        validator({
+          'checks': const ['odr_s', 'lufs_i'],
+        }).validatorChecks,
+        [ValidatorCheck.lufsIntegrated, ValidatorCheck.odrShort],
+      );
+    });
+
+    test('ignores an id it does not know', () {
+      // A preset written by a newer version names a check this build has never
+      // heard of. It is not a check here, and it is not a parse failure either
+      // — see the note on `ModuleSpec.options`.
+      expect(
+        validator({
+          'checks': const ['lufs_i', 'phase_of_the_moon'],
+        }).validatorChecks,
+        [ValidatorCheck.lufsIntegrated],
+      );
+      // And a value that is not a list at all is a preset that says nothing.
+      expect(
+        validator({'checks': 'lufs_i'}).validatorChecks,
+        ValidatorCheck.values,
+      );
+    });
+
+    test('carries the set through a round trip', () {
+      final spec = validator({
+        'checks': const ['lufs_i', 'tp_max'],
+      });
+      final back = ModuleSpec.fromJson(spec.toJson())!;
+      expect(back.validatorChecks, [
+        ValidatorCheck.lufsIntegrated,
+        ValidatorCheck.truePeak,
+      ]);
+    });
+
+    test('only the dynamics rows depend on the target', () {
+      // The three loudness criteria are in every target by construction; the
+      // two floors are optional, and a row a target says nothing about is a
+      // row that could not be judged. See `Calibration.odrIntegratedFloor`.
+      const withoutFloors = Calibration(
+        id: 'test_no_floors',
+        name: 'No floors',
+        lufsTarget: -14,
+        lufsTolerance: 0.5,
+        truePeakMax: -1,
+        loudnessRangeMax: 20,
+      );
+      const withFloors = Calibration(
+        id: 'test_floors',
+        name: 'Floors',
+        lufsTarget: -14,
+        lufsTolerance: 0.5,
+        truePeakMax: -1,
+        loudnessRangeMax: 20,
+        odrIntegratedFloor: 8,
+        odrShortFloor: 6,
+      );
+
+      for (final check in ValidatorCheck.values) {
+        expect(
+          check.judgedBy(withoutFloors),
+          check != ValidatorCheck.odrIntegrated &&
+              check != ValidatorCheck.odrShort,
+          reason: '${check.label} against a target with no dynamics floor',
+        );
+        expect(check.judgedBy(withFloors), isTrue, reason: check.label);
+      }
+    });
+
+    test('names its rows after the metrics they judge, bar one', () {
+      // The ODR-S row is judged against the lowest reading since the reset,
+      // not the live one, and says so — a row reading `ODR-S` beside a number
+      // that is not the ODR-S every other module is showing would be read as a
+      // disagreement.
+      expect(ValidatorCheck.lufsIntegrated.label, Metric.lufsIntegrated.label);
+      expect(ValidatorCheck.odrShort.label, 'ODR-S MIN');
+      // And its id is its metric's, so a preset holds one spelling of each.
+      for (final check in ValidatorCheck.values) {
+        expect(check.id, check.metric.id);
+      }
+    });
+  });
+
   group('the oscilloscope\'s numbers', () {
     ModuleSpec scope(Map<String, Object?> options) => ModuleSpec(
       id: 'm',
@@ -379,6 +615,16 @@ void main() {
       expect(scope(const {}).scopeTrigger.sweeps, isFalse);
       expect(scope({'trigger': 'transient'}).scopeTrigger.sweeps, isTrue);
       expect(scope({'trigger': 'chorus'}).scopeTrigger, ScopeTrigger.auto);
+    });
+
+    test('the channel in front is the left one until it is swapped', () {
+      // The order the module drew in before the setting existed, which is what
+      // every preset written before it means.
+      expect(scope(const {}).scopeFront, ScopeFront.left);
+      expect(scope({'front': 'right'}).scopeFront, ScopeFront.right);
+      expect(scope({'front': 'middle'}).scopeFront, ScopeFront.left);
+      expect(ScopeFront.left.swapped, ScopeFront.right);
+      expect(ScopeFront.right.swapped, ScopeFront.left);
     });
   });
 
@@ -488,6 +734,31 @@ void main() {
       expect(
         spec.copyWith(options: const {'tilt': '9'}).spectrumTilt,
         SpectrumTilt.db4p5,
+      );
+    });
+
+    test('a module with no range written down draws 90 dB', () {
+      for (final range in SpectrumRange.values) {
+        expect(SpectrumRange.fromId(range.id), range);
+        // The step divides the range, or the floor would carry no gridline.
+        expect(range.decibels % range.step, 0);
+      }
+      expect(SpectrumRange.fromId('90 dB'), isNull);
+
+      const spec = ModuleSpec(
+        id: 'm1',
+        kind: ModuleKind.spectrumAnalyzer,
+        rect: GridRect(column: 0, row: 0, columns: 6, rows: 4),
+      );
+      expect(spec.spectrumRange, SpectrumRange.db90);
+      expect(
+        spec.copyWith(options: const {'range': '60'}).spectrumRange,
+        SpectrumRange.db60,
+      );
+      // A range this build does not have, from a preset written by a newer one.
+      expect(
+        spec.copyWith(options: const {'range': '150'}).spectrumRange,
+        SpectrumRange.db90,
       );
     });
   });

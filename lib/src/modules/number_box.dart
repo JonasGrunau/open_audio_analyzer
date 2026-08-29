@@ -20,6 +20,14 @@ import '../data/metric_reader.dart';
 /// with the verdict when the reading stands past its limit — a statement the
 /// eye catches from across a room before the digits resolve.
 ///
+/// The glow is the one thing here that is painted **outside** what the frame
+/// hands the body, and it is why the canvas asks `ModuleFrame` for `bleed` on
+/// this kind alone: light rising out of the panel's own foot is the effect,
+/// and inside the twelve-pixel inset it was instead a lit rectangle sitting in
+/// a dark gutter on all four sides. It reaches the panel's edges and the rule
+/// under the title; the frame clips it there, so the wash cannot leave the
+/// module it belongs to.
+///
 /// The simplest of the fourteen modules, and therefore the one that establishes
 /// the pattern all the others follow:
 ///
@@ -105,28 +113,14 @@ class _NumberBoxPainter extends MeterPainter {
   final OaaColors colors;
   final ReadoutPainter readout;
 
-  /// The bottom glow, rebuilt only when the module resizes or the verdict
-  /// changes colour — which happens when a reading crosses its limit, not per
-  /// frame. The same bargain every cached shader in the application makes.
-  final Paint _glowPaint = Paint();
-  ui.Shader? _glow;
-  Size? _glowSize;
-  Color? _glowColor;
+  /// How far past the body the glow reaches on all four sides, which is
+  /// exactly the frame's inset — so the wash is drawn to the *panel* and the
+  /// body's margin, which is a margin for content, does not fence light in.
+  static const double _bleed = Space.smd;
 
-  void _prepareGlow(Size size, Color color) {
-    if (_glow != null && _glowSize == size && _glowColor == color) return;
-    _glowSize = size;
-    _glowColor = color;
-    final radius = size.width * 0.75;
-    // Anchored below the bottom edge so only the crown of the circle reaches
-    // into the module: a glow, not a spotlight.
-    _glow = ui.Gradient.radial(
-      Offset(size.width / 2, size.height + radius * 0.3),
-      radius,
-      [color.withValues(alpha: 0.28), color.withValues(alpha: 0.0)],
-    );
-    _glowPaint.shader = _glow;
-  }
+  /// Rising out of the module's foot, under the digits. Shared with the Alert
+  /// Meter, which rises out of its left edge — see [EdgeGlow].
+  final EdgeGlow _glow = EdgeGlow(GlowEdge.bottom);
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -138,18 +132,17 @@ class _NumberBoxPainter extends MeterPainter {
     final state = classify(metric, value, calibration);
     final color = colorForState(state, colors);
 
-    // The glow is always present — a box with no verdict glows in the accent,
-    // because the glow is part of what a Number Box looks like and a box that
-    // only lit up on a target would read as broken until one was set. Only a
-    // reading past a limit changes its colour.
-    if (size.width > 0) {
-      final glowColor = switch (state) {
-        ReadingState.over => colors.over,
-        ReadingState.warn => colors.warn,
-        _ => colors.accent,
-      };
-      _prepareGlow(size, glowColor);
-      canvas.drawRect(Offset.zero & size, _glowPaint);
+    // The glow is the digits' own colour, at the scale of the panel — a box
+    // with no verdict glows in the accent, because the glow is part of what a
+    // Number Box looks like and a box that only lit up on a target would read
+    // as broken until one was set. Only a reading past a limit changes it.
+    //
+    // **Except where there is no reading**, which is the em dash: the light is
+    // the reading's verdict, and a quantity nobody measured has none. A lit
+    // panel under a dash says the module is doing something it is not.
+    if (size.width > 0 && state != ReadingState.unavailable) {
+      // The panel, in the body's own coordinates.
+      _glow.paint(canvas, (Offset.zero & size).inflate(_bleed), color);
     }
 
     // Scale the number to the box rather than fixing it, so a Number Box works

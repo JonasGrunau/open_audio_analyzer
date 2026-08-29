@@ -226,15 +226,30 @@ void main() {
       }
     });
 
-    test('state colours are distinct', () {
+    test('a reading is the accent, and a problem is its own colour', () {
       const colors = OaaColors.precisionInstrument;
       final used = {
         for (final state in ReadingState.values) colorForState(state, colors),
       };
+      // Four colours for five states: a reading with no verdict and a reading
+      // in spec are both the signal hue, because the hue says "this is a
+      // measurement" and the palette spends its other colours on what is
+      // *wrong* with one.
+      expect(used.length, ReadingState.values.length - 1);
+      expect(
+        colorForState(ReadingState.neutral, colors),
+        colorForState(ReadingState.inSpec, colors),
+      );
       // "Over" must never share a colour with anything else, or the one colour
       // in the interface that means something stops meaning it.
-      expect(used.length, ReadingState.values.length);
       expect(colorForState(ReadingState.over, colors), colors.over);
+      // And no reading is ever the ink of the chrome around it. This is the
+      // assertion that would have caught the state these five were in for
+      // eleven phases: a number in `textPrimary` beside a menu label in
+      // `textPrimary`.
+      for (final state in ReadingState.values) {
+        expect(colorForState(state, colors), isNot(colors.textPrimary));
+      }
     });
   });
 

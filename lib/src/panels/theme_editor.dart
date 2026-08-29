@@ -800,12 +800,15 @@ const Map<SkinColor, String> _purpose = {
   SkinColor.hairlineStrong:
       'A border that has to be seen: selection, hover, the active module. A '
       'wash of it is also the row a menu already holds.',
-  SkinColor.textPrimary: 'Readings, and anything the eye should land on first.',
+  SkinColor.textPrimary:
+      'Panel and menu text, and anything the eye should land on first. Not a '
+      'reading — those are the accent.',
   SkinColor.textMuted:
       'Labels, units, and the em dash that means a quantity was not measured.',
   SkinColor.textFaint: 'Scale ticks and disabled state. Meant to recede.',
   SkinColor.accent:
-      'In spec, and reserved for it — nothing on the canvas borrows this hue.',
+      'Every reading a module prints, and a reading in spec — nothing else on '
+      'the canvas borrows this hue.',
   SkinColor.warn: 'Approaching a limit.',
   SkinColor.over: 'Over a limit.',
   SkinColor.meterTrack: 'The unfilled part of a bar or arc.',

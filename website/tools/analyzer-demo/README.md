@@ -51,8 +51,8 @@ continuing from the position it had reached rather than jumping.
 
 Decoding, unlike playing, needs no interaction — so it happens on load. That is
 what lets the oscilloscope and the phase scope draw from the first frame: they
-read the last 1024 stereo frames, which is the audio itself, and it is
-deliberately not in the recording. Storing it would have been sending a browser
+read the newest stereo frames of the signal, which is the audio itself, and it
+is deliberately not in the recording. Storing it would have been sending a browser
 a second copy of what it is already playing, at 8 kB a frame.
 
 ## Running it by hand

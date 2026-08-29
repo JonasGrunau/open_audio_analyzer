@@ -45,42 +45,40 @@ import '../clock/meter_clock.dart';
 /// ---------------------------------------------------------------------------
 /// It needs nothing from the engine, and that costs it one thing from the clock
 ///
-/// `oaa_snapshot.scope` already carries the last 1024 stereo frames, published
-/// once per analysis block — and an analysis block *is* 1024 frames, so
-/// consecutive publishes are contiguous: no overlap to deduplicate and no gap
-/// to invent. Everything below is built on that buffer, so the module works
-/// unchanged on a tablet reading a socket.
+/// `oaa_snapshot.scope` already carries the newest stereo frames measured —
+/// four analysis blocks of them, oldest first — and [MeterSource.scopeFrames]
+/// says how many hold audio. Everything below is built on that buffer, so the
+/// module works unchanged on a tablet reading a socket, where the buffer is a
+/// window of the runs the link carried rather than of the blocks an engine
+/// published.
 ///
-/// **Read [MeterSource.scopeFrames], never `scope.length`.** Over a wire the
-/// list is allocated at the protocol's maximum and only partly filled. That
-/// coincidence of 1024 with 1024 is also exactly what a remote display cannot
-/// have: its link runs at 15, 30 or 60 Hz against an engine measuring at about
-/// 47, so a frame stands for more audio than one block holds and the host sends
-/// what actually elapsed. This module was the reason that had to change — it
-/// detected the shortfall correctly and cleared its ring every single frame,
-/// which reads as a scope that will not draw rather than as a link that is
-/// starving it.
-///
-/// **A publish nobody reads is gone, though.** `oaa_snapshot_acquire` is a
-/// seqlock with one slot, so contiguity holds only for a reader that sees every
-/// publish — and the meters repaint at a rate the user chooses. At 30 fps the
-/// reader asks every 33 ms against a publish every 21 ms and loses one in
-/// three. Folded in from `paint`, this module would have drawn a third of its
-/// width as holes and never accumulated enough to fill a window longer than one
-/// buffer. So it consumes from `MeterClock.measurements`, which is unthrottled,
-/// and paints on the throttled notification like everything else. That channel
-/// exists for this module and its comment says why.
-///
-/// What is left is checked rather than assumed, because three things still
-/// break contiguity: a device hands over whatever has arrived, which is usually
-/// fewer than 1024 frames; a file or a plugin pushes whatever block size it
-/// has, which can be more; and a link that drops a frame loses one outright.
+/// **What is new is worked out from time, never from the buffer.**
 /// [MeterSource.elapsedSeconds] is the engine's own count of measured frames
 /// divided by the sample rate, so the difference between two reads is exactly
-/// how much new audio there was — fewer frames than the buffer holds means take
-/// the newest few, more means the rest was measured and never carried here.
-/// Those become blank columns. They are not filled in with what happens to
-/// still be sitting in the buffer.
+/// how much audio arrived in between, and that many of the newest pairs are
+/// this measurement's — the rest was already seen. A device hands over
+/// whatever has arrived, usually fewer than a block; a plugin pushes whole
+/// blocks; a relay sends what elapsed. Fewer pairs held than time says arrived
+/// means the rest was measured and is gone — a link that dropped a frame, or a
+/// source that outran a four-block window — and those become blank columns.
+/// They are not filled in with what happens to still be sitting in the buffer.
+///
+/// **A publish nobody reads is gone, and the four blocks are why that is
+/// survivable.** `oaa_snapshot_acquire` is a seqlock with one slot, and every
+/// reader runs at the display's rate: at 96 kHz a block is 10.7 ms against a
+/// 16.7 ms tick, an engine catching up after a stall publishes back to back,
+/// and a plugin at a 2048-frame host buffer sends two frames per callback,
+/// microseconds apart. While the buffer held one block, each of those handed
+/// this module the second block and lost the first — which it drew, correctly
+/// and uselessly, as a block of silence: a waveform in bursts, with a gap
+/// between every pair. The window keeps the missed block ahead of the one that
+/// was read, and the arithmetic above takes both.
+///
+/// The module still consumes from `MeterClock.measurements`, which is
+/// unthrottled, and paints on the throttled notification like everything
+/// else. What that buys now is smaller and still real: a column's colour is
+/// the spectrum of the block it came from, and a reader at 30 fps folding two
+/// blocks per look would colour both by one.
 ///
 /// ---------------------------------------------------------------------------
 /// Two lanes by default, and never two hues
@@ -154,21 +152,38 @@ import '../clock/meter_clock.dart';
 ///     to the signal is on screen rather than inferred.
 ///
 /// ---------------------------------------------------------------------------
-/// Two of the settings are controls on the module, and only here
+/// Three of the settings are controls on the module, and only here
 ///
 /// The height and the trigger level are dragged, in a strip along the bottom of
 /// the plot, because both are chosen by looking: you move them until the
 /// picture is right, and a menu that closes over the picture on every step
 /// cannot be used for that. They are the only module settings in the
-/// application that are not menu rows, and they are the only two whose value is
-/// a number rather than one of a handful of named things.
+/// application whose value is a number rather than one of a handful of named
+/// things.
+///
+/// [ScopeFront] is the third, and it is a named choice that is still not a menu
+/// row — the one exception in the application. It is set by clicking the legend
+/// at the leading edge of the strip, which is the same argument: which overlaid
+/// trace you want in front is whichever one you are looking at, and it changes
+/// between one glance and the next. Making the legend the control also puts it
+/// somewhere a pointer can reach — a legend painted into the plot is
+/// unreachable by pointer, by keyboard and by every screen reader, because
+/// `MeterPainter` deliberately takes no hits.
+///
+/// The strip's other end carries the span. It is not a control and it is here
+/// for the reader rather than for the pointer: a number that names the width of
+/// the x axis reads better on the row under that axis than printed over the
+/// waveform it is describing.
 ///
 /// The strip is chrome and behaves like the rest of the module's chrome: it is
 /// dropped when there is no room for it, on the same principle that drops the
 /// graticule and the lane letters, because what a small module keeps is the
-/// signal. It is also absent wherever there is nothing to write a setting *to*
-/// — a remote display draws this module from the same painters and changes
-/// nothing about the layout it was sent.
+/// signal. Its two end cells go one step earlier, and what they are dropped
+/// *to* is the corners of the plot, where both were drawn before there was a
+/// strip. The strip is also absent wherever there is nothing to write a setting
+/// *to* — a remote display draws this module from the same painters and changes
+/// nothing about the layout it was sent, so it draws the legend and the span
+/// where the painter has always drawn them.
 class OscilloscopeModule extends StatefulWidget {
   const OscilloscopeModule({
     required this.engine,
@@ -178,6 +193,7 @@ class OscilloscopeModule extends StatefulWidget {
     this.division = ScopeDivision.bar1,
     this.grid = ScopeGrid.straight,
     this.stereo = ScopeStereo.lanes,
+    this.front = ScopeFront.left,
     this.trigger = ScopeTrigger.auto,
     this.threshold = ScopeThreshold.defaultDb,
     this.autoThreshold = false,
@@ -205,6 +221,11 @@ class OscilloscopeModule extends StatefulWidget {
 
   /// Two lanes or one. See [ScopeStereo].
   final ScopeStereo stereo;
+
+  /// Which of two overlaid traces is drawn in front, and which is dimmed
+  /// behind it. See [ScopeFront] — it is read only at [ScopeStereo.overlay],
+  /// where the two share a centre line and so hide one another.
+  final ScopeFront front;
 
   /// What starts the window when [sync] is [ScopeSync.free]. See
   /// [ScopeTrigger].
@@ -354,6 +375,26 @@ const double _zoomReading = Space.xl + Space.xs;
 /// right-hand end, which is the gutter between the two.
 const double _autoColumn = Space.xxl;
 
+/// How many traces there are to draw.
+///
+/// One for a mono source whatever the arrangement says: `oaa_scope_append`
+/// copies the left channel into both, and two identical traces are not a stereo
+/// image. Asked here rather than in each of the three places that need it — the
+/// painter's lanes, the strip's legend and the painter's own — because a legend
+/// naming two channels over one trace is exactly the mismatch this returns the
+/// same answer to avoid.
+int _channelsOf(MeterSource engine) => engine.channels >= 2 ? 2 : 1;
+
+/// Whether there is a tempo to lock a window to.
+///
+/// A sound card has no playhead and neither does a DAW that never mentions one.
+/// See the painter, which asks the same question of the same snapshot to decide
+/// what it draws while the strip asks it to decide what it prints.
+bool _hasTempoOf(MeterSource engine) {
+  final transport = engine.transport;
+  return transport.hasBpm && transport.bpm > 0 && transport.hasPpq;
+}
+
 /// Everything in a control that is not the track.
 double _controlChrome({
   required double label,
@@ -368,12 +409,35 @@ const double _trackMin = Space.xl;
 /// The most track that is drawn, however wide the module is. See the strip.
 const double _trackMax = Space.xxxl * 2 + Space.sm;
 
+/// Room for the legend: two glyphs of the tick face, the seam between them and
+/// the box around the pair.
+///
+/// Its own column at the leading edge of the strip, which is where the module's
+/// chrome has always started — the lane letters sat at exactly this x when they
+/// were painted in the plot. See [_ScopeKey].
+const double _keyColumn = Space.xl;
+
+/// Room for the span, which is eight glyphs at its longest: `4 bars T`.
+///
+/// The same measurement [_readingColumn] is, for the same face and the same
+/// count, and deliberately not that constant: one is what a *reading* is
+/// printed in and this is what a label is, and a change to either has no
+/// business moving the other.
+const double _spanColumn = Space.xxl + Space.sm;
+
 /// Room left at the right-hand end of the strip for the canvas's resize grip.
 ///
 /// The grip is drawn over the module's bottom-right corner and its *touch*
 /// target is twice the size of the ink; both are above this module in the
 /// canvas's stack, so a slider that ran to the right-hand edge would end
 /// underneath them. See `_ModuleSlot` in `lib/src/canvas/grid_canvas.dart`.
+///
+/// **It is taken from controls and from nothing else.** The span is a label:
+/// it takes no gesture, so there is nothing for the grip to steal from it, and
+/// the ticks themselves are drawn in the frame's padding rather than in the
+/// body — the touch target is the only thing that reaches in. So the span runs
+/// to the body's right-hand edge, which is where the axis it measures ends,
+/// and the strip pays this only where the last thing in the row is a slider.
 const double _gripClearance = Space.lg;
 
 /// Where a segment the painter is not using is parked.
@@ -402,6 +466,23 @@ class _OscilloscopeModuleState extends State<OscilloscopeModule> {
   /// The loudest the trigger's own quantity has been, for `AUTO`.
   final _AutoLevel _auto = _AutoLevel();
 
+  /// The two things about the *source* that the strip has to know, and the
+  /// painter reads off the engine every frame.
+  ///
+  /// Whether there are two channels decides whether there is a front to choose,
+  /// and whether the host is offering a tempo decides which of two labels the
+  /// corner prints. A painter can ask both questions in `paint`; a widget has
+  /// to be rebuilt, and a strip built from `widget` alone would say `1 bar`
+  /// under a free window for as long as it took something else to rebuild the
+  /// tree after a DAW went away.
+  ///
+  /// **Folded in on the measurement channel, which is why they cannot drift.**
+  /// `MeterClock` notifies it from inside its ticker callback, so a `setState`
+  /// here is built in the same frame as the paint that follows — the label in
+  /// the strip and the window above it are read from one snapshot.
+  late int _channels = _channelsOf(widget.engine);
+  late bool _hasTempo = _hasTempoOf(widget.engine);
+
   /// The columns sorted by the hue they are drawn in, at [ColorRamp.rgb].
   ///
   /// Kept here rather than in the painter because [PointBuckets] grows its
@@ -421,6 +502,12 @@ class _OscilloscopeModuleState extends State<OscilloscopeModule> {
   /// here is weight, because a hue would not survive a change of skin. Faint
   /// letters beside each other would name the channels without saying which is
   /// which.
+  ///
+  /// **Which letter gets the full ink follows [OscilloscopeModule.front]**, so
+  /// the legend and the traces are drawn from one decision. These two are the
+  /// painter's copy, for the surfaces that have no strip to put the legend in —
+  /// a remote display, and a module too narrow for one. Where there is a strip
+  /// it carries the legend as a control; see [_ScopeKey].
   ui.Paragraph? _leftKey;
   ui.Paragraph? _rightKey;
 
@@ -436,6 +523,7 @@ class _OscilloscopeModuleState extends State<OscilloscopeModule> {
 
   Color? _builtColor;
   Color? _builtAccent;
+  ScopeFront? _builtFront;
   ScopeTimeBase? _builtSpan;
   String? _builtDivision;
 
@@ -462,6 +550,12 @@ class _OscilloscopeModuleState extends State<OscilloscopeModule> {
       // is no longer playing, and a level taken from it would arm the trigger
       // somewhere the new signal never goes.
       _auto.reset();
+      // And the same again for what the strip says about the source: the new
+      // engine's channel count and transport are the ones the next paint will
+      // read, and waiting a publish to find that out would draw one source's
+      // legend over another's waveform.
+      _channels = _channelsOf(widget.engine);
+      _hasTempo = _hasTempoOf(widget.engine);
     }
     if (old.zoom != widget.zoom) _zoom = widget.zoom;
     if (old.threshold != widget.threshold) _threshold = widget.threshold;
@@ -473,21 +567,39 @@ class _OscilloscopeModuleState extends State<OscilloscopeModule> {
     super.dispose();
   }
 
-  /// **Not in `paint`, unlike the other three modules that keep a history.**
+  /// **Not in `paint`, and neither is the spectrogram's record.**
   ///
-  /// They advance by a column per measurement they were *painted* for, so a
-  /// throttled repaint costs them resolution. This one advances by however
-  /// much time the measurement carried, so a throttled repaint costs it the
-  /// audio itself — at 30 fps one publish in three, which on a time axis is a
-  /// hole rather than a coarser picture, and which leaves a window longer than
-  /// one buffer unable to fill at all. `MeterClock.measurements` is
-  /// unthrottled for exactly this; see its comment.
+  /// The modules that keep a history and still advance from paint advance by a
+  /// mark per measurement they were *painted* for, so a throttled repaint
+  /// costs them resolution and nothing else — a phase scope or a stereo cloud
+  /// draws where the signal has been, and a coarser sample of that is a
+  /// coarser picture of the same thing. This one advances by however much time
+  /// the measurement carried, so a throttled repaint costs it the audio
+  /// itself — at 30 fps one publish in three, which on a time axis is a hole
+  /// rather than a coarser picture, and which leaves a window longer than one
+  /// buffer unable to fill at all. The spectrogram is here for the same
+  /// reason: its columns *are* the axis, so the ones a throttled repaint skips
+  /// are measurements the record cannot be redrawn from, and the rate it dates
+  /// them by came out as the repaint rate rather than the publish rate. See
+  /// its `_measured`. `MeterClock.measurements` is unthrottled for exactly
+  /// this; see its comment.
   ///
   /// Nothing here marks the tree dirty. Pixels still arrive on the clock's
   /// throttled notification, at the rate the user asked for.
   void _measured() {
     _history.ingest(widget.engine, coloured: widget.ramp == ColorRamp.rgb);
     _auto.ingest(widget.engine);
+    // Both change on a source, not on a block — a device gains a channel, a
+    // DAW connects — so this is a comparison per publish and a rebuild almost
+    // never. See the fields.
+    final channels = _channelsOf(widget.engine);
+    final tempo = _hasTempoOf(widget.engine);
+    if (channels != _channels || tempo != _hasTempo) {
+      setState(() {
+        _channels = channels;
+        _hasTempo = tempo;
+      });
+    }
     // Only while the box is checked, and only when the decibel it prints
     // actually moved. On steady material the peak holds and this does nothing
     // at all; through a fade it fires a handful of times a second, which is
@@ -510,28 +622,37 @@ class _OscilloscopeModuleState extends State<OscilloscopeModule> {
 
     if (_builtColor != colors.textFaint ||
         _builtAccent != colors.accent ||
+        _builtFront != widget.front ||
         _builtSpan != widget.timeBase ||
         _builtDivision != division) {
       _builtColor = colors.textFaint;
       _builtAccent = colors.accent;
+      _builtFront = widget.front;
       _builtSpan = widget.timeBase;
       _builtDivision = division;
       final style = OaaType.tick.copyWith(color: colors.textFaint);
       _leftLabel = layoutParagraph('L', style);
       _rightLabel = layoutParagraph('R', style);
-      _leftKey = layoutParagraph(
-        'L',
-        OaaType.tick.copyWith(color: colors.accent),
+      final front = OaaType.tick.copyWith(color: colors.accent);
+      final back = OaaType.tick.copyWith(
+        color: colors.accent.withValues(alpha: _dim),
       );
-      _rightKey = layoutParagraph(
-        'R',
-        OaaType.tick.copyWith(color: colors.accent.withValues(alpha: _dim)),
-      );
+      final leads = widget.front == ScopeFront.left;
+      _leftKey = layoutParagraph('L', leads ? front : back);
+      _rightKey = layoutParagraph('R', leads ? back : front);
       _spanLabel = layoutParagraph(widget.timeBase.label, style);
       _divisionLabel = layoutParagraph(division, style);
     }
 
-    final plot = MeterBody(
+    // **The legend and the span are drawn in one place or the other, never
+    // both.** Where there is a strip with room for them they are its leading
+    // and trailing cells — the legend because it is a control there and only a
+    // caption here, the span because a number about the x axis reads better on
+    // the row under it than over the waveform it is describing. Where there is
+    // no strip at all, which is every remote display and every module too
+    // narrow for one, the painter's corners are still the only place they can
+    // go.
+    MeterBody plotWith({required bool chrome}) => MeterBody(
       painter: _OscilloscopePainter(
         engine: widget.engine,
         colors: colors,
@@ -541,15 +662,17 @@ class _OscilloscopeModuleState extends State<OscilloscopeModule> {
         division: widget.division,
         grid: widget.grid,
         stereo: widget.stereo,
+        front: widget.front,
         trigger: widget.trigger,
         threshold: _threshold,
         zoom: _zoom,
         ramp: widget.ramp,
+        chrome: chrome,
         repaint: widget.clock,
       ),
     );
 
-    if (widget.onOption == null) return plot;
+    if (widget.onOption == null) return plotWith(chrome: false);
 
     // The level is only a control where it is the thing deciding what is on
     // screen: a tempo-locked window is placed by the bar line and a
@@ -559,9 +682,17 @@ class _OscilloscopeModuleState extends State<OscilloscopeModule> {
     // division and the grid to a locked one, and never both.
     final levelled = widget.sync == ScopeSync.free && widget.trigger.sweeps;
 
+    // The legend is a control only where there is a front to choose: two
+    // channels around one centre line, hiding one another. In lanes each trace
+    // has its own line and crosses nothing, so its letter stays in its lane
+    // where the painter draws it, and there is nothing here to click.
+    final keyed = widget.stereo == ScopeStereo.overlay && _channels > 1;
+    final span = widget.sync == ScopeSync.tempo && _hasTempo
+        ? division
+        : widget.timeBase.label;
+
     return LayoutBuilder(
       builder: (context, constraints) {
-        final width = constraints.maxWidth - _gripClearance;
         // Each control is cut to its own word and its own cells: the `AUTO`
         // box belongs to the threshold, so the room for it is only taken where
         // there is a threshold to set, and the height control's box ends where
@@ -577,6 +708,22 @@ class _OscilloscopeModuleState extends State<OscilloscopeModule> {
           auto: levelled,
         );
         final minimum = (levelled ? levelChrome : heightChrome) + _trackMin;
+        // **Chrome goes first, here as everywhere else in this module.** The
+        // two end cells are taken only when what is left still holds a control,
+        // and a module too narrow for both keeps the sliders and hands the
+        // legend and the span back to the painter's corners. The other way
+        // round — dropping a control to keep a caption — is the one arrangement
+        // that would be wrong, and it is the one a `Spacer` would have produced
+        // by squeezing the tracks instead.
+        final ends =
+            (keyed ? _keyColumn + Space.sm : 0.0) + _spanColumn + Space.sm;
+        // The span's cell stands in for [_gripClearance] rather than sitting
+        // inside it: it is more than twice as wide, so a control that stops
+        // where it begins is already clear of the grip's target.
+        final chrome = constraints.maxWidth - ends >= minimum;
+        final inner = chrome
+            ? constraints.maxWidth - ends
+            : constraints.maxWidth - _gripClearance;
         // Two controls fit side by side on almost every module and on none of
         // the narrow ones, so the fallback is a second row rather than a
         // dropped control: a setting that disappears when a module is resized
@@ -586,13 +733,13 @@ class _OscilloscopeModuleState extends State<OscilloscopeModule> {
         // and spending that on fitting two 32 px tracks where two 136 px ones
         // used to stack would be a worse strip on every narrow module. The
         // freed room goes into the tracks that are already side by side.
-        final rows = levelled && width < minimum * 2 + Space.md ? 2 : 1;
-        final side = (width - heightChrome - levelChrome - Space.md) / 2;
+        final rows = levelled && inner < minimum * 2 + Space.md ? 2 : 1;
+        final side = (inner - heightChrome - levelChrome - Space.md) / 2;
         final strip = rows * OaaSlider.height + (rows - 1) * Space.xs;
 
-        if (width < minimum ||
+        if (inner < minimum ||
             constraints.maxHeight < _plotAbove + strip + Space.xs) {
-          return plot;
+          return plotWith(chrome: false);
         }
 
         // **Not the whole width, on a wide module.** A track drawn across a
@@ -609,7 +756,7 @@ class _OscilloscopeModuleState extends State<OscilloscopeModule> {
           _trackMax,
           rows == 1 && levelled
               ? side
-              : width - (levelled ? levelChrome : heightChrome),
+              : inner - (levelled ? levelChrome : heightChrome),
         );
 
         // The height is dragged in *octaves* and printed in multipliers. A
@@ -653,53 +800,93 @@ class _OscilloscopeModuleState extends State<OscilloscopeModule> {
           ),
         );
 
+        // Adjacent, one gutter apart. [side] already has the gutter taken out
+        // of it, so the two fit whatever the module's width — pushed to the two
+        // ends instead, as they were, a wide module put half a module between
+        // them and the pair stopped reading as one strip of controls.
+        final controls = rows == 1
+            ? Row(
+                children: [
+                  SizedBox(width: heightChrome + track, child: height),
+                  if (levelled) ...[
+                    const SizedBox(width: Space.md),
+                    SizedBox(width: levelChrome + track, child: level),
+                  ],
+                ],
+              )
+            : Column(
+                children: [
+                  Row(
+                    children: [
+                      SizedBox(width: heightChrome + track, child: height),
+                    ],
+                  ),
+                  const SizedBox(height: Space.xs),
+                  Row(
+                    children: [
+                      SizedBox(width: levelChrome + track, child: level),
+                    ],
+                  ),
+                ],
+              );
+
         return Column(
           children: [
-            Expanded(child: plot),
+            Expanded(child: plotWith(chrome: chrome)),
             const SizedBox(height: Space.xs),
             SizedBox(
               height: strip,
-              child: Padding(
-                padding: const EdgeInsets.only(right: _gripClearance),
-                child: rows == 1
-                    ? Row(
-                        // Adjacent, one gutter apart, the first flush with the
-                        // plot's left edge — which is where the module's own
-                        // chrome already starts, at the lane letters. Pushed to
-                        // the two ends instead, as they were, a wide module put
-                        // half a module between them and the pair stopped
-                        // reading as one strip of controls. [side] already has
-                        // the gutter taken out of it, so the two fit whatever
-                        // the module's width.
-                        children: [
-                          SizedBox(width: heightChrome + track, child: height),
-                          if (levelled) ...[
-                            const SizedBox(width: Space.md),
-                            SizedBox(width: levelChrome + track, child: level),
-                          ],
-                        ],
-                      )
-                    : Column(
-                        children: [
-                          Row(
-                            children: [
-                              SizedBox(
-                                width: heightChrome + track,
-                                child: height,
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: Space.xs),
-                          Row(
-                            children: [
-                              SizedBox(
-                                width: levelChrome + track,
-                                child: level,
-                              ),
-                            ],
-                          ),
-                        ],
+              child: Row(
+                // **The two end cells belong to the first row**, not to the
+                // strip: a second row is a control that did not fit beside the
+                // first, and a legend that slid down to sit between them would
+                // be naming the threshold. Top-aligned, so a strip that grows a
+                // row leaves both of them where the one-row strip put them.
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (chrome && keyed) ...[
+                    SizedBox(
+                      width: _keyColumn,
+                      child: _ScopeKey(
+                        front: widget.front,
+                        onChanged: _setFront,
                       ),
+                    ),
+                    const SizedBox(width: Space.sm),
+                  ],
+                  // What is left over after the tracks have taken their capped
+                  // length, which is most of a wide module, is what holds the
+                  // span out at the right-hand edge. See [_trackMax] for why
+                  // that room is not spent on track.
+                  Expanded(child: controls),
+                  if (chrome) ...[
+                    const SizedBox(width: Space.sm),
+                    SizedBox(
+                      width: _spanColumn,
+                      height: OaaSlider.height,
+                      // Flush with the body's right-hand edge, which is where
+                      // the plot's border ends directly above it: the number
+                      // names the width of that axis, and one that stopped
+                      // short of it would be measuring something narrower.
+                      child: Align(
+                        alignment: Alignment.centerRight,
+                        child: Text(
+                          span,
+                          // Chrome, in the ink the strip's own words are drawn
+                          // in rather than the fainter one the painter uses:
+                          // over the graticule it is competing with a waveform,
+                          // and down here it is sitting beside two labels it
+                          // would otherwise look switched off next to.
+                          style: OaaType.tick.copyWith(color: colors.textMuted),
+                          maxLines: 1,
+                          softWrap: false,
+                          overflow: TextOverflow.clip,
+                        ),
+                      ),
+                    ),
+                  ] else
+                    const SizedBox(width: _gripClearance),
+                ],
               ),
             ),
           ],
@@ -743,6 +930,88 @@ class _OscilloscopeModuleState extends State<OscilloscopeModule> {
     }
     widget.onOption!('autoThreshold', on);
   }
+
+  /// Swaps which overlaid trace is in front.
+  ///
+  /// Straight to the layout with no local copy, unlike the height and the
+  /// level: those are dragged and would spend an undo entry per pixel of
+  /// travel, and this is one click that means one thing. It comes back through
+  /// `widget.front` the way every other menu setting does.
+  void _setFront(ScopeFront front) => widget.onOption!('front', front.id);
+}
+
+/// The legend, and the control it is.
+///
+/// Two letters in the inks their traces are drawn in, **front one first**, in a
+/// box that says it can be clicked. Two cues for one fact, and both of them are
+/// the picture's own: the front trace is the brighter one on screen and the
+/// first one here, so reading the legend is reading the display rather than
+/// remembering a convention.
+///
+/// It replaces the pair the painter used to draw over the top-left of the plot
+/// — see `_paintLabels`, which still draws them wherever there is no strip to
+/// put this in. What moving it buys is that it can be a control at all: a
+/// legend painted into a meter's face is unreachable by pointer, by keyboard
+/// and by a screen reader, because `MeterPainter` deliberately takes no hits.
+///
+/// **The letters keep their inks through hover and focus**, which is the one
+/// place this departs from `OaaCheck` and `BarButton`, where the caption itself
+/// brightens to `textPrimary`. Here the ink *is* the reading — brightening both
+/// letters would say the two traces are drawn the same weight, which is the
+/// single thing this control exists to deny. The box says the rest.
+class _ScopeKey extends StatelessWidget {
+  const _ScopeKey({required this.front, required this.onChanged});
+
+  final ScopeFront front;
+  final ValueChanged<ScopeFront> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = OaaTheme.of(context);
+    final leader = front;
+    final trailer = front.swapped;
+
+    return OaaFocusable(
+      onActivate: () => onChanged(front.swapped),
+      semanticLabel: '${leader.label} in front of ${trailer.label}',
+      builder: (context, hovered, focused) => Container(
+        height: OaaSlider.height,
+        decoration: BoxDecoration(
+          borderRadius: OaaRadius.allXs,
+          border: Border.all(
+            color: focused || hovered ? colors.textPrimary : colors.hairline,
+            width: OaaStroke.hairline,
+          ),
+        ),
+        child: Center(
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _letter(leader, colors.accent),
+              const SizedBox(width: Space.xxs),
+              _letter(trailer, colors.accent.withValues(alpha: _dim)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// One letter, in the ink its trace is drawn in.
+  ///
+  /// Clipped rather than allowed to overflow, for the reason `OaaCheck` gives:
+  /// [_keyColumn] was measured against the face the application bundles, and a
+  /// fallback must cost a glyph rather than a layout assertion that takes the
+  /// whole strip with it.
+  Widget _letter(ScopeFront channel, Color ink) => Flexible(
+    child: Text(
+      channel.label,
+      style: OaaType.tick.copyWith(color: ink),
+      maxLines: 1,
+      softWrap: false,
+      overflow: TextOverflow.clip,
+    ),
+  );
 }
 
 /// One row of the strip: what it sets, the track, and what it is set to.
@@ -1276,11 +1545,12 @@ class _ScopeHistory {
     final first = published - taken;
 
     if (missed > 0) {
-      // More audio was measured than one publish of the scope carries — a file
-      // pushed through faster than real time, or a device that overran. Those
-      // samples were never published and this module will not pretend they
-      // were: the raw ring can no longer claim to be contiguous, and the
-      // rolling display gets that many columns of nothing.
+      // More audio was measured than the window still holds — a link that
+      // dropped a frame, a file pushed through faster than real time, or a
+      // source that outran four blocks between two looks. Those samples are
+      // gone and this module will not pretend they are not: the raw ring can
+      // no longer claim to be contiguous, and the rolling display gets that
+      // many columns of nothing.
       _rawWrite = 0;
       _rawFilled = 0;
       if (_sweep) {
@@ -1824,10 +2094,12 @@ class _OscilloscopePainter extends MeterPainter {
     required this.division,
     required this.grid,
     required this.stereo,
+    required this.front,
     required this.trigger,
     required this.threshold,
     required this.zoom,
     required this.ramp,
+    required this.chrome,
     required Listenable repaint,
   }) : _grid = (Paint()
          ..color = colors.hairline
@@ -1863,6 +2135,12 @@ class _OscilloscopePainter extends MeterPainter {
          ..color = colors.over
          ..strokeWidth = OaaStroke.mark
          ..strokeCap = StrokeCap.butt),
+       // One box around the body, not one per lane. The lanes are two views of
+       // one window — the same milliseconds, the same time base, one graticule
+       // drawn through both — and boxing them separately would say they were
+       // two displays that happen to be stacked. The gap between them already
+       // separates them.
+       _border = PlotBorder(colors),
        super(repaint: repaint) {
     // One ink per palette entry and a dimmed twin of each, built here because a
     // painter is built when the skin, the ramp or a setting moves and never on
@@ -1908,9 +2186,19 @@ class _OscilloscopePainter extends MeterPainter {
   final ScopeDivision division;
   final ScopeGrid grid;
   final ScopeStereo stereo;
+  final ScopeFront front;
   final ScopeTrigger trigger;
   final double threshold;
   final double zoom;
+
+  /// Whether the strip below is carrying the legend and the span.
+  ///
+  /// True on a module wide enough for the strip's two end cells, and false
+  /// everywhere else — a narrow module, and every remote display, which has no
+  /// strip at all because it has no layout to write a setting to. When it is
+  /// false these two are drawn in the plot's corners, which is where they were
+  /// before the strip existed. See `build`.
+  final bool chrome;
 
   /// Which colours the trace is drawn in. See [ColorRamp] — at
   /// [ColorRamp.skin] `_signal` and `_second` are the whole of it and the two
@@ -1924,6 +2212,7 @@ class _OscilloscopePainter extends MeterPainter {
   final Paint _level;
   final Paint _over;
   final Paint _overMark;
+  final PlotBorder _border;
 
   /// One ink per palette entry, and the same again at the weight the second of
   /// two overlaid channels is drawn at. Indexed by entry, [_noMix] included.
@@ -1932,6 +2221,27 @@ class _OscilloscopePainter extends MeterPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    // The box, and the window inside it — see [PlotBorder]. It matters here
+    // for the reason it matters on the spectrogram: a rolling trace puts the
+    // newest audio hard against the right-hand edge, and a border over it
+    // would hide the one column somebody is watching. Everything below is
+    // drawn in the window's own coordinates, so nothing else in this painter
+    // knows about it.
+    _border.paint(canvas, Offset.zero & size);
+
+    final window = PlotBorder.inside(Offset.zero & size);
+    if (window.width <= 0 || window.height <= 0) return;
+
+    canvas.save();
+    canvas.translate(window.left, window.top);
+    _paintWindow(canvas, window.size);
+    canvas.restore();
+  }
+
+  /// Everything the module draws: the graticule, the traces and the labels.
+  ///
+  /// [size] is the window inside the border, not the body. See [paint].
+  void _paintWindow(Canvas canvas, Size size) {
     final columns = size.width.floor();
     if (columns < 2 || size.height < _laneLabelAbove) return;
 
@@ -1978,11 +2288,9 @@ class _OscilloscopePainter extends MeterPainter {
     // `generation`, from the other end.
     history.resolve();
 
-    // What there is to draw, and how many rows it is drawn in. A mono source
-    // is one of each whatever the arrangement says — `oaa_scope_append` copies
-    // the left channel into both, and two identical traces are not a stereo
-    // image, overlaid or otherwise.
-    final channels = engine.channels >= 2 ? 2 : 1;
+    // What there is to draw, and how many rows it is drawn in. See
+    // [_channelsOf] — a mono source is one trace whatever the arrangement says.
+    final channels = _channelsOf(engine);
     final rows = stereo == ScopeStereo.overlay ? 1 : channels;
     final gap = rows > 1 ? Space.xs : 0.0;
     final laneHeight = (size.height - gap * (rows - 1)) / rows;
@@ -2007,14 +2315,27 @@ class _OscilloscopePainter extends MeterPainter {
       sweeping && zoomed <= 1 ? zoomed : null,
     );
 
-    for (var channel = 0; channel < channels; channel++) {
+    // **Back first, front last, and the front one at full ink.** Two overlaid
+    // traces cross constantly, and the one drawn second is the one you read
+    // *through* the other — so which channel is in front is both which is drawn
+    // last and which keeps the undimmed colour. It is a setting because it has
+    // no right answer: it is whichever channel you are looking at. See
+    // [ScopeFront] and `_ScopeKey`, which is the control.
+    //
+    // In lanes there is no front. Each trace has its own centre line and hides
+    // nothing, so the pass order below is simply left then right.
+    final frontChannel = rows == 1 && channels > 1 && front == ScopeFront.right
+        ? 1
+        : 0;
+    for (var pass = 0; pass < channels; pass++) {
+      final channel = frontChannel == 1 ? 1 - pass : pass;
       final row = rows == 1 ? 0 : channel;
       final centre = row * (laneHeight + gap) + laneHeight / 2;
       final low = channel == 0 ? history.minL : history.minR;
       final high = channel == 0 ? history.maxL : history.maxR;
-      // Only the second of two channels sharing a row is dimmed. In lanes it
-      // is on its own centre line and there is nothing to tell it apart from.
-      final dim = rows == 1 && channel == 1;
+      // Only the channel behind the other one is dimmed. In lanes each is on
+      // its own centre line and there is nothing to tell it apart from.
+      final dim = rows == 1 && channel != frontChannel;
       // At [ColorRamp.rgb] a *trace* is one colour — the newest block's, which is
       // what its whole window is — so the ink is picked here rather than per
       // point. The columns pick theirs per column; see [_paintColumns].
@@ -2118,23 +2439,29 @@ class _OscilloscopePainter extends MeterPainter {
           Offset(Space.xs, row * (laneHeight + gap) + Space.xxs),
         );
       }
-    } else if (channels > 1) {
+    } else if (channels > 1 && !chrome) {
       // Overlaid: the two letters side by side, each in the ink its trace is
-      // drawn in. A legend rather than a label — see `_leftKey`.
-      final left = state._leftKey;
-      final right = state._rightKey;
-      if (left != null && right != null) {
-        canvas.drawParagraph(left, const Offset(Space.xs, Space.xxs));
+      // drawn in, the front one first. A legend rather than a label — see
+      // `_leftKey`. Only where the strip is not carrying it as a control, which
+      // is the arrangement this one is the fallback for; see [chrome].
+      final leads = front == ScopeFront.left;
+      final first = leads ? state._leftKey : state._rightKey;
+      final second = leads ? state._rightKey : state._leftKey;
+      if (first != null && second != null) {
+        canvas.drawParagraph(first, const Offset(Space.xs, Space.xxs));
         canvas.drawParagraph(
-          right,
-          Offset(Space.xs + left.longestLine + Space.xxs, Space.xxs),
+          second,
+          Offset(Space.xs + first.longestLine + Space.xxs, Space.xxs),
         );
       }
     }
 
     // The span, bottom right, over the graticule rather than in an axis row of
     // its own — a three-row module has no vertical space to spend on one, and
-    // the number it would carry is the only thing an axis row would say.
+    // the number it would carry is the only thing an axis row would say. Where
+    // there is a strip it is printed at the right-hand end of it instead, on
+    // the row under the axis it describes; see [chrome].
+    if (chrome) return;
     final span = locked ? state._divisionLabel : state._spanLabel;
     if (span != null) {
       canvas.drawParagraph(
@@ -2350,6 +2677,8 @@ class _OscilloscopePainter extends MeterPainter {
       oldDelegate.division != division ||
       oldDelegate.grid != grid ||
       oldDelegate.stereo != stereo ||
+      oldDelegate.front != front ||
+      oldDelegate.chrome != chrome ||
       oldDelegate.trigger != trigger ||
       oldDelegate.threshold != threshold ||
       oldDelegate.zoom != zoom ||

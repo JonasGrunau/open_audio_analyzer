@@ -331,13 +331,19 @@ void main() {
       );
 
       // Every one of these sources is measured, and after a version 4 frame
-      // none may be: the frame overwrites what the previous one left.
+      // none may be: the frame overwrites what the previous one left. The
+      // scope is the one array that does not overwrite — it is a window, and
+      // the version 4 run lands after the version 5 one.
       final decoded = _roundTrip(_FakeSource())..decode(payload, version: 4);
 
       expect(decoded.lufsShort, closeTo(-18.5, 1e-6));
       expect(decoded.spectrum[10], closeTo(-30, 0.5 / Quantise.dbStep));
-      expect(decoded.scopeFrames, MeterShape.scopePoints);
-      expect(decoded.scope[0], closeTo(0.5, 0.5 / Quantise.sampleScale));
+      expect(decoded.lastRunFrames, MeterShape.scopePoints);
+      expect(decoded.scopeFrames, 2 * MeterShape.scopePoints);
+      expect(
+        decoded.scope[MeterShape.scopePoints * 2],
+        closeTo(0.5, 0.5 / Quantise.sampleScale),
+      );
       for (final other in [
         SpectrumSource.left,
         SpectrumSource.right,
@@ -493,6 +499,68 @@ void main() {
       expect(snapshot.refresh(), isTrue);
       expect(snapshot.refresh(), isFalse);
       expect(snapshot.generation, 3);
+    });
+  });
+
+  group('the scope window', () {
+    // Two frames between two ticks is the ordinary case for a plugin at a
+    // 2048-frame host buffer — two pushes, two frames, microseconds apart —
+    // and a snapshot that kept only the newest run handed the oscilloscope
+    // the second block and lost the first, on every callback. The repaint may
+    // collapse; the audio may not. See `WireSnapshot.scopeFrames`.
+    _FakeSource marked(double value) {
+      final source = _FakeSource();
+      for (var i = 0; i < MeterShape.scopePoints; i++) {
+        source.scope[i * 2] = value;
+        source.scope[i * 2 + 1] = -value;
+      }
+      return source;
+    }
+
+    const step = 0.5 / Quantise.sampleScale;
+
+    test('two frames in one tick are both held, oldest first', () {
+      final snapshot = WireSnapshot()
+        ..decode(_encode(marked(0.25)))
+        ..decode(_encode(marked(0.5)));
+
+      expect(snapshot.scopeFrames, 2 * MeterShape.scopePoints);
+      expect(snapshot.lastRunFrames, MeterShape.scopePoints);
+      expect(snapshot.scope[0], closeTo(0.25, step), reason: 'the first run');
+      expect(snapshot.scope[MeterShape.scopePoints * 2], closeTo(0.5, step));
+      expect(
+        snapshot.scope[MeterShape.scopePoints * 2 + 1],
+        closeTo(-0.5, step),
+      );
+    });
+
+    test('a full window drops its oldest run, never its newest', () {
+      final snapshot = WireSnapshot();
+      for (final value in [0.1, 0.2, 0.3, 0.4, 0.5]) {
+        snapshot.decode(_encode(marked(value)));
+      }
+
+      expect(snapshot.scopeFrames, MeterShape.maxScopeFrames);
+      expect(snapshot.scope[0], closeTo(0.2, step), reason: '0.1 fell off');
+      expect(
+        snapshot.scope[(MeterShape.maxScopeFrames - 1) * 2],
+        closeTo(0.5, step),
+      );
+    });
+
+    test('a run after a stale spell starts the window over', () {
+      final snapshot = WireSnapshot()..decode(_encode(marked(0.25)));
+      snapshot.markStale();
+      expect(snapshot.scopeFrames, MeterShape.scopePoints);
+      expect(snapshot.scope[0].isNaN, isTrue, reason: 'the unavailable state');
+
+      snapshot.decode(_encode(marked(0.5)));
+      expect(
+        snapshot.scopeFrames,
+        MeterShape.scopePoints,
+        reason: 'the block of NaN is not audio that came before this run',
+      );
+      expect(snapshot.scope[0], closeTo(0.5, step));
     });
   });
 

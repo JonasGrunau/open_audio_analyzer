@@ -129,9 +129,10 @@ inline constexpr size_t kHeaderBytes = 12;
  * elapsed rather than a fixed block, so that a relay publishing more slowly
  * than the engine measures can still send a contiguous waveform. A plugin is
  * never that relay — it publishes once per analysis block — so what it writes
- * is always exactly one block and `kSnapshotBytes` is a constant here. The
- * per-source spectra sit between `histogram` and the scope count, which is
- * why the base grew by 8,192 from version 4's 3,556. */
+ * is always exactly one block and `kSnapshotBytes` is a constant here: the
+ * newest block of the engine's own scope window, which since ABI 7 holds
+ * four. The per-source spectra sit between `histogram` and the scope count,
+ * which is why the base grew by 8,192 from version 4's 3,556. */
 inline constexpr size_t kScopeFrames    = 1024;
 inline constexpr size_t kSnapshotBase   = 11748;
 inline constexpr size_t kSnapshotBytes  = kSnapshotBase + kScopeFrames * 4;
@@ -145,9 +146,13 @@ inline constexpr size_t kSnapshotLegacyBytes = 15056;
  * per-source arrays. Decode-only on the app side, like the legacy size. */
 inline constexpr size_t kSnapshotV4Bytes = 7652;
 
-/* The C struct today — ABI 6, with the eight per-source arrays appended. Not a
- * wire size at any version; see the static_assert below for what it is for. */
-inline constexpr size_t kSnapshotStructBytes = 31440;
+/* The C struct today — ABI 7, whose `scope` holds four blocks rather than one
+ * and which appended `scope_frames` to count them. Not a wire size at any
+ * version; see the static_assert below for what it is for. It moved here
+ * without a protocol bump, and that is the one case the assert's comment
+ * allows: nothing new crosses the wire, because the frame carries the newest
+ * block of the window and its count was always a fixed 1,024. */
+inline constexpr size_t kSnapshotStructBytes = 56024;
 
 inline constexpr size_t kTransportBytes = 88;
 

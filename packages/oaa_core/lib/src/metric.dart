@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import 'meter_source.dart';
+
 /// Everything the engine can measure, as a closed set.
 ///
 /// This enum is the vocabulary a Number Box picks from, the key a report is
@@ -54,6 +56,101 @@ enum Metric {
   /// True when this metric is per-channel rather than programme-wide.
   bool get isPerChannel => this == Metric.peak || this == Metric.rms;
 
+  /// True when this quantity is an absolute level, which the engine clamps at
+  /// [MeterShape.dbFloor] instead of letting it run to negative infinity.
+  ///
+  /// The distinction is what [format] needs to tell a *reading* from a
+  /// *clamp*: `-144.0` out of the engine does not mean the programme measured
+  /// −144 dB, it means the level was at or below the floor — which for a
+  /// stream of digital zeros is silence, and for anything else is a level no
+  /// float this engine publishes can express. Every one of the eight below
+  /// passes through `oaa_db_from_linear` or the loudness path's own clamp, and
+  /// nothing else does: the ranges and differences — LRA, crest, the two ODRs
+  /// — are subtractions of two levels, so their silent value is zero rather
+  /// than the floor, and correlation and balance are not dB at all.
+  ///
+  /// Exhaustive rather than a set, so that a metric added later has to answer
+  /// the question: a difference wrongly listed here would print `-∞` for a
+  /// legitimate −144 LU, and a level wrongly left out prints the clamp as a
+  /// measurement, which is the thing this exists to stop.
+  bool get isAbsoluteLevel => switch (this) {
+    Metric.lufsMomentary ||
+    Metric.lufsShort ||
+    Metric.lufsIntegrated ||
+    Metric.truePeak ||
+    Metric.truePeakMax ||
+    Metric.samplePeakMax ||
+    Metric.peak ||
+    Metric.rms => true,
+    Metric.loudnessRange ||
+    Metric.crestFactor ||
+    Metric.odrShort ||
+    Metric.odrIntegrated ||
+    Metric.correlation ||
+    Metric.balance => false,
+  };
+
+  /// True when the engine holds this quantity over the programme itself,
+  /// rather than over a window that has moved on by the time anybody looks.
+  ///
+  /// These five are computed from everything pushed since `oaa_engine_reset`;
+  /// the other nine are a 400 ms, 3 s or single-block statistic. It is the
+  /// difference between "what did this programme do" and "what is it doing" —
+  /// so it decides what a summary of a whole programme may take an extreme
+  /// over. **Two of the five converge rather than climb, which is what makes
+  /// this worth stating**: `LUFS-I`, `LRA` and `ODR-I` swing wildly over their
+  /// first seconds, when `LUFS-I` has cleared the −70 LUFS absolute gate on
+  /// room tone and little else. An extreme taken over that swing is a fact
+  /// about how the estimator converged and not about the audio — on a real
+  /// master whose `ODR-I` is 8.6 LU, its minimum inside the first second is
+  /// 7.6 and its maximum 33.5, and neither is a reading of anything.
+  ///
+  /// Two consumers, and they were written apart before this existed: the
+  /// Alert Meter latches the worst of the nine and reads the five, and
+  /// `analyseFile` takes a running minimum of `ODR-S` while deriving `ODR-I`
+  /// from the finished figures — the same rule, reached twice, and the report
+  /// says why in [AnalysisReport.odrShortMin]'s own note. `TP Max` and
+  /// `Peak Max` belong here even though they only ever climb: an extreme over
+  /// a running maximum is that maximum, so nothing reads differently for
+  /// them, and a list that left them out would invite the question of why.
+  bool get isAccumulated => switch (this) {
+    Metric.lufsIntegrated ||
+    Metric.loudnessRange ||
+    Metric.truePeakMax ||
+    Metric.samplePeakMax ||
+    Metric.odrIntegrated => true,
+    _ => false,
+  };
+
+  /// Whether [value] is a worse reading of this metric than [than].
+  ///
+  /// Which direction is "worse" is a property of the quantity, not of any
+  /// target: a level is worse louder, a ratio a floor is set under is worse
+  /// lower, and a correlation is worse the further into anti-phase it goes.
+  /// Getting one backwards holds up the *best* moment of a programme and
+  /// prints it as the worst — which is what an Alert Meter on `ODR-S` did
+  /// through 0.14.0, and on `Crest` until this moved here: crest is peak minus
+  /// RMS, so the highest crest of a session is its most open moment and the
+  /// module was calling it the failure.
+  ///
+  /// **`Balance` is worse in both directions**, being signed around a centre
+  /// rather than bounded at one end, so it is compared by magnitude — a mix
+  /// pulled hard left is exactly as far out as one pulled hard right, and a
+  /// plain `>` never noticed the left one at all.
+  ///
+  /// A NaN [than] is nothing yet, and anything is worse than nothing.
+  bool isWorse(double value, double than) {
+    if (than.isNaN) return true;
+    return switch (this) {
+      Metric.correlation ||
+      Metric.crestFactor ||
+      Metric.odrIntegrated ||
+      Metric.odrShort => value < than,
+      Metric.balance => value.abs() > than.abs(),
+      _ => value > than,
+    };
+  }
+
   static Metric? fromId(String id) {
     for (final metric in Metric.values) {
       if (metric.id == id) return metric;
@@ -75,9 +172,24 @@ enum Metric {
   /// produces the string "NaN", which looks like a bug report waiting to
   /// happen, and `0.0` — the other obvious placeholder — looks like a
   /// measurement.
+  ///
+  /// **An absolute level at [MeterShape.dbFloor] prints `-∞`, not `-144.0`.**
+  /// The floor is a clamp, not a reading: every dB quantity is limited to it
+  /// before it leaves C, so the number that reaches here for digital silence
+  /// is a sentinel wearing four significant figures. Printed as one it is the
+  /// worst kind of wrong number — plausible, precise, and measured by nobody
+  /// — and it disagreed on screen with the meters beside it, whose scales
+  /// label that same end of the track `-∞` already. Every level readout in the
+  /// application comes through here, so this is the one place it is decided.
+  ///
+  /// This is a *statement about silence*, not a missing measurement: silence
+  /// is a real thing for a meter to have measured, so it is `-∞` and not the
+  /// em dash. Which quantities can reach the floor at all is
+  /// [isAbsoluteLevel]'s question.
   String format(double value) {
     if (value.isNaN) return '—';
     if (!value.isFinite) return value.isNegative ? '-∞' : '∞';
+    if (isAbsoluteLevel && value <= MeterShape.dbFloor) return '-∞';
     return value.toStringAsFixed(decimals);
   }
 }

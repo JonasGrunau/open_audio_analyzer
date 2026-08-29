@@ -151,6 +151,8 @@ contains only what you set up:
 
 - Settings, the canvas layout, your tabs and modules
 - Presets, delivery targets, skins and any meter calibrations you save
+- The path of the preset file the canvas is open on, so that `Save` writes back
+  to it after a restart
 - The name and port used for publishing, and the address of a host you last
   connected to
 

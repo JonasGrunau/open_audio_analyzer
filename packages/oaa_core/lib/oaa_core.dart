@@ -29,3 +29,4 @@ export 'src/skin.dart';
 export 'src/skin_contrast.dart';
 export 'src/spectrum_source.dart';
 export 'src/transport.dart';
+export 'src/weighting.dart';

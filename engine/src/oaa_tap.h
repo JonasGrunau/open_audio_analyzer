@@ -192,6 +192,26 @@ int32_t oaa_tap_running(oaa_tap *tap);
  */
 int32_t oaa_tap_revive(oaa_tap *tap);
 
+/*
+ * Whether `uid` names an aggregate device that a tap in *this process* built.
+ *
+ * This is here because a tap's aggregate device is a device. It is private —
+ * `kAudioAggregateDeviceIsPrivateKey`, so nobody else's audio application can
+ * see it — but "nobody else's" includes ours, and miniaudio enumerating capture
+ * devices finds it exactly as it finds a microphone, with an input stream and a
+ * name and everything else a capture device has. So opening the source menu
+ * while a tap is running offered the user "Open Audio Analyzer System Capture":
+ * the application's own plumbing, presented as something to meter, which would
+ * have read the tap back through a second path that was never meant to exist.
+ *
+ * A UID rather than the name, because the name is a string we chose and a user
+ * is entitled to give an aggregate device of their own the same one.
+ *
+ * `uid` is Core Audio's device UID, which is what miniaudio stores in
+ * `ma_device_id.coreaudio`. NULL and empty answer no.
+ */
+int oaa_tap_owns_device_uid(const char *uid);
+
 /* Stops and releases everything, in the reverse of the order it was built.
  * Safe on NULL. */
 void oaa_tap_close(oaa_tap *tap);

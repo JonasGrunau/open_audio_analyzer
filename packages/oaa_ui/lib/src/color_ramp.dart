@@ -37,31 +37,39 @@ import 'tokens.dart';
 extension ColorRampColors on ColorRamp {
   /// A cell of a field, at [level] of the module's range.
   ///
-  /// Level 0 is the ground — [OaaColors.panel] at [ColorRamp.skin], the ramp's
+  /// Level 0 is the ground — *nothing at all* at [ColorRamp.skin], the ramp's
   /// own near-black at [ColorRamp.rgb] — because a cell no signal reached must
   /// not be a colour that means something.
+  ///
+  /// **The skin ramp's floor is transparent rather than [OaaColors.panel], and
+  /// the two are not the same statement.** Composited over a flat panel they
+  /// are the same pixel — the accent at alpha *t* over `panel` is exactly
+  /// `lerp(panel, accent, t)` — but a module's panel is not flat: it carries
+  /// the light `ModuleFrame` lays across its top-left corner. Painted as an
+  /// opaque copy of the unlit panel, a spectrogram's floor cut a rectangle out
+  /// of that light and the field read as a lid over the module rather than as
+  /// part of it, which is not what any other module does with its plot. Every
+  /// cell the signal actually reached is still opaque ink.
   Color colorAt(double level, OaaColors colors) {
     final at = level.clamp(0.0, 1.0);
     return switch (this) {
-      // Ground to accent to a bright accent tip — one hue, carried by
-      // brightness alone. The ramp used to shade into `warn` at the top, and
-      // that gave the warning colour a second meaning: the loudest cell of a
-      // perfectly healthy mix wore the colour every meter reserves for
-      // "approaching a limit", on a display whose levels are nowhere near one.
-      // Monochrome keeps `warn` and `over` meaning what they mean everywhere
-      // else, and it is what every hardware spectrogram in this instrument's
-      // register draws. The step at 0.55 is where the accent hue is reached in
-      // full; above it the same hue brightens towards the text colour, so a
-      // peak stands off the field without changing what colour it claims to
-      // be.
+      // Ground to accent to warn: two hues, so the field has two things to
+      // read. The step at 0.55 is where the accent hue is reached in full, and
+      // above it the colour turns towards `warn`, so the loudest cells of a
+      // frame are a different colour from the merely present ones rather than
+      // a brighter shade of the same one.
+      //
+      // This was briefly monochrome — ground through the accent to a lighter
+      // accent — on the argument that `warn` should mean "approaching a limit"
+      // and nothing else. It read as a wall: on real material most bands of a
+      // mix sit in the top half of the range, and a one-hue ramp gave that
+      // half nothing to separate it by, so the whole field was the accent at
+      // roughly one brightness. On this display the warning hue means what it
+      // means on a meter's bar — the top of the scale — and a reader wants it.
       ColorRamp.skin =>
         at < 0.55
-            ? Color.lerp(colors.panel, colors.accent, at / 0.55)!
-            : Color.lerp(
-                colors.accent,
-                colors.textPrimary,
-                0.7 * (at - 0.55) / 0.45,
-              )!,
+            ? colors.accent.withValues(alpha: at / 0.55)
+            : Color.lerp(colors.accent, colors.warn, (at - 0.55) / 0.45)!,
       ColorRamp.rgb => _level(at),
     };
   }
@@ -96,8 +104,13 @@ extension ColorRampColors on ColorRamp {
   /// A module drawing a field paints its background in this rather than in
   /// `panel`, or the cells no signal reached and the sliver beside them are two
   /// different colours meaning the same nothing.
+  ///
+  /// Transparent at [ColorRamp.skin]: the panel *is* the ground there, light
+  /// and all, so the field paints nothing and both the unreached cells and the
+  /// sliver beside them show it. [ColorRamp.rgb] declares a ground of its own
+  /// and paints it — see [kRampGround].
   Color groundOf(OaaColors colors) => switch (this) {
-    ColorRamp.skin => colors.panel,
+    ColorRamp.skin => const Color(0x00000000),
     ColorRamp.rgb => kRampGround,
   };
 }

@@ -298,7 +298,6 @@ class _WorkspaceState extends ConsumerState<_Workspace>
     // The canvas commits a layout on every drag, resize and option change, so
     // this is debounced inside the store rather than here.
     ref.listenManual(workspaceProvider, (previous, next) {
-      if (!ref.read(settingsProvider).restoreSession) return;
       // Selection is not part of the session — undo does not walk back through
       // clicks and neither does the autosave. Which tab is open is: reopening
       // on a different tab from the one you left is a small daily wrong.
@@ -306,15 +305,18 @@ class _WorkspaceState extends ConsumerState<_Workspace>
           previous?.activeTab == next.activeTab) {
         return;
       }
-      ref
-          .read(configStoreProvider)
-          .scheduleWrite(
-            ConfigFile.session,
-            SessionSnapshot(
-              preset: next.preset,
-              activeTab: next.activeTab,
-            ).toJson(),
-          );
+      _saveSession();
+    });
+
+    // **The file the canvas is open on is part of the session too, and it moves
+    // on its own.** Opening a preset does change the layout, but it adopts the
+    // file *after* it loads it, so the write the listener above schedules
+    // carries the previous path; a Save As changes the path and, once the
+    // rename has been committed, nothing else. One debounced write per file
+    // means the two coalesce rather than racing.
+    ref.listenManual(presetDocumentProvider, (previous, next) {
+      if (previous?.path == next.path) return;
+      _saveSession();
     });
 
     // A debounced write that has not landed yet has to land before the process
@@ -333,6 +335,27 @@ class _WorkspaceState extends ConsumerState<_Workspace>
     // `MaterialApp` — a panel is a route, so it needs the `Navigator` this
     // widget is built under, and it cannot be opened from `main()`.
     WidgetsBinding.instance.addPostFrameCallback((_) => _applyLaunchOptions());
+  }
+
+  /// Writes the canvas, the open tab and the file it came from, debounced.
+  ///
+  /// Reads both providers rather than taking the changed one as an argument:
+  /// the layout and the document move independently, and a snapshot assembled
+  /// from one of them plus a stale copy of the other is how a session comes
+  /// back pointing at the wrong file.
+  void _saveSession() {
+    if (!ref.read(settingsProvider).restoreSession) return;
+    final workspace = ref.read(workspaceProvider);
+    ref
+        .read(configStoreProvider)
+        .scheduleWrite(
+          ConfigFile.session,
+          SessionSnapshot(
+            preset: workspace.preset,
+            activeTab: workspace.activeTab,
+            path: ref.read(presetDocumentProvider).path,
+          ).toJson(),
+        );
   }
 
   /// Notices that the capture source has stopped, and does something about it.

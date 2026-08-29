@@ -63,7 +63,7 @@ extern "C" {
  * side asserts against it at startup, because a stale prebuilt library that
  * silently reads a reordered struct produces plausible-looking wrong numbers,
  * which is the worst failure mode a measurement tool has. */
-#define OAA_ABI_VERSION 6
+#define OAA_ABI_VERSION 8
 
 /* 7.1 is the widest layout the Digital Meter renders, so it is the widest the
  * graph carries. */
@@ -84,13 +84,29 @@ extern "C" {
 #define OAA_SPECTRUM_HZ_LOW 20.0f
 #define OAA_SPECTRUM_HZ_HIGH 20000.0f
 
-/* Consecutive stereo sample pairs published for the phase scope, oldest first.
- *
- * 1024 is one analysis block at the default settings — about 21 ms — so at
- * 48 kHz the scope shows *every* sample rather than a decimation of them. A
+/* Stereo sample pairs in one analysis block at the default settings — about
+ * 21 ms — and so the most a single measurement adds to `scope`. It is also
+ * what the phase scope draws and what a plugin sends per frame: at 48 kHz the
+ * scope shows *every* sample rather than a decimation of them, and a
  * goniometer that skips samples still draws a plausible figure, which is
  * exactly why the skipping would never be noticed. */
 #define OAA_SCOPE_POINTS 1024
+
+/* Stereo sample pairs `scope` holds: the newest four blocks, not the newest
+ * one.
+ *
+ * A snapshot is a seqlock with one slot, so a publish nobody read before the
+ * next one is gone — and readers run at the display's rate, not the engine's.
+ * At 96 kHz a block is 10.7 ms against a 16.7 ms display tick; a source that
+ * fell behind catches up with back-to-back publishes; a plugin at a
+ * 2048-frame host buffer pushes two blocks per callback. Every one of those
+ * hands a reader the second block and loses the first, and a scope whose
+ * axis is time drew the loss as silence. Four blocks covers a 60 Hz reader at
+ * 192 kHz (3,200 pairs) and a 4096-frame host buffer with room to spare; a
+ * reader takes the newest `elapsed_seconds` worth and treats anything beyond
+ * the window as the gap it is. The same figure as the most a transported
+ * snapshot may carry, on purpose. */
+#define OAA_SCOPE_FRAMES 4096
 
 /* Bins in the published short-term loudness distribution, spanning
  * OAA_HISTOGRAM_MIN_LUFS to OAA_HISTOGRAM_MAX_LUFS.
@@ -327,6 +343,14 @@ typedef struct oaa_snapshot {
   float reserved2;
 
   /* --- Stereo field ---------------------------------------------------- */
+  /* Both are NaN under R128's absolute gate, -70 LUFS: they divide by the
+   * channels' energy, so with nothing there they are 0/0, and a substituted 0
+   * is worse than merely invented for correlation — its smoother approaches a
+   * target without reaching it, so it would keep the sign of the last audio
+   * for the whole of the silence. Correlation needs both channels above the
+   * gate and balance needs either, so a hard-panned source reports a balance
+   * and no correlation. A mono source still answers +1 and 0, which is true.
+   */
   float correlation; /* -1 fully out of phase .. +1 mono */
   float balance;     /* -1 hard left .. +1 hard right */
 
@@ -377,12 +401,18 @@ typedef struct oaa_snapshot {
    * silence is not a direction. */
   float spectrum_pan[OAA_SPECTRUM_BANDS];
 
-  /* The last OAA_SCOPE_POINTS stereo frames, interleaved x=left, y=right,
-   * oldest first. Raw sample values, **not** rotated into goniometer axes:
-   * that rotation is a display choice, and doing it here would bake one
-   * module's convention into the ABI every other consumer has to undo. Mono
-   * publishes the same value in both, which draws the diagonal it should. */
-  float scope[OAA_SCOPE_POINTS * 2];
+  /* The last OAA_SCOPE_FRAMES stereo frames, interleaved x=left, y=right,
+   * oldest first; `scope_frames` of them hold audio, from index 0. Raw sample
+   * values, **not** rotated into goniometer axes: that rotation is a display
+   * choice, and doing it here would bake one module's convention into the ABI
+   * every other consumer has to undo. Mono publishes the same value in both,
+   * which draws the diagonal it should.
+   *
+   * A reader that missed a publish finds the missed block still here, ahead
+   * of the newest — see OAA_SCOPE_FRAMES. It knows how much is new from
+   * `elapsed_seconds`, and takes that many pairs from the end. Grown from one
+   * block in ABI 7, which is the one field of this struct whose size moved. */
+  float scope[OAA_SCOPE_FRAMES * 2];
 
   /* Fraction of the gated short-term blocks that fell in each bin, so the bins
    * sum to 1 and the UI needs no total. All zero before the first gated block
@@ -413,6 +443,13 @@ typedef struct oaa_snapshot {
   float spectrum_mid_peak[OAA_SPECTRUM_BANDS];
   float spectrum_side[OAA_SPECTRUM_BANDS];
   float spectrum_side_peak[OAA_SPECTRUM_BANDS];
+
+  /* --- Appended in ABI 7 ------------------------------------------------- */
+  /* How many pairs of `scope`, from index 0, hold measured audio. Climbs from
+   * zero at oaa_engine_reset to OAA_SCOPE_FRAMES and stays there; anything
+   * past it is whatever was there before, never a sample somebody played. */
+  uint32_t scope_frames;
+  uint32_t reserved7;
 } oaa_snapshot;
 
 /* Which signal a spectrum is read from — the argument to
@@ -534,6 +571,34 @@ OAA_API void oaa_config_defaults(oaa_config *cfg);
 
 OAA_API oaa_engine *oaa_engine_create(const oaa_config *cfg);
 OAA_API void oaa_engine_destroy(oaa_engine *engine);
+
+/*
+ * Destroys every engine this process created and did not destroy, and returns
+ * how many there were.
+ *
+ * This exists for exactly one caller: an application's entry point, run before
+ * it creates its first engine. Nothing in a shipping run ever has anything to
+ * reclaim — the count is zero at process start and `oaa_engine_destroy` keeps
+ * it that way — so this is a no-op everywhere except the one place it is not.
+ *
+ * That place is a Flutter hot restart. It discards the Dart isolate and re-runs
+ * `main` **in the same process**, so no Dart finalizer and no `dispose` runs,
+ * while this library and every thread it started carry on untouched. The
+ * orphaned engine goes on running its analysis thread against a monotonic clock
+ * for the life of the process, and on macOS it also goes on owning a Core Audio
+ * process tap and the private aggregate device underneath it — which
+ * `oaa_devices_enumerate` then offers back to the user as a capture device
+ * named "Open Audio Analyzer System Capture", one per restart. Fifteen
+ * development restarts is fifteen live aggregates, fifteen analysis threads and
+ * a machine at full tilt.
+ *
+ * **Any handle the caller still holds is dangling once this returns**, which is
+ * why the entry point is the only sound place to call it: a fresh isolate holds
+ * none, and everything this frees belongs to an isolate that no longer exists.
+ * It is not a way to close engines that are still in use, and it is not a
+ * substitute for `oaa_engine_destroy`.
+ */
+OAA_API uint32_t oaa_engine_reset_all(void);
 
 OAA_API int32_t oaa_engine_start(oaa_engine *engine);
 OAA_API int32_t oaa_engine_stop(oaa_engine *engine);

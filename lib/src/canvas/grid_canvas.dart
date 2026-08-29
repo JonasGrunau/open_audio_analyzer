@@ -11,6 +11,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../clock/meter_clock.dart';
+import '../data/metric_reader.dart';
 import '../data/providers.dart';
 import 'canvas_notice.dart';
 import 'menus.dart';
@@ -238,6 +239,7 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
 
   Future<void> _showModuleMenu(Offset globalPosition, ModuleSpec module) async {
     final colors = OaaTheme.of(context);
+    final calibration = ref.read(calibrationProvider);
     _controller.select(module.id);
 
     // What this module *has*, above what can be done to any module. A module is
@@ -257,6 +259,57 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
           context,
           _ModuleAction.metric,
           'Metric: ${module.metric.label}',
+        ),
+      // The same row, and it is the whole of what makes this module a *target*
+      // meter rather than a true-peak lamp: the three readings a delivery is
+      // decided by are LUFS-I, LRA and true peak, and until this row existed an
+      // Alert Meter could only ever watch the last of them. The metric was
+      // stored, read and drawn the entire time — there was simply nowhere to
+      // choose it.
+      if (module.kind == ModuleKind.alertMeter) ...[
+        oaaMenuItem(
+          context,
+          _ModuleAction.metric,
+          'Metric: ${module.metric.label}',
+        ),
+        // Under the metric, because it is a view of whatever that row picked.
+        // **Disabled rather than dropped** where there is no line to measure
+        // from — the same rule the oscilloscope's two conditional rows follow,
+        // and for the same reason: a row that vanishes is a row somebody hunts
+        // for. See `hasTarget`.
+        //
+        // **The target is half of that question**, which is why this row moves
+        // when the calibration does, exactly as the Validator's count below
+        // moves: an ODR floor is the target's to state, and Delta on a floor
+        // nobody stated printed an em dash for ever with this row — disabled —
+        // as its only way out. The label says what the module is *doing*, so a
+        // stored `delta` that this target cannot satisfy reads Off here and
+        // comes back On under a target that draws the line.
+        oaaMenuItem(
+          context,
+          _ModuleAction.delta,
+          'Delta: ${alertDeltaOf(module, calibration) ? 'On' : 'Off'}',
+          enabled: hasTarget(module.metric, calibration),
+        ),
+      ],
+      // Which of the delivery criteria this Validator judges — the one
+      // setting in the application that holds a *set* rather than a value, so
+      // the menu it opens stays open. See `showOaaToggleMenu`.
+      //
+      // **The count is of the rows the table actually draws**, not of the five
+      // that exist: the two dynamics floors are the target's to set, and a row
+      // reading `5 of 5` over a table of three is the module contradicting its
+      // own menu. Both numbers move when the target does, which is the honest
+      // answer — what a Validator checks is this setting *and* what the target
+      // says anything about.
+      if (module.kind == ModuleKind.validator)
+        oaaMenuItem(
+          context,
+          _ModuleAction.checks,
+          'Checks: '
+          '${module.validatorChecks.where((c) => c.judgedBy(calibration)).length}'
+          ' of '
+          '${ValidatorCheck.values.where((c) => c.judgedBy(calibration)).length}',
         ),
       // Named "Response" rather than a refresh rate, because that is what it
       // is: the analyser draws every frame the engine publishes at every
@@ -283,6 +336,14 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
           context,
           _ModuleAction.tilt,
           'Tilt: ${module.spectrumTilt.label}',
+        ),
+        // How far down the dB axis reaches. See `SpectrumRange` — the other
+        // setting that changes what the axis means, and printed in the plot's
+        // other corner.
+        oaaMenuItem(
+          context,
+          _ModuleAction.range,
+          'Range: ${module.spectrumRange.label}',
         ),
       ],
       // Named "Smoothing" rather than a response or a time constant, because
@@ -420,12 +481,22 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
     switch (action) {
       case _ModuleAction.metric:
         await _showMetricMenu(globalPosition, module);
+      case _ModuleAction.delta:
+        _controller.setModuleOption(
+          module.id,
+          'delta',
+          !alertDeltaOf(module, calibration),
+        );
+      case _ModuleAction.checks:
+        await _showChecksMenu(globalPosition, module);
       case _ModuleAction.source:
         await _showSourceMenu(globalPosition, module);
       case _ModuleAction.response:
         await _showResponseMenu(globalPosition, module);
       case _ModuleAction.tilt:
         await _showTiltMenu(globalPosition, module);
+      case _ModuleAction.range:
+        await _showRangeMenu(globalPosition, module);
       case _ModuleAction.smoothing:
         await _showSmoothingMenu(globalPosition, module);
       case _ModuleAction.distributionScale:
@@ -474,6 +545,38 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
     _controller.setModuleOption(module.id, 'metric', metric.id);
   }
 
+  /// The Validator's checks, which is the one menu here that stays open.
+  ///
+  /// Each tick is written through as it happens, so the table under the menu
+  /// is redrawn while it is still open — the check being switched off is the
+  /// row being watched leave. That also makes each one its own undo step,
+  /// which is what every other setting on a module already is.
+  ///
+  /// The set is held here rather than re-read from the workspace between taps:
+  /// [module] is a snapshot taken when the menu opened and is stale from the
+  /// first tick onwards, and the whole list is written each time regardless, so
+  /// there is nothing to reconcile.
+  Future<void> _showChecksMenu(Offset globalPosition, ModuleSpec module) async {
+    final calibration = ref.read(calibrationProvider);
+    final chosen = module.validatorChecks.toSet();
+
+    await showOaaToggleMenu<ValidatorCheck>(
+      context,
+      globalPosition,
+      values: ValidatorCheck.values,
+      label: (check) => check.label,
+      chosen: chosen,
+      // A dynamics floor this target does not set is a row that could not be
+      // judged, so it is greyed rather than left out — see `ValidatorCheck`.
+      isEnabled: (check) => check.judgedBy(calibration),
+      onToggle: (check, on) =>
+          _controller.setModuleOption(module.id, 'checks', [
+            for (final value in ValidatorCheck.values)
+              if (chosen.contains(value)) value.id,
+          ]),
+    );
+  }
+
   Future<void> _showResponseMenu(
     Offset globalPosition,
     ModuleSpec module,
@@ -514,6 +617,23 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
 
     if (tilt == null || !mounted) return;
     _controller.setModuleOption(module.id, 'tilt', tilt.id);
+  }
+
+  Future<void> _showRangeMenu(Offset globalPosition, ModuleSpec module) async {
+    final colors = OaaTheme.of(context);
+    final current = module.spectrumRange;
+    final range = await showMenu<SpectrumRange>(
+      context: context,
+      color: colors.panelRaised,
+      position: menuPositionAt(context, globalPosition),
+      items: [
+        for (final range in SpectrumRange.values)
+          oaaMenuItem(context, range, range.label, selected: range == current),
+      ],
+    );
+
+    if (range == null || !mounted) return;
+    _controller.setModuleOption(module.id, 'range', range.id);
   }
 
   Future<void> _showSmoothingMenu(
@@ -759,10 +879,17 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
                 // 300 ms and read as a canvas that was thinking about it. A
                 // long press rejects as soon as the pointer lifts, and reaches
                 // the tablets that have no second mouse button either.
+                // Clearing the selection is not here any more. It is the
+                // selected slot's `TapRegion.onTapOutside`, which fires on the
+                // *press* and fires for a press anywhere that is not the
+                // module — the menu bar and the tab strip included, which no
+                // detector on the canvas could ever have seen. This detector
+                // still has to be opaque: it is what makes a press on empty
+                // canvas a hit at all, and the tap-region surface ignores a
+                // press that hit nothing.
                 Positioned.fill(
                   child: GestureDetector(
                     behavior: HitTestBehavior.opaque,
-                    onTap: () => _controller.select(null),
                     onLongPressStart: (details) => _showAddMenu(
                       details.globalPosition,
                       at: _rectAt(geometry, details.localPosition),
@@ -876,6 +1003,10 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
         gripTouchSize: gripTouch,
         handleTouchHeight: handleTouch,
         onSelect: () => _controller.select(module.id),
+        // Unless a menu or a panel is what was pressed — see [isPressAway].
+        onPressAway: () {
+          if (isPressAway(context)) _controller.select(null);
+        },
         onMenu: (position) => _showModuleMenu(position, module),
         onOption: (key, value) =>
             _controller.setModuleOption(module.id, key, value),
@@ -894,9 +1025,12 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
 
 enum _ModuleAction {
   metric,
+  delta,
+  checks,
   source,
   response,
   tilt,
+  range,
   smoothing,
   distributionScale,
   timeBase,
@@ -923,6 +1057,7 @@ class _ModuleSlot extends StatelessWidget {
     required this.gripTouchSize,
     required this.handleTouchHeight,
     required this.onSelect,
+    required this.onPressAway,
     required this.onMenu,
     required this.onOption,
     required this.onDragStart,
@@ -945,6 +1080,11 @@ class _ModuleSlot extends StatelessWidget {
   /// [ModuleFrame.titleBarHeight] when there is no room.
   final double handleTouchHeight;
   final VoidCallback onSelect;
+
+  /// A press landed somewhere that is not this module — empty canvas, the menu
+  /// bar, the tab strip, another module — while this one was selected. Fired
+  /// on the press, not the release. See [ModuleTapGroup] for what counts.
+  final VoidCallback onPressAway;
   final void Function(Offset globalPosition) onMenu;
 
   /// A setting the module changes itself, from a control of its own. The
@@ -959,147 +1099,164 @@ class _ModuleSlot extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = OaaTheme.of(context);
 
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        // Beneath everything: select and context-menu anywhere on the module.
-        GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: onSelect,
-          onSecondaryTapUp: (details) => onMenu(details.globalPosition),
-        ),
-
-        // The same handle, for a finger. Taller than the bar it enlarges and
-        // masked by the opaque strip above, so it is reached only in the margin
-        // it adds below the bar. Translucent, so that a mouse press here starts
-        // nothing — `supportedDevices` will not admit one — and falls through to
-        // the selection catcher beneath, which selects the module as it always
-        // has. See the header, and [kTouchDragDevices].
-        Positioned(
-          left: 0,
-          right: 0,
-          top: 0,
-          height: handleTouchHeight,
-          child: GestureDetector(
-            behavior: HitTestBehavior.translucent,
-            dragStartBehavior: DragStartBehavior.down,
-            supportedDevices: kTouchDragDevices,
-            onPanStart: (_) => onDragStart(false),
-            onPanUpdate: onDragUpdate,
-            onPanEnd: (_) => onDragEnd(),
-            onPanCancel: onDragEnd,
+    // The slot is one `TapRegion` in the module's own group, and that is the
+    // whole of how a selection is cleared: a press that hits nothing in this
+    // group — empty canvas, the menu bar, the tab strip, another module — is a
+    // press away, and the selected module lets go of itself on the press. The
+    // group is what makes a press on the module's own plot or grip *not* one,
+    // and what lets a body join in — see [ModuleTapGroup], which also says why
+    // the callback is not wired for a module that is not selected.
+    return TapRegion(
+      groupId: module.id,
+      onTapOutside: selected ? (_) => onPressAway() : null,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          // Beneath everything: select and context-menu anywhere on the module.
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: onSelect,
+            onSecondaryTapUp: (details) => onMenu(details.globalPosition),
           ),
-        ),
 
-        // The title bar is the drag handle. Dragging by the body is tempting
-        // and wrong: a histogram that can be scrubbed and a spectrum with a
-        // cursor both need the body, and a canvas that claims it now is a
-        // canvas that has to be unpicked in Phase 3.
-        //
-        // A finger is the one exception, and it is a concession rather than a
-        // reversal — the layer above, which reaches [handleTouchHeight] rather
-        // than these twenty-four pixels. A finger has no cursor to tell it what
-        // it is over and covers the whole bar, and the target cannot grow
-        // outward instead: the slot is a `Positioned.fromRect`, and a
-        // `RenderBox` rejects hits outside its own size, so a box overhanging
-        // the gutter would paint there and never be touched. A module that
-        // later wants its body scrubbed takes those pixels back by shrinking
-        // that layer, not by moving this one.
-        Positioned(
-          left: 0,
-          right: 0,
-          top: 0,
-          height: ModuleFrame.titleBarHeight,
-          child: MouseRegion(
-            cursor: SystemMouseCursors.move,
+          // The same handle, for a finger. Taller than the bar it enlarges and
+          // masked by the opaque strip above, so it is reached only in the margin
+          // it adds below the bar. Translucent, so that a mouse press here starts
+          // nothing — `supportedDevices` will not admit one — and falls through to
+          // the selection catcher beneath, which selects the module as it always
+          // has. See the header, and [kTouchDragDevices].
+          Positioned(
+            left: 0,
+            right: 0,
+            top: 0,
+            height: handleTouchHeight,
             child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              // Without this the module trails the pointer by the pan slop —
-              // 36 logical pixels — for the whole drag, because the default
-              // behaviour reports the drag as beginning where the gesture was
-              // *recognised* rather than where the finger went down. On a
-              // snapping grid that is an entire column of permanent offset
-              // between the pointer and the thing it is carrying.
+              behavior: HitTestBehavior.translucent,
               dragStartBehavior: DragStartBehavior.down,
-              // Or a two-finger gesture over the title bar drags the module —
-              // including the one macOS sends as a right click, which put the
-              // placement grid on screen for as long as the menu took to open.
-              // See [kDragDevices].
-              supportedDevices: kDragDevices,
-              onTap: onSelect,
-              onSecondaryTapUp: (details) => onMenu(details.globalPosition),
+              supportedDevices: kTouchDragDevices,
               onPanStart: (_) => onDragStart(false),
               onPanUpdate: onDragUpdate,
               onPanEnd: (_) => onDragEnd(),
               onPanCancel: onDragEnd,
             ),
           ),
-        ),
 
-        ModuleHost(
-          spec: module,
-          engine: engine,
-          clock: clock,
-          calibration: calibration,
-          selected: selected,
-          onMenu: () => onMenu(_centreOf(context)),
-          onOption: onOption,
-        ),
-
-        // The corner grip's target for a finger, on the same principle as the
-        // band over the title bar and masked the same way by the grip below it.
-        // Sized by `_GridCanvasState._slotFor` rather than here: this layer is
-        // above [ModuleHost], so on a short module an unclamped square would
-        // reach up and take the frame's menu button.
-        Positioned(
-          right: 0,
-          bottom: 0,
-          width: gripTouchSize,
-          height: gripTouchSize,
-          child: GestureDetector(
-            behavior: HitTestBehavior.translucent,
-            dragStartBehavior: DragStartBehavior.down,
-            supportedDevices: kTouchDragDevices,
-            onPanStart: (_) => onDragStart(true),
-            onPanUpdate: onDragUpdate,
-            onPanEnd: (_) => onDragEnd(),
-            onPanCancel: onDragEnd,
+          // The title bar is the drag handle. Dragging by the body is tempting
+          // and wrong: a histogram that can be scrubbed and a spectrum with a
+          // cursor both need the body, and both now have it — the histogram's
+          // overview strip and the analyser's plot each take a press without
+          // the canvas standing in the way. The analyser does it through a
+          // translucent `Listener`, so the selection catcher beneath still sees
+          // the same press; see the header of `spectrum_analyzer.dart`.
+          //
+          // A finger is the one exception, and it is a concession rather than a
+          // reversal — the layer above, which reaches [handleTouchHeight] rather
+          // than these twenty-four pixels. A finger has no cursor to tell it what
+          // it is over and covers the whole bar, and the target cannot grow
+          // outward instead: the slot is a `Positioned.fromRect`, and a
+          // `RenderBox` rejects hits outside its own size, so a box overhanging
+          // the gutter would paint there and never be touched. A module that
+          // later wants its body scrubbed takes those pixels back by shrinking
+          // that layer, not by moving this one.
+          Positioned(
+            left: 0,
+            right: 0,
+            top: 0,
+            height: ModuleFrame.titleBarHeight,
+            child: MouseRegion(
+              cursor: SystemMouseCursors.move,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                // Without this the module trails the pointer by the pan slop —
+                // 36 logical pixels — for the whole drag, because the default
+                // behaviour reports the drag as beginning where the gesture was
+                // *recognised* rather than where the finger went down. On a
+                // snapping grid that is an entire column of permanent offset
+                // between the pointer and the thing it is carrying.
+                dragStartBehavior: DragStartBehavior.down,
+                // Or a two-finger gesture over the title bar drags the module —
+                // including the one macOS sends as a right click, which put the
+                // placement grid on screen for as long as the menu took to open.
+                // See [kDragDevices].
+                supportedDevices: kDragDevices,
+                onTap: onSelect,
+                onSecondaryTapUp: (details) => onMenu(details.globalPosition),
+                onPanStart: (_) => onDragStart(false),
+                onPanUpdate: onDragUpdate,
+                onPanEnd: (_) => onDragEnd(),
+                onPanCancel: onDragEnd,
+              ),
+            ),
           ),
-        ),
 
-        Positioned(
-          right: 0,
-          bottom: 0,
-          width: gripSize,
-          height: gripSize,
-          child: MouseRegion(
-            cursor: SystemMouseCursors.resizeDownRight,
+          ModuleTapGroup(
+            id: module.id,
+            child: ModuleHost(
+              spec: module,
+              engine: engine,
+              clock: clock,
+              calibration: calibration,
+              selected: selected,
+              onMenu: () => onMenu(_centreOf(context)),
+              onOption: onOption,
+            ),
+          ),
+
+          // The corner grip's target for a finger, on the same principle as the
+          // band over the title bar and masked the same way by the grip below it.
+          // Sized by `_GridCanvasState._slotFor` rather than here: this layer is
+          // above [ModuleHost], so on a short module an unclamped square would
+          // reach up and take the frame's menu button.
+          Positioned(
+            right: 0,
+            bottom: 0,
+            width: gripTouchSize,
+            height: gripTouchSize,
             child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
+              behavior: HitTestBehavior.translucent,
               dragStartBehavior: DragStartBehavior.down,
-              // Or a two-finger gesture that starts on the grip resizes the
-              // module. See [kDragDevices].
-              supportedDevices: kDragDevices,
-              // Without this the grip is the one place on a module where a tap
-              // does nothing at all: it is opaque, so it takes the hit from the
-              // selection catcher, and it had nothing of its own to spend it
-              // on. Barely noticeable at sixteen pixels; plainly wrong with a
-              // finger's target around it, where tapping two millimetres away
-              // selects the module and tapping the ticks does not.
-              onTap: onSelect,
+              supportedDevices: kTouchDragDevices,
               onPanStart: (_) => onDragStart(true),
               onPanUpdate: onDragUpdate,
               onPanEnd: (_) => onDragEnd(),
               onPanCancel: onDragEnd,
-              child: CustomPaint(
-                painter: _GripPainter(
-                  selected ? colors.textPrimary : colors.textFaint,
+            ),
+          ),
+
+          Positioned(
+            right: 0,
+            bottom: 0,
+            width: gripSize,
+            height: gripSize,
+            child: MouseRegion(
+              cursor: SystemMouseCursors.resizeDownRight,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                dragStartBehavior: DragStartBehavior.down,
+                // Or a two-finger gesture that starts on the grip resizes the
+                // module. See [kDragDevices].
+                supportedDevices: kDragDevices,
+                // Without this the grip is the one place on a module where a tap
+                // does nothing at all: it is opaque, so it takes the hit from the
+                // selection catcher, and it had nothing of its own to spend it
+                // on. Barely noticeable at sixteen pixels; plainly wrong with a
+                // finger's target around it, where tapping two millimetres away
+                // selects the module and tapping the ticks does not.
+                onTap: onSelect,
+                onPanStart: (_) => onDragStart(true),
+                onPanUpdate: onDragUpdate,
+                onPanEnd: (_) => onDragEnd(),
+                onPanCancel: onDragEnd,
+                child: CustomPaint(
+                  painter: _GripPainter(
+                    selected ? colors.textPrimary : colors.textFaint,
+                  ),
                 ),
               ),
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 

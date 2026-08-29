@@ -129,6 +129,10 @@ void oaa_sleep_seconds(double seconds) {
   Sleep((DWORD)(seconds * 1000.0));
 }
 
+/* Exclusive both times: the registry has no readers worth a shared mode. */
+void oaa_mutex_lock(oaa_mutex *mutex) { AcquireSRWLockExclusive(mutex); }
+void oaa_mutex_unlock(oaa_mutex *mutex) { ReleaseSRWLockExclusive(mutex); }
+
 #else /* POSIX */
 
 int oaa_thread_start(oaa_thread *thread, void *(*entry)(void *), void *arg) {
@@ -136,6 +140,9 @@ int oaa_thread_start(oaa_thread *thread, void *(*entry)(void *), void *arg) {
 }
 
 void oaa_thread_join(oaa_thread thread) { pthread_join(thread, NULL); }
+
+void oaa_mutex_lock(oaa_mutex *mutex) { pthread_mutex_lock(mutex); }
+void oaa_mutex_unlock(oaa_mutex *mutex) { pthread_mutex_unlock(mutex); }
 
 double oaa_now_seconds(void) {
   struct timespec ts;
@@ -193,9 +200,6 @@ static void oaa_clear_measurements(oaa_engine *engine) {
     engine->device_stopped_seconds = oaa_now_seconds();
   }
   engine->sample_peak_max_linear = 0.0f;
-  engine->corr_sum_lr = 0.0;
-  engine->corr_sum_ll = 0.0;
-  engine->corr_sum_rr = 0.0;
 
   oaa_snapshot *s = &engine->staging;
   s->elapsed_seconds = 0.0;
@@ -220,8 +224,13 @@ static void oaa_clear_measurements(oaa_engine *engine) {
 
   s->sample_peak_max = OAA_DB_FLOOR;
   s->crest = 0.0f;
-  s->correlation = engine->cfg.channels >= 2 ? 0.0f : 1.0f;
-  s->balance = 0.0f;
+  /* A stereo pair that has not been handed any audio yet has no correlation
+   * and no balance — and `s->correlation` is also the smoother's own state, so
+   * NaN here is what makes the first block after a reset seed it instead of
+   * mixing with a value nobody measured. Mono answers for itself. */
+  const int paired = engine->cfg.channels >= 2;
+  s->correlation = paired ? NAN : 1.0f;
+  s->balance = paired ? NAN : 0.0f;
 
   for (uint32_t c = 0; c < OAA_MAX_CHANNELS; c++) {
     s->peak[c] = OAA_DB_FLOOR;
@@ -247,6 +256,7 @@ static void oaa_clear_measurements(oaa_engine *engine) {
     s->spectrum_side_peak[b] = pair;
   }
   memset(s->scope, 0, sizeof(s->scope));
+  s->scope_frames = 0;
   memset(s->histogram, 0, sizeof(s->histogram));
 }
 
@@ -483,6 +493,72 @@ void oaa_config_defaults(oaa_config *cfg) {
   cfg->block_frames = OAA_DEFAULT_BLOCK_FRAMES;
 }
 
+/* ------------------------------------------------------------------------ */
+/* The list of live engines                                                  */
+/* ------------------------------------------------------------------------ */
+
+/*
+ * Every engine that was created and not yet destroyed, so that the one caller
+ * who can have orphans — an entry point re-running in a process that never
+ * exited — can reclaim them. See oaa_engine_reset_all in oaa.h for why that
+ * caller exists at all.
+ *
+ * A list and a lock, and nothing more: engines are created when a user picks a
+ * source, which is a handful of times in a session, so there is nothing here to
+ * make cheap. Nothing on the measurement path touches either.
+ */
+static oaa_mutex oaa_live_lock = OAA_MUTEX_INIT;
+static oaa_engine *oaa_live = NULL;
+
+static void oaa_live_add(oaa_engine *engine) {
+  oaa_mutex_lock(&oaa_live_lock);
+  engine->next_live = oaa_live;
+  oaa_live = engine;
+  oaa_mutex_unlock(&oaa_live_lock);
+}
+
+/* Silently does nothing for an engine that is not on the list, which is the
+ * ordinary case twice over: oaa_engine_create fails through
+ * oaa_engine_destroy() long before it registers anything, and
+ * oaa_engine_reset_all detaches the whole list before destroying what it took.
+ */
+static void oaa_live_remove(oaa_engine *engine) {
+  oaa_mutex_lock(&oaa_live_lock);
+  oaa_engine **link = &oaa_live;
+  while (*link != NULL) {
+    if (*link == engine) {
+      *link = engine->next_live;
+      engine->next_live = NULL;
+      break;
+    }
+    link = &(*link)->next_live;
+  }
+  oaa_mutex_unlock(&oaa_live_lock);
+}
+
+uint32_t oaa_engine_reset_all(void) {
+  /* Detached whole, under the lock, and destroyed outside it. Destroying under
+   * the lock would deadlock on oaa_live_remove, and oaa_engine_destroy is not a
+   * quick call — it stops an analysis thread and joins it, and on macOS it also
+   * unbuilds a Core Audio tap. Holding a process-wide lock across all of that
+   * so that a concurrent oaa_engine_create could wait for it would be inventing
+   * a contention problem to solve a bookkeeping one. */
+  oaa_mutex_lock(&oaa_live_lock);
+  oaa_engine *engine = oaa_live;
+  oaa_live = NULL;
+  oaa_mutex_unlock(&oaa_live_lock);
+
+  uint32_t reclaimed = 0;
+  while (engine != NULL) {
+    oaa_engine *next = engine->next_live;
+    engine->next_live = NULL;
+    oaa_engine_destroy(engine);
+    reclaimed++;
+    engine = next;
+  }
+  return reclaimed;
+}
+
 oaa_engine *oaa_engine_create(const oaa_config *cfg) {
   oaa_config resolved;
   oaa_config_defaults(&resolved);
@@ -594,6 +670,10 @@ oaa_engine *oaa_engine_create(const oaa_config *cfg) {
   memcpy(&engine->shared, &engine->staging, sizeof(oaa_snapshot));
   memcpy(&engine->front, &engine->staging, sizeof(oaa_snapshot));
 
+  /* Last, so that nothing half-built is ever on the list: every failure above
+   * leaves through oaa_engine_destroy, which would then have to unregister
+   * something that was never a working engine. */
+  oaa_live_add(engine);
   return engine;
 }
 
@@ -601,6 +681,9 @@ void oaa_engine_destroy(oaa_engine *engine) {
   if (engine == NULL) {
     return;
   }
+  /* First, so that an engine being torn down is never handed out again by
+   * oaa_engine_reset_all running on another thread. */
+  oaa_live_remove(engine);
   oaa_engine_stop(engine);
 
   /* The device first, always: it owns the thread that writes into the ring,

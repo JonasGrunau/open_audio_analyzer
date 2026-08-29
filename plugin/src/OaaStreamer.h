@@ -134,6 +134,11 @@ public:
 private:
   void run() override;
 
+  /* Acquires the snapshot the last push published and sends it, with the
+   * transport frame that describes the same instant. Called once per push —
+   * see `run` for why it must not be once per drain. */
+  void publish();
+
   bool ensureConnected();
   bool sendAll(const std::vector<uint8_t>& bytes);
   void rebuildEngine(double sampleRate, int channels);

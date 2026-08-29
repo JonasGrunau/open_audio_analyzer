@@ -54,13 +54,25 @@ final presetModifiedProvider = Provider<bool>((ref) {
 });
 
 class PresetDocumentController extends Notifier<PresetDocument> {
-  /// A launch has no file and nothing saved.
+  /// A launch adopts the file yesterday's session was open on, if there was
+  /// one.
   ///
-  /// Null [saved] is not "modified": it means no file has been read or written
-  /// yet, and [presetModifiedProvider] measures against what the canvas opened
-  /// with instead. Null [path] is why Save on a fresh session asks where to go.
+  /// **The path comes back; [saved] deliberately does not.** The canvas is
+  /// restored from `session.json`, which is written on every edit, so what is
+  /// on screen at launch may be ahead of what is in the preset file — and there
+  /// is nothing here to compare it against, because the file has not been read.
+  /// Null [saved] is not "modified": it means nothing has been read or written
+  /// *this* session, and [presetModifiedProvider] measures against what the
+  /// canvas opened with instead, which is how a restored session has always
+  /// opened unmarked. Save then writes those edits back to the file they came
+  /// from, which is the whole point of remembering it.
+  ///
+  /// A path that no longer names a file never arrives here — `loadStartupConfig`
+  /// drops it — so null [path] still means exactly one thing: there is nowhere
+  /// to save to yet, and Save asks.
   @override
-  PresetDocument build() => (path: null, saved: null);
+  PresetDocument build() =>
+      (path: ref.watch(startupConfigProvider).session?.path, saved: null);
 
   /// Reads [path], applies it to the canvas, and adopts it.
   ///

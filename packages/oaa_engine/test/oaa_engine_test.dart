@@ -188,6 +188,67 @@ void main() {
     expect(engine.rms[0].isFinite, isTrue);
   });
 
+  // **The floor has to be a floor, and for the two window readings it was a
+  // substitute for -inf instead.** They clamped by comparing the result
+  // against -HUGE_VAL, which an energy of exactly zero produces and nothing
+  // else does. What a momentary window actually holds once the signal stops is
+  // the tail of the K-weighting filters ringing out — an energy of 1e-90,
+  // reported faithfully as -1860 LUFS — and the reading went on falling for as
+  // long as that tail took to age out of the window, then jumped back *up* to
+  // the floor at the moment it did. The bars drawn from it fell off the bottom
+  // of the scale, went, and put a hairline of fill back at the foot of the
+  // track a second later; the same numbers reached the wire and the JSON
+  // report, where a four-figure LUFS reading is a measurement of nothing.
+  //
+  // Pushed rather than generated, because the defect is in what happens to a
+  // *window that had programme in it* — OaaSource.silence never puts any there
+  // and never rings.
+  test('loudness stops at the floor when the signal stops', () {
+    const rate = 48000;
+    const frames = 512;
+    final engine = OaaEngine.start(
+      source: OaaSource.push,
+      sampleRate: rate,
+      channels: 2,
+      blockFrames: frames,
+    );
+    addTearDown(engine.dispose);
+
+    var phase = 0.0;
+    for (var i = 0; i < (5 * rate) ~/ frames; i++) {
+      final tone = Float32List(frames * 2);
+      for (var f = 0; f < frames; f++) {
+        final sample = 0.2 * math.sin(phase);
+        phase += 2 * math.pi * 1000 / rate;
+        tone[f * 2] = sample;
+        tone[f * 2 + 1] = sample;
+      }
+      engine.push(tone);
+    }
+    expect(
+      engine.lufsMomentary,
+      greaterThan(-30.0),
+      reason: 'the tone has to be measured before the silence means anything',
+    );
+
+    final silence = Float32List(frames * 2);
+    var lowestMomentary = 0.0;
+    var lowestShort = 0.0;
+    for (var i = 0; i < (6 * rate) ~/ frames; i++) {
+      engine.push(silence);
+      lowestMomentary = math.min(lowestMomentary, engine.lufsMomentary);
+      lowestShort = math.min(lowestShort, engine.lufsShort);
+    }
+
+    // Six seconds is twice the short-term window, so both have long since
+    // emptied — and the excursion, when there was one, was over by then and
+    // would be invisible in the final reading alone.
+    expect(lowestMomentary, greaterThanOrEqualTo(kOaaDbFloor));
+    expect(lowestShort, greaterThanOrEqualTo(kOaaDbFloor));
+    expect(engine.lufsMomentary, closeTo(kOaaDbFloor, 0.001));
+    expect(engine.lufsShort, closeTo(kOaaDbFloor, 0.001));
+  });
+
   test('reset clears the integrators', () async {
     final engine = OaaEngine.start(source: OaaSource.testTone);
     addTearDown(engine.dispose);
@@ -308,6 +369,249 @@ void main() {
 
       engine.push(Float32List(1024 * 2));
       expect(engine.clip[0], 0);
+    });
+  });
+
+  // --- The stereo field -----------------------------------------------------
+  //
+  // Correlation is 0/0 when neither channel carries energy, and the engine used
+  // to answer `0` and let the 200 ms smoother chase it. A one-pole never
+  // arrives, so the published reading kept the *sign* of the last audio for as
+  // long as the silence lasted: a track fading out on a wide reverb tail ends
+  // slightly out of phase, and the Phase Scope then held its marker a pixel off
+  // centre and lit it in the warning colour — asserting anti-phase content in a
+  // signal that had stopped — until the exponential underflowed twenty-odd
+  // seconds later. It was reported as a meter that would not return to centre.
+  group('stereo field', () {
+    /// One block of a constant pair, so its correlation is exactly ±1 and its
+    /// balance is exactly 0.
+    Float32List pair(double left, double right, {int frames = 1024}) {
+      final data = Float32List(frames * 2);
+      for (var i = 0; i < frames; i++) {
+        data[i * 2] = left;
+        data[i * 2 + 1] = right;
+      }
+      return data;
+    }
+
+    test('a stereo pair says nothing until it has been handed audio', () {
+      final engine = OaaEngine.start(source: OaaSource.push, blockFrames: 1024);
+      addTearDown(engine.dispose);
+
+      expect(engine.correlation.isNaN, isTrue);
+      expect(engine.balance.isNaN, isTrue);
+    });
+
+    test('silence has no correlation and no balance', () {
+      final engine = OaaEngine.start(source: OaaSource.push, blockFrames: 1024);
+      addTearDown(engine.dispose);
+
+      engine.push(pair(0.5, -0.5));
+      expect(engine.correlation, closeTo(-1.0, 1e-5));
+
+      engine.push(Float32List(1024 * 2));
+      expect(
+        engine.correlation.isNaN,
+        isTrue,
+        reason: 'a signal that has stopped is not a signal out of phase',
+      );
+      expect(engine.balance.isNaN, isTrue);
+
+      // And it stays undefined rather than creeping back towards a number.
+      for (var i = 0; i < 50; i++) {
+        engine.push(Float32List(1024 * 2));
+      }
+      expect(engine.correlation.isNaN, isTrue);
+    });
+
+    test('audio after silence is measured, not mixed with a NaN', () {
+      final engine = OaaEngine.start(source: OaaSource.push, blockFrames: 1024);
+      addTearDown(engine.dispose);
+
+      engine.push(pair(0.5, -0.5));
+      engine.push(Float32List(1024 * 2));
+      expect(engine.correlation.isNaN, isTrue);
+
+      // The smoother's state *is* the published field, so the first block back
+      // has to seed it. Mixing would give NaN for the rest of the session.
+      engine.push(pair(0.5, 0.5));
+      expect(engine.correlation, closeTo(1.0, 1e-5));
+      expect(engine.balance, closeTo(0.0, 1e-5));
+    });
+
+    test('the sign of the last audio does not survive the silence', () {
+      final engine = OaaEngine.start(source: OaaSource.push, blockFrames: 1024);
+      addTearDown(engine.dispose);
+
+      // A tail that ends out of phase, the way a wide reverb does.
+      engine.push(pair(0.5, -0.5));
+      engine.push(Float32List(1024 * 2));
+
+      expect(
+        engine.correlation.isNaN || engine.correlation >= 0,
+        isTrue,
+        reason: 'the warning colour was latched by arithmetic, not by audio',
+      );
+    });
+
+    test('a noise floor is not a stereo image', () {
+      final engine = OaaEngine.start(source: OaaSource.push, blockFrames: 1024);
+      addTearDown(engine.dispose);
+
+      // A live input with nothing playing into it is never *exactly* zero, and
+      // the correlation of two channels of noise is a random number near zero
+      // whose sign falls whichever way the block did — so a guard at float
+      // underflow would answer honestly for a stopped software player and go
+      // on rolling dice for a converter sitting idle. −100 dBFS, well under
+      // the −70 LUFS gate.
+      final random = math.Random(7);
+      final floor = Float32List(1024 * 2);
+      for (var i = 0; i < 1024; i++) {
+        floor[i * 2] = (random.nextDouble() - 0.5) * 2e-5;
+        floor[i * 2 + 1] = (random.nextDouble() - 0.5) * 2e-5;
+      }
+
+      engine.push(pair(0.5, 0.5));
+      for (var i = 0; i < 20; i++) {
+        engine.push(floor);
+        expect(
+          engine.correlation.isNaN,
+          isTrue,
+          reason: 'the noise floor is not a signal to correlate',
+        );
+        expect(engine.balance.isNaN, isTrue);
+      }
+    });
+
+    test('a hard-panned source has a balance but no correlation', () {
+      final engine = OaaEngine.start(source: OaaSource.push, blockFrames: 1024);
+      addTearDown(engine.dispose);
+
+      engine.push(pair(0.5, 0.0));
+      expect(
+        engine.correlation.isNaN,
+        isTrue,
+        reason: 'there is nothing in the right channel to correlate with',
+      );
+      expect(
+        engine.balance,
+        closeTo(-1.0, 1e-5),
+        reason: 'which side it is on is exactly what balance is for',
+      );
+    });
+
+    test('a mono source answers for itself', () {
+      final engine = OaaEngine.start(
+        source: OaaSource.push,
+        channels: 1,
+        blockFrames: 1024,
+      );
+      addTearDown(engine.dispose);
+
+      // True before any audio and true after it: one channel is perfectly
+      // correlated with itself and dead centre, which is not the same claim as
+      // the one silence cannot make.
+      expect(engine.correlation, 1.0);
+      expect(engine.balance, 0.0);
+
+      engine.push(Float32List(1024));
+      expect(engine.correlation, 1.0);
+      expect(engine.balance, 0.0);
+    });
+  });
+
+  // --- The scope window -----------------------------------------------------
+  //
+  // `scope` holds the newest four blocks, not the newest one, because a reader
+  // at the display's rate misses publishes — a 10.7 ms block at 96 kHz against
+  // a 16.7 ms tick, an engine catching up, a plugin pushing two blocks per host
+  // callback — and a scope drew every missed block as silence. See
+  // OAA_SCOPE_FRAMES in oaa.h. The window fills from the front, slides once it
+  // is full, and `scopeFrames` says how much of it is audio, so a reader can
+  // always take "the newest N pairs" as the N before the count.
+  group('scope window', () {
+    /// One block whose every frame is ([value], −[value]), so a block is
+    /// readable back off any sample of it.
+    Float32List block(double value, {int frames = 1024}) {
+      final data = Float32List(frames * 2);
+      for (var i = 0; i < frames; i++) {
+        data[i * 2] = value;
+        data[i * 2 + 1] = -value;
+      }
+      return data;
+    }
+
+    test('holds the blocks pushed, oldest first, and counts them', () {
+      final engine = OaaEngine.start(source: OaaSource.push, blockFrames: 1024);
+      addTearDown(engine.dispose);
+
+      engine.push(block(0.1));
+      expect(engine.scopeFrames, 1024);
+
+      engine.push(block(0.2));
+      engine.push(block(0.3));
+      expect(engine.scopeFrames, 3072);
+      expect(engine.scope[0], closeTo(0.1, 1e-6), reason: 'oldest first');
+      expect(engine.scope[1024 * 2], closeTo(0.2, 1e-6));
+      expect(engine.scope[2048 * 2], closeTo(0.3, 1e-6));
+      expect(engine.scope[2048 * 2 + 1], closeTo(-0.3, 1e-6));
+    });
+
+    test('a fifth block drops the oldest, never the newest', () {
+      final engine = OaaEngine.start(source: OaaSource.push, blockFrames: 1024);
+      addTearDown(engine.dispose);
+
+      for (final value in [0.1, 0.2, 0.3, 0.4, 0.5]) {
+        engine.push(block(value));
+      }
+      expect(engine.scopeFrames, kOaaScopeFrames);
+      expect(
+        engine.scope[0],
+        closeTo(0.2, 1e-6),
+        reason: 'the window slid by one block and 0.1 fell off the front',
+      );
+      expect(engine.scope[(kOaaScopeFrames - 1) * 2], closeTo(0.5, 1e-6));
+    });
+
+    test('a push larger than the window keeps its newest four blocks', () {
+      final engine = OaaEngine.start(source: OaaSource.push, blockFrames: 1024);
+      addTearDown(engine.dispose);
+
+      const frames = 5000;
+      final ramp = Float32List(frames * 2);
+      for (var i = 0; i < frames; i++) {
+        ramp[i * 2] = i / frames;
+        ramp[i * 2 + 1] = -i / frames;
+      }
+      engine.push(ramp);
+
+      expect(engine.scopeFrames, kOaaScopeFrames);
+      expect(
+        engine.scope[0],
+        closeTo((frames - kOaaScopeFrames) / frames, 1e-6),
+      );
+      expect(
+        engine.scope[(kOaaScopeFrames - 1) * 2],
+        closeTo((frames - 1) / frames, 1e-6),
+        reason: 'the last sample pushed is the last sample held',
+      );
+    });
+
+    test('reset empties it', () {
+      final engine = OaaEngine.start(source: OaaSource.push, blockFrames: 1024);
+      addTearDown(engine.dispose);
+
+      engine.push(block(0.4));
+      engine.push(block(0.4));
+      engine.reset();
+      // A push acquires; a reset publishes and leaves the acquiring to the
+      // reader, so ask before looking.
+      engine.refresh();
+      expect(engine.scopeFrames, 0);
+
+      engine.push(block(0.6));
+      expect(engine.scopeFrames, 1024);
+      expect(engine.scope[0], closeTo(0.6, 1e-6));
     });
   });
 
@@ -558,6 +862,72 @@ void main() {
       },
       timeout: const Timeout(Duration(minutes: 5)),
     );
+
+    test(
+      'the tap\'s own aggregate device is not offered as a source',
+      () {
+        final tap = systemOutput();
+        if (tap == null) return;
+
+        // A tap is read through a *private aggregate device*, and private means
+        // private to every process but this one. This process is the one
+        // drawing the source menu, and to miniaudio that aggregate is an
+        // ordinary capture device with an input stream and a name — so opening
+        // the menu while the tap ran offered "Open Audio Analyzer System
+        // Capture" underneath the System Output entry that had built it. The
+        // application's own plumbing, presented as something to meter.
+        //
+        // Enumerated *while an engine holds the tap*, because that is the only
+        // window in which the device exists at all. The list is filtered by
+        // UID rather than by the name asserted here; the name is what a user
+        // would have seen.
+        final before = OaaEngine.devices().length;
+
+        final engine = OaaEngine.start(
+          source: OaaSource.device,
+          deviceId: kOaaSystemOutputDeviceId,
+        );
+        addTearDown(engine.dispose);
+
+        final during = OaaEngine.devices();
+        expect(during.where((d) => d.name.contains('System Capture')), isEmpty);
+        // The stronger claim: the running tap added nothing at all. A device
+        // genuinely arriving mid-test would fail this, which is worth the
+        // vanishing risk — the alternative is a test that passes because the
+        // name changed.
+        expect(during.length, before);
+      },
+      timeout: const Timeout(Duration(minutes: 5)),
+    );
+  });
+
+  group('reclaiming orphans', () {
+    // `oaa_engine_reset_all` exists for a Flutter hot restart, which re-runs
+    // `main` in a process that never exited — so nothing disposes the engine
+    // the previous isolate owned, and it goes on metering (and on macOS goes on
+    // owning a Core Audio tap) for the life of the process. There is no way to
+    // stage a hot restart from a test, so what is checked is the bookkeeping it
+    // rests on.
+
+    test('reclaims nothing when nothing is owed', () {
+      expect(OaaEngine.resetAll(), 0);
+    });
+
+    test('a disposed engine is no longer owed', () {
+      OaaEngine.start(source: OaaSource.silence).dispose();
+      expect(OaaEngine.resetAll(), 0);
+    });
+
+    test('an undisposed engine is reclaimed exactly once', () {
+      // Deliberately not disposed and deliberately not held: this is the
+      // orphan, and `resetAll` is the only thing that may free it. Disposing it
+      // afterwards would be the double free the doc comment warns about.
+      OaaEngine.start(source: OaaSource.silence);
+      OaaEngine.start(source: OaaSource.testTone);
+
+      expect(OaaEngine.resetAll(), 2);
+      expect(OaaEngine.resetAll(), 0);
+    });
   });
 }
 

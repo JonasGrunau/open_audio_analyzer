@@ -2,6 +2,7 @@
 
 import 'dart:math' as math;
 
+import 'calibration.dart';
 import 'metric.dart';
 import 'spectrum_source.dart';
 import 'transport.dart';
@@ -75,7 +76,16 @@ enum ModuleKind {
     minRows: 2,
     defaultColumns: 4,
     defaultRows: 3,
-    defaultMetric: Metric.truePeakMax,
+    // **The live true peak, not `TP Max`.** The two print the same number on
+    // this module — the largest windowed peak of a session is that session's
+    // peak — but only one of them is the module doing its job. `TP Max` is
+    // held by the *engine* ([Metric.isAccumulated]), so an Alert Meter on it
+    // reads rather than latches: a Number Box with a bigger font and a light,
+    // which is what shipped as the default until 0.14.1. The live reading is
+    // gone within three seconds of the transient that caused it, which is the
+    // one thing on the canvas nothing else can recover — and it is cleared by
+    // this module's own events rather than only by an engine reset.
+    defaultMetric: Metric.truePeak,
     minBodyWidth: 48,
     minBodyHeight: 28,
   ),
@@ -614,6 +624,51 @@ enum SpectrumTilt {
   }
 }
 
+/// How much of the level axis the Spectrum Analyzer draws: 0 dBFS at the top
+/// of the plot down to this many decibels below it, linear in dB.
+///
+/// The three values and the default are FabFilter Pro-Q's, because they are the
+/// ones a mix engineer's hands already know: 60 dB is a zoom into the top of
+/// the range, where a mastering decision is made; 120 dB is everything a
+/// 20-bit converter can say; 90 dB is the one that shows a mix and its noise
+/// floor on one plot. **Linear**, rather than the tapered level scale the
+/// meters draw, because a range setting on a taper would move nothing but the
+/// bottom tenth of the plot — the taper already compresses everything under
+/// −60 dB into it — and a setting that changes almost nothing on screen is one
+/// nobody can tell they have chosen.
+///
+/// Like [SpectrumTilt], this moves the picture and nothing else: the bands are
+/// measured, reported and sent over the wire the same at every setting.
+enum SpectrumRange {
+  db60('60', '60 dB', 60, 6),
+  db90('90', '90 dB', 90, 10),
+  db120('120', '120 dB', 120, 12);
+
+  const SpectrumRange(this.id, this.label, this.decibels, this.step);
+
+  /// Stable identifier for presets and the wire protocol. Never change one of
+  /// these; add a new range instead.
+  final String id;
+
+  /// What the module's menu says, and what the analyser prints in its corner.
+  final String label;
+
+  /// Decibels between the top of the plot and its floor.
+  final double decibels;
+
+  /// The spacing of the labelled gridlines, chosen per range so that each
+  /// draws about ten of them at the same density: 6 dB steps where the plot is
+  /// zoomed in, 12 where it is not, and 10 across 90, which neither divides.
+  final double step;
+
+  static SpectrumRange? fromId(String id) {
+    for (final range in SpectrumRange.values) {
+      if (range.id == id) return range;
+    }
+    return null;
+  }
+}
+
 /// What decides where the oscilloscope's window starts and how wide it is.
 ///
 /// [free] is the display this module was born with: a width in milliseconds
@@ -782,6 +837,48 @@ enum ScopeStereo {
   static ScopeStereo? fromId(String id) {
     for (final mode in ScopeStereo.values) {
       if (mode.id == id) return mode;
+    }
+    return null;
+  }
+}
+
+/// Which of two overlaid oscilloscope traces is drawn in front.
+///
+/// [ScopeStereo.overlay] puts both channels around one centre line and tells
+/// them apart by weight — one at full ink, the other dimmed — so one of them is
+/// read *through* the other wherever they cross, which on correlated material
+/// is most of the width. Which one that is has no right answer: it is whichever
+/// channel you are looking at, and that changes between one glance and the
+/// next.
+///
+/// So it is a control rather than a constant, and the legend is the control —
+/// the two letters in the strip, in the inks their traces are drawn in, front
+/// one first. Clicking them swaps the pair. There is no menu row, for the same
+/// reason the height and the threshold have none: it is chosen by looking at
+/// the picture, and a menu that opens over the picture cannot be used for that.
+///
+/// [ScopeStereo.lanes] has no front. Two traces around two centre lines never
+/// cross, so nothing is hidden behind anything and this setting is simply not
+/// read — the letters stay in their lanes, where the painter draws them.
+enum ScopeFront {
+  left('left', 'L'),
+  right('right', 'R');
+
+  const ScopeFront(this.id, this.label);
+
+  /// Stable identifier for presets and the wire protocol. Never change one of
+  /// these.
+  final String id;
+
+  /// The channel's letter, which is the whole of what the legend prints.
+  final String label;
+
+  /// The other one, which is what clicking the legend selects.
+  ScopeFront get swapped => this == left ? right : left;
+
+  static ScopeFront? fromId(String id) {
+    for (final front in ScopeFront.values) {
+      if (front.id == id) return front;
     }
     return null;
   }
@@ -1048,6 +1145,74 @@ enum ColorRamp {
   }
 }
 
+/// One line of the Validator's table: a delivery criterion the target settles.
+///
+/// The five are not a menu of measurements — they are the whole set of
+/// questions a [Calibration] answers, which is what makes them checkable at
+/// all. A row for correlation or for balance would be a row with nothing to
+/// judge it against, and a Validator's job is the comparison rather than the
+/// reading; the module that watches an arbitrary metric is the Alert Meter.
+///
+/// **Which of them a given Validator checks is the module's own choice**, and
+/// the two dynamics rows are additionally the target's — see [judgedBy]. A
+/// mix bound for a platform that states no true-peak ceiling worth watching, or
+/// an engineer who wants one module for loudness and another for dynamics on
+/// the same tab, was previously served one table of everything: the checks a
+/// delivery actually turns on and the ones nobody in the room cares about, in
+/// the same ink, deciding the same verdict. Turning one off removes it from the
+/// verdict as well as from the table, which is the point — a NOT READY that is
+/// really "the LRA of a podcast is 4 LU" is a red light somebody learns to
+/// ignore, and a red light somebody learns to ignore is worse than no light.
+enum ValidatorCheck {
+  lufsIntegrated('lufs_i', Metric.lufsIntegrated),
+  truePeak('tp_max', Metric.truePeakMax),
+  loudnessRange('lra', Metric.loudnessRange),
+  odrIntegrated('odr_i', Metric.odrIntegrated),
+
+  /// Judged against the lowest ODR-S since the last reset, not the live one —
+  /// "never more squeezed than this" is a statement about the worst three
+  /// seconds. It is the one row whose name is not its metric's, because a row
+  /// reading `ODR-S` beside a number that is not the ODR-S every other module
+  /// on the canvas is showing would be read as a disagreement.
+  odrShort('odr_s', Metric.odrShort, 'ODR-S MIN');
+
+  const ValidatorCheck(this.id, this.metric, [this.rowName]);
+
+  /// Stable identifier for presets. The metric's own id, because a check is
+  /// one metric held against one limit and two spellings of the same thing in
+  /// one preset file would be two things to keep in step. Never change one;
+  /// add a new check instead.
+  final String id;
+
+  /// What the row measures. What it is measured *against* is the target's, and
+  /// lives with the Validator that prints it.
+  final Metric metric;
+
+  /// The row's name where it is not the metric's own. See [odrShort].
+  final String? rowName;
+
+  /// What the table and the module's menu call this row.
+  String get label => rowName ?? metric.label;
+
+  /// Whether [calibration] says anything this row could be judged against.
+  ///
+  /// The two dynamics floors are optional in a target — a target without one
+  /// makes no statement about dynamics, and a row that always passed would be
+  /// read as one. See [Calibration.odrIntegratedFloor].
+  bool judgedBy(Calibration calibration) => switch (this) {
+    ValidatorCheck.odrIntegrated => calibration.odrIntegratedFloor != null,
+    ValidatorCheck.odrShort => calibration.odrShortFloor != null,
+    _ => true,
+  };
+
+  static ValidatorCheck? fromId(String id) {
+    for (final check in ValidatorCheck.values) {
+      if (check.id == id) return check;
+    }
+    return null;
+  }
+}
+
 /// One module on a tab.
 ///
 /// [options] is an untyped map on purpose. Every module has its own settings —
@@ -1098,6 +1263,14 @@ class ModuleSpec {
   SpectrumTilt get spectrumTilt =>
       SpectrumTilt.fromId(options['tilt'] as String? ?? '') ??
       SpectrumTilt.db4p5;
+
+  /// How much of the level axis the analyser draws. See [SpectrumRange].
+  ///
+  /// Defaults to [SpectrumRange.db90], Pro-Q's default and the range that
+  /// shows a mix and its floor on one plot.
+  SpectrumRange get spectrumRange =>
+      SpectrumRange.fromId(options['range'] as String? ?? '') ??
+      SpectrumRange.db90;
 
   /// How much the Histogram averages its bands over. See [HistogramSmoothing].
   ///
@@ -1163,6 +1336,15 @@ class ModuleSpec {
       ScopeStereo.fromId(options['stereo'] as String? ?? '') ??
       ScopeStereo.lanes;
 
+  /// Which of two overlaid oscilloscope traces is drawn in front. See
+  /// [ScopeFront].
+  ///
+  /// Defaults to [ScopeFront.left], which is the order the module drew in
+  /// before the setting existed and the order a stranger expects: the left
+  /// channel is the one named first everywhere else in the application.
+  ScopeFront get scopeFront =>
+      ScopeFront.fromId(options['front'] as String? ?? '') ?? ScopeFront.left;
+
   /// What starts a free-running oscilloscope window. See [ScopeTrigger].
   ///
   /// Defaults to [ScopeTrigger.auto], which is what the module did before the
@@ -1177,14 +1359,53 @@ class ModuleSpec {
 
   /// Whether that level follows the material instead of being dragged.
   ///
-  /// The only boolean in `options`, and the one value here that is read
-  /// strictly: anything that is not `true` is off, which is what every preset
-  /// written before this existed meant and what a hand-edited `"yes"` should
-  /// mean rather than crashing a canvas. The level itself stays under
+  /// One of the two booleans in `options` — see [alertDelta] — and both are
+  /// read strictly: anything that is not `true` is off, which is what every
+  /// preset written before either existed meant and what a hand-edited `"yes"`
+  /// should mean rather than crashing a canvas. The level itself stays under
   /// `threshold` and is written back the moment this is switched off, so
   /// turning it off keeps the number Auto had found rather than snapping to
   /// whatever was dragged before it was switched on.
   bool get scopeAutoThreshold => options['autoThreshold'] == true;
+
+  /// Whether the Alert Meter prints its reading as the distance from the
+  /// target rather than as the reading itself.
+  ///
+  /// Off by default, which is what every preset written before this existed
+  /// meant: a meter states what it measured until it is asked for something
+  /// else. Read strictly, for the reason [scopeAutoThreshold] gives.
+  ///
+  /// **It is the stored choice and not the effective one.** Whether there is a
+  /// line to print a distance from is a question about the metric *and* about
+  /// the active target — an ODR floor is the target's to state, exactly as it
+  /// is for [ValidatorCheck.judgedBy] — and this getter has neither the metric
+  /// nor the calibration beside it. `alertDeltaOf` in the application resolves
+  /// all three, and every consumer goes through it. The stored choice is kept
+  /// rather than corrected, so it comes back when a target that draws the line
+  /// does.
+  bool get alertDelta => options['delta'] == true;
+
+  /// Which delivery criteria this Validator judges. See [ValidatorCheck].
+  ///
+  /// **Absent is all of them**, which is what every preset written before the
+  /// setting existed meant and what a new Validator should open on: a
+  /// delivery table that starts by leaving something out is one whose verdict
+  /// nobody can read without opening the menu first. An empty *list* is a
+  /// different statement — nothing chosen — and is kept, because a module the
+  /// user has emptied on purpose that silently refilled itself would be the
+  /// only setting here that does not stay put.
+  ///
+  /// Read in declaration order rather than the order the file happens to list
+  /// them in, so the table reads the same way as the report it mirrors, and an
+  /// id from a newer version is simply not a check.
+  List<ValidatorCheck> get validatorChecks {
+    final raw = options['checks'];
+    if (raw is! List) return ValidatorCheck.values;
+    return [
+      for (final check in ValidatorCheck.values)
+        if (raw.contains(check.id)) check,
+    ];
+  }
 
   /// How tall the oscilloscope draws full scale. See [ScopeZoom].
   ///

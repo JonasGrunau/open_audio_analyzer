@@ -62,6 +62,10 @@ void main() {
         // Sampled *while* audio is flowing. Once the source stops there is
         // nothing left to accumulate and a frame honestly carries a run of
         // zero, so the last frame of the run is the wrong one to look at.
+        //
+        // `lastRunFrames`, not `scopeFrames`: the client keeps a window of
+        // every run it decoded, which grows past a block at any link rate.
+        // What this asserts is what *one frame* carried.
         var widest = 0;
 
         const blocks = 40;
@@ -69,7 +73,7 @@ void main() {
           source.generation++;
           source.elapsedSeconds += MeterShape.scopePoints / 48000;
           await _settle(milliseconds: 21);
-          final seen = client.snapshot.scopeFrames;
+          final seen = client.snapshot.lastRunFrames;
           if (seen > widest) widest = seen;
         }
 

@@ -74,6 +74,27 @@
  * flickering mess at 10 Hz. */
 #define OAA_CORRELATION_TAU_SECONDS 0.200f
 
+/*
+ * Below this a channel carries no stereo image to describe, and correlation
+ * and balance report NaN rather than a number.
+ *
+ * Mean square of one channel at -70 LUFS, unweighted: 10^((-70 + 0.691)/10),
+ * which is R128's absolute gate — the standard's own line for "this is not
+ * programme". Unweighted because a gate asks whether there is anything here
+ * at all, not how loud it is, and the K filter is within a couple of dB of
+ * flat across the band anything at this level occupies.
+ *
+ * It is a gate and not an underflow guard, and the difference is the whole
+ * point. Both quantities divide by the channels' energy, so with no signal
+ * they are 0/0 — but a real input is never *exactly* zero. It sits on a
+ * converter's noise floor, and the correlation of two channels of noise is a
+ * random number near zero whose sign falls whichever way the block did. A
+ * guard at float underflow would answer honestly for a stopped software
+ * player and go on reporting dice rolls for a live input with nothing playing
+ * into it.
+ */
+#define OAA_STEREO_GATE_MEAN_SQUARE 1.1723e-7
+
 /* A sample at or above this magnitude counts towards a clip run. Full scale is
  * 1.0; float sources can and do exceed it, which is itself worth flagging. */
 #define OAA_CLIP_THRESHOLD 0.999f
@@ -131,22 +152,32 @@ static void oaa_vu_advance(oaa_channel_state *state, float target, float dt) {
 }
 
 /*
- * The most recent OAA_SCOPE_POINTS stereo frames, oldest first.
+ * The most recent OAA_SCOPE_FRAMES stereo frames, oldest first, packed from
+ * index 0 and counted in `scope_frames`.
  *
  * Written as a sliding window over the published array rather than through a
- * ring with a rotation at publish time. It costs one memmove of 8 kB per block
- * and removes the class of bug where the scope draws the right samples in the
- * wrong order — which looks like a plausible Lissajous figure of a completely
- * different signal.
+ * ring with a rotation at publish time. It costs one memmove of at most 24 kB
+ * per block and removes the class of bug where the scope draws the right
+ * samples in the wrong order — which looks like a plausible Lissajous figure
+ * of a completely different signal.
+ *
+ * The window fills before it slides, so a reader can always take "the newest
+ * N pairs" as the N before `scope_frames` — and until the window is full, no
+ * pair below that count is a zero pretending to be silence.
  */
 static void oaa_scope_append(oaa_snapshot *out, const float *interleaved,
                              uint32_t frames, uint32_t channels) {
-  const uint32_t taken =
-      frames < OAA_SCOPE_POINTS ? frames : (uint32_t)OAA_SCOPE_POINTS;
-  const uint32_t kept = (uint32_t)OAA_SCOPE_POINTS - taken;
+  const uint32_t capacity = (uint32_t)OAA_SCOPE_FRAMES;
+  const uint32_t taken = frames < capacity ? frames : capacity;
 
-  if (kept > 0) {
-    memmove(out->scope, &out->scope[taken * 2], (size_t)kept * 2 * sizeof(float));
+  uint32_t held = out->scope_frames < capacity ? out->scope_frames : capacity;
+  if (held + taken > capacity) {
+    const uint32_t kept = capacity - taken;
+    if (kept > 0) {
+      memmove(out->scope, &out->scope[(held - kept) * 2],
+              (size_t)kept * 2 * sizeof(float));
+    }
+    held = kept;
   }
 
   const uint32_t first = frames - taken;
@@ -154,9 +185,10 @@ static void oaa_scope_append(oaa_snapshot *out, const float *interleaved,
 
   for (uint32_t i = 0; i < taken; i++) {
     const float *frame = &interleaved[(size_t)(first + i) * channels];
-    out->scope[(kept + i) * 2] = frame[0];
-    out->scope[(kept + i) * 2 + 1] = frame[right];
+    out->scope[(held + i) * 2] = frame[0];
+    out->scope[(held + i) * 2 + 1] = frame[right];
   }
+  out->scope_frames = held + taken;
 }
 
 /* --- The pass ------------------------------------------------------------ */
@@ -325,19 +357,50 @@ void oaa_analyse(oaa_engine *engine, const float *interleaved,
     /* Pearson correlation over the block, then smoothed. A true sliding window
      * with running sums would be more faithful at very short block sizes; at
      * the sizes a real device delivers, this and the 200 ms smoother are
-     * indistinguishable on screen. */
-    const double denominator = sqrt(sum_ll * sum_rr);
-    const float block_correlation =
-        denominator > 1e-20 ? (float)(sum_lr / denominator) : 0.0f;
+     * indistinguishable on screen.
+     *
+     * **A channel below the gate has nothing to correlate, and answering `0`
+     * is not a smaller lie than answering anything else.** Both quantities
+     * divide by the channels' energy, so under silence they are 0/0 — and
+     * substituting `0` and letting the smoother chase it looks harmless and is
+     * not. A one-pole approaches its target asymptotically and never arrives,
+     * so the published value keeps the *sign* of the last audio for as long as
+     * the silence lasts. A track that fades out on a wide reverb tail ends
+     * slightly out of phase, and the Phase Scope then held its correlation
+     * marker a pixel off centre and lit it in the warning colour — asserting
+     * anti-phase content in a signal that had stopped — for the twenty-odd
+     * seconds it took the exponential to underflow. NaN says the true thing,
+     * and every consumer already withholds a marker and prints an em dash for
+     * it.
+     *
+     * Correlation needs **both** channels above the gate and balance needs
+     * **either**: a hard-panned source has nothing in one channel to correlate
+     * however loud the other one is, while which side it is on is exactly what
+     * balance is for. */
+    const double gate = OAA_STEREO_GATE_MEAN_SQUARE * (double)frames;
+    const int left_present = sum_ll >= gate;
+    const int right_present = sum_rr >= gate;
 
-    out->correlation = out->correlation * correlation_coefficient +
-                       block_correlation * (1.0f - correlation_coefficient);
+    if (left_present && right_present) {
+      const float block_correlation = (float)(sum_lr / sqrt(sum_ll * sum_rr));
+      /* Seeded rather than mixed on the first block back, because the
+       * smoother's state *is* `out->correlation` and NaN mixes to NaN for the
+       * rest of the session. */
+      out->correlation =
+          isnan(out->correlation)
+              ? block_correlation
+              : out->correlation * correlation_coefficient +
+                    block_correlation * (1.0f - correlation_coefficient);
+    } else {
+      out->correlation = NAN;
+    }
 
-    const double total = sum_ll + sum_rr;
-    out->balance = total > 1e-20 ? (float)((sum_rr - sum_ll) / total) : 0.0f;
+    out->balance = (left_present || right_present)
+                       ? (float)((sum_rr - sum_ll) / (sum_ll + sum_rr))
+                       : NAN;
   } else {
     /* Mono is perfectly correlated with itself and dead centre. Saying so is
-     * more useful than reporting nothing. */
+     * more useful than reporting nothing, and unlike silence it is true. */
     out->correlation = 1.0f;
     out->balance = 0.0f;
   }

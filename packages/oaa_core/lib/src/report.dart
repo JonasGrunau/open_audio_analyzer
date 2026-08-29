@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import 'calibration.dart';
+import 'meter_source.dart';
 import 'metric.dart';
 
 /// What a delivery check concluded.
@@ -272,7 +273,18 @@ class AnalysisReport {
   ComplianceCheck _truePeakCheck(Calibration target) {
     final limit = '≤ ${target.truePeakMax.toStringAsFixed(1)} dBTP';
 
-    if (truePeakMax.isNaN) {
+    // **At the floor as well as at NaN.** Every dB level is clamped to
+    // [MeterShape.dbFloor] before it leaves the engine, so a programme with
+    // nothing in it hands this check a number rather than a NaN — and that
+    // number satisfies every ceiling anybody states. The other four checks
+    // wait on their own, because loudness and the two dynamics readings are
+    // gated and stay undefined; true peak is a running maximum and has the
+    // clamp from the first block. Left to pass, it is a delivery verdict on
+    // silence, and it is the one check that could carry [isCompliant] on a
+    // file with no programme in it. The Validator's live table makes the same
+    // judgement about the same number — two verdicts on one quantity is two
+    // verdicts that will eventually disagree in front of somebody delivering.
+    if (truePeakMax.isNaN || truePeakMax <= MeterShape.dbFloor) {
       return ComplianceCheck(
         metric: Metric.truePeakMax,
         value: truePeakMax,

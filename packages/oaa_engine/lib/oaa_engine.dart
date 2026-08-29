@@ -59,9 +59,16 @@ const int kOaaSpectrumBands = 512;
 const double kOaaSpectrumHzLow = 20.0;
 const double kOaaSpectrumHzHigh = 20000.0;
 
-/// Stereo sample pairs published for the phase scope. One analysis block at the
-/// default settings, so at 48 kHz the scope sees every sample.
+/// Stereo sample pairs in one analysis block — the most one measurement adds
+/// to the scope, and what the phase scope draws. At 48 kHz the scope sees
+/// every sample.
 const int kOaaScopePoints = 1024;
+
+/// Stereo sample pairs a snapshot's `scope` holds: the newest four blocks, so
+/// a reader that missed a publish still finds the block it missed ahead of the
+/// one it got. `OAA_SCOPE_FRAMES` in `oaa.h` names the three ways a publish is
+/// missed; `MeterSource.scopeFrames` says how a reader takes what is new.
+const int kOaaScopeFrames = 4096;
 
 /// Bins in the published short-term loudness distribution, and the range they
 /// span in LUFS.
@@ -246,13 +253,13 @@ class OaaEngine implements MeterSource {
       _spectrumSidePeak = _sourcePeakView(snapshot, SpectrumSource.side),
       scope = native
           .oaa_snapshot_scope(snapshot)
-          .asTypedList(kOaaScopePoints * 2),
+          .asTypedList(kOaaScopeFrames * 2),
       histogram = native
           .oaa_snapshot_histogram(snapshot)
           .asTypedList(kOaaHistogramBins);
 
   /// The ABI this Dart code was written against. Mirrors `OAA_ABI_VERSION`.
-  static const int expectedAbiVersion = 6;
+  static const int expectedAbiVersion = 8;
 
   final Pointer<native.oaa_engine> _handle;
 
@@ -370,8 +377,8 @@ class OaaEngine implements MeterSource {
       .oaa_snapshot_spectrum_peak_of(snapshot, _sourceCode(source))
       .asTypedList(kOaaSpectrumBands);
 
-  /// The last [kOaaScopePoints] stereo frames, interleaved x=left, y=right,
-  /// oldest first.
+  /// The last [kOaaScopeFrames] stereo frames, interleaved x=left, y=right,
+  /// oldest first, of which the first [scopeFrames] hold audio.
   ///
   /// Raw sample values, not rotated into goniometer axes — that rotation is a
   /// display choice and belongs in the painter's transform, where it costs
@@ -379,11 +386,12 @@ class OaaEngine implements MeterSource {
   @override
   final Float32List scope;
 
-  /// Always one analysis block: an engine publishes a snapshot per block, so
-  /// the whole of [scope] is always this measurement's. It varies only over a
-  /// wire — see `MeterSource.scopeFrames`.
+  /// How much of the window holds audio: climbs from zero at a reset to
+  /// [kOaaScopeFrames] and stays there. A reader takes the newest pairs it is
+  /// owed by `elapsedSeconds`, not the whole of it — see
+  /// `MeterSource.scopeFrames`.
   @override
-  int get scopeFrames => MeterShape.scopePoints;
+  int get scopeFrames => _disposed ? 0 : _snapshot.scope_frames;
 
   /// Fraction of the gated short-term loudness blocks in each of
   /// [kOaaHistogramBins] bins between [kOaaHistogramMinLufs] and
@@ -397,6 +405,31 @@ class OaaEngine implements MeterSource {
 
   /// The ABI version of the loaded native library.
   static int get abiVersion => native.oaa_abi_version();
+
+  /// Destroys every engine this process created and did not destroy, and
+  /// returns how many there were.
+  ///
+  /// Call it from `main`, before the first [start], and nowhere else. In a
+  /// shipping run it always returns 0 and does nothing: a fresh process owns no
+  /// engines and [dispose] keeps it that way.
+  ///
+  /// It earns its place in development. A Flutter hot restart discards the
+  /// isolate and re-runs `main` **in the same process**, so no `dispose` and no
+  /// finalizer runs — there is no `NativeFinalizer` here and one would not help,
+  /// because the isolate is thrown away rather than collected — while this
+  /// library and every thread it started carry on untouched. The orphaned
+  /// engine keeps its analysis thread running against a monotonic clock, and on
+  /// macOS it keeps a Core Audio process tap and the private aggregate device
+  /// underneath it, which [devices] then reports back as a capture device named
+  /// "Open Audio Analyzer System Capture". One per restart, all of them
+  /// metering, none of them drawn.
+  ///
+  /// **Every [OaaEngine] alive when this returns holds a dangling handle**, and
+  /// disposing one afterwards is a double free. That is not a caveat at the
+  /// call site it is written for — a fresh isolate holds no engines, and
+  /// everything reclaimed belonged to one that no longer exists. It is a reason
+  /// not to call it anywhere else.
+  static int resetAll() => native.oaa_engine_reset_all();
 
   /// Create and start an engine.
   ///
@@ -705,11 +738,12 @@ class OaaEngine implements MeterSource {
   @override
   double get odrShort => _disposed ? double.nan : _snapshot.psr;
 
-  /// −1 fully out of phase, +1 mono.
+  /// −1 fully out of phase, +1 mono. NaN unless both channels are above the
+  /// −70 LUFS gate.
   @override
   double get correlation => _disposed ? double.nan : _snapshot.correlation;
 
-  /// −1 hard left, +1 hard right.
+  /// −1 hard left, +1 hard right. NaN unless either channel is above it.
   @override
   double get balance => _disposed ? double.nan : _snapshot.balance;
 

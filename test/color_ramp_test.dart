@@ -349,9 +349,10 @@ void main() {
       final pixels = await shot(tester, ColorRamp.rgb, db: -40);
       const at = _width - 2;
       // Rows spread over the plot, dodging what is not field: the time band
-      // along the top and the 10k / 1k / 100 Hz gridlines of the frequency
-      // axis, which mute the hue where they cross.
-      for (final row in [18, 40, 75, 112]) {
+      // along the top, the hairline box under it — the field gives up a pixel
+      // on every side to it — and the 10k / 1k / 100 Hz gridlines of the
+      // frequency axis, which mute the hue where they cross.
+      for (final row in [20, 40, 75, 112]) {
         expect(
           _isGreen(pixels, at, row),
           isTrue,

@@ -22,7 +22,7 @@ import '../clock/meter_clock.dart';
 /// "exactly what" — and walking a cursor over a meter to find out what it says
 /// is the tell of a display that only half-committed to being read.
 ///
-/// The peak tick carries the warning that used to be a painted region: its
+/// The peak mark carries the warning that used to be a painted region: its
 /// colour runs from the fill's own colour at low level to [OaaColors.over] as
 /// the peak closes on full scale, so a hot channel announces itself by the one
 /// mark that is actually hot rather than by a stripe of scale that is hot on
@@ -30,8 +30,21 @@ import '../clock/meter_clock.dart';
 ///
 /// The bars are drawn as segments — lit rows with the panel showing through
 /// between them — because a segmented column reads as *level* while a solid
-/// one reads as *area*. The segmentation is cosmetic and exactly cosmetic: the
-/// fill's top edge is the measurement and lands where it would land unsegmented.
+/// one reads as *area*. **A row is lit or it is not.** The fill stops at the
+/// top of the last row it covers completely, and the peak is one whole row
+/// rather than a hairline laid across whichever row the reading falls in.
+/// The segmentation was cosmetic through 0.14 — the fill's top edge was the
+/// measurement — and a segmented meter whose top row is a sliver is a meter
+/// with two segment heights in it: the tip of the bar carries less light than
+/// every row under it, which reads as the ink dimming rather than as a level,
+/// and the peak's hairline sat across a gap as often as on a row. The column's
+/// resolution is now one row, and the numbers printed above it are the
+/// measurement itself, rounded by nothing.
+///
+/// The fill is [OaaColors.meterAccent] under [MeterFill]'s gradient, as on
+/// the LUFS meter and the Super Meter's arcs — the reading's colour, over a
+/// grey track. It was the grey [OaaColors.meterFill] through 0.14, and a bar
+/// the colour of its own track read as a level you had to look for.
 class DigitalMeterModule extends StatefulWidget {
   const DigitalMeterModule({
     required this.engine,
@@ -121,14 +134,34 @@ class _DigitalMeterPainter extends MeterPainter {
     required this.labels,
     required Listenable repaint,
   }) : _track = (Paint()..color = colors.meterTrack),
-       _peakTick = (Paint()..color = colors.meterFill),
+       // Taken once: `meterAccent` is derived, and `paint` allocates nothing.
+       _ink = colors.meterAccent,
+       _peakMark = (Paint()..color = colors.meterFill),
        _segmentGap = (Paint()
          ..color = colors.panel
          ..strokeWidth = _gapHeight
          ..isAntiAlias = false),
+       // A scale row is a *lighter* gap: the graticule's own line colour, in
+       // the row the graticule's line was snapped to.
+       _scaleRule = (Paint()
+         ..color = colors.hairline
+         ..strokeWidth = _gapHeight
+         ..isAntiAlias = false),
        _clip = (Paint()..color = colors.over),
        _clipIdle = (Paint()..color = colors.hairline),
-       _rowStyle = OaaType.readingSmall.copyWith(color: colors.textPrimary),
+       // The readings, in the signal hue every module prints a number in.
+       // See `colorForState`: a value is the accent, and what is wrong with
+       // one is amber, red or a muted dash.
+       //
+       // Both faces, built once per palette rather than per reading: this
+       // module prints two numbers per channel and the styles are otherwise
+       // fixed, so a `copyWith` per value would be sixteen allocations a frame
+       // on a surround source. See [inkForReading] for why the dash needs a
+       // face of its own at all.
+       _rowStyle = OaaType.readingSmall.copyWith(color: colors.accent),
+       _rowDash = OaaType.readingSmall.copyWith(
+         color: colorForState(ReadingState.unavailable, colors),
+       ),
        _peakLabel = layoutParagraph(
          'PEAK',
          OaaType.label.copyWith(color: colors.textMuted),
@@ -149,13 +182,16 @@ class _DigitalMeterPainter extends MeterPainter {
   final List<ui.Paragraph> labels;
 
   final Paint _track;
-  final Paint _peakTick;
+  final Color _ink;
+  final Paint _peakMark;
   final Paint _segmentGap;
+  final Paint _scaleRule;
   final Paint _clip;
   final Paint _clipIdle;
   final MeterFill _fill = MeterFill();
 
   final TextStyle _rowStyle;
+  final TextStyle _rowDash;
   final ui.Paragraph _peakLabel;
   final ui.Paragraph _rmsLabel;
   final ui.Paragraph _unitLabel;
@@ -164,24 +200,26 @@ class _DigitalMeterPainter extends MeterPainter {
   /// fixed for the life of an engine, so this settles on the first frame.
   final List<ValueParagraph> _numbers = [];
 
-  /// The segment gap lines, rebuilt only when the geometry moves.
+  /// The segment gap lines, and the scale's own rows among them. Both rebuilt
+  /// only when the geometry moves.
   Float32List _gaps = Float32List(0);
+  Float32List _rules = Float32List(0);
   Rect _gapsFor = Rect.zero;
   int _gapsChannels = 0;
   double _gapsBarWidth = 0;
 
-  /// Where the peak tick starts trading the fill colour for [OaaColors.over].
+  /// Where the peak mark starts trading the fill colour for [OaaColors.over].
   /// −18 dBFS is conservative on purpose: the blend is a *slope*, and a mark
   /// that only changed colour at the ceiling would change after the moment it
   /// existed to warn about.
   static const double _tintFrom = -18.0;
 
   static const double _clipHeight = 6;
-  static const double _peakTickHeight = 2;
 
   /// Segment pitch: lit rows of 3 with the panel showing through 1.
   static const double _segmentPitch = 4;
   static const double _gapHeight = 1;
+  static const double _litHeight = _segmentPitch - _gapHeight;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -207,7 +245,7 @@ class _DigitalMeterPainter extends MeterPainter {
     final gap = channels > 4 ? Space.xxs : Space.xs;
     final barWidth = (track.width - gap * (channels - 1)) / channels;
 
-    _fill.prepare(track.height, colors);
+    _fill.prepare(colors, color: _ink);
 
     // The numbers' baseline, taken off the first channel's reading, which the
     // row labels and the unit are set on — see below.
@@ -228,8 +266,18 @@ class _DigitalMeterPainter extends MeterPainter {
     }
 
     // Over the troughs and under the bars: the scale belongs to the meter as a
-    // whole, so it crosses the gaps the same way the channel rules do.
-    graticule.paint(canvas, track);
+    // whole, so it crosses the gaps the same way the channel rules do. **On
+    // the segment ruling**, which is the one the gap buffer at the foot of
+    // this method is built on: `track.bottom + _gapHeight / 2` is where the
+    // gap under the floor row would fall, and every gap above it is a pitch
+    // further up. See `ScaleGraticule.paint` for why a scale off that grid is
+    // worse than a scale a pixel off its value.
+    graticule.paint(
+      canvas,
+      track,
+      snapPitch: _segmentPitch,
+      snapAt: _rulingAt(track),
+    );
 
     for (var c = 0; c < channels; c++) {
       final left = track.left + c * (barWidth + gap);
@@ -238,21 +286,31 @@ class _DigitalMeterPainter extends MeterPainter {
       // --- RMS, as the filled column ----------------------------------------
       final rms = engine.rms[c];
       if (!rms.isNaN) {
-        final top = _y(track, rms);
-        if (top < track.bottom) {
-          _fill.draw(canvas, Rect.fromLTRB(left, top, right, track.bottom));
+        final rows = _litRows(track.bottom - _y(track, rms));
+        if (rows > 0) {
+          _fill.draw(
+            canvas,
+            Rect.fromLTRB(left, _rowTop(track, rows - 1), right, track.bottom),
+          );
         }
       }
 
-      // --- Peak, as a floating tick tinted by its own level -----------------
+      // --- Peak, as a floating row tinted by its own level ------------------
+      // The row the fill would have stopped on at this level, lit whole — so
+      // the mark is the same object as a lit segment and the gap between it
+      // and the column is a whole number of rows. Below one row of level it
+      // holds the floor row rather than disappearing: the fill is a quantity
+      // and may legitimately light nothing, but the peak is a mark, and a
+      // channel whose peak mark is missing reads as a channel with no signal.
       final peak = engine.peak[c];
       if (!peak.isNaN && peak.isFinite) {
-        final y = _y(track, peak);
+        final row = _litRows(track.bottom - _y(track, peak)) - 1;
+        final top = _rowTop(track, row < 0 ? 0 : row);
         final heat = ((peak - _tintFrom) / -_tintFrom).clamp(0.0, 1.0);
-        _peakTick.color = Color.lerp(_fill.bright, colors.over, heat)!;
+        _peakMark.color = Color.lerp(_fill.bright, colors.over, heat)!;
         canvas.drawRect(
-          Rect.fromLTRB(left, y - _peakTickHeight, right, y),
-          _peakTick,
+          Rect.fromLTRB(left, top, right, top + _litHeight),
+          _peakMark,
         );
       }
 
@@ -271,8 +329,14 @@ class _DigitalMeterPainter extends MeterPainter {
       );
 
       // --- The numbers --------------------------------------------------------
-      final peakText = _numbers[c * 2].of(Metric.peak.format(peak), _rowStyle);
-      final rmsText = _numbers[c * 2 + 1].of(Metric.rms.format(rms), _rowStyle);
+      final peakText = _numbers[c * 2].of(
+        Metric.peak.format(peak),
+        _readingStyle(peak),
+      );
+      final rmsText = _numbers[c * 2 + 1].of(
+        Metric.rms.format(rms),
+        _readingStyle(rms),
+      );
       if (c == 0) rowBaseline = peakText.alphabeticBaseline;
       final centre = left + barWidth / 2;
       canvas.drawParagraph(
@@ -335,15 +399,68 @@ class _DigitalMeterPainter extends MeterPainter {
         }
       }
       if (i < _gaps.length) _gaps = _gaps.sublist(0, i);
+
+      // The scale's rows, in the gaps the graticule's lines were snapped to.
+      // The graticule draws them under the bars, where the fill covers them
+      // and the buffer above then paints the panel over what is left — so
+      // without this pass the ruling would show only in the gutters between
+      // the channels, and on a mono meter nowhere at all. Lit here instead,
+      // a labelled value is one of the meter's own gaps in a lighter grey:
+      // the division the scale marks, on the ruling the segments impose,
+      // rather than a second set of lines beating against it.
+      final ticks = graticule.scale.ticks;
+      _rules = Float32List(ticks.length * channels * 4);
+      var r = 0;
+      for (final value in ticks) {
+        final y = ScaleGraticule.snapped(
+          _y(track, value),
+          low: track.top,
+          high: track.bottom,
+          pitch: _segmentPitch,
+          at: _rulingAt(track),
+        );
+        for (var c = 0; c < channels; c++) {
+          final left = track.left + c * (barWidth + gap);
+          _rules[r++] = left;
+          _rules[r++] = y;
+          _rules[r++] = left + barWidth;
+          _rules[r++] = y;
+        }
+      }
+
       _gapsFor = track;
       _gapsChannels = channels;
       _gapsBarWidth = barWidth;
     }
     canvas.drawRawPoints(ui.PointMode.lines, _gaps, _segmentGap);
+    canvas.drawRawPoints(ui.PointMode.lines, _rules, _scaleRule);
   }
+
+  /// The face a reading is set in: the signal hue, or the muted one when there
+  /// is no reading and [Metric.format] prints the em dash. [inkForReading] is
+  /// the rule; this is it with the two faces built ahead of the frame.
+  TextStyle _readingStyle(double value) => value.isNaN ? _rowDash : _rowStyle;
 
   double _y(Rect track, double value) =>
       track.bottom - graticule.scale.fractionOf(value) * track.height;
+
+  /// Where the gap under the floor row would fall — the one line of the
+  /// segment ruling every other gap is a whole pitch from, and what both the
+  /// graticule and the buffer of scale rows snap against.
+  static double _rulingAt(Rect track) => track.bottom + _gapHeight / 2;
+
+  /// How many rows a column [height] pixels tall lights, counting only the
+  /// rows it covers completely. Zero below one row of level.
+  static int _litRows(double height) => height < _litHeight
+      ? 0
+      : ((height - _litHeight) / _segmentPitch).floor() + 1;
+
+  /// The top edge of row [row], numbered from the floor of the track. Row
+  /// zero's own top is [_litHeight] above the floor, and every row after it
+  /// one pitch further up — the same arithmetic the gap buffer is built from,
+  /// which is what keeps a lit row exactly between two gaps.
+  static double _rowTop(Rect track, int row) =>
+      track.bottom - row * _segmentPitch - _litHeight;
 
   @override
   bool shouldRepaint(_DigitalMeterPainter oldDelegate) =>

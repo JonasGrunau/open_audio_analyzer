@@ -55,7 +55,13 @@ import 'package:test/test.dart';
 
 /// Everything one run of the host produced.
 class _Session {
-  _Session(this.hello, this.transports, this.snapshot, this.snapshotFrames);
+  _Session(
+    this.hello,
+    this.transports,
+    this.snapshot,
+    this.snapshotFrames,
+    this.scopeRuns,
+  );
 
   final WireHello? hello;
   final List<Transport> transports;
@@ -64,7 +70,14 @@ class _Session {
   /// what a display would be showing.
   final WireSnapshot snapshot;
   final int snapshotFrames;
+
+  /// Per snapshot frame, in order: the engine clock it was stamped with and
+  /// how many stereo pairs of audio its scope run carried. Together they say
+  /// whether the audio crossed the wire whole — see the block-size group.
+  final List<_ScopeRun> scopeRuns;
 }
+
+typedef _ScopeRun = ({double elapsed, int frames, int sampleRate});
 
 /// The port the plugin streams to unless its editor says otherwise, and the
 /// port the application listens on. `plugin/src/OaaStreamer.h` is where it is
@@ -240,6 +253,53 @@ void main() {
       // mean the plugin thinks the host relocated when it did not, which is how
       // an integrated reading gets reset in the middle of a pass.
       expect(rolled.map((t) => t.isDiscontinuous), everyElement(isFalse));
+    });
+  }, skip: skip);
+
+  group('a host buffer larger than the engine block', () {
+    // Every push publishes a snapshot whose scope run is the block just
+    // pushed. A 2048-frame host buffer hands the streamer two engine blocks
+    // per callback, and the streamer used to drain both and send one — so the
+    // first block's audio never crossed the wire, and the app's oscilloscope,
+    // which turns the engine clock into a count of frames it should have
+    // seen, drew that block as silence: a waveform in bursts with a gap
+    // between every pair. Nothing else noticed, because every other reading
+    // is an integral and the second push carried it.
+    test('every block of audio crosses the wire in its own frame', () async {
+      if (skip != null) return;
+      final session = await _run(binary!, <String>[
+        '--track=${_track().path}',
+        '--block=2048',
+        '--seconds=3',
+        '--speed=2',
+      ]);
+      if (session == null) return;
+
+      final runs = session.scopeRuns;
+      expect(runs.length, greaterThan(20));
+
+      // Between consecutive frames the clock advances by the audio the
+      // second one carries — not by twice it. Rounded, because the clock is
+      // a double of frames over the sample rate. The first frame has no
+      // predecessor, and a frame whose run is at the wire's cap has been
+      // relayed rather than pushed, which this host never does.
+      var checked = 0;
+      for (var i = 1; i < runs.length; i++) {
+        final advanced =
+            ((runs[i].elapsed - runs[i - 1].elapsed) * runs[i].sampleRate)
+                .round();
+        if (advanced <= 0) continue; // a reset, or a repeated frame
+        expect(
+          advanced,
+          runs[i].frames,
+          reason:
+              'frame $i: the clock advanced $advanced frames but the scope '
+              'run carried ${runs[i].frames} — the audio between them was '
+              'measured and never sent',
+        );
+        checked++;
+      }
+      expect(checked, greaterThan(20));
     });
   }, skip: skip);
 
@@ -486,6 +546,7 @@ Future<_Session?> _run(File binary, List<String> arguments) async {
   final transports = <Transport>[];
   final snapshot = WireSnapshot();
   var snapshotFrames = 0;
+  final scopeRuns = <_ScopeRun>[];
   final reader = FrameReader();
 
   final finished = Completer<void>();
@@ -503,6 +564,11 @@ Future<_Session?> _run(File binary, List<String> arguments) async {
             case WireFrameType.snapshot:
               snapshot.decode(reader.payload, version: reader.version);
               snapshotFrames++;
+              scopeRuns.add((
+                elapsed: snapshot.elapsedSeconds,
+                frames: snapshot.scopeFrames,
+                sampleRate: snapshot.sampleRate,
+              ));
           }
         }
       },
@@ -555,7 +621,7 @@ Future<_Session?> _run(File binary, List<String> arguments) async {
     );
   }
 
-  return _Session(hello, transports, snapshot, snapshotFrames);
+  return _Session(hello, transports, snapshot, snapshotFrames, scopeRuns);
 }
 
 /// The fake DAW's executable, wherever this build put it.

@@ -1,12 +1,15 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:oaa_core/oaa_core.dart';
 import 'package:oaa_ui/oaa_ui.dart';
 
 /// [fitHzLabels] is the one rule the three frequency axes label by. These
 /// hold the two properties that rule exists for: the three anchors survive
 /// whatever else has to go, and an axis with room labels the whole series.
 void main() {
+  group('formatHzReading', formatHzReadingTests);
+
   int indexOf(double hz) => kHzGrid.indexOf(hz);
 
   test('an axis with room for every label labels every value', () {
@@ -48,5 +51,31 @@ void main() {
     expect(labelled[indexOf(20)], isTrue);
     expect(labelled[indexOf(20000)], isTrue);
     expect(labelled.where((on) => on).length, 2);
+  });
+}
+
+/// [formatHzReading] is the sentence form — the analyser's cursor — and prints
+/// three significant figures throughout, which is what the bands resolve.
+void formatHzReadingTests() {
+  test('three significant figures, in the unit the range calls for', () {
+    expect(formatHzReading(20.3), '20.3 Hz');
+    expect(formatHzReading(99.96), '100.0 Hz');
+    expect(formatHzReading(440), '440 Hz');
+    expect(formatHzReading(999.6), '1000 Hz');
+    expect(formatHzReading(1020), '1.02 kHz');
+    expect(formatHzReading(9996), '10.00 kHz');
+    expect(formatHzReading(12500), '12.5 kHz');
+    expect(formatHzReading(19952.6), '20.0 kHz');
+  });
+
+  test('neighbouring bands print apart at both ends of the range', () {
+    expect(
+      formatHzReading(bandCentreHz(0)),
+      isNot(formatHzReading(bandCentreHz(1))),
+    );
+    expect(
+      formatHzReading(bandCentreHz(MeterShape.spectrumBands - 2)),
+      isNot(formatHzReading(bandCentreHz(MeterShape.spectrumBands - 1))),
+    );
   });
 }

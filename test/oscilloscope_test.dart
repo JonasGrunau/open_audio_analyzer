@@ -38,7 +38,12 @@ const _size = Size(400, 120);
 /// buffer have to describe the same audio, and [skip] is how the test breaks
 /// that on purpose.
 class _Tone implements MeterSource {
-  _Tone({required this.hz, this.amplitude = 0.8, this.channels = 1});
+  _Tone({
+    required this.hz,
+    this.amplitude = 0.8,
+    this.channels = 1,
+    this.right = -1,
+  });
 
   /// No DAW. Every case below the tempo-sync group is about audio arriving
   /// without a playhead behind it, which is what a sound card is.
@@ -47,6 +52,15 @@ class _Tone implements MeterSource {
 
   final double hz;
   final double amplitude;
+
+  /// What the right channel is the left one times.
+  ///
+  /// The inverse by default, which is a stereo image no lane arrangement can
+  /// hide. A *smaller* multiple is what the overlaid cases want: it puts one
+  /// trace wholly inside the other, so the band between the two amplitudes is
+  /// drawn by the left channel alone and its weight there says which of the two
+  /// is in front.
+  final double right;
 
   @override
   final int channels;
@@ -60,7 +74,7 @@ class _Tone implements MeterSource {
     for (var i = 0; i < _block; i++) {
       final value = _sample(_frames + i) * gain;
       _scope[i * 2] = value;
-      _scope[i * 2 + 1] = channels >= 2 ? -value : value;
+      _scope[i * 2 + 1] = channels >= 2 ? value * right : value;
     }
     _frames += _block;
   }
@@ -76,7 +90,7 @@ class _Tone implements MeterSource {
     for (var i = 0; i < _block; i++) {
       final value = i < after ? 0.0 : _sample(i - after);
       _scope[i * 2] = value;
-      _scope[i * 2 + 1] = channels >= 2 ? -value : value;
+      _scope[i * 2 + 1] = channels >= 2 ? value * right : value;
     }
     _frames += _block;
   }
@@ -124,6 +138,8 @@ class _Harness extends StatefulWidget {
     this.fps = 60,
     this.sync = ScopeSync.free,
     this.division = ScopeDivision.bar1,
+    this.stereo = ScopeStereo.lanes,
+    this.front = ScopeFront.left,
     this.trigger = ScopeTrigger.auto,
     this.threshold = ScopeThreshold.defaultDb,
     this.autoThreshold = false,
@@ -135,6 +151,8 @@ class _Harness extends StatefulWidget {
   final ScopeTimeBase timeBase;
   final ScopeSync sync;
   final ScopeDivision division;
+  final ScopeStereo stereo;
+  final ScopeFront front;
   final ScopeTrigger trigger;
   final double threshold;
   final bool autoThreshold;
@@ -184,6 +202,8 @@ class _HarnessState extends State<_Harness>
                 timeBase: widget.timeBase,
                 sync: widget.sync,
                 division: widget.division,
+                stereo: widget.stereo,
+                front: widget.front,
                 trigger: widget.trigger,
                 threshold: widget.threshold,
                 autoThreshold: widget.autoThreshold,
@@ -233,11 +253,28 @@ bool _isOver(Uint8List pixels, int x, int y) {
   return pixels[i] - pixels[i + 1] > 40;
 }
 
+/// How much of the accent is in a pixel.
+///
+/// The accent is far more green than anything else this module draws, so the
+/// green channel alone separates a trace drawn at full weight from the same
+/// trace drawn at [_dim] over the same ground — which is the whole of what
+/// being in front looks like. Read as a comparison between two pictures rather
+/// than against a constant, because the number the compositor lands on is a
+/// blend and not the palette entry.
+int _green(Uint8List pixels, int x, int y) => pixels[(y * _width + x) * 4 + 1];
+
 /// The columns carrying signal ink, anywhere down their height.
 List<int> _inked(Uint8List pixels) => [
   for (var x = 0; x < _width; x++)
     if (List.generate(_height, (y) => y).any((y) => _isSignal(pixels, x, y))) x,
 ];
+
+/// The first column of the window.
+///
+/// Not the first column of the module: the border takes the outermost pixel on
+/// every side and the window is drawn inside it, so a probe at x 0 reads the
+/// box and never the trace.
+const int _firstColumn = 1;
 
 /// The topmost row of signal ink in column [x], or null.
 int? _top(Uint8List pixels, int x) {
@@ -308,13 +345,16 @@ void main() {
     // for this tone is 16 samples further round the cycle each time.
     final centre = _height / 2;
     final half = centre - OaaStroke.hairline;
+    // Column 1, not column 0: the module's outermost pixel on every side is
+    // its border, and the window is drawn inside it. The first column of the
+    // *window* is the first sample past the trigger.
     expect(
-      _top(locked, 0),
+      _top(locked, _firstColumn),
       isNotNull,
       reason: 'the leftmost column drew nothing',
     );
     expect(
-      (_top(locked, 0)! - centre).abs(),
+      (_top(locked, _firstColumn)! - centre).abs(),
       lessThan(half * 0.25),
       reason: 'the window does not start near a zero crossing',
     );
@@ -448,11 +488,12 @@ void main() {
 
     // Sixty blocks at 1024 frames is 1.28 s, so the whole width is covered.
     // Every column of it has to carry ink: a gap anywhere is a measurement
-    // that was published and never read.
+    // that was published and never read. Every column of the *window*, which
+    // is the body less the hairline the border takes on each side.
     final columns = _inked(await _shoot(tester, key));
     expect(
       columns,
-      hasLength(_width),
+      hasLength(_width - 2),
       reason:
           'the display has holes in it, so measurements were lost between the '
           'publish rate and the repaint rate',
@@ -678,7 +719,7 @@ void main() {
       final half = centre - OaaStroke.hairline;
       final at = centre - math.pow(10, level / 20) * half;
       expect(
-        _bottom(pixels, 0)?.toDouble(),
+        _bottom(pixels, _firstColumn)?.toDouble(),
         closeTo(at, 6),
         reason: 'the window does not start at the level it was set to',
       );
@@ -955,6 +996,180 @@ void main() {
         findsNothing,
         reason:
             'a remote display drew a control for a setting it cannot change',
+      );
+    });
+  });
+
+  group('the overlaid legend', () {
+    // Two traces around one centre line hide one another wherever they cross,
+    // which on correlated material is most of the width — so which of them is
+    // in front is a setting, and the legend is where it is set. What is checked
+    // here is that the letters, the ink and the trace agree: the one named
+    // first is the one drawn at full weight, and clicking them swaps all three.
+
+    /// Fills a one-second window with a left channel that wholly contains the
+    /// right one. See [_Tone.right].
+    Future<void> fill(WidgetTester tester, _Tone source) async {
+      for (var block = 0; block < 48; block++) {
+        source.publish();
+        await _frame(tester);
+      }
+    }
+
+    /// The green in the band the left channel draws in alone.
+    ///
+    /// A quarter of the lane out from the centre, which is past the right
+    /// channel's 0.4 and inside the left channel's 0.8. Nothing else can be
+    /// drawn there, so the only thing that moves it is the weight the left
+    /// trace is drawn at.
+    Future<int> outerBand(WidgetTester tester, GlobalKey key) async {
+      final pixels = await _shoot(tester, key);
+      return _green(pixels, _width ~/ 2, _height ~/ 2 - _height ~/ 4);
+    }
+
+    testWidgets('the channel in front is the one drawn at full weight', (
+      tester,
+    ) async {
+      final left = GlobalKey();
+      final source = _Tone(hz: 1000, channels: 2, right: -0.4);
+      await tester.pumpWidget(
+        _Harness(
+          source: source,
+          boundary: left,
+          timeBase: ScopeTimeBase.s1,
+          stereo: ScopeStereo.overlay,
+          onOption: (key, value) {},
+        ),
+      );
+      await fill(tester, source);
+      final leading = await outerBand(tester, left);
+
+      final right = GlobalKey();
+      final swapped = _Tone(hz: 1000, channels: 2, right: -0.4);
+      await tester.pumpWidget(
+        _Harness(
+          source: swapped,
+          boundary: right,
+          timeBase: ScopeTimeBase.s1,
+          stereo: ScopeStereo.overlay,
+          front: ScopeFront.right,
+          onOption: (key, value) {},
+        ),
+      );
+      await fill(tester, swapped);
+      final behind = await outerBand(tester, right);
+
+      expect(
+        leading,
+        greaterThan(behind + 40),
+        reason:
+            'the left channel was drawn at the same weight whether it was in '
+            'front or behind, so the legend names an order the picture does '
+            'not have',
+      );
+    });
+
+    testWidgets('clicking the legend writes the other channel', (tester) async {
+      final key = GlobalKey();
+      final source = _Tone(hz: 1000, channels: 2, right: -0.4);
+      final writes = <(String, Object?)>[];
+      await tester.pumpWidget(
+        _Harness(
+          source: source,
+          boundary: key,
+          timeBase: ScopeTimeBase.s1,
+          stereo: ScopeStereo.overlay,
+          onOption: (key, value) => writes.add((key, value)),
+        ),
+      );
+      source.publish();
+      await _frame(tester);
+
+      expect(
+        find.text('L'),
+        findsOneWidget,
+        reason: 'the legend is not in the strip, so it cannot be clicked',
+      );
+      await tester.tap(find.text('L'));
+      await _frame(tester);
+
+      expect(writes, [('front', 'right')]);
+    });
+
+    testWidgets('lanes offer no front, and a remote display no control', (
+      tester,
+    ) async {
+      final key = GlobalKey();
+      final source = _Tone(hz: 1000, channels: 2, right: -0.4);
+      await tester.pumpWidget(
+        _Harness(
+          source: source,
+          boundary: key,
+          timeBase: ScopeTimeBase.s1,
+          onOption: (key, value) {},
+        ),
+      );
+      source.publish();
+      await _frame(tester);
+
+      expect(
+        find.text('L'),
+        findsNothing,
+        reason:
+            'two traces around two centre lines cross nothing, so there is '
+            'no front to choose and the letters belong in their lanes',
+      );
+
+      await tester.pumpWidget(
+        _Harness(
+          source: source,
+          boundary: key,
+          timeBase: ScopeTimeBase.s1,
+          stereo: ScopeStereo.overlay,
+        ),
+      );
+      await _frame(tester);
+
+      expect(
+        find.text('L'),
+        findsNothing,
+        reason: 'a remote display drew a control for a setting it cannot write',
+      );
+    });
+
+    testWidgets('the span is printed in the strip, or in the corner', (
+      tester,
+    ) async {
+      final key = GlobalKey();
+      final source = _Tone(hz: 1000, channels: 2);
+      await tester.pumpWidget(
+        _Harness(
+          source: source,
+          boundary: key,
+          timeBase: ScopeTimeBase.s1,
+          onOption: (key, value) {},
+        ),
+      );
+      source.publish();
+      await _frame(tester);
+
+      expect(
+        find.text('1 s'),
+        findsOneWidget,
+        reason: 'the span is not on the row it describes',
+      );
+
+      await tester.pumpWidget(
+        _Harness(source: source, boundary: key, timeBase: ScopeTimeBase.s1),
+      );
+      await _frame(tester);
+
+      expect(
+        find.text('1 s'),
+        findsNothing,
+        reason:
+            'a display with no strip has to paint the span into the plot, and '
+            'a widget found here means it was drawn twice or not at all',
       );
     });
   });

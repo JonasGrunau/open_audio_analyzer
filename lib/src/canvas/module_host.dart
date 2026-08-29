@@ -5,6 +5,7 @@ import 'package:oaa_ui/oaa_ui.dart';
 import 'package:flutter/widgets.dart';
 
 import '../clock/meter_clock.dart';
+import '../data/metric_reader.dart';
 import '../modules/alert_meter.dart';
 import '../modules/digital_meter.dart';
 import '../modules/histogram.dart';
@@ -69,6 +70,15 @@ class ModuleHost extends StatelessWidget {
       title: spec.title,
       selected: selected,
       onMenu: onMenu,
+      // Two kinds paint past the frame's inset, and both for the same reason:
+      // a glow rises out of the panel rather than out of a rectangle twelve
+      // pixels inside it — the Number Box's out of its foot, the Alert Meter's
+      // out of its left edge. Asked for here rather than by the module,
+      // because the frame is built here, and because the frame pays for it
+      // with a rounded clip the other twelve have no use for.
+      bleed:
+          spec.kind == ModuleKind.numberBox ||
+          spec.kind == ModuleKind.alertMeter,
       child: _body(),
     );
   }
@@ -138,11 +148,13 @@ class ModuleHost extends StatelessWidget {
         clock: clock,
         metric: spec.metric,
         calibration: calibration,
+        delta: alertDeltaOf(spec, calibration),
       ),
       ModuleKind.validator => ValidatorModule(
         engine: engine,
         clock: clock,
         calibration: calibration,
+        checks: spec.validatorChecks,
       ),
       ModuleKind.histogram => HistogramModule(
         engine: engine,
@@ -162,6 +174,7 @@ class ModuleHost extends StatelessWidget {
         source: spec.spectrumSource,
         response: spec.spectrumResponse,
         tilt: spec.spectrumTilt,
+        range: spec.spectrumRange,
       ),
       ModuleKind.spectrogram => SpectrogramModule(
         engine: engine,
@@ -177,6 +190,7 @@ class ModuleHost extends StatelessWidget {
         division: spec.scopeDivision,
         grid: spec.scopeGrid,
         stereo: spec.scopeStereo,
+        front: spec.scopeFront,
         trigger: spec.scopeTrigger,
         threshold: spec.scopeThresholdDb,
         autoThreshold: spec.scopeAutoThreshold,

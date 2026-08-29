@@ -21,6 +21,7 @@ import 'package:oaa/src/canvas/tab_strip.dart';
 import 'package:oaa/src/canvas/workspace.dart';
 import 'package:oaa/src/clock/meter_clock.dart';
 import 'package:oaa/src/modules/spectrum_analyzer.dart';
+import 'package:oaa/src/modules/validator.dart';
 import 'package:oaa_core/oaa_core.dart';
 import 'package:oaa_engine/oaa_engine.dart';
 import 'package:oaa_ui/oaa_ui.dart';
@@ -163,6 +164,14 @@ Future<void> _settle(WidgetTester tester) async {
 
 Finder _moduleTitled(String title) =>
     find.ancestor(of: find.text(title), matching: find.byType(ModuleHost));
+
+/// A row of an open menu, by its label.
+///
+/// Scoped to the row rather than found by text alone: a menu of module
+/// settings is open *over* the canvas, and `LRA` is both a row of the
+/// Validator's checks and the title of a Number Box behind it.
+Finder _menuRow(String label) =>
+    find.descendant(of: find.byType(OaaMenuRow), matching: find.text(label));
 
 /// The height of one grid row, in pixels, derived from a module on screen
 /// rather than recomputed. The default preset's boxes are three rows tall and
@@ -717,6 +726,84 @@ void main() {
     expect(container.read(workspaceProvider).selectedModuleId, isNull);
   });
 
+  testWidgets('a press on the tab strip clears the selection, on the press', (
+    tester,
+  ) async {
+    final container = await _pumpSparse(tester);
+    final selected = _spec(container, Metric.loudnessRange).id;
+    container.read(workspaceProvider.notifier).select(selected);
+    await tester.pump();
+    final tab = container.read(workspaceProvider).activeTab;
+
+    // The middle of the strip: the tabs sit at its left and the buttons at its
+    // right, and nothing on the canvas could ever have seen a press here. Held
+    // down rather than tapped, so what is asserted is the press and not the
+    // release.
+    final strip = tester.getRect(find.byType(TabStrip));
+    final gesture = await tester.startGesture(strip.center);
+    await tester.pump();
+
+    expect(container.read(workspaceProvider).selectedModuleId, isNull);
+    // And it was the press that cleared it, not a tab switching underneath.
+    expect(container.read(workspaceProvider).activeTab, tab);
+    await gesture.up();
+  });
+
+  testWidgets('a press on the selected module keeps it; on another, moves it', (
+    tester,
+  ) async {
+    final container = await _pumpSparse(tester);
+    final selected = _spec(container, Metric.loudnessRange).id;
+    container.read(workspaceProvider.notifier).select(selected);
+    await tester.pump();
+
+    // Its own title bar is not "away", and neither is a drag that starts
+    // there.
+    await tester.tapAt(_titleBarOf(tester, 'LRA'));
+    await tester.pump();
+    expect(container.read(workspaceProvider).selectedModuleId, selected);
+
+    await tester.tapAt(tester.getCenter(_moduleTitled('LUFS-M')));
+    await tester.pump();
+    expect(
+      container.read(workspaceProvider).selectedModuleId,
+      _spec(container, Metric.lufsMomentary).id,
+    );
+  });
+
+  testWidgets('a press while the module\'s menu is open is the menu\'s', (
+    tester,
+  ) async {
+    final container = await _pumpSparse(tester);
+    final selected = _spec(container, Metric.loudnessRange).id;
+    container.read(workspaceProvider.notifier).select(selected);
+    await tester.pump();
+
+    await tester.tapAt(
+      tester.getCenter(_moduleTitled('LRA')),
+      buttons: kSecondaryButton,
+    );
+    await _settle(tester);
+    expect(_menuRow('Duplicate'), findsOneWidget);
+
+    // The click that closes the menu lands on empty canvas — the same spot
+    // that would clear the selection with no menu up — and is the menu's.
+    final canvas = tester.getRect(find.byType(GridCanvas));
+    final emptyCanvas = Offset(
+      canvas.left + canvas.width / 4,
+      canvas.bottom - canvas.height / 4,
+    );
+    await tester.tapAt(emptyCanvas);
+    await _settle(tester);
+    expect(_menuRow('Duplicate'), findsNothing);
+    expect(container.read(workspaceProvider).selectedModuleId, selected);
+
+    // With the menu gone the same click is a click away.
+    await tester.tapAt(emptyCanvas);
+    await tester.pump();
+    expect(container.read(workspaceProvider).selectedModuleId, isNull);
+  });
+
   testWidgets('a tab switches at once, and long-pressing one opens its menu', (
     tester,
   ) async {
@@ -779,6 +866,83 @@ void main() {
         reason: '${kind.label} does not fit at its own default size',
       );
     }
+  });
+
+  testWidgets('the Validator\'s checks are ticked in a menu that stays open', (
+    tester,
+  ) async {
+    // The one menu in the application that holds a *set*. Every other one
+    // closes on the tap that chooses, because choosing is also how you say you
+    // are finished; here the fourth tap is where somebody discovers they
+    // wanted the second one back, so it stays up and writes each tick through
+    // as it happens. See `showOaaToggleMenu`.
+    final container = await _pumpSparse(tester);
+    final controller = container.read(workspaceProvider.notifier);
+    controller.addModule(
+      ModuleKind.validator,
+      at: const GridRect(column: 0, row: 4, columns: 8, rows: 5),
+    );
+    await _settle(tester);
+
+    final id = container.read(workspaceProvider).selectedModuleId!;
+    ModuleSpec spec() => container.read(workspaceProvider).tab.moduleById(id)!;
+    expect(spec().validatorChecks, ValidatorCheck.values);
+
+    // A right click on the module opens its menu. Three of three, not five of
+    // five: no built-in target sets a dynamics floor, so those two rows are
+    // not judged by anything and the table does not draw them.
+    await tester.tapAt(
+      tester.getCenter(find.byType(ValidatorModule)),
+      buttons: kSecondaryButton,
+    );
+    await _settle(tester);
+    expect(_menuRow('Checks: 3 of 3'), findsOneWidget);
+
+    await tester.tap(_menuRow('Checks: 3 of 3'));
+    await _settle(tester);
+
+    // Off, and then back on, without the menu closing in between — the row is
+    // still there to be tapped a second time, which is the whole feature.
+    await tester.tap(_menuRow(ValidatorCheck.loudnessRange.label));
+    await tester.pump();
+    expect(
+      spec().validatorChecks,
+      isNot(contains(ValidatorCheck.loudnessRange)),
+    );
+
+    await tester.tap(_menuRow(ValidatorCheck.loudnessRange.label));
+    await tester.pump();
+    expect(spec().validatorChecks, contains(ValidatorCheck.loudnessRange));
+
+    // A floor this target does not set is listed and does not answer. It is
+    // greyed rather than left out, because a row that vanishes is a row
+    // somebody hunts for — and it keeps whatever it was set to, so choosing a
+    // target that does set a floor brings the row back as it was left.
+    await tester.tap(_menuRow(ValidatorCheck.odrShort.label));
+    await tester.pump();
+    expect(spec().validatorChecks, contains(ValidatorCheck.odrShort));
+
+    // And a table with nothing left in it still paints. It is the one state
+    // whose verdict is neither READY nor NOT READY, because nothing was
+    // compared — see the module.
+    for (final check in const [
+      ValidatorCheck.lufsIntegrated,
+      ValidatorCheck.truePeak,
+      ValidatorCheck.loudnessRange,
+    ]) {
+      await tester.tap(_menuRow(check.label));
+      await tester.pump();
+    }
+    expect(spec().validatorChecks, [
+      ValidatorCheck.odrIntegrated,
+      ValidatorCheck.odrShort,
+    ]);
+
+    // Dismissed the way any menu is, rather than by the choosing.
+    await tester.tapAt(const Offset(4, 4));
+    await _settle(tester);
+    expect(_menuRow(ValidatorCheck.truePeak.label), findsNothing);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('delete removes the selection and undo brings it back', (

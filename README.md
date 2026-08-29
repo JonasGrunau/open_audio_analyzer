@@ -131,16 +131,16 @@ other thirteen.
 |---|---|
 | **Number Box** | Any single measurement, as a number. |
 | **LUFS Meter** | Momentary, short-term and integrated loudness as three bars against a target band, each with its value printed beneath. |
-| **Super Meter** | One half-gauge: short-term and integrated loudness filling from the left, ODR-S and ODR-I continuing from each loudness tip to the true peak, so the dark rest of a ring is its true-peak headroom. Names ride the outer tips, every arc prints its reading in the lane inside it, and LUFS, ODR and true peak max are in the centre; LRA on tall modules. |
+| **Super Meter** | One half-gauge: short-term and integrated loudness filling from the left, ODR-S and ODR-I continuing from each loudness tip to the true peak, so the dark rest of a ring is its true-peak headroom. Names ride the outer tips, and the centre stacks the short-term pair above the delivered three — LUFS-I, ODR-I and true peak — each of the five with its unit beside it. |
 | **Digital Meter** | Sample peak and RMS, per channel, up to 7.1 — as segmented bars and as numbers. |
 | **VU Meter** | A needle, on the movement the engine models. |
-| **Alert Meter** | One measurement, watched, with the worst it has been latched. |
-| **Validator** | The delivery decision, as a table. |
-| **Histogram** | Loudness against time: how the programme moved, and when it was over target. Both bands averaged over a window its menu names, and the whole recording in an overview strip along the floor. |
+| **Alert Meter** | One measurement, watched, printed as **the worst it has been**. That one number is the module — the live value is a Number Box's job — and the panel's own light is that same verdict at a hundred times the area: a wash off the left edge in the latched state's colour, held until the engine is reset and dark until something has been measured. `Metric` picks what it watches; any of the fourteen works. A quantity the engine already accumulates over the programme — LUFS-I, LRA, TP Max, Peak Max, ODR-I — is **read rather than latched**: the engine is doing the holding, and the extremum of a converging estimator is a property of how it converged rather than of the audio. `Delta` prints that worst case as its signed distance from the line the target draws instead of as itself — `+0.6 dB` rather than `−0.4 dBTP` against a −1.0 ceiling, in the unit of the *difference* — and is offered only where the active target actually draws that line: loudness, true peak and LRA always, the two ODR floors only under a target that states them, because a distance from a floor nobody stated is a number nobody measured. |
+| **Validator** | The delivery decision, as a table. `Checks` picks which criteria this one judges — LUFS-I, true peak, LRA and each dynamics floor the target sets — ticked in a menu that stays open, because choosing four of five through a menu that closes on every tap is four trips through it. A criterion switched off leaves the verdict as well as the table; a module with nothing left to check says so rather than passing. |
+| **Histogram** | Loudness against time: how the programme moved, and when it was over target. Both bands averaged over a window its menu names, and the whole recording in an overview strip along the floor — which is also the control: drag the frame on it to scroll back through the programme, scroll, pinch or wheel over it to change how much of the programme the plot shows. The time axis is elapsed time, so a scrolled plot still says where you are. |
 | **Loudness Distribution** | How much of the programme was spent at each loudness, bracketed between the two percentiles LRA is the distance between. The axis fits the programme, so a distribution occupying eight decibels is drawn across the module instead of into a fifth of it; `Scale` gives the whole −60 to 0 range back. |
-| **Spectrum Analyzer** | Level against frequency, log-spaced, tilted so a mix reads roughly flat, with a peak hold. `Source` picks which signal the bands are measured on: all channels, or the front pair's left, right, mid or side. |
-| **Spectrogram** | Frequency against time, level as colour. `Source` is the analyser's, and changing it clears the record. `Colour` picks the ramp: the skin's own, rising monotonically in brightness through the accent hue, or `Full RGB`, the spectrogram rainbow, which separates far more steps of level than one hue can. |
-| **Oscilloscope** | The waveform, one lane per channel or both overlaid: triggered at scope speeds, rolling from half a second up, locked to the DAW's bar grid when a plugin is attached, or swept from a transient. Height and threshold are sliders on the module, because both are chosen by watching the picture move; `AUTO` takes the threshold six decibels under the loudest transient, so the sweep starts inside the attack rather than on top of it. `Colour: Full RGB` draws each column in its own balance of bass, mids and highs, so a kick is red, a hat is blue and a full-spectrum hit is white. |
+| **Spectrum Analyzer** | Level against frequency, log-spaced, tilted so a mix reads roughly flat, with a peak hold. `Source` picks which signal the bands are measured on: all channels, or the front pair's left, right, mid or side. `Range` sets how far below full scale the axis reaches — 60, 90 or 120 dB, 90 by default. Click or tap the plot for a **cursor**: a line at that frequency with a tag reading the frequency, the level there, its peak hold and the level A-weighted — dB(A), the IEC 61672-1 curve at the band's centre. Drag it to move it; tap the line, or click anywhere away from the module, to dismiss it. The tag prints the *measured* level, untilted, which under a tilt is not where the curve is drawn. |
+| **Spectrogram** | Frequency against time, level as colour. `Source` is the analyser's, and changing it clears the record. `Colour` picks the ramp: the skin's own, its ground rising through the accent into the warning colour, or `Full RGB`, the spectrogram rainbow, which separates far more steps of level than two hues can. |
+| **Oscilloscope** | The waveform, one lane per channel or both overlaid: triggered at scope speeds, rolling from half a second up, locked to the DAW's bar grid when a plugin is attached, or swept from a transient. Height and threshold are sliders on the module, because both are chosen by watching the picture move; `AUTO` takes the threshold six decibels under the loudest transient, so the sweep starts inside the attack rather than on top of it. Overlaid, the `L R` legend beside them is a control too: clicking it swaps which channel is drawn in front of the other. `Colour: Full RGB` draws each column in its own balance of bass, mids and highs, so a kick is red, a hat is blue and a full-spectrum hit is white. |
 | **Phase Scope** | A goniometer: left against right, rotated so mono stands upright, `L`, `R` and `M` engraved at the axis ends, with balance and correlation riding the frame's edges as markers — correlation in the warning colour below zero. Needs two channels; on a mono source it says **MONO SOURCE** rather than drawing the straight line one produces. |
 | **Stereo Cloud** | Where each frequency sits in the stereo image over the last two seconds: one mark per band per frame, brighter and larger the louder, fading with age, placed at the pan pot's angle. |
 
@@ -202,11 +202,11 @@ Four consequences worth naming, because they are what usually goes wrong:
 | Number box, LUFS, Alert, Validator | Cached `ui.Paragraph`, rebuilt on string change only |
 | Digital meter | Batched `drawRect` under one cached gradient shader; the segment gaps are one `drawRawPoints` from a buffer rebuilt only on resize |
 | VU meter | The whole face redrawn each frame — a handful of `drawArc`s and `drawLine`s, cheaper than caching it and keeping it in step with a resize. The needle is one `Path`, reset and refilled; the scale labels are cached paragraphs, each placed where it clears the boxes already placed |
-| Spectrum analyzer | `drawRawPoints` over the native `Float32List` — C writes screen-space x,y directly. The drawn level is a one-pole average at the time constant `Response` names, plus the offset `Tilt` names; the line above it is that curve's envelope on the same pole |
-| Phase scope | The last forty frames of samples in a ring, each drawn as one polyline at its age's brightness. The trail is the frames, not a faded picture |
+| Spectrum analyzer | `drawRawPoints` over the native `Float32List` — C writes screen-space x,y directly. The drawn level is a one-pole average at the time constant `Response` names, plus the offset `Tilt` names; the line above it is that curve's envelope on the same pole. The cursor reads those two buffers at one band and repaints from its own notifier, because the clock fires only on a new frame and a cursor placed on a stopped signal still has to appear |
+| Phase scope | The last forty frames of samples in a ring, each drawn as one `drawRawPoints` of 1.4 px dots at its age's brightness, the dimmest from an eighth of their samples. The trail is the frames, not a faded picture |
 | Stereo cloud | A ring of the last 96 frames' hits — band, position, weight — re-emitted every published frame as square-capped points under a 45° rotation, which draws them as diamonds, sorted into brightness buckets whose paints also size them |
 | Spectrogram | One byte of palette step per cell as the record, plus an RGBA buffer shifted a column per published frame and uploaded as a pixel-backed `ui.Image` for a single `drawImageRect`. Bounded by the module's area, whatever the signal does. A skin or `Colour` change re-renders the buffer from the record, moving no cell |
-| Histogram | Ten columns a second into a fixed ring of loudness values, redrawn whole as a handful of `drawRawPoints` — the momentary band bucketed by how far over target each column stands. Kept as measurements rather than pixels, so it survives a resize, and raw, with `Smoothing` applied on the way out, so the setting redraws the whole programme |
+| Histogram | Twenty columns a second into a fixed ring of loudness values, redrawn whole as a handful of `drawRawPoints` — the momentary band bucketed by how far over target each column stands. Kept as measurements rather than pixels, so it survives a resize and so the plot's window over it is an index rather than a scroll offset in pixels; raw, with `Smoothing` applied on the way out, so the setting redraws the whole programme. A pixel covering several columns takes their mean for short-term and their loudest for momentary |
 | Loudness distribution | The engine's 120 bins as one-pixel columns that tile exactly, over an axis fitted to every occupied bin, the gated range and the target, rounded to whole ticks and left alone until the distribution outgrows it, so the scale never slides while it is being read. One `drawRawPoints` for the fill and one for the top edge, each clipped twice so either side of the target takes its own colour |
 
 ---
@@ -227,7 +227,7 @@ ones.
 | **LRA** | Gated at −20 LU relative, 10th–95th percentile, via a 0.01 LU-bin histogram storing exact energy sums (O(1) per update, constant memory) |
 | **True peak** | BS.1770-4 Annex 2, 4× oversampling with the specified 48-tap polyphase FIR, at every sample rate |
 | **Spectrum** | 4096-point Hann window at a 1024-sample hop, zero-padded to a 16384-point transform and mapped onto 512 log-spaced bands with **peak-per-bin** so narrow peaks survive; bands too narrow to hold a bin read between two. Window-compensated: a full-scale sine reads 0.0 dBFS on a bin centre and within 0.3 dB off it |
-| **Correlation** | Running Pearson over a sliding window |
+| **Correlation** | Pearson over the block, then a 200 ms one-pole. Gated at −70 LUFS per channel, R128's absolute gate: under it the quotient is `0/0` and the reading is a dash rather than a `0` nobody took. A gate and not an underflow guard — a live input's noise floor is not exactly zero, and the correlation of two channels of noise is a random number whose sign falls whichever way the block did |
 | **Crest** | Sample peak minus RMS over the same block — the block's own values, not the held peak and smoothed RMS the meters draw, which settle at different rates. Exactly 3.0103 dB for a sine, 0 for DC |
 | **ODR-S / ODR-I** | Open Dynamic Range: true peak minus loudness over the same window, the last 3 s for ODR-S and the programme for ODR-I. Defined [below](#-open-dynamic-range). A stereo 1 kHz sine reads exactly 0 LU on both, in mono 3.01 |
 | **Clip** | Longest run of consecutive samples at or above 0.999 since the reset, per channel. Latched, so a clip that lasted three samples is still visible when you look back |
@@ -267,7 +267,9 @@ follows is the summary; nothing is tuned, weighted or smoothed on top of it.
   BS.1770 defines for the programme. The unit is LU and the resolution 0.1,
   like every loudness reading.
 - **Silence has no dynamics.** Every dB quantity floors at −144 rather than
-  −∞, and a subtraction of two floors is 0.0 — which read as "completely
+  −∞ internally — a level standing there is *printed* `-∞`, and the floor is
+  kept a number so that differences of dB stay arithmetic — and a subtraction
+  of two floors is 0.0 — which read as "completely
   squashed" for a passage nobody could hear, and about 8 LU of "dynamics" for a
   noise floor at −90 dBFS. ODR-S is therefore undefined below the −70 LUFS
   absolute gate, which is the line BS.1770 already draws for what counts as
@@ -331,7 +333,8 @@ target carries.
 
 A quantity this build does not measure is **NaN**, never zero — zero is a
 legitimate reading for correlation, balance and several dB quantities, so it
-cannot double as "no data" — and the UI renders it as an em dash. Nothing in the
+cannot double as "no data" — and the UI renders it as an em dash, in the muted
+ink and never in the colour a measurement is printed in. Nothing in the
 table above is unmeasured, so in practice a dash means a reading that is not yet
 *defined*: momentary loudness needs 400 ms of signal, short-term 3 s, integrated
 one gating block above the absolute gate. A remote display that has lost its host
@@ -422,9 +425,11 @@ on a 32" monitor and an 11" tablet with nobody writing responsive code.
 **Drag a module's title bar** to move it, **drag the corner grip** to resize,
 **alt-drag** to duplicate, **right-click or long-press empty canvas** to add a
 module there, **right-click a module** for its options, and **right-click or
-long-press a tab** to rename, duplicate or delete it. Buttons for add, undo and
-redo sit in the tab strip as well, because tablets have neither a right mouse
-button nor `⌘Z`.
+long-press a tab** to rename, duplicate or delete it. **Click anywhere else** —
+empty canvas, the menu bar, the tab strip, another module — and the selection
+clears, on the press; a module's own menu is not "anywhere else", so choosing an
+option for it leaves it selected. Buttons for add, undo and redo sit in the tab
+strip as well, because tablets have neither a right mouse button nor `⌘Z`.
 
 A finger gets a larger target than the one that is drawn: 40 px of title bar
 rather than the 24 px it paints, a 32 px corner grip rather than 16 px. Both are
@@ -494,8 +499,10 @@ presets cannot carry a target or an explicit choice gets silently overwritten.
 **A preset is a document, and the File menu treats it like one.** `Open…` picks
 one through the platform's own dialog, starting in the presets folder and
 reaching anywhere else you point it; `Save` writes back to the file it came
-from; `Save as…` places a copy anywhere and takes the preset's name from the
-filename, which is why there is no name field. An unsaved layout is called
+from, without asking, on the next launch as well as this one — the session
+remembers which file that is, and drops it only if the file has gone; `Save
+as…` places a copy anywhere and takes the preset's name from the filename,
+which is why there is no name field. An unsaved layout is called
 **Unnamed**, and that is the word the save dialog opens with. The open preset's
 name is centred in the menu bar, with a dot beside it when the canvas differs
 from the file. On macOS the menu is in the system menu bar; on Windows and Linux
@@ -546,7 +553,8 @@ between machines or keep in version control.
 
 ```
 settings.json          the frame rate, source, target, skin
-session.json           the canvas as you left it, saved as you work
+session.json           the canvas as you left it and the preset file it is
+                       open on, saved as you work
 presets/*.json         one file per saved layout
 calibrations/*.json    one file per delivery target you wrote
 skins/*.json           one file per skin
@@ -643,7 +651,9 @@ A delivery target is the same idea:
 `odr_i_min` and `odr_s_min` are the two lines that may be left out: a target
 without them sets no dynamics floor, and its Validator has three rows rather
 than five. The second is judged against the lowest ODR-S of the programme, not
-the current one.
+the current one. That is the target's half of what a Validator checks; the
+module's half is its `Checks` menu, which can leave out any of the rows the
+target does state.
 
 A file whose `id` matches one Open Audio Analyzer ships with **replaces** it
 everywhere, including in presets that already name it, so if you disagree with
@@ -655,14 +665,17 @@ original comes back.
 ## 🎨 Design
 
 **Precision Instrument.** Graphite black, one signal hue, hairline borders, no
-shadows and no gradients. Depth comes from background steps, because measurement
-gear is machined panels sitting flush, not floating cards.
+shadows. Depth comes from background steps, because measurement gear is
+machined panels sitting flush, not floating cards — and a gradient appears only
+where it describes light on such a surface: every module's panel is lit from its
+top-left corner, as Decibel's are; a level meter's bar is shaded as a solid; the
+Number Box and the Alert Meter glow in their verdict. Never as decoration.
 
 ```
-bg      #0B0C0E     accent  #35E0C4   in spec
+bg      #0B0C0E     accent  #35E0C4   readings, and in spec
 panel   #121417     warn    #F2B01E   close to a limit
 hairline#1F2328     over    #FF4D4D   past the target
-text    #E6E8EB / #8A9199 / #565E67
+text    #E6E8EB / #8A9199 / #565E67   chrome, labels, ticks
 ```
 
 Two rules are enforced rather than merely encouraged:
@@ -1109,13 +1122,15 @@ drives, and it is the only test that covers the live path — `prepareToPlay`, t
 FIFO, the playhead, the engine, the streaming thread and the socket — rather
 than the codec alone.
 
-It earned its keep immediately: **six** findings that nothing else could see,
+It earned its keep immediately: **seven** findings that nothing else could see,
 listed under **What it found** in
-[`plugin/host/AGENTS.md`](plugin/host/AGENTS.md). Five were defects and all five
+[`plugin/host/AGENTS.md`](plugin/host/AGENTS.md). Six were defects and all six
 are fixed — three in the plugin's transport handling, one that only became
-visible with the fake DAW and the application running as a pair, and one in the
-fake DAW itself, which was inventing the very thing it exists to measure. The
-sixth is the unreachable "host supplies no position" branch described above.
+visible with the fake DAW and the application running as a pair, one in the
+plugin's streaming thread that a 2048-frame host buffer exposed as a waveform
+with gaps in it, and one in the fake DAW itself, which was inventing the very
+thing it exists to measure. The seventh is the unreachable "host supplies no
+position" branch described above.
 
 ---
 

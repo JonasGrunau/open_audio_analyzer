@@ -45,7 +45,17 @@ This directory knows about files; it does not know what is in them.
   that the three rules above still hold for those files: a preset saved to a
   Desktop is written atomically, and one that cannot be read there names itself
   in `lastError` instead of throwing. Nothing outside this directory opens a
-  `File`.
+  `File` — which is why `existsAt` is here too, for the one question about a
+  user's file that is not a read.
+
+- **`session.json` carries the preset file the canvas is open on, and
+  `loadStartupConfig` drops it if that file has gone.** The path is what makes
+  `Save` mean overwrite on the next launch rather than opening a save panel for
+  a preset that already has a home. Checked once, at launch: a preset that has
+  been renamed, thrown away or left on an unmounted drive stops being the
+  document, and the layout comes back as an unsaved one. A file that goes
+  missing *during* a session is the write's problem, and a failed write already
+  says so.
 
 - **One file per preset, per skin, per target.** A single `presets.json` is
   marginally less code and takes the whole library out with one corrupt byte,

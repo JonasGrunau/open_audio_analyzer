@@ -142,12 +142,20 @@ class MeterClock extends ChangeNotifier {
   /// publish is gone.
   ///
   /// At 30 fps the reader asks every 33 ms and the engine publishes every
-  /// 21 ms, so **one publish in three is lost** — and the oscilloscope, whose
-  /// whole axis is time, would draw a third of its width as holes and refuse
-  /// to fill a window longer than one buffer at all. The clock's tick runs at
-  /// the display's refresh rate, which is 60 or 120 and therefore always
-  /// faster than 47, so consuming here and drawing later is the difference
-  /// between a complete record and a sampled one.
+  /// 21 ms, so **one publish in three is lost**. The scope survives that on
+  /// its own now — `oaa_snapshot.scope` holds four blocks, so the audio of a
+  /// missed publish is still in the next one — but its spectrum is not, and
+  /// the oscilloscope colours each block by the spectrum it was measured
+  /// with. The spectrogram's columns are lost outright — one column is one
+  /// published measurement, so a publish nobody read is a column the record
+  /// never gets and cannot be redrawn from — and worse, the rate it dates its
+  /// own time axis by is measured off the columns it appends, so consuming
+  /// from a throttled repaint made it measure the *repaint* rate: the same
+  /// audio was labelled 47 Hz at 60 fps and 30 Hz at 30. The clock's tick runs
+  /// at the display's refresh rate, which is 60 or 120 and therefore faster
+  /// than 47 at every sample rate up to 61 kHz, so consuming here and drawing
+  /// later is the difference between a record of every measurement and one of
+  /// every other.
   ///
   /// What crosses this is the *acquisition*, not a repaint: a listener folds
   /// the new measurement into whatever it is accumulating and does not mark

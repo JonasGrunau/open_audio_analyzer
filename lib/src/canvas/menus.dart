@@ -105,3 +105,116 @@ Future<ModuleKind?> showModuleKindMenu(
     ],
   );
 }
+
+/// A menu that **stays open** while several values are switched on and off.
+///
+/// Every other menu in the application holds one value: you pick a metric, a
+/// ramp, a time base, and picking it is also how you say you are finished. A
+/// set is not that. Choosing which four of five delivery criteria a Validator
+/// judges through a menu that closes on every tap is four round trips through
+/// a right click and a submenu, and the fourth one is where somebody discovers
+/// they wanted the second back.
+///
+/// Flutter's `PopupMenuItem` pops the route on tap and offers no way to refuse,
+/// so the whole list is **one disabled item** whose child is the rows. Disabled
+/// costs nothing here — the item's own ink response is what would close the
+/// menu — and the rows inside it are live: a disabled `InkWell` is opaque to
+/// hit testing but hit-tests its children first, so each row's own tap lands.
+/// Keyboard traversal is what it costs, which is why the row that opened this
+/// menu names the count — `Checks: 2 of 3` is readable without opening it at
+/// all.
+///
+/// [onToggle] is called with the value and the state it has just been given,
+/// and is expected to write it through immediately rather than at the end. That
+/// is the second half of staying open: the module under the menu is repainted
+/// as each row is ticked, so the table being assembled is the one being looked
+/// at. It is why this returns nothing — there is no result to wait for, only a
+/// menu that has been dismissed.
+Future<void> showOaaToggleMenu<T>(
+  BuildContext context,
+  Offset globalPosition, {
+  required List<T> values,
+  required String Function(T value) label,
+  required Set<T> chosen,
+  required void Function(T value, bool on) onToggle,
+  bool Function(T value)? isEnabled,
+}) {
+  final colors = OaaTheme.of(context);
+  return showMenu<void>(
+    context: context,
+    color: colors.panelRaised,
+    position: menuPositionAt(context, globalPosition),
+    items: [
+      PopupMenuItem<void>(
+        enabled: false,
+        padding: EdgeInsets.zero,
+        // The item is the whole list, so Material's one-row minimum would only
+        // pad a menu that is already as tall as its rows make it.
+        height: 0,
+        child: StatefulBuilder(
+          builder: (context, setState) => Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (final value in values)
+                _ToggleRow(
+                  colors: colors,
+                  label: label(value),
+                  on: chosen.contains(value),
+                  // A value this menu's owner cannot act on is greyed and left
+                  // in place rather than dropped, for the reason `oaaMenuItem`
+                  // gives — and it keeps its check, because "chosen, and this
+                  // target says nothing to judge it against" is two facts.
+                  enabled: isEnabled?.call(value) ?? true,
+                  onTap: () {
+                    final on = !chosen.contains(value);
+                    setState(() {
+                      if (on) {
+                        chosen.add(value);
+                      } else {
+                        chosen.remove(value);
+                      }
+                    });
+                    onToggle(value, on);
+                  },
+                ),
+            ],
+          ),
+        ),
+      ),
+    ],
+  );
+}
+
+/// One row of [showOaaToggleMenu], which is [OaaMenuRow] with a tap of its own.
+class _ToggleRow extends StatelessWidget {
+  const _ToggleRow({
+    required this.colors,
+    required this.label,
+    required this.on,
+    required this.enabled,
+    required this.onTap,
+  });
+
+  final OaaColors colors;
+  final String label;
+  final bool on;
+  final bool enabled;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => InkWell(
+    onTap: enabled ? onTap : null,
+    child: OaaMenuRow(
+      colors: colors,
+      selected: on,
+      child: Text(
+        label,
+        style: OaaType.body.copyWith(
+          color: enabled
+              ? (on ? colors.textPrimary : colors.textMuted)
+              : colors.textFaint,
+        ),
+      ),
+    ),
+  );
+}

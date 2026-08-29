@@ -33,10 +33,11 @@ import '../clock/meter_clock.dart';
 /// now a band along the rim rather than a line, in [OaaColors.meterTrack] up to
 /// 0 VU and [OaaColors.over] above it over a tinted ring, with the standard
 /// face's marks — −20 to +2 labelled, `−` and `+` past the ends — and a peak
-/// lamp beside the dial that lights while the held peak stands in the red.
-/// The needle is a taper in [OaaColors.meterFill], the instrument's own fill
-/// colour, rising from behind the boxed reading that sits over the pivot: a
-/// movement needs a hub, and a drawing of one does better with the number.
+/// lamp set into the face under the end of the red, lit while the held peak
+/// stands in it. The needle is a taper in [OaaColors.meterFill], the
+/// instrument's own fill colour, rising from behind the boxed reading that
+/// sits over the pivot: a movement needs a hub, and a drawing of one does
+/// better with the number.
 /// That is weight rather than decoration: at a glance the module says *how far
 /// up the scale the programme is* from the proportion of the rim that is red,
 /// before the needle is read at all.
@@ -209,15 +210,13 @@ class _VuMeterModuleState extends State<VuMeterModule> {
               mark == 0
                   ? '0'
                   : (mark > 0 ? '+${mark.toInt()}' : '${mark.toInt()}'),
-              // 0 VU is what the whole face is aimed at, so it is the one
-              // number on it drawn like a reading rather than like a
-              // graticule. Above it is over; below it recedes.
+              // 0 VU is what the whole face is aimed at, and it is where the
+              // red begins — the band changes colour under it and the zone
+              // starts there — so it wears the over colour with the numbers
+              // above it, and the extra weight that says it is the boundary
+              // rather than one more number in the red. Below it recedes.
               OaaType.tick.copyWith(
-                color: mark > 0
-                    ? colors.over
-                    : mark == 0
-                    ? colors.textPrimary
-                    : colors.textFaint,
+                color: mark >= 0 ? colors.over : colors.textFaint,
                 fontWeight: mark == 0 ? FontWeight.w500 : null,
               ),
             )
@@ -226,15 +225,18 @@ class _VuMeterModuleState extends State<VuMeterModule> {
       ];
       // The face's end signs: what a real VU face prints past its last marks.
       // The minus end recedes like the scale under it; the plus end is the red
-      // family's, like everything past 0.
-      _minus = layoutParagraph(
-        '−',
-        OaaType.label.copyWith(color: colors.accent),
-      );
-      _plus = layoutParagraph('+', OaaType.label.copyWith(color: colors.over));
+      // family's, like everything from 0 up.
+      //
+      // Larger than a scale number and untracked. They are signs rather than
+      // labels, so they carry the face at a glance where a 10 px glyph reads as
+      // a speck; and `label`'s letter spacing is a margin on the right of a
+      // single glyph, which pushes the sign off the radius it was placed on.
+      final endSign = OaaType.label.copyWith(fontSize: 14, letterSpacing: 0);
+      _minus = layoutParagraph('−', endSign.copyWith(color: colors.textMuted));
+      _plus = layoutParagraph('+', endSign.copyWith(color: colors.over));
       _template = layoutParagraph(
         _readingTemplate,
-        OaaType.readingSmall.copyWith(color: colors.textPrimary),
+        OaaType.readingSmall.copyWith(color: colors.accent),
       );
       _reference = layoutParagraph(
         '0 VU = ${_dbfs(reference)} dBFS',
@@ -309,8 +311,11 @@ class _VuPainter extends MeterPainter {
        _markOver = (Paint()
          ..color = colors.over
          ..strokeWidth = OaaStroke.mark),
+       // 0 is red like everything above it, and heavier than every other mark:
+       // the boundary is said with weight here rather than with a second
+       // colour, so nothing on the face is over-coloured except the over.
        _markZero = (Paint()
-         ..color = colors.textPrimary
+         ..color = colors.over
          ..strokeWidth = OaaStroke.emphasis),
        _peak = (Paint()
          ..color = colors.textPrimary
@@ -390,8 +395,16 @@ class _VuPainter extends MeterPainter {
   /// How far past the last marks the `−` and `+` end signs stand, in radians.
   static const double _endSignLead = 0.12;
 
-  /// The peak lamp's radius.
-  static const double _lampRadius = 4;
+  /// The peak lamp's radius: a share of the face, held between a lens that is
+  /// still round on a two-cell tile and one that does not become a spot on the
+  /// dial of a meter drawn across half the canvas.
+  static const double _lampShare = 0.045;
+  static const double _lampMin = 2.0;
+  static const double _lampMax = 5.0;
+
+  /// How far past the last mark the lamp stands, in radians. Far enough that
+  /// the band's end and the lens are two objects and not one.
+  static const double _lampLead = 0.22;
 
   /// The pivot hub, as a fraction of the face radius.
   static const double _capShare = 0.045;
@@ -679,18 +692,52 @@ class _VuPainter extends MeterPainter {
       canvas.drawPath(_pointer, _needle);
     }
 
+    // --- The readout box's place ---------------------------------------------
+    // Taken here rather than where the box is drawn, because the lamp gives way
+    // to it: on a tile with no room for both, the number wins.
+    final boxHeight = state._rowHeight + Space.xs * 2;
+    final box = showRow
+        ? Rect.fromCenter(
+            center: Offset(pivot.dx, pivot.dy + boxHeight * 0.25),
+            width: state._readingWidth,
+            height: boxHeight,
+          )
+        : Rect.zero;
+
     // --- The peak lamp -------------------------------------------------------
-    // Beside the dial where a real face carries one, lit while the held peak
-    // stands over 0 VU — the same hold the mark on the rim draws, so the two
-    // can never disagree about whether the programme has been in the red.
-    // Skipped when the tile leaves it no clear margin: a lamp on top of the
-    // scale labels is furniture, not a signal.
-    final lampX = availW - Space.xs - _lampRadius;
-    if (lampX - _lampRadius >=
-        pivot.dx + face * sinHalf + _labelGap + state._labelBeside) {
+    // A lens set into the face just past the end of the red, where a real
+    // instrument carries one, lit while the held peak stands over 0 VU — the
+    // same hold the mark on the rim draws, so the two can never disagree about
+    // whether the programme has been in the red.
+    //
+    // **Inside the rim, not out in the tile's margin.** It was pinned to the
+    // right edge at half the face's height, which is level with nothing and
+    // attached to nothing: a stray dot on the panel beside an instrument rather
+    // than a part of one. Past the sweep is the only interior a lamp can live
+    // in — the needle crosses every angle between the ends, out to the rim — so
+    // it sits in the wedge under the red end, hugging the band's inner edge,
+    // with the `+` end sign outside the band on nearly the same radius.
+    //
+    // Sized against the face like everything else here, and skipped when the
+    // dial has shrunk to where it would touch the readout box or leave the
+    // tile: a lamp on top of the reading is furniture, not a signal.
+    final lampRadius = (face * _lampShare).clamp(_lampMin, _lampMax);
+    final lampAngle = zero + halfSweep + _lampLead;
+    final lampAt =
+        pivot +
+        Offset(math.cos(lampAngle), math.sin(lampAngle)) * (rim - lampRadius);
+    final lampBox = Rect.fromCircle(
+      center: lampAt,
+      radius: lampRadius + Space.xxs,
+    );
+    if (lampBox.left >= 0 &&
+        lampBox.top >= 0 &&
+        lampBox.right <= availW &&
+        lampBox.bottom <= availH &&
+        !lampBox.overlaps(box)) {
       canvas.drawCircle(
-        Offset(lampX, pivot.dy - face * 0.5),
-        _lampRadius,
+        lampAt,
+        lampRadius,
         state._peak > 0 ? _lampOn : _lampIdle,
       );
     }
@@ -701,25 +748,13 @@ class _VuPainter extends MeterPainter {
     // behind it is what a pivot looks like when the pivot is a reading.
     if (!showRow) return;
 
-    final boxHeight = state._rowHeight + Space.xs * 2;
-    final box = Rect.fromCenter(
-      center: Offset(pivot.dx, pivot.dy + boxHeight * 0.25),
-      width: state._readingWidth,
-      height: boxHeight,
-    );
     final rounded = RRect.fromRectAndRadius(box, OaaRadius.sm);
     canvas.drawRRect(rounded, _readoutFill);
     canvas.drawRRect(rounded, _readoutBorder);
 
     final reading = state._reading.of(
       _readingText(vu),
-      OaaType.readingSmall.copyWith(
-        color: vu.isNaN
-            ? colors.textMuted
-            : vu > 0
-            ? colors.over
-            : colors.textPrimary,
-      ),
+      OaaType.readingSmall.copyWith(color: _readingColor(vu)),
     );
     canvas.drawParagraph(
       reading,
@@ -761,13 +796,39 @@ class _VuPainter extends MeterPainter {
   /// and rather than printing the true −126 VU of digital silence, which is a
   /// number no VU meter has ever had an opinion about. Above the top it prints
   /// the real figure: how far over you are is the reason to look.
+  ///
+  /// **Below the floor it prints the same dash an unmeasured reading gets**,
+  /// rather than a figure with an operator in front of it. `<-20` ran its two
+  /// signs into a single mark that read as a left arrow at the size this box is
+  /// drawn, and spacing them apart bought a legible string at the price of
+  /// putting punctuation in a readout that otherwise holds nothing but a
+  /// number. Both states are the box having no figure to print, and the face
+  /// already tells them apart in the only way that matters: below the floor the
+  /// needle is there, resting on its bottom stop; unmeasured, there is no
+  /// needle at all.
   String _readingText(double vu) {
-    if (vu.isNaN) return '—';
-    if (vu < _minVu) return '<${_minVu.toInt()}';
+    if (_noFigure(vu)) return unmeasured;
     var text = vu.toStringAsFixed(1);
     if (text == '-0.0') text = '0.0';
     return vu > 0 ? '+$text' : text;
   }
+
+  /// What the reading is printed in: over-scale in the red family, a figure the
+  /// programme actually made in [OaaColors.accent] — the ink every module
+  /// prints a measurement in, see `colorForState` — and the dash in
+  /// [OaaColors.textMuted], which is the voice this application gives every
+  /// quantity it is not reporting.
+  Color _readingColor(double vu) {
+    if (_noFigure(vu)) return colors.textMuted;
+    return vu > 0 ? colors.over : colors.accent;
+  }
+
+  /// Whether the box has a figure to print at all: nothing measured, or a
+  /// needle resting on the bottom stop, where −20.0 would be a reading of the
+  /// stop rather than of the programme and the true −126 VU of digital silence
+  /// is a number no VU meter has ever had an opinion about. One predicate, so
+  /// the text and the colour cannot come to different conclusions about it.
+  bool _noFigure(double vu) => vu.isNaN || vu < _minVu;
 
   /// Where a VU reading sits on the face, as an angle either side of vertical.
   ///

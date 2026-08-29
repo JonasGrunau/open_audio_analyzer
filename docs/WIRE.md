@@ -406,8 +406,10 @@ scope_frames` `i16` samples, interleaved x=left, y=right, oldest first. At most
 **4,096** pairs.
 
 **A producer that measures sends one analysis block — 1,024 pairs — and nothing
-else.** The plugin is always that, and so is the app's own engine: a snapshot is
-published once per block.
+else.** The plugin is always that: a snapshot is published once per block, and
+every block is pushed and sent. The engine's own `oaa_snapshot.scope` has held
+its newest four blocks since ABI 7, for a reader that misses a publish; the
+plugin sends the newest of them, and nothing on the wire moved.
 
 **A producer that relays sends what elapsed.** The app publishing to a remote
 display is the only one, and it is why this field exists. Its link runs at 15,

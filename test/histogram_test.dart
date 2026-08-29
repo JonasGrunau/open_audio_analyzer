@@ -20,6 +20,7 @@ import 'package:oaa/src/clock/meter_clock.dart';
 import 'package:oaa/src/modules/histogram.dart';
 import 'package:oaa_core/oaa_core.dart';
 import 'package:oaa_ui/oaa_ui.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -153,13 +154,10 @@ const _lowTarget = Calibration(
 );
 
 /// The plot's floor row: the module keeps an overview strip under the plot,
-/// and the resting curve rests on the plot's own bottom edge above it. Derived
-/// from the module's arithmetic rather than copied as a number, so a resized
-/// strip moves the tests with it.
-int _plotFloor() {
-  final overview = HistogramModule.overviewHeight(_size.height);
-  return (_size.height - (overview > 0 ? overview + Space.xs : 0)).floor();
-}
+/// and the resting curve rests on the plot's own bottom edge above it. Asked of
+/// the module rather than recomputed here, so a resized strip or a wider gap
+/// below the plot moves the tests with it.
+int _plotFloor() => HistogramModule.plotFloor(_size.height).floor();
 
 Future<void> _frame(WidgetTester tester) =>
     tester.pump(const Duration(milliseconds: 17));
@@ -218,6 +216,22 @@ List<int> _curveColumns(Uint8List pixels, {int rows = 3}) {
   ];
 }
 
+/// The x of every column whose curve is drawn in the upper half of the plot.
+///
+/// The programme the scrolling cases publish is silence with one loud run in
+/// it, so this is "how much of the plot is showing the loud run" — which is
+/// what both a scroll and a zoom change, and neither of them changes anything
+/// a widget assertion can see.
+List<int> _loudColumns(Uint8List pixels) {
+  final floor = _plotFloor();
+  final half = floor ~/ 2;
+  return [
+    for (var x = 0; x < _size.width.toInt(); x++)
+      if ([for (var y = 0; y < half; y++) y].any((y) => _isCurve(pixels, x, y)))
+        x,
+  ];
+}
+
 /// The highest row any curve pixel reaches. Smaller is higher up the plot.
 int _curveTop(Uint8List pixels) {
   final width = _size.width.toInt();
@@ -229,12 +243,12 @@ int _curveTop(Uint8List pixels) {
   return _size.height.toInt();
 }
 
-/// A hundred columns of quiet, one loud column, a hundred more of quiet.
+/// Two hundred columns of quiet, one loud column, two hundred more of quiet.
 ///
-/// Five publishes to a column at 50 ms apart, so the spike is one closed column
-/// and not a fraction of two — the property under test is what happens to a
-/// single column, and a spike smeared across a boundary by the harness would
-/// pass either way.
+/// The publishes run at 20 ms and a column closes every 50 ms, so the loud run
+/// ends exactly on a boundary and closes one column at −6: the property under
+/// test is what happens to a *single* column, and a spike smeared across a
+/// boundary by the harness would pass either way.
 Future<Uint8List> _spike(
   WidgetTester tester,
   HistogramSmoothing smoothing,
@@ -261,6 +275,40 @@ Future<Uint8List> _spike(
     await _frame(tester);
   }
   return _shoot(tester, key);
+}
+
+/// A programme long enough to scroll: silence, then a loud run at the end.
+///
+/// Longer than the plot's own window on purpose — a recording that fits inside
+/// the window has nothing to scroll to, and the module clamps the frame against
+/// the right-hand edge rather than letting it slide off the start of the
+/// recording.
+Future<_Fake> _longProgramme(WidgetTester tester, GlobalKey key) async {
+  final source = _Fake();
+  await tester.pumpWidget(
+    _Harness(source: source, boundary: key, calibration: _lowTarget),
+  );
+
+  // 900 closed columns at 50 ms — 45 seconds — of which the last 100 are loud.
+  for (var publish = 1; publish <= 2250; publish++) {
+    final loud = publish > 2000;
+    source.publish(
+      publish * 0.02,
+      short: loud ? -6 : -70,
+      momentary: loud ? -6 : -70,
+    );
+    await _frame(tester);
+  }
+  return source;
+}
+
+/// The middle of the overview strip, in global coordinates.
+Offset _stripCentre(WidgetTester tester) {
+  final module = tester.getRect(find.byType(HistogramModule));
+  return Offset(
+    module.center.dx,
+    module.bottom - HistogramModule.overviewHeight(_size.height) / 2,
+  );
 }
 
 void main() {
@@ -364,6 +412,162 @@ void main() {
           'the drawn level of a steady −18 LUFS depends on the window: $tops',
     );
   });
+
+  // --- The overview strip as a control --------------------------------------
+  //
+  // Dragging the frame scrolls the plot and the wheel resizes it. Both are pixel
+  // reads for the same reason the smoothing cases are: the window is view state
+  // with no widget of its own, and a frame drawn at the wrong offset — or a
+  // plot that quietly went on following the newest column — passes every widget
+  // assertion there is.
+
+  testWidgets('dragging the overview strip scrolls the plot off the newest '
+      'column, and dragging it back re-attaches', (tester) async {
+    final key = GlobalKey();
+    await _longProgramme(tester, key);
+
+    final live = _loudColumns(await _shoot(tester, key));
+    expect(live, isNotEmpty, reason: 'the loud run was not on screen at all');
+
+    // Left by the strip's whole width, which is the whole recording — the
+    // module clamps it at the oldest column the ring still holds.
+    await tester.dragFrom(_stripCentre(tester), const Offset(-480, 0));
+    await _frame(tester);
+
+    expect(
+      _loudColumns(await _shoot(tester, key)),
+      isEmpty,
+      reason: 'the plot still showed the loud run after scrolling to the start',
+    );
+
+    await tester.dragFrom(_stripCentre(tester), const Offset(480, 0));
+    await _frame(tester);
+
+    expect(
+      _loudColumns(await _shoot(tester, key)),
+      isNotEmpty,
+      reason: 'the plot did not come back to the newest column',
+    );
+  });
+
+  testWidgets('a scrolled plot keeps following once it is back against the '
+      'right edge', (tester) async {
+    final key = GlobalKey();
+    final source = await _longProgramme(tester, key);
+
+    await tester.dragFrom(_stripCentre(tester), const Offset(-480, 0));
+    await tester.dragFrom(_stripCentre(tester), const Offset(480, 0));
+    await _frame(tester);
+    final before = _loudColumns(await _shoot(tester, key));
+
+    // Another five seconds of silence — a hundred columns, and at a column to
+    // the pixel a hundred pixels. A view that had stopped following would hold
+    // the loud run exactly where it is; one that is following again carries it
+    // that far towards the left edge.
+    for (var publish = 2251; publish <= 2500; publish++) {
+      source.publish(publish * 0.02, short: -70, momentary: -70);
+      await _frame(tester);
+    }
+    final after = _loudColumns(await _shoot(tester, key));
+
+    expect(before, isNotEmpty, reason: 'the drag back showed no loud run');
+    expect(after, isNotEmpty, reason: 'the loud run left the plot entirely');
+    expect(
+      after.last,
+      lessThan(before.last - 50),
+      reason:
+          'the plot stopped following the newest column after a scroll: the '
+          'loud run ended at ${before.last} and then at ${after.last}',
+    );
+  });
+
+  testWidgets('the wheel over the strip narrows the window the plot shows', (
+    tester,
+  ) async {
+    final key = GlobalKey();
+    await _longProgramme(tester, key);
+
+    final before = _loudColumns(await _shoot(tester, key)).length;
+
+    // Up is in. Far enough to reach the narrowest window the module allows,
+    // which is a hundred columns — the loud run itself.
+    final pointer = TestPointer(1, PointerDeviceKind.mouse);
+    final at = _stripCentre(tester);
+    await tester.sendEventToBinding(pointer.hover(at));
+    await tester.sendEventToBinding(pointer.scroll(const Offset(0, -900)));
+    await _frame(tester);
+
+    final after = _loudColumns(await _shoot(tester, key)).length;
+    expect(
+      after,
+      greaterThan(before * 3),
+      reason:
+          'zooming in did not widen the loud run: $before columns before, '
+          '$after after',
+    );
+  });
+
+  // A trackpad and a Magic Mouse send no scroll event at all on macOS — the
+  // platform marks a scroll off a touch surface with a phase and Flutter turns
+  // those into pan-zoom events. Wiring only the signal left the zoom working on
+  // a click-wheel mouse and on nothing else, which is why both of these exist.
+
+  testWidgets('a two-finger scroll over the strip zooms it', (tester) async {
+    final key = GlobalKey();
+    await _longProgramme(tester, key);
+
+    final before = _loudColumns(await _shoot(tester, key)).length;
+
+    final pointer = TestPointer(1, PointerDeviceKind.trackpad);
+    final at = _stripCentre(tester);
+    await tester.sendEventToBinding(pointer.panZoomStart(at));
+    // Fingers moving *down* is a wheel scrolling up, which is in.
+    await tester.sendEventToBinding(
+      pointer.panZoomUpdate(at, pan: const Offset(0, 900)),
+    );
+    await tester.sendEventToBinding(pointer.panZoomEnd());
+    await _frame(tester);
+
+    expect(
+      _loudColumns(await _shoot(tester, key)).length,
+      greaterThan(before * 3),
+      reason: 'a trackpad scroll over the strip did nothing',
+    );
+  });
+
+  testWidgets('a pinch over the strip zooms it, from where the fingers went '
+      'down', (tester) async {
+    final key = GlobalKey();
+    await _longProgramme(tester, key);
+
+    final before = _loudColumns(await _shoot(tester, key)).length;
+
+    final pointer = TestPointer(1, PointerDeviceKind.trackpad);
+    final at = _stripCentre(tester);
+    await tester.sendEventToBinding(pointer.panZoomStart(at));
+    // Cumulative, and a pinch reports it as such: three updates ending at 4x
+    // are one zoom to 4x, not one to 64x. That is the whole reason a pinch is
+    // applied to the span the gesture began at.
+    for (final scale in [1.5, 2.5, 4.0]) {
+      await tester.sendEventToBinding(pointer.panZoomUpdate(at, scale: scale));
+    }
+    await tester.sendEventToBinding(pointer.panZoomEnd());
+    await _frame(tester);
+
+    final after = _loudColumns(await _shoot(tester, key)).length;
+    expect(
+      after,
+      greaterThan(before * 3),
+      reason: 'a pinch over the strip did not zoom in',
+    );
+    expect(
+      after,
+      lessThan(_size.width.toInt()),
+      reason:
+          'a 4x pinch reached the narrowest window there is, so the scale was '
+          'compounded rather than applied to the span it started from',
+    );
+  });
 }
 
 /// The curve reaches the right edge, runs unbroken, and gives up only the scale
@@ -372,12 +576,16 @@ void main() {
 /// Deliberately not an assertion about where the plot starts: that depends on
 /// the width of a laid-out label, and a test that hard-codes it fails the next
 /// time the gutter is measured differently rather than when the line breaks.
+///
+/// The right edge is the module's less the hairline its box takes. The plot is
+/// drawn *inside* that box — see `PlotBorder` — so a curve that reached the
+/// module's own last column would be a curve drawn under its border.
 void _expectSpansThePlot(List<int> columns, String when) {
   final width = _size.width.toInt();
   expect(columns, isNotEmpty, reason: 'no resting curve at all when $when');
   expect(
     columns.last,
-    width - 1,
+    width - 2,
     reason: 'the resting curve stops short of the right edge when $when',
   );
   expect(

@@ -87,11 +87,21 @@ class _Fake implements MeterSource {
   /// rather than getters because the fitted axis is computed from them, and a
   /// case that moves the percentiles is how that gets checked.
   @override
-  double loudnessRange = 12.5;
+  double loudnessRange = _startingRange;
   @override
   double loudnessRangeLow = -22.0;
   @override
   double loudnessRangeHigh = -9.5;
+
+  /// A new number for the caliper to print, with the percentiles, the bins and
+  /// the axis where they were. The generation moves with it because the clock
+  /// publishes nothing when it has not — see [MeterClock] — and this is how the
+  /// cases below find the reading in the frame.
+  void range(double lra) {
+    loudnessRange = lra;
+    _generation++;
+  }
+
   @override
   double get loudnessRangeGate => -34;
 
@@ -182,59 +192,88 @@ Future<Uint8List> _shoot(WidgetTester tester, GlobalKey key) async {
   return pixels;
 }
 
-/// Whether the pixel at [x], [y] is the reading rather than the picture.
+/// Whether the two frames differ at [x], [y].
 ///
-/// `textPrimary` is `0xFFE6E8EB` — bright and very nearly neutral. The accent
-/// the fill is drawn in is `0xFF35E0C4`, which is 171 counts more green than
-/// red, and the over colour is redder than either by as much. So a bright pixel
-/// whose channels agree is text, and a bright pixel composited *under* an
-/// accent fill at 0.70 alpha is not: it would come out green-dominant by more
-/// than a hundred counts.
-bool _isReading(Uint8List pixels, int x, int y) {
+/// Every case here is a difference between two frames of the same module with
+/// one thing changed, so this is the whole of the measurement: the same
+/// graticule, the same range band and the same caliper are drawn in the same
+/// places both times, and every pixel that moved belongs to the thing that
+/// changed.
+bool _differs(Uint8List before, Uint8List after, int x, int y) {
   final i = (y * _size.width.toInt() + x) * 4;
-  final r = pixels[i];
-  final g = pixels[i + 1];
-  final b = pixels[i + 2];
-  return r > 150 && (g - r).abs() < 24 && (b - r).abs() < 24;
+  for (var channel = 0; channel < 4; channel++) {
+    if (before[i + channel] != after[i + channel]) return true;
+  }
+  return false;
 }
 
-/// Whether the pixel at [x], [y] belongs to the distribution's fill or its
-/// edge — accent, which is far more green than red, or the over colour, which is
-/// far more red than green. Either way the channels disagree by a great deal,
-/// which is exactly what text does not do.
-bool _isPicture(Uint8List pixels, int x, int y) {
-  final i = (y * _size.width.toInt() + x) * 4;
-  return (pixels[i + 1] - pixels[i]).abs() > 40;
-}
-
-/// How many pixels of reading there are, and how many pixels of picture share a
-/// row with any of them.
+/// The reading, found by changing it.
 ///
-/// Deliberately not an assertion about which rows those are. Where the strip
-/// starts depends on the height of a laid-out label and on the graticule's
-/// gutter, and a test that hard-codes either fails the next time one of them is
-/// measured differently rather than when the reading is buried.
-(int, int) _readingAndCollisions(Uint8List pixels) {
-  final width = _size.width.toInt();
-  final rows = <int>{};
-  var reading = 0;
-  for (var y = 0; y < _size.height.toInt(); y++) {
-    for (var x = 0; x < width; x++) {
-      if (_isReading(pixels, x, y)) {
-        reading++;
-        rows.add(y);
+/// It used to be found by hue. The accent is `0xFF35E0C4`, 171 counts more
+/// green than red, where every other thing in a module with no distribution in
+/// it is very nearly neutral — so a green-dominant pixel was the LRA reading
+/// and nothing else. The reading is the caliper's own grey now, the same ink as
+/// the two marks it sits between, and no pixel says on its own which of them it
+/// belongs to. So the number is moved instead: [_Fake.range] changes what is
+/// printed and nothing else at all, and both values print at the same width
+/// because every figure in the application is tabular — the caliper's break and
+/// the label's offset are identical, and what moved is a glyph of the reading.
+class _Reading {
+  const _Reading(this.rows, this.pixels);
+
+  /// The rows of the frame the reading is drawn into. Deliberately not an
+  /// assertion about which rows those are. Where the strip starts depends on
+  /// the height of a laid-out label and on the graticule's gutter, and a test
+  /// that hard-coded either would fail the next time one of them was measured
+  /// differently rather than when the reading was buried.
+  final Set<int> rows;
+
+  /// How many pixels of it there are, which is how a module that has stopped
+  /// printing the number is told from one that prints it somewhere unexpected.
+  final int pixels;
+
+  static _Reading between(Uint8List before, Uint8List after) {
+    final rows = <int>{};
+    var pixels = 0;
+    for (var y = 0; y < _size.height.toInt(); y++) {
+      for (var x = 0; x < _size.width.toInt(); x++) {
+        if (_differs(before, after, x, y)) {
+          rows.add(y);
+          pixels++;
+        }
       }
     }
+    return _Reading(rows, pixels);
   }
+}
 
+/// How many pixels of picture share a row with any pixel of the reading.
+int _collisions(Uint8List empty, Uint8List drawn, Set<int> rows) {
+  final width = _size.width.toInt();
   var collisions = 0;
   for (final y in rows) {
     for (var x = 0; x < width; x++) {
-      if (_isPicture(pixels, x, y)) collisions++;
+      if (_differs(empty, drawn, x, y)) collisions++;
     }
   }
-  return (reading, collisions);
+  return collisions;
 }
+
+/// The reading the fake starts at, and one that prints at a **different
+/// width** — which is not a detail, it is the whole of what a pixel read can
+/// see here. A widget test runs in the test font, where every glyph is a box
+/// of the same size, so `12.5` and `19.8` are the same pixels in the same
+/// places and a frame that swapped one for the other would be byte-identical.
+/// A reading one figure shorter is not: the label is narrower, the caliper
+/// breaks in different places, and a module printing a fixed string instead of
+/// the number it was handed shows as the zero it should.
+///
+/// The pair is deliberately not consistent with the fake's percentiles — those
+/// stay where they are so that the caliper's arrangement does, and what these
+/// cases are about is the reading's pixels rather than a programme that adds
+/// up.
+const _startingRange = 12.5;
+const _otherRange = 9.9;
 
 void main() {
   testWidgets('the mode does not reach the strip the reading lives in', (
@@ -244,18 +283,35 @@ void main() {
     final source = _Fake();
     await tester.pumpWidget(_Harness(source: source, boundary: key));
 
+    // The same module with nothing measured: its graticule, its range band and
+    // its caliper, and no bars at all. Every pixel that moves from here is the
+    // distribution.
+    await tester.pump(const Duration(milliseconds: 17));
+    final empty = await _shoot(tester, key);
+
+    // Where in that frame the reading is — see [_Reading] — and then back to
+    // the number the empty frame was taken at, so the two the picture is
+    // measured against differ by the picture alone.
+    source.range(_otherRange);
+    await tester.pump(const Duration(milliseconds: 17));
+    final reading = _Reading.between(empty, await _shoot(tester, key));
+    source.range(_startingRange);
+    await tester.pump(const Duration(milliseconds: 17));
+
     // A mode in the middle of the gated range, so the tallest bins are directly
     // under the caliper's label — which is not an unlucky case, because the
     // tallest bin reaches the top of the bars whatever loudness it sits at.
     source.mode(-15.5);
     await tester.pump(const Duration(milliseconds: 17));
-    final (reading, collisions) = _readingAndCollisions(
-      await _shoot(tester, key),
-    );
+    final drawn = await _shoot(tester, key);
 
-    expect(reading, greaterThan(40), reason: 'no LRA reading drawn at all');
     expect(
-      collisions,
+      reading.pixels,
+      greaterThan(60),
+      reason: 'no LRA reading drawn at all',
+    );
+    expect(
+      _collisions(empty, drawn, reading.rows),
       isZero,
       reason:
           'the distribution is drawn into the rows the reading lives in — on a '
@@ -291,14 +347,19 @@ void main() {
           scale: scale,
         ),
       );
+      // The module before it has anything to draw, for the same reason as the
+      // caliper case above: what the setting is for is how much of the module
+      // the *picture* covers, and the chrome is in both frames either way.
+      await tester.pump(const Duration(milliseconds: 17));
+      final empty = await _shoot(tester, key);
       source.mode(-15.5);
       await tester.pump(const Duration(milliseconds: 17));
 
-      final pixels = await _shoot(tester, key);
+      final drawn = await _shoot(tester, key);
       var columns = 0;
       for (var x = 0; x < _size.width.toInt(); x++) {
         for (var y = 0; y < _size.height.toInt(); y++) {
-          if (_isPicture(pixels, x, y)) {
+          if (_differs(empty, drawn, x, y)) {
             columns++;
             break;
           }
@@ -333,14 +394,18 @@ void main() {
     final source = _Fake();
     await tester.pumpWidget(_Harness(source: source, boundary: key));
     await tester.pump(const Duration(milliseconds: 17));
+    final first = await _shoot(tester, key);
 
     // Nothing has been measured, so there are no bins to draw and the module is
     // a graticule. The range still has a reading, and a module that drew
-    // nothing at all here would read as one that had failed.
-    final (reading, _) = _readingAndCollisions(await _shoot(tester, key));
+    // nothing at all here would read as one that had failed — so the number is
+    // changed, and a frame that did not change with it is a frame with no
+    // number in it.
+    source.range(_otherRange);
+    await tester.pump(const Duration(milliseconds: 17));
     expect(
-      reading,
-      greaterThan(40),
+      _Reading.between(first, await _shoot(tester, key)).pixels,
+      greaterThan(60),
       reason: 'no reading on a module with no distribution yet',
     );
   });

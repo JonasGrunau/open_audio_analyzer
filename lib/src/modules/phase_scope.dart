@@ -9,6 +9,7 @@ import 'package:oaa_ui/oaa_ui.dart';
 import 'package:flutter/widgets.dart';
 
 import '../clock/meter_clock.dart';
+import '../data/metric_reader.dart';
 
 /// A goniometer: left against right, rotated so mono stands upright.
 ///
@@ -57,20 +58,24 @@ import '../clock/meter_clock.dart';
 /// so a moving line smeared instead of fading in place.
 ///
 /// ---------------------------------------------------------------------------
-/// The trace is a polyline, so a slot holds its block in time order
+/// The figure is a cloud of dots, and a slot holds its block in time order
 ///
-/// Each frame is drawn with `PointMode.polygon` — consecutive samples joined —
-/// because the connected path is what carries the waveform's structure: a bass
-/// note is a loop, a delay is a braid, and a cloud of disconnected dots shows
-/// neither. Joining consecutive *buffer* entries only draws the signal's path
-/// if the buffer is in time order, so each slot stores its block that way, at
-/// four detail levels side by side — full, then every 2nd, 4th and 8th sample,
-/// each level contiguous so a draw is one buffer and no copy. See
-/// [PhaseScopeModule.writeSlot]; the levels exist for the sparseness below,
-/// and an even-in-time subsample traces the same figure with longer segments
-/// rather than a piece of it. A short block ends in NaN pairs, and a segment
-/// with a NaN endpoint is culled rather than drawn — which is also what ages a
-/// mono source's trail out instead of freezing its last stereo frame.
+/// Each frame is drawn with `PointMode.points`: one 1.4 px dot per sample,
+/// which is what a goniometer has always drawn — a dense core where the signal
+/// spends its time, thinning towards the extremes it only visits. It was
+/// briefly a polyline, consecutive samples joined, on the argument that the
+/// connected path carries structure a cloud does not; on real material the
+/// path is a scribble that fills its own outline, and the picture lost the
+/// density the cloud reads by. The dots came back; the slot layout the
+/// polyline asked for stayed, because it costs nothing and is the better one:
+/// each slot stores its block at four detail levels side by side — full, then
+/// every 2nd, 4th and 8th sample, each level in time order and contiguous, so
+/// a draw is one buffer and no copy. See [PhaseScopeModule.writeSlot]; the
+/// levels exist for the sparseness below, and an even-in-time subsample is an
+/// even subsample along the path, so an old frame is a sparser figure and
+/// never a piece of one. A short block ends in NaN pairs, which
+/// `drawRawPoints` skips — which is also what ages a mono source's trail out
+/// instead of freezing its last stereo frame.
 ///
 /// ---------------------------------------------------------------------------
 /// It is fragment-bound, and that is why the fix is sparseness
@@ -88,19 +93,19 @@ import '../clock/meter_clock.dart';
 ///
 /// **The cost is fragments, and only fragments.** Drawing all forty frames in a
 /// single call measured the same as forty separate ones, so batching buys
-/// nothing and only the fragment count is left. Those numbers were measured on
-/// the dot cloud this module drew first; a polyline covers more fragments per
-/// sample than a 1.4 px dot, which makes the two mitigations below more
-/// load-bearing, not less:
+/// nothing and only the fragment count is left. Two things bring it down:
 ///
-///   - **No antialiasing.** On dots it measured 9,616 → 6,057 µs; a hairline
-///     in a fading braid gains nothing legible from it either.
+///   - **No antialiasing.** A 1.4 px dot in a cloud of tens of thousands
+///     gains nothing legible from it, and it measured 9,616 → 6,057 µs.
+///     `StrokeCap.square` is *slower* than round here, which is the opposite
+///     of what it sounds like — Skia has a fast path for round points and
+///     none for square ones.
 ///   - **Sparseness that follows the fade** — see [_detailFor]. The dimmest
 ///     frames are drawn from an eighth of their samples.
 ///
-/// On dots the pair took 9.6 ms to 3.3 ms on the GPU and 24.3 ms to 9.1 ms on
-/// the software rasteriser — two backends, the same 2.6x. What was *not* done
-/// is worth recording too: accumulating the trail into a pixel buffer, the way
+/// The pair took 9.6 ms to 3.3 ms on the GPU and 24.3 ms to 9.1 ms on the
+/// software rasteriser — two backends, the same 2.6x. What was *not* done is
+/// worth recording too: accumulating the trail into a pixel buffer, the way
 /// `spectrogram.dart` does. That works there because a spectrogram scrolls —
 /// one new column and a memmove, O(height) a frame. A trail decays everywhere
 /// at once, so the same idea is O(width x height) of Dart on the UI thread
@@ -198,12 +203,11 @@ const int _detailLevels = 4;
 /// of the module's cost control and it is worth saying why it is legitimate.
 /// The cost is fragments and nothing else — see the header — and ages 30 to 39
 /// are drawn at alphas from 0.011 down to 0.0024, at most three parts in 255.
-/// An eighth of the samples at three parts in 255, joined into a polyline of
-/// segments eight times as long, is not a picture anybody can tell from all of
-/// them; the frames that carry the shape you actually read are untouched: the
-/// first ten are drawn whole. Even the sparsest level still spans the whole
-/// block — 128 joined samples — so an old frame is a coarser figure, never a
-/// shorter one.
+/// An eighth of the dots at three parts in 255 is not a picture anybody can
+/// tell from all of them; the frames that carry the shape you actually read
+/// are untouched: the first ten are drawn whole. Even the sparsest level still
+/// spans the whole block — 128 dots spread evenly through it — so an old frame
+/// is a sparser figure, never a piece of one.
 int _detailFor(int age) {
   if (age < 10) return 0;
   if (age < 20) return 1;
@@ -333,14 +337,11 @@ class _PhaseScopeModuleState extends State<PhaseScopeModule> {
             ..color = colors.accent.withValues(
               alpha: math.pow(_decay, age).toDouble(),
             )
-            // Butt caps: the polyline's joins cover their own ends, and caps
-            // are per-segment work. The round-versus-square note that used to
-            // sit here was about Skia's fast path for round *points*, which a
-            // line does not take.
-            ..strokeCap = StrokeCap.butt
-            // A hairline in a fading braid gains nothing legible from being
-            // antialiased, and on the dot cloud this trace grew from, having
-            // it measured 9,616 µs against 6,057 µs.
+            // Round, not square: Skia has a fast path for round points and
+            // none for square ones — see the header. No antialiasing, for the
+            // reason given there too: 9,616 µs against 6,057 µs, for nothing
+            // legible in a cloud of tens of thousands.
+            ..strokeCap = StrokeCap.round
             ..isAntiAlias = false,
       ];
     }
@@ -369,7 +370,9 @@ class _PhaseScopePainter extends MeterPainter {
        _marker = (Paint()..color = colors.accent),
        // The correlation marker below zero: a signal that is losing itself
        // in mono, which is the failure a phase scope exists to catch, and the
-       // one reading on this face that earns the warning colour.
+       // one reading on this face that earns the warning colour. Where "below
+       // zero" starts is `isAntiPhase`, shared with the Number Box's own rule
+       // so that two readings of one number cannot be coloured differently.
        _markerWarn = (Paint()..color = colors.warn),
        super(repaint: repaint);
 
@@ -394,8 +397,8 @@ class _PhaseScopePainter extends MeterPainter {
 
   static const double _markerReach = 4.5;
 
-  /// Stroke width of the trace, in logical pixels.
-  static const double _strokeWidth = 1.0;
+  /// Diameter of a dot, in logical pixels.
+  static const double _pointSize = 1.4;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -459,11 +462,11 @@ class _PhaseScopePainter extends MeterPainter {
       for (var age = state._filled - 1; age >= 0; age--) {
         final slot = (state._next - 1 - age + _trailFrames * 2) % _trailFrames;
         canvas.drawRawPoints(
-          ui.PointMode.polygon,
+          ui.PointMode.points,
           state._frames[slot][_detailFor(age)],
           // strokeWidth is in the transformed space, so it has to be divided
-          // back out or the line would be `radius` pixels across.
-          state._trail[age]..strokeWidth = _strokeWidth / radius,
+          // back out or each dot would be `radius` pixels across.
+          state._trail[age]..strokeWidth = _pointSize / radius,
         );
       }
       canvas.restore();
@@ -582,7 +585,7 @@ class _PhaseScopePainter extends MeterPainter {
       _markerAt(
         canvas,
         Offset(square.right, centre.dy - correlation.clamp(-1.0, 1.0) * half),
-        correlation < 0 ? _markerWarn : _marker,
+        isAntiPhase(correlation) ? _markerWarn : _marker,
       );
     }
   }

@@ -46,7 +46,7 @@ measurement: short-term loudness against time rather than against how often.
 Only one of the two names is literally a histogram; both are the names these
 displays are known by, so both are kept.
 
-The Histogram **draws an average of its two bands** rather than each 100 ms
+The Histogram **draws an average of its two bands** rather than each 50 ms
 column as measured, and says which in its own menu: `Smoothing` is Off (no
 averaging), Light (0.5 s), Normal (1.0 s) or Broad (2.0 s), and Normal is the
 default. Both bands take the same window, because the gap between them is the
@@ -168,11 +168,38 @@ target — and the one published perceptual floor is 8 LU on the minimum ODR-S.
 
 | Metric | Unit | Definition | Availability |
 |---|---|---|---|
-| `Correlation` | — | Pearson correlation of L and R. `+1` identical (mono), `0` uncorrelated, `−1` polarity-inverted. Smoothed with a 200 ms one-pole so it is readable. | **now** |
-| `Balance` | — | `(E_R − E_L) / (E_R + E_L)` where E is block energy. `−1` hard left, `0` centred, `+1` hard right. | **now** |
+| `Correlation` | — | Pearson correlation of L and R over the block, then a 200 ms one-pole so it is readable. `+1` identical (mono), `0` uncorrelated, `−1` polarity-inverted. Gated — see below. | **now** |
+| `Balance` | — | `(E_R − E_L) / (E_R + E_L)` where E is block energy. `−1` hard left, `0` centred, `+1` hard right. Gated — see below. | **now** |
 
 Mono sources report correlation `+1` and balance `0`. Saying so is more useful
 than reporting nothing, and it is also true.
+
+**Both are gated at −70 LUFS**, R128's absolute gate, applied per channel to
+the block's unweighted mean square. Correlation needs **both** channels above
+it and balance needs **either**: a hard-panned source has nothing in one
+channel to correlate however loud the other one is, and which side it is on is
+exactly what balance is for. Under the gate each reads as a dash.
+
+Both quantities divide by the channels' energy, so with nothing there they are
+`0/0`, and `0` — "uncorrelated, dead centre" — is a reading nobody took. For
+correlation it is worse than merely invented: a one-pole approaches its target
+asymptotically and never reaches it, so a substituted `0` leaves the published
+value carrying the *sign* of the last audio for as long as the silence lasts. A
+track that fades out on a wide reverb tail ends slightly out of phase, and the
+Phase Scope then held its correlation marker off centre and lit it in the
+warning colour — asserting anti-phase content in a signal that had stopped —
+until the exponential underflowed some twenty seconds later.
+
+**A gate rather than a guard against dividing by zero**, and the difference is
+the whole point: a live input is never *exactly* zero. It sits on a converter's
+noise floor, and the correlation of two channels of noise is a random number
+near zero whose sign falls whichever way the block did. A threshold at float
+underflow answers honestly for a stopped software player and goes on reporting
+dice rolls for a desk with nothing playing into it.
+
+The first block of audio after silence, and after a reset, **seeds** the
+smoother instead of mixing with it — the smoothed value is its own state, and
+NaN mixes to NaN for ever.
 
 **The two displays that plot the stereo field do not draw it, though.** The raw
 sample stream a goniometer reads is built the same way the spectrum's pan is —
@@ -184,7 +211,8 @@ has stuck, which is what the Stereo Cloud's version of it was reported as. Both
 say **MONO SOURCE** across the face instead and leave their graticule drawn. The
 correlation and balance markers on the Phase Scope's frame are withheld for the
 same reason: a marker pinned at the mono end of its edge is the same tautology
-one stroke over. The numbers themselves are still measured and still available —
+one stroke over. They are withheld under the gate too, by the ordinary
+NaN rule — a marker is a reading, and there is none. The numbers themselves are still measured and still available —
 a Number Box set to `Correlation` or `Balance` prints them, and so does an
 offline report.
 
@@ -217,9 +245,17 @@ frequency at roughly 3 to 4.5 dB an octave, so an untilted analyser draws every
 mix as the same ramp and spends its height on the one part of the picture that
 carries no information. At 4.5 dB/oct the ends of the range are rotated 44.8 dB
 apart: 20 Hz is drawn 25.4 dB lower than it measures and 20 kHz 19.4 dB higher.
-**The dB scale on the right is therefore true at 1 kHz and rotated away from
+**The dB scale on the left is therefore true at 1 kHz and rotated away from
 it**, which is why the module prints the tilt it is drawing at, and why 0 dB/oct
 — where the scale is true everywhere — prints nothing.
+
+`Range` in the same menu sets how far below full scale that scale reaches: 60,
+90 or 120 dB, and 90 dB is the default — the three values and the default
+Pro-Q's analyser uses. The axis is linear over the range, labelled every 6, 10
+or 12 dB, and the module prints the range in its top-right corner. It is the
+one level axis in the application that is not tapered, because a range setting
+on the tapered scale would move nothing but the bottom tenth of the plot. Like
+the tilt, it moves the picture and nothing else.
 
 The measurement above is untouched by any of it: every set of bands and its
 peak is what the wire protocol carries whatever a module is set to, and every
@@ -273,17 +309,54 @@ one continuous curve, taken four to a main lobe, and a straight line between two
 of them is within about a tenth of a decibel of it. Frequency **resolution** is
 unchanged by any of this; only the sampling of it is finer.
 
-A/C/Z weighting and selectable FFT sizes are **not built**: the window is 4096
-points, unweighted (Z). One set of transforms feeds the analyser, the
-spectrogram and the stereo cloud, so three modules cannot disagree about where a
-peak is.
+The bands are unweighted (Z), and a weighted *spectrum* — A, C or any other —
+is **not built**, nor are selectable FFT sizes: the window is 4096 points. One
+set of transforms feeds the analyser, the spectrogram and the stereo cloud, so
+three modules cannot disagree about where a peak is.
+
+One reading is A-weighted: the analyser's cursor prints the band under it in
+**dB(A)**, which is that band's level plus the IEC 61672-1 A curve at the band's
+centre frequency. That is exact for a band — a band is a level at a frequency,
+and weighting a component at a frequency is adding the curve's value there —
+and the curve is a function of frequency alone, so it is computed in `oaa_core`
+(`aWeightingDb`) and held against the standard's table to a tenth of a decibel.
+It is **not** an A-weighted loudness, which would be a sum over the weighted
+spectrum and which nothing here reports. The tag's other two numbers are the
+drawn level and the drawn peak hold at the band — the two lines the cursor
+crosses — and all three are the measured level, not the tilted one: `Tilt`
+rotates the picture, and the cursor is where the untilted number can still be
+read off a tilted plot.
 
 ## Conventions
 
 - **The dB floor is −144.0**, a little below the noise floor of 24-bit audio.
   Real `-INFINITY` is avoided because differences of dB values are meaningful
   here — crest is peak minus RMS — and `-inf − -inf` is `NaN`, which would turn
-  a silent passage into "no data".
+  a silent passage into "no data". **No dB reading is ever published below
+  it**, which is a stronger claim than "silence reads −144" and is the one that
+  matters: a quantity that is merely *usually* floored will find the case where
+  it is not. `LUFS-M` and `LUFS-S` clamped by testing against −infinity rather
+  than against the floor, and the case that misses is the ordinary one — a
+  K-weighting window holding nothing but the filters' ringing, which is what
+  every window holds for a moment after the music stops.
+- **A level standing at the floor is *displayed* as `-∞`,** not as `-144.0`.
+  The floor is a clamp, so the number that reaches a readout for digital
+  silence is a sentinel rather than a measurement, and printed to four
+  significant figures it is precise, plausible and nobody's reading — while
+  the meter beside it labels that same end of its scale `-∞` already. This is
+  a rendering rule and nothing more: the snapshot, the wire and the JSON
+  report all still carry −144.0, which is what keeps the differences above
+  working. It applies to the eight absolute levels — `LUFS-M`, `LUFS-S`,
+  `LUFS-I`, true peak, true peak max, sample peak max, peak and RMS — and to
+  nothing else, because a range or a difference never reaches the clamp.
+  Silence is a measurement, so it is `-∞` and not the em dash, which stays
+  reserved for a quantity nobody measured.
+- **A delivery check is not answered by silence.** True peak max is a running
+  maximum, so unlike the gated quantities it carries a number — the floor —
+  from the first block, and that number satisfies every ceiling anybody
+  states. A true peak at the floor therefore counts as *not measured* in both
+  places a verdict is given, the Validator's table and the delivery report,
+  rather than passing.
 - **Reset** clears every integrating quantity (`LUFS-I`, `LRA`, all `Max`
   values, the latched clip runs) and restarts the elapsed clock. Momentary
   values are left alone; they describe the signal, not the session. For `Clip`

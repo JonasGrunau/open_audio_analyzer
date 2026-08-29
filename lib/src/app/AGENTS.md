@@ -9,7 +9,7 @@ The shell everything else is mounted in. GPL-3.0-or-later.
 | `shortcuts.dart` | **Every keyboard shortcut Open Audio Analyzer has, as one table**, plus the widget that installs it and the generator for `docs/site/keyboard.md`. |
 | `transport_readout.dart` | The DAW's playhead, painted: position, tempo and meter, and the rules about which of the three a host has actually earned the right to have drawn. Built by the status bar and by the tablet's link bar, which is why it lives here rather than in `lib/src/remote/`. |
 | `launch_options.dart` | `--config-dir` and `--open-panel`, parsed by hand. Both exist to make something else reviewable on a Mac; a third that drew the in-window FILE button was folded into `fileMenuInWindowProvider`, which a debug build answers true. |
-| `preset_file.dart` | **The preset as a document**: which file the canvas came from, whether it differs from that file, and the four commands — Open, Save, Save as, and the two rows that decide what the preset carries. The file dialogs sit behind a seam a test replaces, because a native panel is a modal sheet owned by the platform and there is nothing in a test to tap. |
+| `preset_file.dart` | **The preset as a document**: which file the canvas came from, whether it differs from that file, and the four commands — Open, Save, Save as, and the two rows that decide what the preset carries. The file survives a launch: it is written into `session.json` beside the layout and adopted here when the application opens, which is what makes `Save` mean overwrite the next morning too. The file dialogs sit behind a seam a test replaces, because a native panel is a modal sheet owned by the platform and there is nothing in a test to tap. |
 | `file_menu.dart` | The File menu, drawn twice: `FileMenuButton` at the leading edge of the menu bar off macOS, and `MacFileMenu` over a channel to `macos/Runner/OaaFileMenu.swift` on it. Also `RouteDepth`, which is how the second one knows to grey, and `fileMenuInWindowProvider`, which decides between them. |
 | `window_chrome.dart` | The window itself: the palette its buttons are drawn against, the room the menu bar leaves them, and the drag and zoom a window with no title bar cannot get for free. macOS only. |
 
@@ -278,6 +278,16 @@ The shell everything else is mounted in. GPL-3.0-or-later.
   any refactor are the session autosave and the `AppLifecycleListener` that
   flushes pending writes on exit — the last edit before quitting is the one edit
   a user is most likely to notice losing.
+
+  **The autosave has two listeners and one writer.** The layout and the open
+  preset file move independently: `Open` adopts a file *after* it has loaded the
+  layout, so the write the workspace listener schedules would carry the previous
+  path, and a `Save as…` moves the path with nothing else following it. Both go
+  through `_saveSession`, which reads the current value of both providers rather
+  than trusting the one that changed, and the store's debounce coalesces them
+  into one write. A session that comes back pointing at the wrong file is worse
+  than one that comes back pointing at none, because the next `Save` overwrites
+  it without asking.
 
 - **The source is watched on a `Timer`, and it cannot be the meter clock.**
   `_watchSource` asks the local engine twice a second whether its capture source

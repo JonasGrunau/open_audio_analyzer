@@ -545,6 +545,52 @@ void main() {
       expect((await loadStartupConfig(store)).session!.activeTab, 0);
     });
 
+    test(
+      'the session remembers the preset file the canvas is open on',
+      () async {
+        final root = _tempDir();
+        final store = await _store(root);
+
+        final preset = File('${root.path}/Mastering.json')
+          ..writeAsStringSync('{}');
+        await store.writeJson('session.json', {
+          'active_tab': 0,
+          'preset_path': preset.path,
+          'preset': {
+            'name': 'Mastering',
+            'tabs': [
+              {'name': 'Tab', 'modules': []},
+            ],
+          },
+        });
+
+        expect((await loadStartupConfig(store)).session!.path, preset.path);
+      },
+    );
+
+    test('a remembered file that is no longer there is dropped', () async {
+      // Renamed, thrown away, or on a drive that is not mounted this morning.
+      // The layout still comes back; what goes is the claim that it has a file,
+      // because the next Save would otherwise recreate one nobody wanted.
+      final root = _tempDir();
+      final store = await _store(root);
+
+      await store.writeJson('session.json', {
+        'active_tab': 0,
+        'preset_path': '${root.path}/gone.json',
+        'preset': {
+          'name': 'Mastering',
+          'tabs': [
+            {'name': 'Tab', 'modules': []},
+          ],
+        },
+      });
+
+      final session = (await loadStartupConfig(store)).session!;
+      expect(session.preset.name, 'Mastering');
+      expect(session.path, isNull);
+    });
+
     test('a session round-trips through its own serialiser', () {
       const snapshot = SessionSnapshot(
         preset: PresetSpec(
@@ -564,12 +610,14 @@ void main() {
           ],
         ),
         activeTab: 0,
+        path: '/tmp/Session.json',
       );
 
       final parsed = SessionSnapshot.fromJson(
         jsonDecode(jsonEncode(snapshot.toJson())) as Map<String, Object?>,
       )!;
 
+      expect(parsed.path, '/tmp/Session.json');
       final module = parsed.preset.tabs.single.modules.single;
       expect(module.id, 'm1');
       expect(module.kind, ModuleKind.lufsMeter);

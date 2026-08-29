@@ -2,6 +2,7 @@
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:oaa_engine/oaa_engine.dart';
 
 import 'src/app/oaa_app.dart';
 import 'src/app/launch_options.dart';
@@ -27,6 +28,22 @@ import 'src/storage/startup_config.dart';
 /// `lib/src/app/launch_options.dart` for why it exists at all.
 Future<void> main(List<String> arguments) async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Nothing to reclaim in a shipping run, and one engine per hot restart in
+  // development. A hot restart discards the isolate and re-runs this function
+  // in the *same process*, so nothing disposes the engine the previous isolate
+  // owned while the native library and every thread it started carry on. Each
+  // orphan keeps metering — and on macOS keeps a Core Audio process tap and the
+  // private aggregate device under it, which the source menu then offers back
+  // as a capture device. Fifteen restarts was fifteen of them and a machine at
+  // full tilt. See `OaaEngine.resetAll`.
+  //
+  // Swallowed rather than fatal, because a native library that cannot load at
+  // all must not cost the window: the source path already catches that and says
+  // so where every other source failure is said.
+  try {
+    OaaEngine.resetAll();
+  } catch (_) {}
 
   final options = parseLaunchOptions(arguments);
 

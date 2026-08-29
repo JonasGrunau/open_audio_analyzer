@@ -181,10 +181,16 @@ class OaaColors {
   /// the palette names. See `OaaMenuRow`.
   final Color hairlineStrong;
 
-  /// Readings, and anything the eye should land on first.
+  /// Panel and menu text, and anything the eye should land on first.
+  ///
+  /// **Not a reading.** A module's numbers are [accent] or the colour of their
+  /// verdict; this is the ink of the interface around them — a menu label, a panel's body text, a
+  /// focus hairline, the report the panels print. A meter drawn in the same
+  /// colour as the chrome it sits in is a meter you have to look for.
   final Color textPrimary;
 
-  /// Labels and units.
+  /// Labels and units — and the one reading that is neither, the Loudness
+  /// Distribution's LRA. See [accent] for why that one is grey.
   final Color textMuted;
 
   /// Scale ticks and disabled state.
@@ -198,15 +204,29 @@ class OaaColors {
   /// is [textMuted] now.
   final Color textFaint;
 
-  /// In spec.
+  /// A reading, and a reading in spec.
   ///
-  /// **On the measurement surface this hue means exactly one thing.** The
-  /// canvas, the modules and every verdict reserve it for "within the delivery
-  /// target", and nothing there may borrow it — not a selected module, not the
-  /// active tab, not a highlighted menu row. A teal border meaning "selected"
-  /// beside a teal number meaning "in spec" is a meter you have to stop and
-  /// think about before you can read, which is the one thing a meter may never
-  /// be. Chrome that needs to stand out uses [hairlineStrong] or [textPrimary].
+  /// **On the measurement surface this hue means exactly one thing: this is a
+  /// measurement.** Every value the fourteen modules print takes it — with no
+  /// target to judge it against, or with one it meets — and nothing else
+  /// there may borrow it: not a selected module, not the active tab, not a
+  /// highlighted menu row. A teal border meaning "selected" beside a teal
+  /// number meaning "the signal" is a meter you have to stop and think about
+  /// before you can read, which is the one thing a meter may never be. Chrome
+  /// that needs to stand out uses [hairlineStrong] or [textPrimary].
+  ///
+  /// **One reading is the exception, and it is not a value standing on its
+  /// own.** The Loudness Distribution prints LRA between the two marks of the
+  /// dimension line that measures it, and in the signal hue that read as a
+  /// separate label which happened to be collinear with them rather than as
+  /// part of the annotation. It wears the caliper's [textMuted] instead. A
+  /// reading with a picture of its own around it is the only shape that argues
+  /// for this; a number on its own never is.
+  ///
+  /// What the palette spends its other colours on is therefore what is *wrong*
+  /// with a reading rather than what is right: [warn] approaching a limit,
+  /// [over] past it, [textMuted] for a quantity nobody measured. See
+  /// `colorForState`, which is where the mapping lives.
   ///
   /// Modal panels are the single exception, and it is a decision rather than a
   /// leak: a panel covers the canvas, so there is no reading on screen to be
@@ -248,8 +268,120 @@ class OaaColors {
   /// invisible one.
   final Color meterTrack;
 
-  /// The filled part, when it carries no pass/fail meaning of its own.
+  /// A filled mark that carries no pass/fail meaning of its own and is not a
+  /// level reading: the VU needle, the bars of the report card and the report
+  /// panel. **The level meters do not use it.** The Digital Meter's and the
+  /// LUFS meter's fills and the Super Meter's arcs are [meterAccent] since
+  /// 0.15, because a fill in a grey a step above its grey track was a level
+  /// you had to look for. [MeterFill] still takes this as its default so that
+  /// a caller has to say which it wants.
   final Color meterFill;
+
+  /// The level meters' ink: [accent] taken down to 70 % of its lightness.
+  ///
+  /// The three meters whose fill runs most of a module's height — the LUFS
+  /// Meter, the Digital Meter and the Super Meter's rings — wear this rather
+  /// than the accent itself. At full strength a bar the size of a module in
+  /// the colour of a 12 px pass mark was a light rather than a level, and the
+  /// readouts beside it that turned green vanished into it. Derived rather
+  /// than a fourteenth skin role, so a skin that sets its accent gets meters
+  /// to match without a second value to keep in step; `MeterFill` still lifts
+  /// a fill's top edge towards the text colour and shades its foot darker
+  /// still, so the reading stays the brightest thing in the bar and the floor
+  /// the darkest.
+  ///
+  /// **Not for the frame path.** It converts through HSL and allocates; a
+  /// painter takes it once, in its constructor, like every other colour it
+  /// derives.
+  Color get meterAccent => shade(accent, 0.7);
+
+  /// The lit corner of a module: [panel] with [panelLift] added to its HSL
+  /// lightness.
+  ///
+  /// Decibel's panels are lit from the top left — brightest in the corner,
+  /// fading back to the panel's own colour four fifths of the way across and
+  /// down — and `ModuleFrame` paints the same light, from this colour at the
+  /// corner to [panel], under the title bar and the body alike. Derived rather
+  /// than a fourteenth skin role, like [meterAccent], so a skin that sets its
+  /// panel gets a corner lit to match without a second value to keep in step.
+  /// On a light skin the sum clamps: a white panel is lit white, because there
+  /// is nothing lighter to lift it to, and its modules are barely lit at all —
+  /// which is what a highlight on white paper looks like.
+  ///
+  /// **Not for the frame path.** It converts through HSL and allocates; the
+  /// frame takes it once, in `build`, like every other colour a painter
+  /// derives.
+  Color get panelLit => lift(panel, panelLift);
+
+  /// How far [panelLit] stands above [panel], in HSL lightness.
+  ///
+  /// About half of what Decibel does. Measured off a screenshot, its corner
+  /// sits 17 of 255 above a base of 22 on a graphite panel — six and a half
+  /// points of lightness — and at that strength the same light on this palette
+  /// read as a spotlight rather than as a lit surface, and swallowed the
+  /// hairline border at the corner, where the fill reached the border's own
+  /// colour. Nine levels keeps the corner a step under [hairline] on the
+  /// default skin, so the border still closes the panel where the light is
+  /// brightest. Added rather than multiplied — [shade] multiplies — because a
+  /// factor that lifts a graphite panel by this much lifts a mid-grey one a
+  /// long way towards white, and the light on a panel is a step above whatever
+  /// it lights: the same step on every skin.
+  static const double panelLift = 0.035;
+
+  /// [color] at [factor] of its HSL lightness — the one recipe this design has
+  /// for a darker shade of a colour it already owns. [meterAccent] is the
+  /// accent through it at 0.7, and the LUFS Meter's bars darken towards their
+  /// edges with that ink through it again — see `MeterFill.sideLightness`. Its
+  /// *floor* is not a shade but [deepen]. Lightness rather than a
+  /// blend towards [background], because a shade has to be *darker* on every
+  /// skin, and the background of a light one is not. [lift] goes the other
+  /// way, and adds rather than multiplies — see [panelLift] for why. Allocates;
+  /// never on the frame path.
+  static Color shade(Color color, double factor) {
+    final hsl = HSLColor.fromColor(color);
+    return hsl
+        .withLightness((hsl.lightness * factor).clamp(0.0, 1.0))
+        .toColor();
+  }
+
+  /// [color] deepened: the same hue, HSV saturation up by a third and value
+  /// down to 70 %. What the floor of a level meter is when its reading is
+  /// [color] — see `MeterFill`.
+  ///
+  /// **Measured, then adapted.** Decibel's loudness bars run from their accent
+  /// at the top to a floor colour that is not that accent shaded: sampled
+  /// down one, `#5bbefd` (H 203°, S 0.64, V 0.99) becomes `#304dea` (H 231°,
+  /// S 0.79, V 0.92) — a quarter more saturated, a little darker, and turned
+  /// 28° towards blue. A shade — [shade] — takes a colour towards black, and
+  /// a bar with a blackened foot reads as a bar in shadow; a deepened floor
+  /// keeps the colour vivid and reads as the same paint, thicker. The turn is
+  /// the one part not taken: it was, for an afternoon, and a teal that ran to
+  /// blue at its floor read as a bar in two colours rather than one paint —
+  /// on a blue the turn is a nuance, on any other hue it is a second hue. So
+  /// the hue holds, and the value goes further down than measured to supply
+  /// the darkness the turn towards blue, the darkest hue, was supplying in
+  /// the reference. HSV rather than HSL because the measured saturation
+  /// *rises* in HSV and falls in HSL; the space in which the number moves
+  /// with the impression is the one to state it in. Allocates; never on the
+  /// frame path.
+  static Color deepen(Color color) {
+    final hsv = HSVColor.fromColor(color);
+    return hsv
+        .withSaturation((hsv.saturation * 1.33).clamp(0.0, 1.0))
+        .withValue((hsv.value * 0.7).clamp(0.0, 1.0))
+        .toColor();
+  }
+
+  /// [color] with [amount] added to its HSL lightness, clamped — the one recipe
+  /// this design has for a lighter tint of a colour it already owns, and the
+  /// counterpart of [shade]. [panelLit] is the panel through it at
+  /// [panelLift]. Allocates; never on the frame path.
+  static Color lift(Color color, double amount) {
+    final hsl = HSLColor.fromColor(color);
+    return hsl
+        .withLightness((hsl.lightness + amount).clamp(0.0, 1.0))
+        .toColor();
+  }
 
   /// Whether this palette is dark ink on a light ground.
   ///
@@ -307,7 +439,7 @@ class OaaColors {
     isLight,
   );
 
-  /// Precision Instrument — graphite, one signal hue, no gradients.
+  /// Precision Instrument — graphite, one signal hue, lit from the top left.
   static const OaaColors precisionInstrument = OaaColors(
     background: Color(0xFF0B0C0E),
     panel: Color(0xFF121417),

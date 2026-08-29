@@ -65,7 +65,7 @@ built, and `CHANGELOG.md` for what shipped when.
 | `packages/oaa_core/lib/src/report.dart` | `AnalysisReport` and the delivery verdict. Holds no engine handle, so it round-trips through JSON. |
 | `cli/bin/oaa.dart` | The `oaa` analyser. Its exit code is the product — see `cli/AGENTS.md`. |
 | `lib/src/app/shortcuts.dart` | Every keyboard shortcut, as one table. The bindings, the `?` sheet, `docs/site/keyboard.md` **and the macOS File menu's key equivalents** are all derived from it; `test/shortcuts_test.dart` fails when the page has drifted. |
-| `lib/src/app/preset_file.dart` | **The preset as a document.** Which file the canvas came from, whether it still matches that file, and the six File menu commands — one implementation, reached from the keyboard, from the macOS menu bar and from the FILE button at the leading edge of the window's own menu bar. The file dialogs sit behind a seam a test replaces. Its name is what the menu bar prints in the middle of the row, and `Unnamed` until somebody saves it. |
+| `lib/src/app/preset_file.dart` | **The preset as a document.** Which file the canvas came from, whether it still matches that file, and the six File menu commands — one implementation, reached from the keyboard, from the macOS menu bar and from the FILE button at the leading edge of the window's own menu bar. The file dialogs sit behind a seam a test replaces. The file is remembered in `session.json` and adopted at launch, so `Save` overwrites it the next morning too. Its name is what the menu bar prints in the middle of the row, and `Unnamed` until somebody saves it. |
 | `lib/src/app/launch_options.dart` | `--config-dir` and `--open-panel`. Both exist to make something else testable — see the file. |
 | `packaging/icon/make_icons.dart` | The app mark, **read** from `assets/brand/oaa-logo.svg` and rendered into every container the six platforms want — a rounded tile for the desktops, two layers on a 108dp canvas for Android, and a layered `AppIcon.icon` for macOS and iOS that the system lights itself. It carries a path rasteriser because the mark is a stroked cubic path. It also writes the rest of `assets/brand/`, `packaging/icon/oaa.svg` and `website/public/`'s icons — every one except `website/public/favicon.svg`, which is a browser tab's 16 px and is drawn by hand. It wrote the tile over that file until 0.10.0, and there is a note where the line was. |
 | `.tool-versions` | Pins Flutter `3.44.5-stable` and the JDK the Android build uses. CI pins both — `FLUTTER_VERSION` and `JAVA_VERSION` at the top of `ci.yml` — keep them in step. |
@@ -314,11 +314,12 @@ stale and the fix is to delete the claim, not to soften it. `mobile_scanner`,
   **The plugin has its own version of this, and it is `plugin/host/`.** A
   metering plugin cannot be judged from a unit test either — it has to be fed
   real music by something that moves a playhead. The fake DAW does that with a
-  window and a Play button, and with `--headless` it does it in a test. Three
+  window and a Play button, and with `--headless` it does it in a test. Six
   defects were found by running it, all in code that had shipped and all now
-  fixed — see **What it found** in `plugin/host/AGENTS.md`. One of the three
+  fixed — see **What it found** in `plugin/host/AGENTS.md`. One of the six
   needed the fake DAW *and* the application running together, which is worth
-  knowing: neither suite can be that check.
+  knowing: neither suite can be that check. Another needed a host buffer larger
+  than the engine's block — `--block=2048` — which no default run uses.
 
   **`--open-panel=<name>` opens one of the six panels at startup**, in a debug
   build, which is how a panel gets looked at without clicking through to it:

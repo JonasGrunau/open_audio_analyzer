@@ -359,61 +359,69 @@ void Streamer::run() {
       oaa_engine_push(engine_, interleaved_.data(),
                       static_cast<uint32_t>(size1 + size2));
       measured = true;
+
+      /* Sent now, before the next push replaces it — not once after the
+       * drain. Every push publishes a snapshot whose `scope` is exactly the
+       * block just pushed, so a drain that pushed two blocks and sent the last
+       * left the first block's audio unsent, and the app's oscilloscope drew
+       * that as a block of silence: at a 2048-frame host buffer every other
+       * block, a waveform in bursts with gaps between. Every *measurement* was
+       * right throughout — they are integrals, and the second push carried
+       * them — which is why it stood. */
+      publish();
     }
 
-    if (!measured) {
+    if (!measured)
       wait(kPollMs);
-      continue;
-    }
-
-    const uint64_t generation = oaa_snapshot_acquire(engine_);
-    if (generation == lastGeneration_) {
-      wait(kPollMs);
-      continue;
-    }
-    lastGeneration_ = generation;
-
-    statusLufs_.store(snapshot_->lufs_integrated, std::memory_order_relaxed);
-    statusElapsed_.store(snapshot_->elapsed_seconds, std::memory_order_relaxed);
-    statusSampleRate_.store(snapshot_->sample_rate, std::memory_order_relaxed);
-    statusChannels_.store(snapshot_->channels, std::memory_order_relaxed);
-
-    if (!ensureConnected())
-      continue;
-
-    /* Transport first, then the snapshot it describes, so a consumer holding
-     * both applies them to the same instant. A failed read leaves
-     * `lastTransport_` in place, which is the right answer for one frame of a
-     * continuously-moving value. */
-    transport_.read(lastTransport_);
-
-    wire::writeTransportFrame(frameBytes_, lastTransport_);
-    if (!sendAll(frameBytes_))
-      continue;
-
-    /* An edge is delivered once, and keeping `lastTransport_` across a lost
-     * seqlock race is what makes that need saying: right for a position, wrong
-     * for a flag that marks a single moment, because the frame after next would
-     * assert a relocate that has already gone out. Cleared here rather than
-     * before the send so that a frame which never left is not counted as
-     * delivered — if the send failed the link is gone, and the app re-handshakes
-     * from scratch when it comes back.
-     *
-     * The emptiness check is for the other way a frame can fail to leave: a
-     * writer that produced the wrong length clears the buffer rather than
-     * sending a malformed frame, and `sendAll` reports an empty buffer as sent
-     * because its loop is never entered. Nothing but a producer bug reaches
-     * that, and a producer that cannot write a transport frame will never
-     * deliver an edge anyway — but "sent" and "consumed" should mean the same
-     * thing here, or the next reader of this line has to work out that they
-     * do not. */
-    if (!frameBytes_.empty())
-      lastTransport_.flags &= ~TransportBox::kStickyFlags;
-
-    wire::writeSnapshotFrame(frameBytes_, *snapshot_,
-                             droppedFrames_.load(std::memory_order_relaxed));
-    sendAll(frameBytes_);
   }
+}
+
+void Streamer::publish() {
+  const uint64_t generation = oaa_snapshot_acquire(engine_);
+  if (generation == lastGeneration_)
+    return;
+  lastGeneration_ = generation;
+
+  statusLufs_.store(snapshot_->lufs_integrated, std::memory_order_relaxed);
+  statusElapsed_.store(snapshot_->elapsed_seconds, std::memory_order_relaxed);
+  statusSampleRate_.store(snapshot_->sample_rate, std::memory_order_relaxed);
+  statusChannels_.store(snapshot_->channels, std::memory_order_relaxed);
+
+  if (!ensureConnected())
+    return;
+
+  /* Transport first, then the snapshot it describes, so a consumer holding
+   * both applies them to the same instant. A failed read leaves
+   * `lastTransport_` in place, which is the right answer for one frame of a
+   * continuously-moving value. */
+  transport_.read(lastTransport_);
+
+  wire::writeTransportFrame(frameBytes_, lastTransport_);
+  if (!sendAll(frameBytes_))
+    return;
+
+  /* An edge is delivered once, and keeping `lastTransport_` across a lost
+   * seqlock race is what makes that need saying: right for a position, wrong
+   * for a flag that marks a single moment, because the frame after next would
+   * assert a relocate that has already gone out. Cleared here rather than
+   * before the send so that a frame which never left is not counted as
+   * delivered — if the send failed the link is gone, and the app re-handshakes
+   * from scratch when it comes back.
+   *
+   * The emptiness check is for the other way a frame can fail to leave: a
+   * writer that produced the wrong length clears the buffer rather than
+   * sending a malformed frame, and `sendAll` reports an empty buffer as sent
+   * because its loop is never entered. Nothing but a producer bug reaches
+   * that, and a producer that cannot write a transport frame will never
+   * deliver an edge anyway — but "sent" and "consumed" should mean the same
+   * thing here, or the next reader of this line has to work out that they
+   * do not. */
+  if (!frameBytes_.empty())
+    lastTransport_.flags &= ~TransportBox::kStickyFlags;
+
+  wire::writeSnapshotFrame(frameBytes_, *snapshot_,
+                           droppedFrames_.load(std::memory_order_relaxed));
+  sendAll(frameBytes_);
 }
 
 }  // namespace oaa

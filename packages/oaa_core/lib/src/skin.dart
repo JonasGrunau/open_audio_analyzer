@@ -269,14 +269,14 @@ class Skin {
 /// claim about somebody else's published specification and has to be
 /// correctable without a release.
 abstract final class BuiltInSkins {
-  /// Graphite, one signal hue, no gradients. The default.
+  /// Graphite, one signal hue, lit from the top left. The default.
   ///
   /// These are the same values as `OaaColors.precisionInstrument`, and a test in
   /// `oaa_ui` asserts they have not drifted apart.
   static const Skin precisionInstrument = Skin(
     id: 'precision-instrument',
     name: 'Precision Instrument',
-    note: 'The default. Graphite, one signal hue, no gradients.',
+    note: 'The default. Graphite, one signal hue, lit from the top left.',
     colors: {
       SkinColor.background: 0xFF0B0C0E,
       SkinColor.panel: 0xFF121417,

@@ -5,17 +5,38 @@ import 'package:flutter/foundation.dart';
 
 import 'config_store.dart';
 
-/// The canvas as it was left.
+/// The canvas as it was left, and the file it was left in.
 @immutable
 class SessionSnapshot {
-  const SessionSnapshot({required this.preset, required this.activeTab});
+  const SessionSnapshot({
+    required this.preset,
+    required this.activeTab,
+    this.path,
+  });
 
   final PresetSpec preset;
   final int activeTab;
 
+  /// The preset file the canvas is open on, or null if it has never been saved
+  /// to one.
+  ///
+  /// **The document survives the launch, which is what makes `Save` mean
+  /// overwrite.** Without it the layout came back and its file did not, so the
+  /// first ⌘S of every morning opened a save panel for a preset that already
+  /// had a home — and the obvious answer, accepting the suggested name, wrote a
+  /// second copy of it beside the first.
+  ///
+  /// It is not part of [preset] because it is not part of the document: a
+  /// preset copied to another machine has a path there that has nothing to do
+  /// with the one it was written at.
+  final String? path;
+
   Map<String, Object?> toJson() => {
     'version': kConfigSchemaVersion,
     'active_tab': activeTab,
+    // Absent rather than null for a layout with no file. These documents are
+    // meant to be read by hand.
+    if (path != null) 'preset_path': path,
     'preset': preset.toJson(),
   };
 
@@ -30,11 +51,17 @@ class SessionSnapshot {
     if (preset == null) return null;
 
     final tab = json['active_tab'];
+    final path = json['preset_path'];
     return SessionSnapshot(
       preset: preset,
       activeTab: tab is int ? tab.clamp(0, preset.tabs.length - 1) : 0,
+      path: path is String && path.isNotEmpty ? path : null,
     );
   }
+
+  /// The same canvas, no longer claiming a file. See [path].
+  SessionSnapshot withoutPath() =>
+      SessionSnapshot(preset: preset, activeTab: activeTab);
 }
 
 /// Everything read from disk at launch, in one value.
@@ -118,6 +145,18 @@ Future<StartupConfig> loadStartupConfig(ConfigStore store) async {
   if (settings.restoreSession) {
     final json = await store.readJson(ConfigFile.session);
     if (json != null) session = SessionSnapshot.fromJson(json);
+
+    // **A remembered file that is no longer there is not the document.** The
+    // preset may have been renamed, deleted, or be on a drive that is not
+    // mounted this morning, and a `Save` onto any of those either recreates a
+    // file the user threw away or fails with a notice. Dropping the path here
+    // puts the layout back where an unsaved one is: the next `Save` asks where
+    // it should go. Checked once, at launch — a file that goes missing during
+    // a session is the write's problem, and it reports one.
+    final path = session?.path;
+    if (path != null && !await store.existsAt(path)) {
+      session = session!.withoutPath();
+    }
   }
 
   return StartupConfig(

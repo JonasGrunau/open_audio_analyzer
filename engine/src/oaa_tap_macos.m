@@ -56,6 +56,89 @@
  * callback allocate — a larger block is interleaved in several passes. */
 #define OAA_TAP_SCRATCH_FRAMES 4096
 
+/* A UUID string is 36 characters. The margin is for a Core Audio that one day
+ * decorates the UID it was handed; a UID that does not fit is simply not
+ * recognised as ours, which shows the entry rather than losing a device. */
+#define OAA_TAP_UID_MAX 64
+
+/* ------------------------------------------------------------------------ */
+/* The aggregates this process owns                                          */
+/* ------------------------------------------------------------------------ */
+
+/*
+ * Process-wide rather than per-tap, because the question is asked by
+ * oaa_devices_enumerate, which has no tap in its hand and is not always called
+ * by a thread that owns one. Two taps can be alive at once — the application
+ * builds the new engine before it destroys the old one, so the source menu can
+ * open in the frame where both exist — and after a hot restart there may be
+ * many, every one of them still owning a device that must not be offered.
+ *
+ * A list and a lock. Taps are built a handful of times in a session and the
+ * list is walked only when a menu opens, so there is nothing here worth making
+ * cheap. The callback never touches it.
+ */
+typedef struct oaa_tap_owned {
+  struct oaa_tap_owned *next;
+  char uid[OAA_TAP_UID_MAX];
+} oaa_tap_owned;
+
+static pthread_mutex_t oaa_owned_lock = PTHREAD_MUTEX_INITIALIZER;
+static oaa_tap_owned *oaa_owned = NULL;
+
+/* Failure to record is deliberately silent and deliberately harmless: the
+ * aggregate exists either way, and the only consequence is one extra row in a
+ * menu. Refusing to build a working tap over a failed malloc for a list that
+ * exists to tidy a menu would be the wrong trade. */
+static void oaa_own_uid(const char *uid) {
+  if (uid == NULL || uid[0] == '\0') {
+    return;
+  }
+  oaa_tap_owned *node = (oaa_tap_owned *)calloc(1, sizeof(oaa_tap_owned));
+  if (node == NULL) {
+    return;
+  }
+  snprintf(node->uid, sizeof(node->uid), "%s", uid);
+
+  pthread_mutex_lock(&oaa_owned_lock);
+  node->next = oaa_owned;
+  oaa_owned = node;
+  pthread_mutex_unlock(&oaa_owned_lock);
+}
+
+static void oaa_disown_uid(const char *uid) {
+  if (uid == NULL || uid[0] == '\0') {
+    return;
+  }
+  pthread_mutex_lock(&oaa_owned_lock);
+  oaa_tap_owned **link = &oaa_owned;
+  while (*link != NULL) {
+    if (strcmp((*link)->uid, uid) == 0) {
+      oaa_tap_owned *dead = *link;
+      *link = dead->next;
+      free(dead);
+      break;
+    }
+    link = &(*link)->next;
+  }
+  pthread_mutex_unlock(&oaa_owned_lock);
+}
+
+int oaa_tap_owns_device_uid(const char *uid) {
+  if (uid == NULL || uid[0] == '\0') {
+    return 0;
+  }
+  int owned = 0;
+  pthread_mutex_lock(&oaa_owned_lock);
+  for (const oaa_tap_owned *node = oaa_owned; node != NULL; node = node->next) {
+    if (strcmp(node->uid, uid) == 0) {
+      owned = 1;
+      break;
+    }
+  }
+  pthread_mutex_unlock(&oaa_owned_lock);
+  return owned;
+}
+
 struct oaa_tap {
   /* Built in this order and torn down in reverse. Every one of them is
    * kAudioObjectUnknown / NULL until it exists, which is what lets
@@ -66,6 +149,12 @@ struct oaa_tap {
   AudioObjectID aggregate;
   AudioDeviceIOProcID proc;
   int running;
+
+  /* The aggregate's UID, kept so teardown can take it off the owned list, and
+   * empty whenever `aggregate` is kAudioObjectUnknown. The object id would not
+   * do: enumeration compares against what miniaudio reports, and what miniaudio
+   * reports for a Core Audio device is the UID string. */
+  char aggregate_uid[OAA_TAP_UID_MAX];
 
   /* The device this tap is bound to, and the format the engine was configured
    * against. A rebuild that cannot match both does not happen — see the
@@ -260,6 +349,13 @@ static void teardown_chain(oaa_tap *self) {
     AudioHardwareDestroyAggregateDevice(self->aggregate);
     self->aggregate = kAudioObjectUnknown;
   }
+  /* After the destroy, not before: between the two calls the device still
+   * exists, and a source menu opening in that window must still be told to
+   * leave it out. */
+  if (self->aggregate_uid[0] != '\0') {
+    oaa_disown_uid(self->aggregate_uid);
+    self->aggregate_uid[0] = '\0';
+  }
   if (self->tap != kAudioObjectUnknown) {
     AudioHardwareDestroyProcessTap(self->tap);
     self->tap = kAudioObjectUnknown;
@@ -373,6 +469,11 @@ static int32_t build_chain(oaa_tap *self, AudioObjectID device,
       return OAA_ERR_UNSUPPORTED;
     }
     self->aggregate = aggregate;
+    /* Before the IO proc, because the failure below leaves through
+     * teardown_chain and teardown_chain is what unregisters. */
+    snprintf(self->aggregate_uid, sizeof(self->aggregate_uid), "%s",
+             [aggregate_uid UTF8String]);
+    oaa_own_uid(self->aggregate_uid);
 
     AudioDeviceIOProcID proc = NULL;
     if (AudioDeviceCreateIOProcIDWithBlock(

@@ -247,7 +247,63 @@ Future<int> _settled(
   return _topAt(await _shoot(tester, key));
 }
 
+/// Whether the pixel at [x], [y] is the hairline the graticule and the plot's
+/// own border are both drawn in — `0xFF1F2328`, exactly, because both are
+/// drawn with antialiasing off and neither is blended with anything.
+bool _isHairline(Uint8List pixels, int x, int y) {
+  final i = (y * _size.width.toInt() + x) * 4;
+  return pixels[i] == 0x1F && pixels[i + 1] == 0x23 && pixels[i + 2] == 0x28;
+}
+
 void main() {
+  testWidgets('the gridline at 20 kHz is the plot\'s edge, not a second line', (
+    tester,
+  ) async {
+    // **`bandOfHz` answers with a band *centre*, so the ends of the series are
+    // not the ends of the plot** — they are half a band inside it. 20 Hz is
+    // half a band outside the left edge and has always been dropped; 20 kHz
+    // was half a band inside the right one, drawn in the border's own colour
+    // at the border's own weight. On a module of ordinary width the two lines
+    // are adjacent and the right-hand edge comes out twice as thick as the
+    // other three; on a wide one they separate and it reads as a rule beside
+    // the border. It was reported as the second of those.
+    //
+    // So the right edge has to be exactly as thick as the left, which is the
+    // assertion that holds at every width — the arithmetic that produced the
+    // defect scales with the plot.
+    final key = GlobalKey();
+    final source = _Fake();
+    await tester.pumpWidget(
+      _Harness(source: source, boundary: key, response: SpectrumResponse.fast),
+    );
+    source.publish(0.02, db: -80);
+    await _frame(tester);
+    final pixels = await _shoot(tester, key);
+
+    // A row above the curve, where the fill does not cover the graticule. −80
+    // dB is drawn near the floor, so the top of the plot is clear.
+    final y = (_size.height * 0.3).round();
+    int run(int from, int step) {
+      var count = 0;
+      for (var x = from; x >= 0 && x < _size.width; x += step) {
+        if (!_isHairline(pixels, x, y)) break;
+        count++;
+      }
+      return count;
+    }
+
+    // The plot's own edges, which sit one hairline inside the box the module
+    // is handed — see `PlotBorder.inside`.
+    final right = run(_size.width.toInt() - 1, -1);
+    expect(
+      right,
+      1,
+      reason:
+          'the 20 kHz gridline is drawn beside the border rather than as '
+          'it, so the plot has a right edge twice the weight of its left',
+    );
+  });
+
   testWidgets('Fast draws the frame it was handed', (tester) async {
     final loud = await _settled(tester, SpectrumResponse.fast, -12);
 
@@ -319,9 +375,9 @@ void main() {
 
     // Seven-tenths of a second is nearly six time constants. It has to
     // actually get there: a one-pole that stops short reads low on steady
-    // programme forever. Six rather than four because the tapered scale gives
-    // the top of the range about five pixels per decibel, so the same
-    // two-pixel tolerance is a finer statement in decibels than it used to be.
+    // programme forever. Six rather than four so that the two-pixel tolerance
+    // below holds whatever the axis's pixels per decibel — it is a statement
+    // about the fold having finished, not about the scale.
     for (var i = 0; i < 35; i++) {
       source.publish(0.02, db: -12);
       await _frame(tester);

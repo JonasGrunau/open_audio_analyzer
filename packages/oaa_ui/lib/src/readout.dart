@@ -123,6 +123,18 @@ class ReadoutPainter {
 /// trivial; it is the difference between a colour that means something and a
 /// colour that is just decoration.
 ///
+/// **A reading is drawn in [OaaColors.accent], and it is the only thing on the
+/// measurement surface that is.** Numbers used to be [OaaColors.textPrimary]
+/// — the same ink as a menu label and a panel's body text — which drew the one
+/// thing a meter exists to show in the colour of the chrome around it. The signal hue now says "this is a measurement", and the palette spends
+/// its remaining colours on what is *wrong* with one: amber approaching a
+/// limit, red past it, a muted dash for a quantity nobody measured.
+///
+/// The cost is that [ReadingState.neutral] and [ReadingState.inSpec] are the
+/// same colour, so a quiet integrated loudness no longer looks different from
+/// an on-target one — the Validator, the Alert Meter and the delivery report
+/// are where that verdict is stated in words.
+///
 /// [ReadingState.unavailable] is [OaaColors.textMuted] rather than
 /// `textFaint`, and the difference is 2.81:1 against the panel versus 5.79:1.
 /// The em dash is not chrome — it is the engine saying *this quantity was not
@@ -132,9 +144,38 @@ class ReadoutPainter {
 /// the honesty it exists to deliver: a dash nobody can see reads as a blank,
 /// and a blank reads as a meter that has not started yet.
 Color colorForState(ReadingState state, OaaColors colors) => switch (state) {
-  ReadingState.neutral => colors.textPrimary,
-  ReadingState.inSpec => colors.accent,
+  ReadingState.neutral || ReadingState.inSpec => colors.accent,
   ReadingState.warn => colors.warn,
   ReadingState.over => colors.over,
   ReadingState.unavailable => colors.textMuted,
 };
+
+/// What every quantity nobody measured is printed as.
+///
+/// `Metric.format` produces this for NaN, and so does each module that formats
+/// a reading itself. It is named here because [inkForReading] has to recognise
+/// it, and because a second literal em dash somewhere else is a dash that will
+/// eventually be a different character.
+const String unmeasured = '—';
+
+/// The ink for a reading no verdict applies to.
+///
+/// [colorForState] with the only two states such a reading can be in: a number
+/// is [OaaColors.accent], and NaN — which prints as [unmeasured] — is the
+/// muted ink.
+///
+/// It exists because those modules settle the colour *before* they have the
+/// number. The LUFS meter's momentary and short-term columns, the Super
+/// Meter's short-term pair and the Digital Meter's peaks are all readings
+/// passing through, judged by nothing, so each took the accent once per
+/// palette and never looked at the value again —
+/// and an unmeasured one's em dash then went out in the signal hue. That is
+/// the one colour on the measurement surface that means *this is a
+/// measurement*, spent on the statement that there is none, while the Number
+/// Box and the Validator wrote the same statement in grey a module away. A
+/// dash is not a reading with no verdict; it is the absence of a reading, and
+/// it is grey everywhere or it is decoration.
+Color inkForReading(double value, OaaColors colors) => colorForState(
+  value.isNaN ? ReadingState.unavailable : ReadingState.neutral,
+  colors,
+);

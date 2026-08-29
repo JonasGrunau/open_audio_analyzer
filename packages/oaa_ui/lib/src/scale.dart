@@ -80,10 +80,21 @@ class MeterScale {
   /// a reading off the end of the scale pins to the end rather than drawing
   /// outside the meter. On a tapered scale the bottom is −∞ itself, which no
   /// finite reading reaches — only silence does.
+  ///
+  /// **And silence is spelled [MeterShape.dbFloor], not −∞**, which is the
+  /// whole of why that last sentence needs a line of code under it. Every dB
+  /// quantity is clamped to the floor before it leaves the engine, so what a
+  /// silent meter is handed is −144.0 — a finite number, which the taper puts
+  /// at 0.4% of the track rather than at the end of it. Four tenths of one
+  /// percent is under a pixel on a small module and a visible hairline of lit
+  /// fill on a large one, sitting at the foot of a meter that has nothing to
+  /// show, seconds after the music stopped. The scale labels that end `-∞`
+  /// already; this is what makes the reading agree with the label.
   double fractionOf(double value) {
     if (value.isNaN) return 0;
     if (labelled != null) {
       if (value >= max) return 1;
+      if (value <= MeterShape.dbFloor) return 0;
       return math.pow(10, (value - max) / taperDecibels).toDouble();
     }
     final fraction = (value - min) / span;
@@ -179,6 +190,23 @@ const List<double> kHzGrid = [
 /// tick rather than a sentence.
 String formatHz(double hz) =>
     hz >= 1000 ? '${(hz / 1000).round()}k' : '${hz.round()}';
+
+/// `31.6` → "31.6 Hz", `440` → "440 Hz", `1020` → "1.02 kHz", `12500` →
+/// "12.5 kHz". The sentence form, for a frequency that is a *reading* — the
+/// analyser's cursor — rather than a tick.
+///
+/// Three significant figures throughout, which is the resolution of the thing
+/// being read: the analyser's 512 bands are a fifty-first of an octave apart,
+/// 1.4 % of the frequency, and a fourth figure would print two neighbouring
+/// bands as if they were measured apart when the spectrum does not resolve
+/// them. A whole hertz below 100 Hz is too coarse the other way — adjacent
+/// bands at 20 Hz are a quarter of a hertz apart and would all print "20".
+String formatHzReading(double hz) {
+  if (hz < 100) return '${hz.toStringAsFixed(1)} Hz';
+  if (hz < 1000) return '${hz.round()} Hz';
+  if (hz < 10000) return '${(hz / 1000).toStringAsFixed(2)} kHz';
+  return '${(hz / 1000).toStringAsFixed(1)} kHz';
+}
 
 /// Which of [kHzGrid]'s values carry a label along an axis [extent] long,
 /// when the label for value `i` is `sizeOf(i)` long along that axis, is
@@ -341,11 +369,52 @@ class ScaleGraticule {
   static double _inside(double start, double extent, double low, double high) =>
       start < low ? low : (start + extent > high ? high - extent : start);
 
+  /// [position] moved onto the ruling [pitch] apart through [at], and held
+  /// between [low] and [high] — a gridline that snapped past the end of its
+  /// own track would be a line off the meter. One step is enough to bring it
+  /// back: the snap never moves a line further than half a pitch.
+  ///
+  /// Public because a caller that snaps its scale onto a ruling is a caller
+  /// that draws that ruling, and usually has to find these rows again in it —
+  /// the Digital Meter re-lights them over its own segment gaps. Two roundings
+  /// of the same grid are two grids the first time one of them changes.
+  static double snapped(
+    double position, {
+    required double low,
+    required double high,
+    required double pitch,
+    required double at,
+  }) {
+    if (pitch <= 0) return position;
+    final snapped = at - ((at - position) / pitch).roundToDouble() * pitch;
+    if (snapped < low) return snapped + pitch;
+    if (snapped > high) return snapped - pitch;
+    return snapped;
+  }
+
   /// Draws the gridlines across [track] and the labels beside it.
   ///
   /// [track] is the meter's own rectangle, not the whole module: the labels are
   /// placed outside it, in the gutter the caller reserved.
-  void paint(Canvas canvas, Rect track) {
+  ///
+  /// [snapPitch] puts every gridline on a ruling the caller draws itself:
+  /// lines [snapPitch] apart with one of them through [snapAt]. Zero — the
+  /// default, and what four of the five callers want — draws each line exactly
+  /// on its value.
+  ///
+  /// The Digital Meter's segments are such a ruling. A scale line a pixel off
+  /// it is a *second* ruling in the same picture: the two beat against each
+  /// other down the bar, and a pair of lines two pixels apart reads as one
+  /// line that has come loose rather than as a scale over a meter. Snapped, a
+  /// line stands at most half a segment from its value — which is a difference
+  /// the segments themselves already impose on everything else in the module,
+  /// and its own label moves with it.
+  void paint(
+    Canvas canvas,
+    Rect track, {
+    double snapPitch = 0,
+    double snapAt = 0,
+  }) {
     final values = scale.ticks;
 
     for (var i = 0; i < values.length; i++) {
@@ -353,7 +422,13 @@ class ScaleGraticule {
       final label = _labels[i];
 
       if (side == ScaleSide.bottom || side == ScaleSide.top) {
-        final x = track.left + fraction * track.width;
+        final x = snapped(
+          track.left + fraction * track.width,
+          low: track.left,
+          high: track.right,
+          pitch: snapPitch,
+          at: snapAt,
+        );
         canvas.drawLine(
           Offset(x, track.top),
           Offset(x, track.bottom),
@@ -388,7 +463,13 @@ class ScaleGraticule {
           ),
         );
       } else {
-        final y = track.bottom - fraction * track.height;
+        final y = snapped(
+          track.bottom - fraction * track.height,
+          low: track.top,
+          high: track.bottom,
+          pitch: snapPitch,
+          at: snapAt,
+        );
         canvas.drawLine(
           Offset(track.left, y),
           Offset(track.right, y),

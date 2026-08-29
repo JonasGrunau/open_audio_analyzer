@@ -12,12 +12,11 @@
 // would draw one eighth *of the path*, so a fading trail would visibly shrink
 // towards wherever the block happened to start.
 //
-// The trace is a polyline, which adds the second property: every level must be
-// in **time order**, because `PointMode.polygon` joins consecutive buffer
-// entries, and joining samples that are far apart in time draws a web across
-// the figure rather than the signal's path. And what a short block leaves
-// unfilled must be NaN — a culled segment — not stale audio joined to this
-// moment's.
+// The slot layout adds a second property: every level is kept in **time
+// order**, contiguous, so a draw is one buffer with no copy — and so the same
+// buffers could be joined into a path, which the module once did and may
+// again. And what a short block leaves unfilled must be NaN — a pair
+// `drawRawPoints` skips — not stale audio drawn as this moment's.
 //
 // All three failures are pictures, not exceptions. They would look like a
 // phase scope with an unusually tight trail, or an unusually busy one, which

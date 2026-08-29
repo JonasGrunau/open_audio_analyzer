@@ -28,17 +28,21 @@ abstract final class MeterShape {
   static const int spectrumBands = 512;
 
   /// Stereo sample pairs one analysis block carries — the engine's own block
-  /// size, so a snapshot straight off an engine always holds exactly this many.
+  /// size, so the most a single measurement adds to [MeterSource.scope], what a
+  /// measuring producer sends per wire frame, and what the phase scope draws.
   static const int scopePoints = 1024;
 
-  /// The most stereo pairs a *transported* snapshot may carry.
+  /// The most stereo pairs [MeterSource.scope] holds, from any source.
   ///
-  /// A remote display publishes at 15, 30 or 60 Hz while the engine measures at
-  /// about 47, so one transported frame may have to carry several blocks of
-  /// audio if the waveform is to stay contiguous — see [MeterSource.scopeFrames]
-  /// for what goes wrong when it does not. 4,096 covers 48 kHz at the slowest
-  /// link rate (3,200 pairs) with headroom; past that the run is truncated and
-  /// the consumer is told, which it can draw honestly as a gap.
+  /// It is a *window*, not a block: an engine keeps its newest four blocks and
+  /// a wire snapshot appends every run it decodes into the same span, so a
+  /// reader that saw one publish in two still finds the block it missed. A
+  /// remote display's frame may itself carry several blocks — its link runs
+  /// at 15, 30 or 60 Hz while the engine measures at about 47 — and 4,096
+  /// covers 48 kHz at the slowest link rate (3,200 pairs) and a 60 Hz reader
+  /// at 192 kHz alike. Past it the oldest audio is dropped and the consumer,
+  /// which knows from `elapsedSeconds` how much it was owed, draws the
+  /// shortfall honestly as a gap. See [MeterSource.scopeFrames].
   static const int maxScopeFrames = 4096;
 
   /// Bins in the published short-term loudness distribution, and the range in
@@ -193,10 +197,15 @@ abstract interface class MeterSource {
 
   // --- Stereo field ---------------------------------------------------------
 
-  /// −1 fully out of phase, +1 mono.
+  /// −1 fully out of phase, +1 mono. NaN unless **both** channels are above
+  /// R128's absolute gate of −70 LUFS: below it there is nothing to correlate,
+  /// and a substituted `0` would leave the smoother carrying the sign of the
+  /// last audio for the whole of the silence.
   double get correlation;
 
-  /// −1 hard left, +1 hard right.
+  /// −1 hard left, +1 hard right. NaN unless **either** channel is above the
+  /// same gate — which side a signal is on is answerable when only one channel
+  /// has anything in it, and it is the reading that says so.
   double get balance;
 
   // --- Per channel, [MeterShape.maxChannels] long ---------------------------
@@ -247,34 +256,38 @@ abstract interface class MeterSource {
   /// same reason. NaN where [spectrumOf] is.
   Float32List spectrumPeakOf(SpectrumSource source);
 
-  /// Stereo frames, interleaved x=left, y=right, oldest first, of which the
-  /// first [scopeFrames] pairs are valid. Raw sample values, not rotated into
-  /// goniometer axes — that rotation is a display choice and belongs in the
-  /// painter's transform, where it costs nothing.
+  /// The newest stereo frames measured, interleaved x=left, y=right, oldest
+  /// first, of which the first [scopeFrames] pairs hold audio. Raw sample
+  /// values, not rotated into goniometer axes — that rotation is a display
+  /// choice and belongs in the painter's transform, where it costs nothing.
   ///
   /// **Read [scopeFrames], never `scope.length`.** The list is allocated once
   /// at its largest and only partly filled; the rest is whatever the previous
   /// frame left there.
   Float32List get scope;
 
-  /// How many stereo pairs of [scope] are this measurement's.
+  /// How many stereo pairs of [scope] hold audio — a **window** onto the recent
+  /// past, and the one member of this interface worth reading twice.
   ///
-  /// Always [MeterShape.scopePoints] from an engine, because a snapshot is
-  /// published once per analysis block and that block is exactly that long. It
-  /// varies over a wire, and the reason is the one thing about this interface
-  /// worth reading twice.
+  /// It is not "this measurement's block". A snapshot is a seqlock with one
+  /// slot and its readers run at the display's rate, so a publish nobody read
+  /// before the next is gone: at 96 kHz a block is 10.7 ms against a 16.7 ms
+  /// tick, an engine that fell behind catches up with back-to-back publishes,
+  /// and a plugin at a 2048-frame host buffer pushes two blocks per callback.
+  /// Every one of those handed a reader the second block and lost the first —
+  /// and the oscilloscope, which computes how much audio arrived from
+  /// `elapsedSeconds`, drew the missing block as silence. So every source
+  /// keeps its newest few blocks here, up to [MeterShape.maxScopeFrames]: an
+  /// engine slides a four-block window, and a wire snapshot appends each run
+  /// it decodes into the same span.
   ///
-  /// A remote display's link runs at 15, 30 or 60 Hz and the engine measures at
-  /// about 47, so at the default 30 Hz a frame stands for 1,600 frames of audio
-  /// at 48 kHz while one block carries 1,024. A transport that sent the newest
-  /// block regardless would hand the oscilloscope 64 % of the waveform and no
-  /// way to know it — and the module, which computes how much audio arrived
-  /// from `elapsedSeconds`, would correctly conclude the ring was no longer
-  /// contiguous and reset it. Every tick. So the host accumulates what it
-  /// measured between two sends and this says how much of it there is.
-  ///
-  /// Never more than [MeterShape.maxScopeFrames]. A consumer that finds less
-  /// audio here than elapsed knows a gap is real rather than assuming one.
+  /// **A reader takes the newest pairs it is owed, from the end.** Two reads
+  /// of `elapsedSeconds` say how much audio arrived in between; that many
+  /// pairs before [scopeFrames] are new, the rest was already seen. More owed
+  /// than held is a gap that is real — the audio was measured and is gone —
+  /// and is drawn as one rather than assumed away. A module that wants a
+  /// figure rather than a record, like the phase scope, simply draws the
+  /// newest block's worth.
   int get scopeFrames;
 
   /// Fraction of the gated short-term blocks in each of

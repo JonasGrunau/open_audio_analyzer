@@ -211,6 +211,29 @@ oaa_device_list *oaa_devices_enumerate(void) {
 
   for (ma_uint32 i = 0; i < capture_count; i++) {
     ma_device_info detail;
+
+#if OAA_TAP_SUPPORTED
+    /* The tap's own aggregate device, left out.
+     *
+     * It is private to this process, so it never reaches anybody else's device
+     * list — but this process is the one drawing the menu, and to miniaudio it
+     * is an ordinary capture device with an input stream. So every running tap
+     * put "Open Audio Analyzer System Capture" in the source menu underneath
+     * the System Output entry that built it: the application's own plumbing,
+     * offered as something to meter. Selecting it would have read the tap back
+     * through the miniaudio path, which is a second route to the same audio
+     * that nobody designed and nothing tests.
+     *
+     * Compared by UID, which is what `ma_device_id.coreaudio` holds. The name
+     * would be simpler and wrong twice over: it is a string we chose, so a user
+     * may legitimately have given an aggregate of their own the same one, and
+     * it would still be a string compare against a device we could identify
+     * exactly. */
+    if (oaa_tap_owns_device_uid(capture_infos[i].id.coreaudio)) {
+      continue;
+    }
+#endif
+
     oaa_device_info *out = &list->items[list->count];
 
     copy_bounded(out->name, OAA_DEVICE_NAME_MAX, capture_infos[i].name);

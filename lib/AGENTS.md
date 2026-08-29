@@ -27,12 +27,18 @@ The application. GPL-3.0-or-later.
 - **A module that keeps a record of time reads `MeterClock.measurements`, not
   `paint`.** `notifyListeners` is throttled to the user's fps setting, and the
   engine's snapshot is a seqlock with one slot — so at 30 fps against a 47 Hz
-  publish rate, one measurement in three is gone before anybody looks at it. A
-  module whose display is *per published frame* (the spectrogram's columns, the
-  phase trail) loses resolution and no more. A module whose display is *per
-  second* — the oscilloscope — loses the audio, and draws holes. `measurements`
-  fires on every tick that carried a new generation and marks nothing dirty;
-  pixels still arrive at the rate that was asked for.
+  publish rate, one measurement in three is gone before anybody looks at it.
+  A module whose display is *per second* — the oscilloscope — loses the audio
+  and draws holes. So does the spectrogram, for a reason that is easy to
+  mistake for a merely coarser picture: its columns *are* its time axis, so a
+  publish it was not painted for is a measurement the record never gets, and
+  the rate it dates the ages by is measured off the columns it appended — which
+  made it measure the **repaint** rate and label the same audio 30 Hz at 30 fps
+  and 47 Hz at 60. A module whose display is a *shape* rather than an axis (the
+  phase trail, the stereo cloud) genuinely does lose resolution and no more, and
+  may still advance from paint. `measurements` fires on every tick that carried
+  a new generation and marks nothing dirty; pixels still arrive at the rate that
+  was asked for.
 - **A module is `ModuleFrame` + a painter, and the painter takes
   `repaint: clock`.** That constructor argument is the whole render strategy: it
   re-rasters without rebuilding the widget. The module widget supplies the
@@ -43,7 +49,26 @@ The application. GPL-3.0-or-later.
   that as *true*, so a plain painter silently swallows every pointer event that
   lands on the meter — and the canvas's drag and selection layers sit behind the
   module. The symptom is a meter that cannot be selected or dragged by its own
-  face, with nothing reported anywhere.
+  face, with nothing reported anywhere. **A module that takes input on its face
+  lays a translucent `Listener` over the part that does** — the spectrum
+  analyser's cursor is the model — rather than overriding `hitTest`, so that
+  the canvas's select-and-menu catcher behind it still sees the press. A
+  `GestureDetector` there would enter the catcher's arena and win it, and a
+  press that places a cursor would stop selecting the module. What such a
+  module holds is dismissed by a press *away* from the module through a
+  `TapRegion` in the module's `ModuleTapGroup`, and never by geometry of its
+  own — see `lib/src/canvas/AGENTS.md`.
+- **A module with a plot boxes it with `PlotBorder`, and draws inside
+  `PlotBorder.inside`.** Six do: the spectrum analyser, the oscilloscope, the
+  spectrogram, the histogram — twice, since its overview strip is a second
+  picture — the loudness distribution and the stereo cloud. Each of them used
+  to rule whichever one or two sides a scale happened to sit against, in
+  whatever weight looked right there, which is four modules' worth of
+  unfinished box. **The box goes around the picture and never over it**: the
+  outermost pixel belongs to the border and the plot starts inside it, because
+  on a rolling display — a spectrogram, a scope, the histogram — the right-hand
+  edge is the newest measurement, which is exactly where the eye is.
+
 - **A module's settings are menu rows, unless the setting is a number.** The
   canvas's menu is where a closed set of named choices belongs — a time base, a
   stereo arrangement, a metric — and thirteen of the fourteen modules have
@@ -54,11 +79,29 @@ The application. GPL-3.0-or-later.
   the module, written back through `ModuleHost.onOption`, and the threshold
   carries an `OaaCheck` — `AUTO`, which hands the level to the audio and is the
   one control in the strip that is not a value.
+  **A third is a named choice and is still not a menu row**, which is the one
+  exception to the rule above: the overlaid arrangement's legend, `L R` at the
+  leading edge of the strip, and clicking it swaps which trace is drawn in front.
+  It is here for the same reason the other two are — you choose it by looking at
+  the picture — and it is a *control* rather than the caption it used to be
+  because a legend painted into a meter's face is unreachable by pointer, by
+  keyboard and by a screen reader: `MeterPainter` deliberately takes no hits.
+  The strip's other end carries the span, right-aligned on the first row,
+  because a number about the x axis reads better on the row under it than over
+  the waveform it is describing — and it is flush with the body's right-hand
+  edge, where that axis ends. **The corner grip's clearance is taken from
+  controls only**: the grip's ticks are drawn in the frame's padding and it is
+  its *touch* target that reaches into the body, so a slider must stop short of
+  it and a label, which takes no gesture, must not.
   Four properties of that arrangement are not optional. The strip is **absent
   where `onOption` is null**, which is the remote display — the same signal
   `onMenu` already uses, and a control that cannot change anything is worse than
   no control. It is **dropped when the plot cannot spare the room**, like the
-  graticule and the lane letters before it. And a drag **reports continuously
+  graticule and the lane letters before it, and its two end cells go one step
+  before the sliders do: a module too narrow for both hands the legend and the
+  span back to the painter's corners, which is where they were drawn before
+  there was a strip and where every remote display still draws them. Dropping a
+  *control* to keep a caption is the one order that would be wrong. And a drag **reports continuously
   and commits once**: the undo history is a stack of whole workspaces and the
   autosave and every attached display watch the same provider, so a write per
   pointer event costs sixty history entries, sixty JSON encodings and sixty

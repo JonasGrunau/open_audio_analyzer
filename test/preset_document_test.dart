@@ -17,6 +17,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:oaa/src/app/file_menu.dart';
+import 'package:oaa/src/app/oaa_app.dart';
 import 'package:oaa/src/app/preset_file.dart';
 import 'package:oaa/src/canvas/canvas_notice.dart';
 import 'package:oaa/src/canvas/workspace.dart';
@@ -442,6 +443,39 @@ void main() {
       await _until(tester, () => File(path).existsSync());
 
       expect(dialogs.saves, 1);
+    });
+
+    testWidgets('a restored session saves back to the file it was left in', (
+      tester,
+    ) async {
+      // The layout comes back from `session.json`; the file it came from comes
+      // back with it. Without that, the first Save of the morning opened a
+      // panel for a preset that already had a home, and accepting the suggested
+      // name wrote a second copy of it beside the first.
+      final path = '${_tempDir().path}/Mastering.json';
+      File(path).writeAsStringSync('{}');
+
+      final dialogs = _FakeDialogs();
+      final container = _container(
+        await _storeFor(tester),
+        dialogs: dialogs,
+        config: StartupConfig(
+          session: SessionSnapshot(
+            preset: _preset('Mastering'),
+            activeTab: 0,
+            path: path,
+          ),
+        ),
+      );
+      final host = await _pump(tester, container);
+
+      expect(container.read(presetDocumentProvider).path, path);
+
+      unawaited(runFileCommand(FileCommand.save, host.context, host.ref));
+      await _until(tester, () => _read(path)['name'] == 'Mastering');
+
+      expect(dialogs.saves, 0);
+      expect(container.read(presetDocumentProvider).path, path);
     });
 
     testWidgets('Save as takes the preset name from the filename', (
@@ -881,6 +915,58 @@ void main() {
       expect(it.dialogs.saves, 1);
       expect(File(it.dialogs.savePath!).existsSync(), isTrue);
       expect(it.container.read(workspaceProvider).preset.name, 'Other');
+    });
+  });
+
+  group('across launches', () {
+    testWidgets('the session records the file the canvas is open on', (
+      tester,
+    ) async {
+      // The other half of the case above, and the half only the running
+      // application can do: the layout is written to `session.json` on every
+      // edit, and the file it belongs to has to be written with it or the next
+      // launch has nothing to adopt. The document moves on its own — Open
+      // adopts a file *after* it has loaded the layout, and a Save As moves the
+      // path and nothing else — so this is a listener of its own rather than a
+      // field read off the workspace.
+      final store = await _storeFor(tester);
+      final root = store.root!.path;
+
+      final container = ProviderContainer(
+        overrides: [
+          configStoreProvider.overrideWithValue(store),
+          startupConfigProvider.overrideWithValue(const StartupConfig()),
+          // Nothing here connects; a port already in use would only set the
+          // plugin link's failure notice.
+          pluginLinkPortProvider.overrideWithValue(0),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(container: container, child: const OaaApp()),
+      );
+      await tester.pump();
+
+      final path = '$root/Mastering.json';
+      unawaited(container.read(presetDocumentProvider.notifier).saveTo(path));
+
+      // Debounced inside the store, so this waits for the file rather than for
+      // the command — and it cannot use `_until`, which ends in a
+      // `pumpAndSettle`: the meter clock is running here, so this tree never
+      // settles and the wait would time out on a test that had already passed.
+      final session = '$root/${ConfigFile.session}';
+      bool written() =>
+          File(session).existsSync() && _read(session)['preset_path'] == path;
+
+      for (var i = 0; i < 200 && !written(); i++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 5)),
+        );
+        await tester.pump(const Duration(milliseconds: 20));
+      }
+
+      expect(written(), isTrue);
     });
   });
 }

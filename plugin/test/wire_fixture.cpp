@@ -128,8 +128,11 @@ oaa_snapshot makeSnapshot() {
   }
   s.spectrum_side[0] = std::numeric_limits<float>::quiet_NaN();
 
+  /* One block, held as the whole of the window: the producer sends the newest
+   * block the count says it holds, so this is the block the golden carries. */
   for (int i = 0; i < OAA_SCOPE_POINTS * 2; ++i)
     s.scope[i] = static_cast<float>(i % 7) / 7.0f - 0.5f;
+  s.scope_frames = OAA_SCOPE_POINTS;
 
   for (int i = 0; i < OAA_HISTOGRAM_BINS; ++i)
     s.histogram[i] = static_cast<float>(i) / 120.0f;
