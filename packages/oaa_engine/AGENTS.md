@@ -29,6 +29,29 @@ Dart bindings for the engine, plus the build hook that compiles it.
   necessary rather than sufficient. Anything it catches that a generated signal
   can also express belongs in `conformance_test.dart` too — nothing in CI can
   see these files.
+- **`dart test` runs these suites in one process, so anything process-global
+  needs a process of its own.** Two throwaway suites here report the same
+  `pid`: the VM platform runs each suite as an *isolate*, not as a process, and
+  the native library is loaded once and shared by all of them. Four of the six
+  suites create engines.
+
+  `oaa_engine_reset_all` destroys **every** live engine in the process, which is
+  exactly what its one real caller — a Flutter hot restart, in `lib/main.dart` —
+  needs. Called from a test it reaches into whichever sibling suite is running,
+  frees engines that suite still holds, and leaves it calling into freed memory.
+  That is what it did: the Windows engine job failed about one run in four with
+  an access violation inside `oaa_engine.dll`, reported against whichever
+  `reclaiming orphans` case was in flight and with `GetAndValidateThreadStackBounds
+  failed` under it, because the fault was not on a thread the VM knew about. The
+  expectation failure and the crash were one event seen from two sides, and
+  nothing about it was Windows-specific — that runner just lost the race more
+  often.
+
+  `test/reclaim_orphans.dart` is those cases as a **program**, one process per
+  case, driven by `Process.run` from the group in `oaa_engine_test.dart`. It is
+  not named `*_test.dart` so that the runner leaves it alone. **Anything else
+  process-global goes the same way** — and `--concurrency=1` is not the fix, it
+  only hides the hazard from the next person to add a suite.
 - **This package is not publishable.** `hook/build.dart` reaches `../../engine`
   with relative paths that no published archive would contain. It is a
   workspace package; keep `publish_to: 'none'`.

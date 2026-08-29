@@ -48,6 +48,14 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   — this is the website's replay source alone, and it now has a test.
 
 ### 🚧 Internal
+- **The Windows engine job no longer fails about one run in four.** The
+  `reclaiming orphans` tests called `oaa_engine_reset_all`, which destroys every
+  live engine in the *process* — and `dart test` runs its suites as isolates
+  inside one process, four of which create engines. So the reset reached into
+  whichever sibling suite was running and freed engines it still held, and the
+  job died with an access violation inside the engine library. The three cases
+  now run as a program in a process of their own. Nothing the engine does was
+  wrong and no measurement changes; the test was.
 - `website/tools/oaa_replay` has a test suite, run by the `checks` job. That
   package is not a workspace member, so `flutter analyze` never reached it and
   the only thing that read it at all was `dart format`.
