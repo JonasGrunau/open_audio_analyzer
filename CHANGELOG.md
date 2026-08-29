@@ -612,14 +612,17 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   The default five-cell module lands where it always was. The single letters
   under the bars are still the fallback, now for a bar too narrow to carry a
   word rather than for a module too short.
-- **A LUFS Meter bar is lit down its centre line.** The fill was shaded at both
-  edges and left at the ink in the middle; the middle is now lifted as well, so
-  a bar reads as a round solid rather than a flat one with dark sides. The
-  stretch standing above the target keeps the shading it had and takes no
-  light: it is the one thing in the module wearing the over colour, and what
-  has to be seen there is the edge carrying the reading. No other module
-  changes — the LUFS Meter is the only one whose fill is shaded across its
-  width at all.
+- **A LUFS Meter bar is lit down its centre line, and shaded far less at its
+  edges.** The fill was shaded at both sides and left at the ink in the middle;
+  the middle is now lifted instead, and the shading at the sides is under a
+  third of what it was — on the accent and on the red above the target alike — so a
+  bar reads as a round solid rather than as a bar in a box. The two go
+  together: with the middle lit, a hard edge as well gave the bar more range
+  across its width than down its height, and the top edge, which is the
+  reading, stopped being the first thing the eye found. The stretch above the
+  target takes the lighter edges and no centre light. No other module changes —
+  the LUFS Meter is the only one whose fill is shaded across its width at
+  all.
 
 ### 🐛 Fixed
 - **A meter with nothing to show no longer leaves a hairline of fill at the

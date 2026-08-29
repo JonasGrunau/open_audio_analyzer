@@ -163,12 +163,24 @@ class MeterFill {
   /// The tube's darkness: the ink's shade at [sideLightness] of its lightness,
   /// laid on at [sideAlpha] on the edges and falling to nothing on the centre
   /// line as `(1 − sin(πx))` to [sideFalloff]. The reference lands its edge at
-  /// about half the centre's lightness; this is deliberately gentler — a curve
-  /// of the bar, not a pipe — because at the measured depth the edge competed
-  /// with the deepening down the bar and the two together read as a bar in a
-  /// box.
+  /// about half the centre's lightness; this is much gentler — a curve of the
+  /// bar, not a pipe — for two reasons that arrived a version apart. At the
+  /// measured depth the edge competed with the deepening down the bar, and the
+  /// two together read as a bar in a box. Then the centre light was added, and
+  /// half of what the tube was doing became its job: a round bar needs a
+  /// difference between its middle and its sides, and it no longer matters
+  /// which end of that difference supplies it. Lit in the middle *and* shaded
+  /// hard at the edges, the bar had a range across its width wider than the
+  /// one down its height, and the reading — which is the top edge — stopped
+  /// being the thing the eye went to. So the sides came up until the shading
+  /// is a fall-off at the very edge and nothing more, and the light down the
+  /// middle carries the shape.
+  ///
+  /// [sideLightness] is untouched at either strength: how dark the shade
+  /// *colour* is decides the hue of the edge, and it is the alpha that decides
+  /// how much of it lands.
   static const double sideLightness = 0.4;
-  static const double sideAlpha = 0.42;
+  static const double sideAlpha = 0.12;
 
   /// The power the tube's curve is raised to, which is what keeps the shading
   /// on the *edges*. The plain `1 − sin(πx)` still carries a quarter of the
