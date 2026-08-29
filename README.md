@@ -873,6 +873,10 @@ flutter test                          # widget and golden tests
 dart test packages/oaa_core           # domain layer, no toolchain needed
 dart test packages/oaa_wire           # the wire protocol, incl. the C++ golden
 cd packages/oaa_engine && dart test   # engine, through FFI
+cd packages/oaa_engine && dart run test/reclaim_orphans.dart
+                                      # the process-global reset, in a process
+                                      # of its own. After the suite, never
+                                      # inside it — see the file's header
 cd cli && dart test                   # the `oaa` binary, as a subprocess
 cd cli && dart build cli -o build     # and it still builds the way a release does
 sh plugin/test/sources_match.sh       # the engine's two build lists agree

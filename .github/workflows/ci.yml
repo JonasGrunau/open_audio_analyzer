@@ -218,11 +218,18 @@ jobs:
       # of A/sqrt(2) — if those drift, the meters are wrong, not the tone.
       # Includes the EBU Tech 3341/3342 conformance cases. A red conformance
       # run is a red build: these numbers are what users deliver against.
+      #
+      # `reclaim_orphans.dart` runs **after** the suite and not inside it.
+      # `oaa_engine_reset_all` empties the whole process, so it cannot share one
+      # with sibling suites — and it cannot be spawned from a test either,
+      # because `dart run` re-copies `oaa_engine.dll` and Windows locks the copy
+      # the parent `dart test` has loaded. Both were red builds; see the file.
       - name: Engine and conformance tests
         working-directory: packages/oaa_engine
         run: |
           dart pub get
           dart test
+          dart run test/reclaim_orphans.dart
 
       # Runs the real `oaa` binary as a subprocess and asserts on its exit
       # codes. On all three platforms because file decoding is where they

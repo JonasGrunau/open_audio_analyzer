@@ -681,6 +681,10 @@ cd website/tools/oaa_replay && dart test
                                       # Outside `flutter analyze`'s reach — a
                                       # separate package, not a workspace member
 cd packages/oaa_engine && dart test   # engine, through FFI
+cd packages/oaa_engine && dart run test/reclaim_orphans.dart
+                                      # the process-global reset, in a process
+                                      # of its own. After the suite, never
+                                      # inside it — see the file's header
 cd cli && dart test                   # the `oaa` binary, as a subprocess
 cd cli && dart build cli -o build     # the CLI builds the way a release builds it
 sh plugin/test/sources_match.sh       # the engine's two build lists agree
@@ -728,6 +732,9 @@ that will say the bundle is real.
 All thirteen gates are jobs in `ci.yml`, which is the only workflow. The repeated
 `dart test packages/oaa_wire` is not a fourteenth: it is the same suite, run
 again where a built plugin turns its end-to-end cases from skipped into real.
+Neither is `reclaim_orphans.dart` — it is a second command in the `engine` job's
+own step, and it is a separate command rather than a test for a reason the file
+spends a screenful on.
 The line after it is one file of the `flutter test` suite for the same reason —
 `test/plugin_to_display_e2e_test.dart` skips without a built plugin, and it is
 the only thing anywhere that runs a DAW's audio through the plugin, the app and

@@ -15,7 +15,6 @@
 // fails loudly rather than substituting something plausible.
 
 import 'dart:io';
-import 'dart:isolate';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
@@ -902,89 +901,10 @@ void main() {
     );
   });
 
-  group('reclaiming orphans', () {
-    // `oaa_engine_reset_all` exists for a Flutter hot restart, which re-runs
-    // `main` in a process that never exited — so nothing disposes the engine
-    // the previous isolate owned, and it goes on metering (and on macOS goes on
-    // owning a Core Audio tap) for the life of the process. There is no way to
-    // stage a hot restart from a test, so what is checked is the bookkeeping it
-    // rests on.
-    //
-    // **Each case runs in a process of its own, and it has to.** These three
-    // were ordinary `test` bodies until they were found crashing the Windows
-    // engine job about one run in four — an access violation inside
-    // `oaa_engine.dll`, reported against whichever case was in flight, with
-    // `Stack dump aborted because GetAndValidateThreadStackBounds failed`
-    // underneath it because the fault was not on a thread the VM knew about.
-    //
-    // `oaa_engine_reset_all` destroys *every* live engine in the process. It
-    // says so, and for its one real caller that is the point. But `dart test`
-    // runs its VM suites as isolates inside a single process — two throwaway
-    // suites report the same `pid` — and four other suites in this directory
-    // create engines: conformance_test (3), decode_test (2), spectrum_test and
-    // vu_test (1 each). So a reset run from here reached into whichever of them
-    // was running, freed engines they still held, and left them calling into
-    // freed memory. The expectation failure and the crash were the same event
-    // seen from two sides.
-    //
-    // Nothing about that is Windows-specific. The runner simply loses the race
-    // more often, and the group was latently wrong everywhere.
-    //
-    // A subprocess is not a way of making this tidier. A process-global reset
-    // is only meaningful in a process it is entitled to empty, and "nothing is
-    // owed" is only a claim about a process that has genuinely done nothing.
-    // `reclaim_orphans.dart` beside this file is that program; it is not named
-    // `*_test.dart` precisely so that the runner leaves it alone.
-
-    late final String packageRoot;
-    late final String script;
-
-    setUpAll(() async {
-      // Resolved rather than assumed: `dart test` may be run from this
-      // directory or from the workspace root, and the two give different
-      // working directories for the same suite.
-      final lib = (await Isolate.resolvePackageUri(
-        Uri.parse('package:oaa_engine/oaa_engine.dart'),
-      ))!.toFilePath();
-      packageRoot = File(lib).parent.parent.path;
-      script = File(
-        lib,
-      ).parent.parent.uri.resolve('test/reclaim_orphans.dart').toFilePath();
-    });
-
-    Future<void> runCase(String name) async {
-      final result = await Process.run(Platform.resolvedExecutable, [
-        'run',
-        script,
-        name,
-      ], workingDirectory: packageRoot);
-      // stderr carries the reason a case failed; without it the report is an
-      // exit code and nothing to act on.
-      expect(
-        result.exitCode,
-        0,
-        reason: 'reclaim_orphans.dart $name\n${result.stderr}${result.stdout}',
-      );
-    }
-
-    test(
-      'reclaims nothing when nothing is owed',
-      () => runCase('nothing-owed'),
-      timeout: const Timeout(Duration(minutes: 2)),
-    );
-
-    test(
-      'a disposed engine is no longer owed',
-      () => runCase('disposed'),
-      timeout: const Timeout(Duration(minutes: 2)),
-    );
-
-    test(
-      'an undisposed engine is reclaimed exactly once',
-      () => runCase('orphans'),
-      timeout: const Timeout(Duration(minutes: 2)),
-    );
-  });
+  // The `oaa_engine_reset_all` cases are deliberately not here. They are a
+  // program — `test/reclaim_orphans.dart` — run after this suite rather than
+  // inside it, because a process-global reset cannot share a process with
+  // anything. See that file, and this package's AGENTS.md.
 }
 
 /// The engine's half of the LUFS time modes.

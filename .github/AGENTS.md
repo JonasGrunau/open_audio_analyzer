@@ -141,8 +141,10 @@ The jobs are split by what they need, and that split is deliberate:
   will find its like on a push.
 
 - **`engine`** compiles the C through the build hook and runs the meters, the
-  EBU Tech 3341/3342 conformance cases and then the `oaa` CLI on Linux, macOS
-  and Windows. It needs no audio hardware — that is what the built-in test tone
+  EBU Tech 3341/3342 conformance cases, the process-global reset — which is a
+  command after the suite rather than a test inside it, for the reason
+  `packages/oaa_engine/test/reclaim_orphans.dart` gives — and then the `oaa` CLI
+  on Linux, macOS and Windows. It needs no audio hardware — that is what the built-in test tone
   is for. The CLI runs on all three because **file decoding is where the
   platforms differ most**: Windows takes a UTF-16 path, so a filename with an
   umlaut in it fails there and nowhere else. It then **builds** the CLI with

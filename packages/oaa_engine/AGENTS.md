@@ -47,11 +47,27 @@ Dart bindings for the engine, plus the build hook that compiles it.
   nothing about it was Windows-specific — that runner just lost the race more
   often.
 
-  `test/reclaim_orphans.dart` is those cases as a **program**, one process per
-  case, driven by `Process.run` from the group in `oaa_engine_test.dart`. It is
-  not named `*_test.dart` so that the runner leaves it alone. **Anything else
-  process-global goes the same way** — and `--concurrency=1` is not the fix, it
-  only hides the hazard from the next person to add a suite.
+  `test/reclaim_orphans.dart` is those cases as a **program**, run *after* the
+  suite:
+
+  ```sh
+  dart test && dart run test/reclaim_orphans.dart
+  ```
+
+  **After, and not from inside it** — that distinction cost a second red build.
+  Driving the file with `Process.run` from a group in `oaa_engine_test.dart`
+  fixed the race and broke Windows outright: `dart run` re-runs the build hooks,
+  which delete and re-copy `.dart_tool/lib/oaa_engine.dll`, and the parent
+  `dart test` process has that library loaded. Windows locks a loaded DLL, so
+  every case died with `Access is denied, errno = 5` before it measured
+  anything, deterministically. macOS and Linux allow the unlink and showed
+  nothing. **Never spawn a Dart process from a test in this package.**
+
+  It is not named `*_test.dart` so the runner leaves it alone, and it is a gate
+  the harness invokes — the same shape as `plugin/test/sources_match.sh`.
+  **Anything else process-global goes the same way**, and `--concurrency=1` is
+  not the fix: it serialises 112 vector cases to protect one group and leaves
+  the hazard in place for the next suite somebody adds.
 - **This package is not publishable.** `hook/build.dart` reaches `../../engine`
   with relative paths that no published archive would contain. It is a
   workspace package; keep `publish_to: 'none'`.
