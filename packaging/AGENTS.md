@@ -80,7 +80,9 @@ checkbox, because they have no way to tell it from having installed it wrong.
 So the archive carries it, for anyone with a Developer build of Pro Tools or
 Avid's own developer tools, and the installers do not.
 
-**Promoting it once a certificate exists** is four things, and they go together:
+**Promoting it once a certificate exists** is four things, and they go together
+— [#3](https://github.com/JonasGrunau/open_audio_analyzer/issues/3) is the same
+list as a checklist, including the documents at the end:
 
 1. A `wraptool sign` step in `ci.yml`'s `plugin` job, **above** the Notarise
    step — wraptool re-signs the bundle, and a re-signed bundle is one whose

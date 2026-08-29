@@ -275,7 +275,8 @@ concluding the bundle was built wrong, check whether it was signed at all.
 
 That is why the AAX is **in the release archive and not in the installers** —
 see `packaging/AGENTS.md` § AAX. When a certificate exists, the promotion is
-small and is written down there.
+small and is written down there, and tracked as
+[#3](https://github.com/JonasGrunau/open_audio_analyzer/issues/3).
 
 ### Checking it without Pro Tools
 
