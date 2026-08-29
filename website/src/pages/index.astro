@@ -230,6 +230,24 @@ const ANCHORS = [
         A free and open-source loudness and spectrum analyzer. Fourteen meter modules on a canvas
         you arrange — on the desktop, inside your DAW, and on a tablet beside the desk.
       </p>
+
+      <!--
+        The one line on this page addressed to somebody who is not reading it
+        cold. The deck above describes a modular meter canvas, which is a
+        description a Decibel user recognises on sight — so this is where they
+        already are when the question occurs to them, and sending them two
+        thirds of the way down the page to find the answer is sending them to a
+        section about something else. It sat under the ODR section for exactly
+        one revision, where it read as a claim about the dynamics figure rather
+        than about the application.
+
+        Inside `.hero-lede` and not in the button row below it: it is a
+        signpost and not an action, the row is already five controls wide, and
+        the box's 62ch measure is the one this sentence wants anyway.
+      -->
+      <p class="hero-vs">
+        <a class="link" href="/alternatives/decibel">Comparison to Process.Audio Decibel</a>
+      </p>
     </div>
 
     <!--
@@ -373,9 +391,11 @@ const ANCHORS = [
 
     <!-- Required, not decorative. The programme behind those meters is a CC BY
          3.0 track, and that licence asks for credit wherever the audio is
-         published — which a page that plays it is. The wording and the link are
-         copied from test_audio/ATTRIBUTION.md, written by the tool that fetched
-         it, so there is one place this is stated from.
+         published — which a page that plays it is. The credit itself — the title,
+         the artist, the licence and both links — is copied from
+         test_audio/ATTRIBUTION.md, written by the tool that fetched it, so there
+         is one place that is stated from; the sentence around it is the page's
+         own, and says what the reader is looking at.
 
          It is not drawn on a phone, where the control that loads the analyzer is
          not drawn either: with nothing to press, the audio is never fetched and
@@ -385,10 +405,12 @@ const ANCHORS = [
          analyzer is a phone that has to carry this line. See the media query in
          the stylesheet. -->
     <p class="hero-credit">
-      Measured from <em>Apathy And Resignation Are The Sources Of Our Misfortune</em> by
+      Not a video or simulation. Those are the application's own meter modules, the same code the
+      desktop runs, drawing in your browser from the engine's own readings of <em>Apathy And
+      Resignation Are The Sources Of Our Misfortune</em> by
       <a class="link-quiet" href="https://citizensoftheempire.bandcamp.com/" rel="noopener">Citizens
       Of The Empire</a>, <a class="link-quiet" href="https://creativecommons.org/licenses/by/3.0" rel="noopener">CC
-      BY 3.0</a>. The readings are the engine's own, recorded from that track — not a simulation.
+      BY 3.0</a>.
     </p>
 
   </section>
@@ -969,6 +991,26 @@ const ANCHORS = [
 
   .hero-sep {
     color: var(--hair-strong);
+  }
+
+  /* Set in the display face rather than the deck's serif, and smaller: it is a
+     signpost, and a sentence of the same weight as the deck reads as a second
+     deck. The arrow is a pseudo-element so it cannot be selected, copied or
+     read out as a word. */
+  .hero-vs {
+    margin-top: var(--s16);
+    font-size: 0.875rem;
+    color: var(--muted);
+  }
+
+  /* The arrow hangs off the *paragraph*, not off the link. `.link` draws its
+     rule with `border-bottom`, and a pseudo-element of the anchor is content
+     inside that border box — so the rule ran under the arrow and read as a
+     glyph that had been underlined by mistake. Outside the anchor it is also
+     outside the hit target, which is right: the words are the link. */
+  .hero-vs::after {
+    content: ' →';
+    color: var(--muted);
   }
 
   /* Under the canvas, quiet, and never removed: see the note in the markup. */

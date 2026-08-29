@@ -45,6 +45,12 @@ const ENTRIES = [
   ...PAGES.map((page) => ({ path: href(page.slug), source: page.source })),
   { path: '/privacy', source: 'docs/site/privacy.md' },
   { path: '/testing', source: 'website/src/pages/testing.astro' },
+  /* The third page outside the manual's manifest: it answers a question
+     people arrive with rather than documenting anything. */
+  {
+    path: '/alternatives/decibel',
+    source: 'website/src/pages/alternatives/decibel.astro',
+  },
 ];
 
 /* `/analyzer/index.html` is deliberately absent. It is a real address and it is

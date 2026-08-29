@@ -48,7 +48,10 @@ It is a free reimplementation of the ideas in
 modular canvas is the best interaction model anybody has found for this problem.
 The measurement work, the architecture and the visual language are our own, and
 where Open Audio Analyzer cannot honestly match Decibel it says so rather than
-approximating.
+approximating. The
+[side-by-side](https://open-audio-analyzer.com/alternatives/decibel) is on the
+website: what the two share, the four differences there is published evidence
+for, and [Known gaps](#-known-gaps-stated-plainly) unsoftened.
 
 ---
 

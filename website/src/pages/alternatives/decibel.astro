@@ -1,0 +1,513 @@
+---
+/* /alternatives/decibel — the page somebody lands on after searching for a free
+ * alternative to Decibel by process.audio.
+ *
+ * It exists because the README has said since the first commit that this project
+ * is a reimplementation of Decibel's ideas, and the README is not one of the
+ * nine documents `src/lib/docs.mjs` publishes. So the sentence that answers the
+ * question sat on GitHub and nowhere on this domain: a reader looking for it
+ * found the repository, or found nothing.
+ *
+ * The rule this page is written under is the repository's own, turned on
+ * somebody else's product: **do not state a measurement nobody took.** Every
+ * claim here about Decibel is either something process.audio publishes or
+ * something this project checked and wrote down in `README.md`, and the
+ * comparison table is short for exactly that reason — where we do not know, there
+ * is no row. A guess in a table like this one is not a small inaccuracy: it is
+ * what makes a reader stop believing the rows that are right, and those are the
+ * rows the page is for.
+ *
+ * It also does not sell. The differences run in both directions — one row of the
+ * table is a design this project *took* rather than one it improved on — and the
+ * gaps section is the README's `Known gaps` rather than a softened version of it.
+ * A comparison page that admits what it loses is the one that gets linked to.
+ *
+ * `slimFooter`, and not for the usual reason. The four-column footer carries the
+ * Apple and Google trademark credit, which both companies' guidelines ask for
+ * *wherever their badge is shown*; the badges are in the front page's hero and
+ * nowhere else, so that footer under this page would be a legal notice about two
+ * marks the page does not use.
+ */
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
+
+import Base from '../../layouts/Base.astro';
+import { REPO, RELEASES, VERSION } from '../../lib/app.mjs';
+import { pageSchema } from '../../lib/schema.mjs';
+
+/* The same check the front page makes, for the same reason: `public/analyzer/`
+   is git-ignored compiled Flutter, so a build without it offers no button
+   rather than a button onto a 404. See src/pages/index.astro. */
+const hasDemo = existsSync(join(process.cwd(), 'public/analyzer/index.html'));
+
+const PATH = '/alternatives/decibel';
+
+const description =
+  'A free, open-source loudness and spectrum analyzer built on the modular ' +
+  'meter canvas Decibel by Process.Audio established: what is the same, what ' +
+  'is deliberately different, and what it does not do.';
+
+/* Four rows, and four is the number there is evidence for.
+ *
+ * Each `decibel` cell is process.audio's own description or a behaviour this
+ * project examined and recorded in README.md — the free pixel canvas and the
+ * window-fraction presets under **Layout**, TrueDyn under **Open Dynamic
+ * Range**, the three preset axes under **Presets, targets and skins**. Nothing
+ * here is inferred from a screenshot or a feature list.
+ *
+ * The last row is in the table on purpose. It is a design this project copied
+ * outright, and a comparison whose every line happens to favour the side that
+ * wrote it is a comparison nobody finishes reading. */
+const ROWS = [
+  {
+    area: 'Placing a module',
+    decibel: 'Free pixel positioning.',
+    oaa:
+      'A 24-column snapping grid, 16 rows. 24 divides by 2, 3, 4, 6, 8 and 12, ' +
+      'so halves, thirds and quarters are all exact — which is the first thing ' +
+      'anybody wants when arranging meters, and what a 12-column grid cannot ' +
+      'give you at once.',
+  },
+  {
+    area: 'The same preset on another display',
+    decibel: 'Fractions of the window, reconstituted per display.',
+    oaa:
+      'Grid cells, so a preset is screen-independent by construction: the same ' +
+      'layout opens on a 32-inch monitor and an 11-inch tablet with nobody ' +
+      'writing responsive code.',
+  },
+  {
+    area: 'The dynamics reading',
+    decibel:
+      'TrueDyn — “the equivalent of peak over average, but in the LUFS world”, ' +
+      'shown beside LUFS-S and true peak on one rim of the Super Meter and ' +
+      'beside LUFS-I and true peak max on the other.',
+    oaa:
+      'ODR-S and ODR-I: by that description the same pair, published as a ' +
+      'versioned specification defined to the operand, with numbered ' +
+      'conformance cases CI runs on every commit. Nothing here claims to match ' +
+      'TrueDyn’s ballistics or its rounding, because they are not documented — ' +
+      'the numbers go out under their own name and are checked against ' +
+      'arithmetic instead.',
+  },
+  {
+    area: 'Presets, targets and skins',
+    decibel: 'Three independent axes, including the from-preset indirection.',
+    oaa:
+      'The same three axes and the same indirection. This one is borrowed ' +
+      'rather than improved on: it is the right model, and there was no reason ' +
+      'to invent a different one to avoid saying so.',
+  },
+];
+
+/* What is here that is not a comparison — the things a reader weighing the two
+   is actually deciding between, none of which require a claim about Decibel. */
+const ADDS = [
+  [
+    'Free, and free software',
+    'GPL-3.0 for the engine, the application, the CLI and the tablet display; ' +
+      'AGPL-3.0 for the plugin, because it links JUCE. No account, no licence ' +
+      'key, no activation.',
+  ],
+  [
+    'Five platforms, one canvas',
+    'macOS, Windows, Linux, iPadOS and Android run the same application, the ' +
+      'same fourteen modules and the same engine — a tablet is not a cut-down ' +
+      'build, it is the whole thing that can additionally draw another machine’s ' +
+      'meters.',
+  ],
+  [
+    'A plugin that measures the DAW',
+    'A headless VST3 (and AU on macOS) streams the DAW’s audio and its transport ' +
+      'to the application, so the meters read what the session reads and the ' +
+      'playhead is the session’s playhead.',
+  ],
+  [
+    'A command-line analyser',
+    '<span class="num">oaa</span> measures a file offline and exits non-zero when it ' +
+      'misses the delivery target, which is what puts a loudness check in CI ' +
+      'beside the tests.',
+  ],
+  [
+    'The meters across the room',
+    'A tablet on the far side of the studio mirrors a tab over Wi-Fi, drawing ' +
+      'the desktop’s published frame with the desktop’s own painters — one ' +
+      'measurement, two screens.',
+  ],
+  [
+    'Held against the reference cases',
+    'EBU Tech 3341 and 3342 run in CI on Linux, macOS and Windows on every ' +
+      'commit, and the full EBU and ITU vector sets on top of them. A quantity ' +
+      'this build does not measure reads as an em dash, never as zero.',
+  ],
+  [
+    'Nothing is collected',
+    'No account, no analytics, no telemetry, no third-party services. The audio ' +
+      'never leaves the machine, and never goes on the wire even when a tablet ' +
+      'is watching.',
+  ],
+];
+
+/* The README's `Known gaps, stated plainly`, and stated the same way here.
+   Shortened, not softened — every one of these is a thing a reader could
+   otherwise discover an hour after downloading. */
+const GAPS = [
+  [
+    'LUFS modes',
+    'Every module measures Continuous. The Elapsed and Timecode modes are ' +
+      'specified and half-built, and are not on any module yet.',
+  ],
+  [
+    'Capturing your own output',
+    'It takes all of it — there is no per-application selection on any platform. ' +
+      'On macOS it needs a permission whose refusal Apple makes silent, so the ' +
+      'meters read digital black rather than saying no.',
+  ],
+  [
+    'File formats',
+    'WAV, AIFF, RF64, Wave64, FLAC and MP3 — the formats a master is delivered ' +
+      'as. Not Ogg Vorbis, Opus, AAC or ALAC. An unsupported file is refused ' +
+      'rather than half-read.',
+  ],
+  [
+    'Offline analysis',
+    'A file is measured whole, from the start. There is no region selection and ' +
+      'no seeking, because an integrated loudness taken over a file somebody ' +
+      'seeked through is a measurement of a programme nobody played.',
+  ],
+  [
+    'The remote display',
+    'No authentication and no encryption. Anyone who can reach the port can read ' +
+      'the measurements and the layout — not the audio — which is why publishing ' +
+      'is off until you switch it on and is off again at the next launch.',
+  ],
+];
+---
+
+<Base
+  title="A free, open-source alternative to Decibel by Process.Audio"
+  description={description}
+  path={PATH}
+  slimFooter
+  schema={pageSchema({
+    title: 'A free, open-source alternative to Decibel by Process.Audio',
+    description,
+    path: PATH,
+  })}
+>
+  <section class="section shell head">
+    <p class="label">Alternatives</p>
+    <h1 class="section-title">A free and open-source<br />alternative to Decibel</h1>
+
+    <div class="stack-24 lede">
+      <p class="prose">
+        <strong>Open Audio Analyzer</strong> is a free and open-source loudness and spectrum
+        analyzer: fourteen meter modules on a canvas you arrange yourself, saved as presets and
+        judged against delivery targets, on the desktop, inside your DAW and on a tablet beside the
+        desk. It runs on macOS, Windows, Linux, iPadOS and Android, and it costs nothing because it
+        is <span class="num">GPL-3.0</span> software rather than because there is a paid tier
+        further along.
+      </p>
+      <p class="prose">
+        It is a reimplementation of the ideas in
+        <a class="link" href="https://process.audio/products/decibel" rel="noopener nofollow"
+          >Decibel</a
+        > by Process.Audio, whose modular canvas is the best interaction model anybody has found for
+        this problem. The measurement work, the architecture and the visual language are our own,
+        and where Open Audio Analyzer cannot honestly match Decibel it says so rather than
+        approximating — which is what the last two sections of this page are.
+      </p>
+    </div>
+
+    <div class="cta">
+      {hasDemo && <a class="btn btn-primary" href="/#analyzer">Run the live demo</a>}
+      <a class="btn" href={RELEASES} rel="noopener">Download {VERSION}</a>
+      <a class="btn" href={REPO} rel="noopener">Source</a>
+      <a class="btn" href="/docs">Documentation</a>
+    </div>
+  </section>
+
+  <section class="section shell">
+    <div class="section-head">
+      <div>
+        <p class="label">Side by side</p>
+        <h2 class="section-title">Four differences,<br />and the evidence for each</h2>
+      </div>
+    </div>
+
+    <div class="table-scroll" tabindex="0" role="region" aria-label="Decibel and Open Audio Analyzer compared">
+      <table class="spec">
+        <thead>
+          <tr>
+            <th scope="col">Area</th>
+            <th scope="col">Decibel</th>
+            <th scope="col">Open Audio Analyzer</th>
+          </tr>
+        </thead>
+        <tbody>
+          {
+            ROWS.map((row) => (
+              <tr>
+                <td class="q">{row.area}</td>
+                <td>{row.decibel}</td>
+                <td>{row.oaa}</td>
+              </tr>
+            ))
+          }
+        </tbody>
+      </table>
+    </div>
+
+    <p class="prose note">
+      <strong>Four rows, because four is what there is evidence for.</strong> Every cell in the
+      Decibel column is Process.Audio’s own description or a behaviour this project examined and
+      recorded in its
+      <a class="link" href={`${REPO}#-layout`} rel="noopener">README</a>. Where we do not know, there
+      is no row — this page is held to the rule the meters are: a quantity nobody measured does not
+      get reported, and a plausible guess is worse than a dash. If something here is out of date,
+      <a class="link" href={`${REPO}/issues`} rel="noopener">open an issue</a> and it will be
+      corrected or removed.
+    </p>
+  </section>
+
+  <section class="section shell">
+    <div class="section-head">
+      <div>
+        <p class="label">Beyond the canvas</p>
+        <h2 class="section-title">What you also get,<br />comparison aside</h2>
+      </div>
+    </div>
+
+    <ul class="adds">
+      {
+        ADDS.map(([name, body]) => (
+          <li class="add">
+            <p class="add-k">{name}</p>
+            <p class="add-v" set:html={body} />
+          </li>
+        ))
+      }
+    </ul>
+  </section>
+
+  <section class="section shell">
+    <div class="section-head">
+      <div>
+        <p class="label">Honestly</p>
+        <h2 class="section-title">What it does not do</h2>
+      </div>
+    </div>
+
+    <div class="split">
+      <div class="stack-24">
+        <p class="prose">
+          A metering tool is bought on trust, and a comparison page that lists only what its own
+          side wins has spent that trust before the reader has downloaded anything. So this is the
+          repository’s <a class="link" href={`${REPO}#-known-gaps-stated-plainly`} rel="noopener"
+            >Known gaps</a
+          > section, shortened and not softened. None of it is a surprise waiting an hour after the
+          download.
+        </p>
+        <p class="prose">
+          The list that matters more is the one on the other side of it: the fourteen modules, every
+          reading’s definition, and whether this build measures it, are all in
+          <a class="link" href="/docs/metrics">the metrics reference</a>.
+        </p>
+      </div>
+
+      <aside class="module">
+        <div class="module-bar">
+          <span class="name">Not built, or built with a limit</span>
+        </div>
+        <div class="module-body gaps">
+          <ul class="gap-list">
+            {
+              GAPS.map(([name, body]) => (
+                <li>
+                  <p class="gap-k">{name}</p>
+                  <p class="gap-v">{body}</p>
+                </li>
+              ))
+            }
+          </ul>
+        </div>
+      </aside>
+    </div>
+  </section>
+
+  <section class="section shell close">
+    <h2 class="section-title">Try it against a master<br />you already know</h2>
+    <p class="prose">
+      The fastest honest comparison is your own material: open a master whose numbers you know and
+      see whether these agree. {hasDemo ? 'The live demo on the front page is the real application in a browser tab, replaying one recorded measurement through the real engine; the download is the same thing with your own audio in it.' : 'The download is the whole thing — there is no trial, no watermark and nothing to unlock.'}
+    </p>
+    <div class="cta">
+      {hasDemo && <a class="btn btn-primary" href="/#analyzer">Run the live demo</a>}
+      <a class="btn" href={RELEASES} rel="noopener">Download {VERSION}</a>
+      <a class="btn" href="/docs/install">Install guide</a>
+    </div>
+
+    <!-- Nominative use: naming a product to say what this one is an alternative
+         to is fair, and saying whose product it is is the part that makes it
+         fair. The same reasoning and the same shape as the Apple and Google
+         credit in the four-column footer — see Base.astro. -->
+    <p class="tm">
+      Decibel is a product of Process.Audio, and any trademarks named on this page belong to their
+      respective owners. Open Audio Analyzer is an independent project and is not affiliated with,
+      endorsed by or sponsored by Process.Audio.
+    </p>
+  </section>
+</Base>
+
+<style>
+  /* The page opens on an `h1` rather than on a picture: somebody arriving here
+     arrived from a search box with a question in it, and the answer is a
+     sentence. `.section-head`'s label/title pair without the head's flex row,
+     because there is nothing to sit beside it. */
+  .head {
+    padding-top: var(--s48);
+  }
+
+  .head .section-title {
+    margin-top: var(--s8);
+  }
+
+  .lede {
+    margin-top: var(--s32);
+    max-width: 68ch;
+  }
+
+  .cta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s12);
+    margin-top: var(--s32);
+  }
+
+  /* Three columns of prose in one table wants a wider measure than `.prose`
+     and a narrower one than the shell, so the middle two columns are given
+     their share explicitly rather than being sized by their longest sentence —
+     the TrueDyn cell is four times the length of the one beside it and would
+     otherwise take three quarters of the row. */
+  /* `.spec td.q` is `white-space: nowrap` globally, which is right for a
+     reading's name — `LUFS-S` must never wrap — and wrong for a phrase. These
+     cells are sentences, so they wrap and take a stated share of the row. */
+  .spec td.q {
+    white-space: normal;
+    width: 16%;
+  }
+
+  .spec td:nth-child(2),
+  .spec td:nth-child(3) {
+    width: 42%;
+  }
+
+  .note {
+    margin-top: var(--s24);
+    max-width: 74ch;
+  }
+
+  /* `global.css` carries no `ul` reset — every list on the site turns off its
+     own markers, the way the front page's five do. A bullet here would be the
+     browser's, and nothing else on the site has one. */
+  .adds {
+    list-style: none;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--s32) var(--s48);
+  }
+
+  .add {
+    border-top: 1px solid var(--hair);
+    padding-top: var(--s12);
+  }
+
+  .add-k {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+  }
+
+  .add-v {
+    margin-top: var(--s8);
+    font-family: var(--prose);
+    font-size: 0.9375rem;
+    line-height: 1.6;
+    color: var(--faint);
+  }
+
+  /* The same two-column split the front page's measurement section uses: an
+     argument on the left, the thing itself drawn as a module on the right. */
+  .split {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--s48);
+    align-items: start;
+  }
+
+  .gaps {
+    padding: var(--s16);
+  }
+
+  .gap-list {
+    list-style: none;
+    padding: 0;
+    display: grid;
+    gap: var(--s16);
+  }
+
+  .gap-list li + li {
+    border-top: 1px solid var(--hair);
+    padding-top: var(--s16);
+  }
+
+  .gap-k {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text);
+    letter-spacing: 0.02em;
+  }
+
+  .gap-v {
+    margin-top: var(--s4);
+    font-family: var(--prose);
+    font-size: 0.875rem;
+    line-height: 1.6;
+    color: var(--faint);
+  }
+
+  .close .prose {
+    margin-top: var(--s24);
+    max-width: 68ch;
+  }
+
+  /* The legal line, set the way the footer's is: smaller than anything else on
+     the page, because it is a requirement to be met rather than a line to be
+     read, and kept to a measure so it is not four words per eye movement. */
+  .tm {
+    margin-top: var(--s64);
+    padding-top: var(--s16);
+    border-top: 1px solid var(--hair);
+    max-width: 96ch;
+    font-size: 0.6875rem;
+    line-height: 1.6;
+    color: var(--faint);
+  }
+
+  @media (max-width: 1080px) {
+    .adds {
+      grid-template-columns: repeat(2, 1fr);
+    }
+    .split {
+      grid-template-columns: 1fr;
+      gap: var(--s32);
+    }
+  }
+
+  @media (max-width: 620px) {
+    .adds {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
