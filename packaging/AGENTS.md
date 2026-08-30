@@ -282,6 +282,32 @@ would all become wrong in the same commit.
   thing on any of the three platforms. A build that implied success would be
   worse than one that failed.
 
+- **A package whose plugin and application disagree about the version is one a
+  DAW reports as an old plugin, correctly.** `make_pkg.sh` reads
+  `CFBundleShortVersionString` out of the VST3 and the AU and refuses to build
+  if either is not the version on the box. Two things it catches, and both had
+  already shipped: `--plugins` defaults to `plugin/build/OaaPlugin_artefacts/
+  Release`, which on a working machine is whatever was last built there, and the
+  plugin's version was a literal in `plugin/CMakeLists.txt` that stopped being
+  bumped — so 0.12.0 through 0.15.0 installed a plugin declaring **0.11.0**
+  beside an application declaring the real one. The version is read from
+  `pubspec.yaml` now; this is what stops a *stale build tree* reintroducing the
+  same symptom with the source perfectly correct. **The guard is the pkg's
+  alone**: a Windows VST3 carries its version in a PE resource and a Linux one
+  in neither, so `make_installer.ps1` and `make_installer.sh` have only the
+  derived version behind them. If you add the Windows half, compare the first
+  three components of `FileVersion` — JUCE writes a fourth — and test it on a
+  release build before it can throw in a release job.
+
+- **A release adds a `<release>` row to `linux/com.openaudioanalyzer.oaa.metainfo.xml`,
+  and nothing will tell you when it does not.** The newest row is the version
+  GNOME Software and KDE Discover offer, `appstreamcli validate` checks the
+  list's *shape* and never compares it to `pubspec.yaml`, and the flatpak
+  builds and publishes either way. It stopped at 0.11.0 while four releases
+  went out. Unlike the plugin's version this one cannot be derived — a row is
+  prose — so it is written from `CHANGELOG.md` in the release commit, and its
+  audience is somebody in a software centre deciding whether to update.
+
 - **A signed but un-notarised package is still refused by Gatekeeper.** The
   quarantine flag needs notarisation, not merely a signature. `make_pkg.sh`
   distinguishes all three states in what it prints, because the middle one is

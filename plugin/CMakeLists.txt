@@ -109,11 +109,43 @@ if(NOT CMAKE_OSX_DEPLOYMENT_TARGET)
     "Oldest macOS the plugin bundles load on. Ignored off Apple." FORCE)
 endif()
 
+# ---------------------------------------------------------------------------
+# The version, read from `pubspec.yaml` and not typed here
+#
+# It was typed here, and it drifted. `juce_add_plugin` takes no VERSION of its
+# own, so JUCE hands `PROJECT_VERSION` to every bundle it builds — the VST3's
+# `moduleinfo.json`, each `Info.plist`, the Windows resource — and this line
+# was the only thing that decided what a DAW printed beside the plugin's name.
+# It was bumped by hand in every release commit from 0.4.0 to 0.11.0 and then
+# that step was quietly dropped: 0.12.0, 0.13.0, 0.14.0 and 0.15.0 all shipped
+# a bundle declaring **0.11.0**, installed by a package whose application said
+# 0.15.0. Current code, four releases of wrong label, and nothing anywhere
+# compared the two.
+#
+# A number that has to be copied is a number that will stop being copied, so
+# there is one place it is written — `pubspec.yaml`, which the application, the
+# CLI, the installers and the website already read — and this reads it. The
+# build number after `+` is Apple's and Google's, not a version, and is cut.
+#
+# Before `project()` on purpose: `VERSION` is an argument to it and cannot be
+# set afterwards. `file(READ)` is one of the few commands that works up here.
+#
+# It is fatal rather than a fallback. A default would put a plausible number on
+# a bundle nobody asked for — which is the failure this whole comment is about.
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/../pubspec.yaml" OAA_PUBSPEC)
+if(NOT OAA_PUBSPEC MATCHES "(^|\n)version:[ \t]*([0-9]+\\.[0-9]+\\.[0-9]+)")
+  message(FATAL_ERROR
+    "plugin: no `version: <x.y.z>` in pubspec.yaml. Every bundle's version "
+    "comes from there; refusing to build one that would label itself 0.0.0.")
+endif()
+set(OAA_VERSION "${CMAKE_MATCH_2}")
+
 project(oaa_plugin
-  VERSION 0.11.0
+  VERSION ${OAA_VERSION}
   DESCRIPTION "Open Audio Analyzer — headless metering plugin"
   LANGUAGES C CXX
 )
+message(STATUS "Open Audio Analyzer: plugin version ${OAA_VERSION}, from pubspec.yaml")
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)

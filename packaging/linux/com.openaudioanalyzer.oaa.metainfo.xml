@@ -76,7 +76,66 @@
 
   <content_rating type="oars-1.1"/>
 
+  <!--
+    A row per released version, newest first, and it is the *newest* one a
+    software centre prints as the version on offer. It stopped at 0.11.0 for
+    four releases — 0.12.0 to 0.15.0 shipped with GNOME Software and Discover
+    still advertising 0.11.0 — because `appstreamcli validate` does not check
+    this list against anything and nothing else reads it. Same dropped release
+    step that left the plugin bundles declaring 0.11.0; see
+    `plugin/CMakeLists.txt`, where the version is now derived rather than
+    typed. This one cannot be derived: a release row is prose, and it is
+    written from `CHANGELOG.md` when the version is tagged.
+  -->
   <releases>
+    <release version="0.15.0" date="2026-08-29">
+      <description>
+        <p>
+          Four readings changed. Correlation and balance now read as a dash
+          below −70 LUFS instead of reporting a figure taken from noise, a true
+          peak ceiling is no longer passed by silence, and an Alert Meter on
+          crest or on any of the integrated readings holds the worst of a
+          session rather than the latest. The Spectrum Analyzer has a cursor
+          that names the frequency and level under it, the Histogram scrolls
+          and zooms, and a Validator can be told which criteria it judges.
+          PSR, PLR, DR-S and DR-I are gone as names: the dynamics readings are
+          ODR-S and ODR-I, defined in the project's own published standard.
+        </p>
+      </description>
+    </release>
+    <release version="0.14.0" date="2026-08-27">
+      <description>
+        <p>
+          The engine, the FFI bindings, the domain model and the wire protocol
+          are GPL-3.0-or-later rather than MIT; the plugin remains AGPL. The
+          documentation site was reworked to say what a number is for before it
+          says how it is arrived at, and the privacy policy no longer claims
+          the Android build never asks for the microphone.
+        </p>
+      </description>
+    </release>
+    <release version="0.13.0" date="2026-08-27">
+      <description>
+        <p>
+          A status bar across the bottom of the window carries the source, the
+          format, the transport and the link, which the top row used to hold.
+          The File menu moved to the far left where a menu bar's file menu
+          belongs, a layout nobody has saved is called Unnamed, and the open
+          preset's name and the PUBLISH control no longer disappear when the
+          window is narrowed. The Phase Scope stops looking broken on a mono
+          source. The smallest supported window is now 960x808.
+        </p>
+      </description>
+    </release>
+    <release version="0.12.0" date="2026-08-25">
+      <description>
+        <p>
+          Distribution and documentation: an Android build on Google Play, and
+          a front page that shows how the desktop, the plugin and a tablet fit
+          together. Nothing in the desktop application changed.
+        </p>
+      </description>
+    </release>
     <release version="0.11.0" date="2026-08-24">
       <description>
         <p>

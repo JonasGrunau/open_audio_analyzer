@@ -131,6 +131,34 @@ for bundle in "$vst3" "$au"; do
   fi
 done
 
+# And they have to be *this* version's plugins.
+#
+# The plugin's version comes from pubspec.yaml now, but that only guarantees a
+# bundle is labelled with the version of the tree it was built from — not that
+# it is the tree being packaged. Two ways it is not: `--plugins` defaults to
+# plugin/build/OaaPlugin_artefacts/Release, which on a working machine is
+# whatever was last built there and may be weeks old, and in CI the tarball is
+# downloaded rather than built beside the app. Both produce a package that
+# installs an application saying one version and a plugin saying another, and
+# nobody sees it until a DAW prints the two side by side.
+#
+# That shipped. Every release from 0.12.0 to 0.15.0 carried a plugin declaring
+# 0.11.0 because the number was typed into plugin/CMakeLists.txt by hand and
+# the release step that bumped it was dropped. Deriving the version stops the
+# typing; this stops the shipping.
+for bundle in "$vst3" "$au"; do
+  have=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" \
+    "$bundle/Contents/Info.plist" 2>/dev/null || true)
+  if [ "$have" != "$version" ]; then
+    echo "make_pkg: $(basename "$bundle") says version ${have:-<none>}, and this package is $version." >&2
+    echo "  A package whose plugin and application disagree is one a DAW will" >&2
+    echo "  report as an old plugin, correctly. Rebuild the plugins from this" >&2
+    echo "  tree, or point --plugins at the tarball this version's plugin job" >&2
+    echo "  produced." >&2
+    exit 1
+  fi
+done
+
 mkdir -p "$out"
 rm -f "$pkg"
 work="$out/pkg-work"

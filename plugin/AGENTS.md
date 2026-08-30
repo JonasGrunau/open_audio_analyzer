@@ -371,6 +371,20 @@ on the audio thread.
 JUCE is fetched, not vendored. A checkout at `third_party/JUCE` is used if
 present; otherwise CMake clones the pinned tag. Either way it is gitignored.
 
+**The bundles' version is read from `pubspec.yaml`, and there is nothing here to
+bump.** `juce_add_plugin` takes no `VERSION`, so JUCE puts `PROJECT_VERSION` on
+every artefact it builds — each `Info.plist`, the VST3's `moduleinfo.json`, the
+Windows resource — and that used to be a literal in `CMakeLists.txt` that a
+release commit was expected to move. It moved for eight releases and then it
+did not: **0.12.0 through 0.15.0 all shipped a plugin declaring 0.11.0**, in a
+package whose application said 0.15.0, and no test, no gate and no document
+compared the two. The number now comes from the one file the application, the
+CLI, the installers and the website already read, a missing or unparseable
+`version:` is a configure-time `FATAL_ERROR` rather than a default, and
+`packaging/macos/make_pkg.sh` refuses to package a bundle whose version is not
+the one on the box — which is the half that catches a stale
+`OaaPlugin_artefacts/` or a tarball from another run.
+
 **Anything that writes into a macOS bundle must run before the signing step, and
 the signing step is last on purpose.** Every bundle this directory produced up
 to 0.4.0 shipped with an invalid code signature and nothing said so. Two causes:

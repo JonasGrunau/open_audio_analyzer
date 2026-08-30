@@ -55,6 +55,24 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   The credit under the front page's live analyzer also says what that canvas is:
   one measured pass of the track, replayed on a fixed eight, and not the canvas
   the section two screens below is about. (#4)
+- **The plugin told every DAW it was 0.11.0.** The VST3, the Audio Unit and the
+  AAX have all declared that version since 0.12.0 — in each bundle's version
+  field and in the VST3's `moduleinfo.json` — while the installer that carried
+  them put the real version on the application, so a host listed a plugin four
+  releases behind the program it streams to. The bundles were built from the
+  right commit every time and nothing they measure was affected; the number was
+  a literal in `plugin/CMakeLists.txt` that a release commit was expected to
+  bump, and after 0.11.0 nothing did. It is now read from `pubspec.yaml`, and
+  the macOS package refuses to build if a plugin bundle's version is not the one
+  on the box — which is also what catches a stale build tree. A DAW that still
+  shows 0.11.0 after this release has cached the old bundle, or is loading a
+  copy from `~/Library/Audio/Plug-Ins`, which no installer here writes to or can
+  remove.
+- **GNOME Software and KDE Discover offered 0.11.0.** The flatpak's AppStream
+  metadata lists a row per release and its newest row is the version a software
+  centre prints; it stopped being written after 0.11.0, so four releases
+  installed while the store beside them described the one before them. Every
+  release through 0.15.0 is listed now.
 
 ### 🚧 Internal
 - **The Windows engine job no longer fails about one run in four.** The
