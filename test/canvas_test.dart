@@ -653,10 +653,18 @@ void main() {
     final container = await _pumpSparse(tester);
 
     // Below the six default boxes, which occupy the top three rows.
+    //
+    // `kind` is a mouse and not the default touch on purpose: a real right
+    // click is the only way this gesture is ever performed with a second
+    // button, macOS delivers a trackpad's two-finger tap as exactly the same
+    // event, and `supportedDevices` is what silently removed a *device* from
+    // this canvas's other detectors — see `kDragDevices`. A test that presses
+    // secondary with a finger would pass through that mistake.
     final canvas = tester.getRect(find.byType(GridCanvas));
     await tester.tapAt(
       Offset(canvas.left + canvas.width / 4, canvas.bottom - canvas.height / 4),
       buttons: kSecondaryButton,
+      kind: PointerDeviceKind.mouse,
     );
     await _settle(tester);
 

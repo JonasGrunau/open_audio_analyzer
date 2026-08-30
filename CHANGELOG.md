@@ -46,6 +46,15 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   browser refuses that, the window is stepped into the reading's time base
   instead. Nothing the application, the CLI or the plugin measures is affected
   — this is the website's replay source alone, and it now has a test.
+- **The website's Modules section told readers to drag a meter onto the
+  canvas**, which is not a gesture Open Audio Analyzer has or has ever had:
+  there is no palette to drag a meter from, and dragging on the canvas moves a
+  module that is already placed. It now names the ones that exist — right click
+  the canvas, or long press it on a tablet — which is what `README.md` has said
+  since the first release, so the first instruction on the page can be followed.
+  The credit under the front page's live analyzer also says what that canvas is:
+  one measured pass of the track, replayed on a fixed eight, and not the canvas
+  the section two screens below is about. (#4)
 
 ### 🚧 Internal
 - **The Windows engine job no longer fails about one run in four.** The

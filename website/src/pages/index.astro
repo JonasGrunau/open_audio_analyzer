@@ -404,13 +404,21 @@ const ANCHORS = [
          together and must keep going together — a phone that can start the
          analyzer is a phone that has to carry this line. See the media query in
          the stylesheet. -->
+    <!-- The last sentence is the other half of what the Modules section says.
+         `tools/analyzer-demo` is eight modules, one clock and one `ReplaySource`
+         — there is no `GridCanvas` under it, so there is no add menu, no
+         selection and no resize, and a reader told two screens further down to
+         arrange a canvas will try it on this one first because it is the canvas
+         in front of them. Saying what it is costs a clause; a demo that ignores
+         every gesture the page names reads as an application that is broken. -->
     <p class="hero-credit">
       Not a video or simulation. Those are the application's own meter modules, the same code the
       desktop runs, drawing in your browser from the engine's own readings of “<em>Apathy And
       Resignation Are The Sources Of Our Misfortune</em>” by
       <a class="link-quiet" href="https://citizensoftheempire.bandcamp.com/" rel="noopener">Citizens
       Of The Empire</a>, <a class="link-quiet" href="https://creativecommons.org/licenses/by/3.0" rel="noopener">CC
-      BY 3.0</a>.
+      BY 3.0</a>. It is one measured pass of that track, replayed on a fixed canvas of eight; the
+      canvas you arrange is the application's.
     </p>
 
   </section>
@@ -479,11 +487,26 @@ const ANCHORS = [
       </div>
     </div>
 
+    <!--
+      The gestures named here are the ones the application has, which this
+      sentence did not name for four releases: it opened by telling the reader
+      to drag a meter onto the canvas, and there is no such gesture and never
+      has been — there is no palette to drag one *from*, and dragging on the
+      canvas moves a module that is already placed. `README.md` had it right the
+      whole time, so the two texts disagreed and the website was the wrong one.
+
+      It says "in the application" for the other half of the same problem: the
+      live analyzer at the top of this page is a fixed canvas of eight with no
+      `GridCanvas` under it, so a reader who presses it and then tries the
+      gesture this paragraph names gets nothing. The credit line under the
+      facade says so from the other side.
+    -->
     <p class="prose mod-intro">
-      You choose which of them are on screen. Drag a meter onto the canvas, size it, put it where
-      you want it: loudness and a delivery verdict when you are finishing a master, a spectrum and a
-      phase scope while you mix, a VU and a waveform while you track. The arrangement you settle on
-      saves as a preset, for the desktop and for the tablet beside it.
+      You choose which of them are on screen. In the application, right click the canvas — long
+      press it on a tablet — to add a meter, then drag it where you want it and size it: loudness
+      and a delivery verdict when you are finishing a master, a spectrum and a phase scope while you
+      mix, a VU and a waveform while you track. The arrangement you settle on saves as a preset, for
+      the desktop and for the tablet beside it.
     </p>
 
     <ul class="cat">
