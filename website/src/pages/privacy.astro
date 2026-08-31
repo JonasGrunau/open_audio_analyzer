@@ -18,6 +18,9 @@
  *
  * One column, not three. The manual's rails are for a reader with a question
  * who needs to get to a section; this is a document read from the top, once.
+ * That column is `.legal` in `docs.css` rather than a scoped style here,
+ * because `/impressum` is the same shape and the two sit one link apart in the
+ * footer.
  */
 import { getEntry, render } from 'astro:content';
 
@@ -76,30 +79,3 @@ const description =
     </article>
   </div>
 </Base>
-
-<style>
-  /* The manual's measure without the manual's rails. `.md p` is already capped
-     at 68ch; this holds the tables and the headings to the same column so a
-     three-column table does not run twice the width of the prose above it.
-
-     Centred, and that is the whole reason `margin-inline` is here: `.shell` is
-     1440 px, so a 46 rem block inside it with the default margin sits against
-     the left edge with 600-odd pixels of nothing beside it. Every other page
-     fills the shell — a documentation page holds its left with a 15 rem nav
-     rail — so this was the one page on the site that looked lopsided rather
-     than narrow. */
-  .legal {
-    padding-block: var(--s48) var(--s96);
-  }
-
-  .legal-main {
-    max-width: 46rem;
-    margin-inline: auto;
-  }
-
-  @media (max-width: 900px) {
-    .legal {
-      padding-block: var(--s32) var(--s64);
-    }
-  }
-</style>

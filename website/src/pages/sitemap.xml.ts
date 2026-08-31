@@ -36,16 +36,20 @@ import { PAGES, href } from '../lib/docs.mjs';
 const ROOT = resolve(process.cwd(), '..');
 
 /* Every published URL, and the file in the repository it is rendered from.
-   `/privacy` is named because it is the one page outside the manual's
-   manifest — see src/pages/privacy.astro. `/testing` is the other, and is
-   where the Google Play badge lands; it is a page rather than a chapter of the
-   manual, so it is named here too. */
+   `/privacy` is named because it is one of the pages outside the manual's
+   manifest — see src/pages/privacy.astro. `/impressum` is the second, and is
+   the one entry here that a crawler is not the point of: it is named because
+   § 5 DDG wants the page permanently reachable, and a URL absent from the
+   sitemap is a URL the site itself does not admit to having. `/testing` is the
+   third, and is where the Google Play badge lands; it is a page rather than a
+   chapter of the manual, so it is named here too. */
 const ENTRIES = [
   { path: '/', source: 'website/src/pages/index.astro' },
   ...PAGES.map((page) => ({ path: href(page.slug), source: page.source })),
   { path: '/privacy', source: 'docs/site/privacy.md' },
+  { path: '/impressum', source: 'website/src/pages/impressum.astro' },
   { path: '/testing', source: 'website/src/pages/testing.astro' },
-  /* The third page outside the manual's manifest: it answers a question
+  /* The fourth page outside the manual's manifest: it answers a question
      people arrive with rather than documenting anything. */
   {
     path: '/alternatives/decibel',

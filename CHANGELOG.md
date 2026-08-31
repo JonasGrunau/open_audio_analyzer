@@ -29,8 +29,31 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   repository's Known gaps rather than a softened version of them. The claim that
   this project reimplements Decibel's ideas has been in `README.md` since the
   first commit and was on no page of the site.
+- The website has an Impressum at `/impressum` — the provider identification
+  § 5 DDG requires of a German site: name, postal address, telephone, email, and
+  who is responsible for the content under § 18 Abs. 2 MStV. German first,
+  because that is the word a German reader looks for in a footer, with an
+  English translation under it. It is linked from both footers and is in the
+  sitemap.
 
 ### 🐛 Fixed
+- **The privacy policy was 128 px wider than a phone screen.** The address to
+  report a privacy question to is printed as a link whose text is the URL, and
+  a 57-character word has no break opportunity in it — so on a 390 px phone it
+  laid out at its own width and pushed the document sideways. Nothing scrolled,
+  because the page cannot scroll sideways, so what a reader saw instead was a
+  page 128 px narrower than the window from the header down, with every heading
+  and every paragraph short of the right edge. Long links now break.
+- **Every page carrying the one-line footer was 37 px wider than a 360 px
+  phone**, for the same reason and on a smaller scale: the row of five links in
+  it did not wrap. Small enough to look like nothing, and on every documentation
+  page, which is the combination that makes a bug read as the design.
+- **`npm run check` reported every page clean while three of them overflowed.**
+  It opened each page in an emulated *mobile* viewport, and mobile emulation
+  scales a too-wide document down until it fits — so the width the page reported
+  was the width of its own content and the check compared a quantity with
+  itself. It now measures at the width it asked for, and fails outright if that
+  is not the width the page got.
 - **The oscilloscope on the website draws a continuous waveform.** It drew a
   comb — half a beat of trace, a gap the same width, over and over — on both
   the front page's still and the live analyzer behind it. The recording is not

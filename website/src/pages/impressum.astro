@@ -1,0 +1,221 @@
+---
+/* /impressum — the provider identification § 5 DDG requires of a German site.
+ *
+ * German rather than English at the top, and at `/impressum` rather than at
+ * `/legal-notice`, because the law is about being *found*: § 5 DDG wants the
+ * information "leicht erkennbar, unmittelbar erreichbar und ständig verfügbar",
+ * and the word a German reader looks for in a footer is the one word this page
+ * is called. An English translation follows it, because everything else on this
+ * site is in English and the reader who needs the address is as likely to be in
+ * Utrecht as in Munich — but the statutory text is the German, and the English
+ * says so rather than pretending to be a second original.
+ *
+ * Written into the page rather than rendered from `docs/site/`, which is where
+ * the privacy policy comes from. That document is there for a stated reason —
+ * it claims things about what the application does with a microphone and a
+ * socket, and a claim like that belongs beside the code that has to keep it
+ * true. An Impressum claims nothing about the software. It is a fact about who
+ * publishes the website, it changes when a person moves house rather than when
+ * a release ships, and putting it in `docs/` would publish it into the manual's
+ * content collection for no benefit at all.
+ *
+ * **Three things are deliberately absent, and each of them is the kind of thing
+ * a well-meaning edit puts back:**
+ *
+ *   - **The EU Online Dispute Resolution link.** Every German Impressum
+ *     template still carries `ec.europa.eu/consumers/odr`. The platform was
+ *     shut down on 20 July 2025 and the address no longer resolves to it. A
+ *     dead link to a body that no longer exists is worse than no link, because
+ *     it is presented as a route a reader has.
+ *   - **A VAT identification number.** § 5 Abs. 1 Nr. 6 DDG asks for one *if
+ *     there is one*. Stating that there is none is a claim about somebody's tax
+ *     status, and this page states no fact it cannot stand behind.
+ *   - **The four paragraphs of Haftungsausschluss boilerplate.** "Haftung für
+ *     Inhalte", "Haftung für Links", and the rest are a restatement of §§ 7–10
+ *     DDG, which apply whether or not a page recites them. What is here instead
+ *     is the one thing about this site that is *not* generic: what it links to,
+ *     and under which licences its parts are published.
+ */
+import Base from '../layouts/Base.astro';
+import { pageSchema } from '../lib/schema.mjs';
+import '../styles/docs.css';
+import { sourceUrl } from '../lib/docs.mjs';
+
+const SOURCE = 'website/src/pages/impressum.astro';
+
+const description =
+  'Provider identification for open-audio-analyzer.com under § 5 DDG: the ' +
+  'name, postal address and contact details of the person who publishes the ' +
+  'site, in German and in English.';
+---
+
+<Base
+  title="Impressum — Open Audio Analyzer"
+  description={description}
+  path="/impressum"
+  slimFooter
+  schema={pageSchema({ title: 'Impressum', description, path: '/impressum' })}
+>
+  <div class="shell legal">
+    <article class="legal-main">
+      <div class="doc-head">
+        <p class="label">Legal</p>
+        <a class="doc-src" href={sourceUrl(SOURCE)} rel="noopener">{SOURCE} ↗</a>
+      </div>
+
+      <h1 class="doc-title">Impressum</h1>
+      <p class="doc-blurb">
+        Anbieterkennzeichnung für open-audio-analyzer.com nach § 5 DDG und § 18 Abs. 2 MStV.
+        <span lang="en">An English translation follows the German.</span>
+      </p>
+
+      <div class="md" lang="de">
+        <h2>Angaben gemäß § 5 DDG</h2>
+
+        <address class="legal-address">
+          Jonas Grunau<br />
+          Zypressenweg 9<br />
+          85551 Kirchheim<br />
+          Deutschland
+        </address>
+
+        <h2>Kontakt</h2>
+
+        <address class="legal-address">
+          Telefon: <a href="tel:+4917632669958">+49 176 32669958</a><br />
+          E-Mail: <a href="mailto:grunaujonas@gmail.com">grunaujonas@gmail.com</a>
+        </address>
+
+        <p>
+          Eine E-Mail wird gelesen und beantwortet. Technische Fragen zur Software gehören
+          allerdings besser in ein <a href="https://github.com/JonasGrunau/open_audio_analyzer/issues" rel="noopener">Issue</a>,
+          wo die nächste Person die Antwort auch findet.
+        </p>
+
+        <h2>Verantwortlich für den Inhalt nach § 18 Abs. 2 MStV</h2>
+
+        <address class="legal-address">
+          Jonas Grunau<br />
+          Zypressenweg 9<br />
+          85551 Kirchheim<br />
+          Deutschland
+        </address>
+
+        <h2>Zu dieser Website</h2>
+
+        <p>
+          Open Audio Analyzer ist freie Software und wird kostenlos abgegeben. Auf dieser Website
+          wird nichts verkauft, es gibt keine Bezahlfunktion, keine Werbung, keine Konten und
+          keine Reichweitenmessung. Was die Anwendung mit einem Mikrofon, einer Kamera, dem
+          lokalen Netzwerk und Ihrer Festplatte tut, steht vollständig in der
+          <a href="/privacy">Datenschutzerklärung</a>.
+        </p>
+
+        <h2>Streitbeilegung</h2>
+
+        <p>
+          Ich bin nicht bereit und nicht verpflichtet, an einem Streitbeilegungsverfahren vor
+          einer Verbraucherschlichtungsstelle teilzunehmen.
+        </p>
+
+        <h2>Links und Lizenzen</h2>
+
+        <p>
+          Diese Seiten verlinken auf externe Angebote — GitHub, Google Play, den App Store, die
+          Websites der EBU und der ITU. Auf deren Inhalte habe ich keinen Einfluss; für sie ist
+          jeweils der dortige Anbieter verantwortlich.
+        </p>
+
+        <p>
+          Der Quelltext der Anwendung, der Engine und dieser Website steht unter der
+          <span class="num">GPL-3.0-or-later</span>; das Plugin unter der
+          <span class="num">AGPL-3.0-or-later</span>, weil es JUCE einbindet. Die Spezifikation
+          <a href="/docs/odr">Open Dynamic Range</a> steht unter
+          <span class="num">CC BY 4.0</span>, damit sie jemand anders implementieren und
+          abdrucken darf. Die Schriften, in denen diese Seite gesetzt ist, stehen unter der
+          <span class="num">SIL OFL 1.1</span>. Alles davon ist im
+          <a href="https://github.com/JonasGrunau/open_audio_analyzer" rel="noopener">Repository</a>
+          nachzulesen, Datei für Datei.
+        </p>
+      </div>
+
+      <div class="md legal-en" lang="en">
+        <h2>In English</h2>
+
+        <p>
+          The German above is the operative text; this is a translation of it, provided because
+          the rest of this site is in English.
+        </p>
+
+        <p>
+          <strong>Provider information under § 5 DDG.</strong> This website is published by
+          Jonas Grunau, Zypressenweg 9, 85551 Kirchheim, Germany. Telephone
+          <a href="tel:+4917632669958">+49 176 32669958</a>, email
+          <a href="mailto:grunaujonas@gmail.com">grunaujonas@gmail.com</a>. The same person is
+          responsible for the site's content under § 18 (2) MStV, at the same address.
+        </p>
+
+        <p>
+          <strong>What this site is.</strong> Open Audio Analyzer is free software, given away at
+          no charge. Nothing is sold here: there is no payment, no advertising, no account and no
+          analytics. What the application does with a microphone, a camera, the local network and
+          your disk is set out in full in the <a href="/privacy">privacy policy</a>.
+        </p>
+
+        <p>
+          <strong>Dispute resolution.</strong> I am neither willing nor obliged to take part in
+          dispute resolution proceedings before a consumer arbitration board.
+        </p>
+
+        <p>
+          <strong>Links and licences.</strong> These pages link to sites I do not control, and
+          their operators are responsible for what is on them. The application, the engine and
+          this website are <span class="num">GPL-3.0-or-later</span>; the plugin is
+          <span class="num">AGPL-3.0-or-later</span> because it links JUCE; the
+          <a href="/docs/odr">Open Dynamic Range</a> specification is
+          <span class="num">CC BY 4.0</span> so that somebody else may implement and reprint it;
+          and the typefaces this page is set in are <span class="num">SIL OFL 1.1</span>. All of
+          it is in the
+          <a href="https://github.com/JonasGrunau/open_audio_analyzer" rel="noopener">repository</a>,
+          file by file.
+        </p>
+      </div>
+    </article>
+  </div>
+</Base>
+
+<style>
+  /* The manual gives every h2 a rule above it, which is right in a four-hundred
+     line document and wrong for the first heading of a page: it draws a line
+     immediately under the blurb, and a second one on top of the border the
+     translation already carries. */
+  .md > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: 0;
+  }
+
+  /* `address` is the right element for the four lines of an Anbieterkennzeichnung
+     — it is what a machine reading this page for contact details looks for — and
+     every browser italicises it, which is wrong for a postal address and wrong
+     beside the rest of this page. The face is the readout one for the same
+     reason a version number gets it: a street number and a telephone number are
+     read digit by digit. */
+  .legal-address {
+    font-family: var(--readout);
+    font-style: normal;
+    font-size: 0.9375rem;
+    line-height: 1.7;
+    color: var(--text);
+  }
+
+  /* The translation is a second document under the first, not a continuation of
+     it, so it gets the rule the manual gives an h2 — the reader who wants the
+     English should be able to find where it starts by scrolling past one line
+     rather than by reading. */
+  .legal-en {
+    margin-top: var(--s64);
+    padding-top: var(--s48);
+    border-top: 1px solid var(--hair-strong);
+  }
+</style>

@@ -46,14 +46,17 @@ if (!external && !existsSync(join(DIST, 'index.html'))) {
 
 /// Every page the site publishes. The documentation is derived from the same
 /// manifest the pages are built from, so a new document is checked without this
-/// list being edited. The three pages outside that manifest are named — the
-/// same three `src/pages/sitemap.xml.ts` has to name, and for the same reason.
+/// list being edited. The four pages outside that manifest are named — the
+/// same four `src/pages/sitemap.xml.ts` has to name, and for the same reason.
 /// `/privacy` is the one most worth checking here, being almost entirely
-/// tables; `/alternatives/decibel` is the only three-column table on the site.
+/// tables; `/alternatives/decibel` is the only three-column table on the site;
+/// and `/impressum` carries a postal address and a telephone number set in the
+/// readout face, which is the one face on the site that does not wrap.
 const paths = [
   '/',
   '/404',
   '/privacy',
+  '/impressum',
   '/testing',
   '/alternatives/decibel',
   ...PAGES.map((page) => href(page.slug)),
@@ -75,6 +78,18 @@ try {
         width,
         height: 900,
       });
+      // Against the width asked for, and not against the width the page says
+      // it got. They are the same number when the override is honoured, and
+      // when they differ it is because something rescaled the viewport to fit
+      // the content — at which point comparing the two compares a quantity
+      // with itself and every page is clean. See `mobile` in `probe`.
+      if (report.innerWidth !== width) {
+        failures++;
+        console.error(
+          `  ${String(width).padStart(4)}px  ${path} laid out at ${report.innerWidth}px — the viewport override did not hold, so nothing here was measured`,
+        );
+        continue;
+      }
       const over = report.scrollWidth - report.innerWidth;
       if (over > 1) {
         failures++;

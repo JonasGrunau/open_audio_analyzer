@@ -288,9 +288,20 @@ export async function browser({ port = 9333, window = '1600,1000' } = {}) {
       const { targetId } = await cdp.send('Target.createTarget', { url: 'about:blank' });
       const { sessionId } = await cdp.send('Target.attachToTarget', { targetId, flatten: true });
       try {
+        // `mobile: false`, and that is the whole of the check working or not.
+        // Mobile emulation applies the viewport meta *and* Chrome's shrink to
+        // fit: a document 128 px wider than the window is laid out at its own
+        // width and scaled down to show all of it, so `innerWidth` comes back
+        // as 518 on a 390 px phone and equals `scrollWidth` exactly. The
+        // comparison below then reports a clean page for every page on the
+        // site, which is what it did — the privacy policy pushed itself 128 px
+        // sideways for four releases with this check green over it. A real
+        // phone does not do that: `initial-scale=1` pins the scale and the page
+        // scrolls. Desktop metrics at a chosen width are that layout, because
+        // `width=device-width` resolves to the same number the override sets.
         await cdp.send(
           'Emulation.setDeviceMetricsOverride',
-          { width, height, deviceScaleFactor: dpr, mobile: true },
+          { width, height, deviceScaleFactor: dpr, mobile: false },
           sessionId,
         );
         await cdp.send('Page.navigate', { url }, sessionId);

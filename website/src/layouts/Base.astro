@@ -179,6 +179,7 @@ const nav = [
             <a class="foot-a" href="/">Home</a>
             <a class="foot-a" href="/docs">Documentation</a>
             <a class="foot-a" href="/privacy">Privacy</a>
+            <a class="foot-a" href="/impressum">Impressum</a>
             <a class="foot-a" href={REPO} rel="noopener">Repository</a>
             <a class="foot-a" href={RELEASES} rel="noopener">Download</a>
           </span>
@@ -210,6 +211,7 @@ const nav = [
               <a class="foot-a" href="/alternatives/decibel">Compared to Decibel</a>
               <a class="foot-a" href={`${REPO}/issues`} rel="noopener">Issues</a>
               <a class="foot-a" href="/privacy">Privacy</a>
+              <a class="foot-a" href="/impressum">Impressum</a>
             </div>
 
             <div class="stack-12">
@@ -360,9 +362,18 @@ const nav = [
     letter-spacing: 0.04em;
   }
 
+  /* The row wraps. The line above it does — `.foot-slim-in` has had
+     `flex-wrap` since there was a slim footer — but this inner row did not, so
+     the links stayed one unbreakable 381 px line and every page carrying this
+     footer was 7 px wider than a 390 px phone and 37 px wider than a 360 px
+     one. Small enough to look like nothing and site-wide, which is the worst
+     combination: it is the same misalignment on every page, so it reads as the
+     design rather than as a bug. */
   .foot-slim-links {
     display: flex;
-    gap: var(--s24);
+    flex-wrap: wrap;
+    column-gap: var(--s24);
+    row-gap: var(--s8);
   }
 
   .foot-slim-links .foot-a {

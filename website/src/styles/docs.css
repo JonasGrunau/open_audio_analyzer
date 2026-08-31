@@ -54,6 +54,34 @@
   scrollbar-color: var(--hair-strong) transparent;
 }
 
+/* --- the legal register --------------------------------------------------
+   The manual's measure without the manual's rails, for the two pages that are
+   read from the top once rather than navigated: the privacy policy and the
+   Impressum. The rails are for a reader with a question who needs to get to a
+   section; neither of these has sections worth jumping between.
+
+   Here rather than scoped inside either page because there are two of them.
+   They sit one link apart in the footer and a reader moves between them, so a
+   column that is 46 rem on one and 44 on the other is a page that appears to
+   shift under the pointer — and Astro scopes a component's styles, so two
+   copies is what "both pages, same measure" would otherwise mean.
+
+   Centred, and that is the whole reason `margin-inline` is here: `.shell` is
+   1440 px, so a 46 rem block inside it with the default margin sits against the
+   left edge with 600-odd pixels of nothing beside it. Every other page fills the
+   shell — a documentation page holds its left with a 15 rem nav rail — so these
+   are the pages that would look lopsided rather than narrow.
+   ------------------------------------------------------------------------ */
+
+.legal {
+  padding-block: var(--s48) var(--s96);
+}
+
+.legal-main {
+  max-width: 46rem;
+  margin-inline: auto;
+}
+
 /* --- contents ------------------------------------------------------------ */
 
 .doc-nav {
@@ -476,9 +504,24 @@
   margin-block: var(--s48);
 }
 
+/* `break-word` for the same reason inline code has it, and against a worse
+   failure: a link whose *text* is the URL. Markdown's `<https://…>` autolink
+   sets the whole address as one word, and a 57-character one has no break
+   opportunity in it at all — so on a phone it laid out at its own 502 px inside
+   a 358 px column and pushed the document 128 px sideways. `body` has
+   `overflow-x: hidden`, so nothing scrolled and nothing looked broken; the page
+   was simply 128 px narrower than the window from the header down, with every
+   heading short of the right edge. The privacy policy is the page that carries
+   such an address, being the one that has to print the place to complain to,
+   but the rule belongs on every document for the next one.
+
+   `break-word` and not `anywhere` for the reason written out above the inline
+   code rule: `anywhere` would also offer a link as one character wide to a
+   table column asking how narrow it can be. */
 .md a {
   color: inherit;
   border-bottom: 1px solid var(--faint);
+  overflow-wrap: break-word;
   transition: border-color 140ms linear, color 140ms linear;
 }
 
@@ -569,6 +612,10 @@
   .doc {
     grid-template-columns: minmax(0, 1fr);
     gap: 0;
+    padding-block: var(--s32) var(--s64);
+  }
+
+  .legal {
     padding-block: var(--s32) var(--s64);
   }
 
