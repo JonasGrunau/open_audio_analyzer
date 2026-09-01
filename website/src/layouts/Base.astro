@@ -67,6 +67,12 @@ const nav = [
     <meta name="description" content={description} />
     {noindex ? <meta name="robots" content="noindex, follow" /> : <link rel="canonical" href={canonical} />}
 
+    <!-- Proof to the Website Launches directory that this domain is ours. It is
+         on every page rather than on the front page alone because the layout is
+         the only head there is, and a listing verified against one address that
+         later moves is a listing that quietly stops being verified. -->
+    <meta name="websitelaunches-verification" content="bffa8842ec7dc5f5bcc0435bb407ed7c" />
+
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/icon-180.png" />
     <meta name="theme-color" content="#0b0c0e" />
