@@ -33,7 +33,9 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   § 5 DDG requires of a German site: name, postal address, telephone, email, and
   who is responsible for the content under § 18 Abs. 2 MStV. German first,
   because that is the word a German reader looks for in a footer, with an
-  English translation under it. It is linked from both footers and is in the
+  English translation under it. Both footers link it as "Legal Notice
+  (Impressum)" — the English for a site written in English, and the German word
+  because that is the one § 5's recognisability is judged by — and it is in the
   sitemap.
 
 ### 🐛 Fixed
