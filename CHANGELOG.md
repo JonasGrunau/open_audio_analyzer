@@ -38,6 +38,15 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   because that is the one § 5's recognisability is judged by — and it is in the
   sitemap.
 
+### ⚡ Changed
+- The front page shows the Google Play badge alone. The App Store badge was
+  there greyed and unlinked while the iPad build waits on review, and greyed is
+  not a state a reader reads: to somebody who knows the badge it says the
+  application is on the App Store, and the caption that once said otherwise is
+  gone. It is commented out rather than deleted — artwork, CSS and the
+  trademark credit are all still in place — and comes back as a link the day
+  there is something to link to.
+
 ### 🐛 Fixed
 - **The privacy policy was 128 px wider than a phone screen.** The address to
   report a privacy question to is printed as a link whose text is the URL, and
