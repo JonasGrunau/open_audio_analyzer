@@ -417,12 +417,16 @@ stale and the fix is to delete the claim, not to soften it. `mobile_scanner`,
 
   **A screenshot script that has to press something in the interface is a
   script that will hijack somebody's pointer.** `packaging/ios/screenshots.sh`
-  posts CGEvents at the Simulator's window and owns the mouse for the two
-  minutes it runs; it is also how ATTACH stopped being pressed at all, because
-  its tap coordinates were read off a finished screenshot and the row moved
-  twice underneath them. Prefer a launch option, which is what `--publish` and
-  `--attach` are — see `lib/src/app/launch_options.dart`, including why neither
-  is gated to a debug build.
+  posted mouse CGEvents at the Simulator's window and owned the mouse for the
+  two minutes it ran; it is also how ATTACH stopped being pressed at all,
+  because its tap coordinates were read off a finished screenshot and the row
+  moved twice underneath them. It posts two *keys* now — ⌘→ to turn the device,
+  checked against the Simulator's window bounds, and the tab digit, which is
+  the shipped binding — and writes the skin into `settings.json` before the
+  launch; nothing with coordinates. Prefer a launch option, which is what
+  `--publish` and `--attach` are — see `lib/src/app/launch_options.dart`,
+  including why neither is gated to a debug build — or a setting the app
+  already persists, which is what a skin is.
 
 - **A feature that only fails on the device is a feature nobody tested.** Three
   of Open Audio Analyzer's platforms lie about the network in a way a

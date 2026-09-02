@@ -17,7 +17,8 @@
     "modules": "node scripts/render-modules.mjs",
     "record": "node scripts/record.mjs",
     "analyzer": "node scripts/render-analyzer.mjs",
-    "flow": "node scripts/render-flow.mjs"
+    "flow": "node scripts/render-flow.mjs",
+    "window": "node scripts/render-window.mjs"
   },
   "devDependencies": {
     "astro": "^7.2.4",

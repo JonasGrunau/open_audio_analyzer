@@ -122,10 +122,10 @@ if (wanted('plugin')) {
 
 for (const name of ['desktop', 'tablet']) {
   if (!wanted(name)) continue;
-  const shot = join(REPO, `build/packaging/screenshots/${name}.png`);
+  const shot = join(REPO, `packaging/screenshots/${name}.png`);
   if (!existsSync(shot)) {
     skipped.push(
-      `${name.padEnd(8)} — build/packaging/screenshots/${name}.png is not there.\n` +
+      `${name.padEnd(8)} — packaging/screenshots/${name}.png is not there.\n` +
         '             sh packaging/signal_path.sh\n' +
         '             (A release build, a simulator build, the fake DAW, Screen\n' +
         '              Recording, and both 47821 and 47822 free.)',

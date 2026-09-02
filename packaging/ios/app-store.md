@@ -135,7 +135,7 @@ For 0.10.0. Written for somebody deciding whether to update.
 | Age rating | 4+ |
 | Price | Free |
 | Devices | iPad only — `TARGETED_DEVICE_FAMILY = 2`, so no iPhone screenshots are required |
-| Screenshots | Five, 13-inch iPad, landscape, 2752 × 2064. `sh packaging/ios/screenshots.sh` |
+| Screenshots | Three, 13-inch iPad, landscape, 2752 × 2064, committed in `packaging/ios/screenshots/`. Retaken with `sh packaging/ios/screenshots.sh` |
 | Support URL | https://open-audio-analyzer.com/docs |
 | Marketing URL | https://open-audio-analyzer.com |
 | Privacy policy URL | https://open-audio-analyzer.com/privacy — mandatory. See below |
@@ -168,11 +168,18 @@ argument each one makes, so a later regeneration keeps the sequence.
 |---|---|
 | `01-loudness.png` | This is a meter bridge, and it is measuring real music right now |
 | `02-spectrum.png` | Frequency, time and the stereo image, on a second tab |
-| `03-delivery-targets.png` | Six delivery standards, chosen in one press |
-| `04-modules.png` | Fourteen modules, and you place them |
-| `05-remote-display.png` | The iPad is a second screen for the desktop |
+| `03-loudness-daylight.png` | The same bridge, at the same second of the same track, in the light skin |
 
-The settings panel is the obvious sixth and is deliberately not in the set: on
+All three are the canvas and nothing else, because the script that takes them
+posts no pointer event: the tab is a key and the skin is a settings file, and
+neither can open a panel. The delivery-target, module-library and
+remote-display pictures that used to follow were reached by clicks at
+coordinates read off a finished screenshot, which drifted twice and pressed the
+wrong controls without anything failing. A panel comes back into the set the
+day there is a launch option that opens it in a release build; `--open-panel`
+is debug-only, and a store screenshot is of the build that ships.
+
+The settings panel would be the obvious candidate and is not one even then: on
 an iPad it explains System Output in terms of macOS 14.2, VB-Cable and
 PulseAudio, its delivery target row names five streaming services, and Name and
 port shows whatever the device is called. All three are worth fixing in the

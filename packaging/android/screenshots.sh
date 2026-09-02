@@ -3,9 +3,14 @@
 #
 # Play Store screenshots for the Android build.
 #
-# Writes 2048x1145 PNGs into build/packaging/screenshots-android/ — a 10-inch
+# Writes 2048x1145 PNGs into packaging/android/screenshots/ — a 10-inch
 # tablet in landscape, which is the form factor this build is for. Play wants a
 # minimum of two screenshots across device types; this takes three.
+#
+# Into the repository rather than build/, for the reason `ios/screenshots.sh`
+# gives: these are what the store is given, nothing in CI can take them, and a
+# set kept under `build/packaging/` was one clean away from being gone. They are
+# committed and a run overwrites them in place.
 #
 # ---------------------------------------------------------------------------
 # Why the meters are measuring something
@@ -96,7 +101,7 @@ AVD="${OAA_AVD:-}"
 PKG=com.openaudioanalyzer.oaa
 TRACK=test_audio/citizens-apathy.flac
 FAKE_DAW="plugin/build/host/OaaFakeDaw_artefacts/Release/oaa-fake-daw.app/Contents/MacOS/oaa-fake-daw"
-OUT=build/packaging/screenshots-android
+OUT=packaging/android/screenshots
 APK=build/app/outputs/flutter-apk/app-release.apk
 
 # 1280x2048 at density 200 is 1024x1638 dp. See the header for both numbers.

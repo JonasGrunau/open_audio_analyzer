@@ -1,0 +1,54 @@
+{
+  "loudness": {
+    "width": 3136,
+    "height": 1960,
+    "sources": [
+      {
+        "width": 1024,
+        "file": "/window/loudness-1024.webp"
+      },
+      {
+        "width": 1440,
+        "file": "/window/loudness-1440.webp"
+      },
+      {
+        "width": 1920,
+        "file": "/window/loudness-1920.webp"
+      },
+      {
+        "width": 2560,
+        "file": "/window/loudness-2560.webp"
+      },
+      {
+        "width": 3136,
+        "file": "/window/loudness.webp"
+      }
+    ]
+  },
+  "spectrum": {
+    "width": 3136,
+    "height": 1960,
+    "sources": [
+      {
+        "width": 1024,
+        "file": "/window/spectrum-1024.webp"
+      },
+      {
+        "width": 1440,
+        "file": "/window/spectrum-1440.webp"
+      },
+      {
+        "width": 1920,
+        "file": "/window/spectrum-1920.webp"
+      },
+      {
+        "width": 2560,
+        "file": "/window/spectrum-2560.webp"
+      },
+      {
+        "width": 3136,
+        "file": "/window/spectrum.webp"
+      }
+    ]
+  }
+}

@@ -3,7 +3,7 @@
 #
 # The two photographs behind the website's signal-path section, from one session.
 #
-# Writes build/packaging/screenshots/desktop.png and .../tablet.png — the real
+# Writes packaging/screenshots/desktop.png and .../tablet.png — the real
 # application on this Mac, and the real application on an iPad simulator
 # *attached to it as a remote display*. `website/scripts/render-flow.mjs` picks
 # both up as the second and third plates of the front page's signal path.
@@ -126,7 +126,10 @@ set -eu
 
 APP="build/macos/Build/Products/Release/Open Audio Analyzer.app"
 SIM_APP="build/ios/iphonesimulator/Runner.app"
-OUT="build/packaging/screenshots"
+# Into the repository rather than build/: a plate needs a Mac with the grants
+# and the fake DAW, which no runner has, so it is kept the way the store sets in
+# `ios/screenshots/` and `android/screenshots/` are — see packaging/AGENTS.md.
+OUT="packaging/screenshots"
 TRACK="test_audio/citizens-apathy.flac"
 FAKE_DAW="plugin/build/host/OaaFakeDaw_artefacts/Release/oaa-fake-daw.app/Contents/MacOS/oaa-fake-daw"
 WORK="$(mktemp -d)"

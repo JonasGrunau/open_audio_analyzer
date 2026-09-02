@@ -194,6 +194,54 @@ WebAssembly out of the repository at the cost of one third-party request, and on
 press the button. To self-host it, keep `canvaskit/` from the build (`render-analyzer.mjs` deletes it)
 and set `canvasKitBaseUrl` in the bootstrap.
 
+## The window, both tabs
+
+Every other photograph here is cropped to the meters. The hero still is a Flutter *web* build shot
+through headless Chrome, so it has no window around it at all; the catalogue is one module per
+picture; and the signal-path desktop plate does show a window, but shows it publishing to a tablet,
+because that is what the paragraph beside it is about. None of them contains the tab strip, the file
+name, the menu row or the status bar — so nothing on this site shows what opening the application
+actually looks like.
+
+`public/window/loudness.webp` and `public/window/spectrum.webp` are that picture, one per tab of the
+default canvas. They are photographs of the real macOS window, each taken from a session in which the fake DAW played a
+real track through the real VST3 into the application on this Mac, so every reading in them is one the
+engine took.
+
+```sh
+sh packaging/app_window_shots.sh    # from the repository root: takes both PNGs
+npm run window                      # encode them into public/window/
+npm run window -- --only=spectrum
+```
+
+The first half needs a release build of the application, the plugin build for the fake DAW and its
+VST3, Screen Recording, permission to post one key, port 47822 free, and **the machine to itself for
+about four minutes**: Flutter pauses its ticker when a window is occluded and this application
+consumes the plugin's stream from that one ticker, so a covered canvas stops measuring silently —
+with the link still up and the transport sitting at 00:00:00:00. The script polls what is frontmost
+through every wait and stops at the first sighting of anything else, rather than publishing a picture
+of a meter that had stopped.
+
+**Each tab gets a launch of its own**, and the first version of the script did not. Written as one
+session with two shutters it had to resume the application in between, and `kill -STOP` is not a
+pause: the plugin goes on filling a socket nobody is draining, so the second picture came back with
+the canvas carrying its own notice — *Audio was lost — 3073 frames never reached the measurement* —
+which is the application being right, and not a meter anyone should photograph. A freeze is terminal
+now, and the tab is selected before the settle rather than between the shutters. The Spectrum run
+needs that anyway: the spectrogram accumulates from `engine.generation` and a module that is not
+built accumulates nothing, so the tab has to be on screen for the whole wait for its ring to fill.
+
+The two pictures are therefore two sessions, which is said rather than glossed. It costs nothing —
+unlike the signal-path pair, which sits under a sentence claiming the two screens agree, these two
+share no reading at all, because the Spectrum tab shows no loudness number.
+
+The tab is chosen with one posted key, the bare digit, which is the application's own tab binding.
+Nothing with screen coordinates is posted; `packaging/ios/screenshots.sh` chooses its tab the
+same way, after its hardcoded taps had drifted twice and pressed the wrong controls.
+
+Committed, like the rest of the photographs, because the `website` job in `ci.yml` has none of what
+takes them.
+
 ## Regenerating the Open Graph card
 
 `public/og.png` is committed, because rendering it needs a browser and CI should not need one. To

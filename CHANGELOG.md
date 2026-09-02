@@ -109,6 +109,33 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   release through 0.15.0 is listed now.
 
 ### 🚧 Internal
+- The website has photographs of the application's own window — the Loudness
+  tab and the Spectrum tab, chrome included — taken by
+  `packaging/app_window_shots.sh` and encoded by `npm run window`. Nothing on
+  the site showed the tab strip, the file name, the menu row or the status bar:
+  the hero still is a Flutter web build with no window around it, the module
+  thumbnails are one module each, and the signal-path plate shows the window
+  mid-publish because that is what its section is about. Each is a session of
+  the fake DAW playing a real track through the real VST3, so every reading in
+  them is one the engine took.
+- **`packaging/ios/screenshots.sh` no longer touches the pointer.** The App
+  Store set is three pictures now — the Loudness tab, the Spectrum tab, and the
+  Loudness tab in the Daylight skin — and nothing with screen coordinates is
+  posted to take them: the tab is the application's own digit binding sent as a
+  key, the skin is written into the app's `settings.json` before the launch that
+  photographs it, and the rotation is a key whose effect is read back off the
+  Simulator's window bounds and retried until the device is on its side. The
+  old five posted mouse clicks at coordinates read off a finished screenshot,
+  which drifted twice and pressed the wrong controls without failing; the
+  delivery-target, module-library and remote-display pictures are gone with
+  them.
+- **Every photograph is committed.** `packaging/ios/screenshots/` holds the App
+  Store set, `packaging/android/screenshots/` the Play Store set, and
+  `packaging/screenshots/` the website's four plates — the signal-path pair and
+  the two window shots — and the four scripts write there now rather than into
+  `build/packaging/`, which a clean deletes. Nothing in CI can take these
+  pictures — they need a fake DAW, a simulator or an emulator, and a person's
+  grants — so unlike an installer they could not be rebuilt from nothing.
 - **The Windows engine job no longer fails about one run in four.** The
   `reclaiming orphans` tests called `oaa_engine_reset_all`, which destroys every
   live engine in the *process* — and `dart test` runs its suites as isolates

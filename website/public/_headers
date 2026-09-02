@@ -45,6 +45,8 @@
   Cache-Control: public, max-age=2592000
 /flow/*
   Cache-Control: public, max-age=2592000
+/window/*
+  Cache-Control: public, max-age=2592000
 /analyzer-still.webp
   Cache-Control: public, max-age=2592000
 /og.png
