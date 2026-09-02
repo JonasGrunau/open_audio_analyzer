@@ -221,6 +221,7 @@ reported **unavailable** against a version-2 producer rather than requested.
 | `0x0003` | `SNAPSHOT` | host → client | at the publish rate |
 | `0x0004` | `SKIN` | host → client | after `HELLO`, and whenever the skin changes |
 | `0x0005` | `CALIBRATION` | host → client | after `HELLO`, and whenever the target changes |
+| `0x0006` | `DYNAMICS_NAMING` | host → client | after `HELLO`, and whenever the names change |
 | `0x0010`–`0x001F` | plugin transport | producer → app, app → client | see [DAW transport](#0x0010--daw_transport) |
 | `0x0020` | `SET_LUFS_MODE` | app → producer | ingest port only; on change, and once per connection |
 | `0x0021`–`0x002F` | *reserved* | — | the rest of the control range, undefined |
@@ -307,6 +308,27 @@ so a display holding a different target renders the same measurement in a
 different colour. A master that reads "in spec" on the tablet and "over" on the
 desktop is worse than a display that shows nothing at all, because one of the
 two is going to be believed.
+
+### `0x0006` — DYNAMICS_NAMING
+
+Payload is UTF-8 JSON, exactly `{"dynamics_names": "<id>"}`, where the id is
+`psr` or `odr` — the same key and the same ids the application writes into
+`settings.json`, so the choice has one spelling everywhere it is written down.
+
+What the two dynamics readings are *called*: `PSR` / `PLR`, the names the AES
+gives the arithmetic, or `ODR-S` / `ODR-I`, the Open Dynamic Range
+specification's own (ODR § 6.4). A label rather than a measurement, and it
+travels for the reason the skin and the target do: the display draws the
+desktop's frame, and a tablet printing `ODR-S` under the number the desktop
+has `PSR` over is two screens somebody has to reconcile.
+
+**Added under version 5 without moving the version.** It changes no table and
+no framing rule: a receiver that predates it skips it by length, as the rule
+above requires, and goes on labelling the same number with its own default —
+which is what a host that predates the setting prints, so a display that
+never sees this frame is not wrong, only unasked. A consumer that reads an id
+it does not know treats it the same way. Not rate-limited; it changes from a
+segmented control, never from a pointer drag.
 
 ### `0x0003` — SNAPSHOT
 

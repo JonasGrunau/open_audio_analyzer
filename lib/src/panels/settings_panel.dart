@@ -39,8 +39,9 @@ Future<void> showSettingsPanel(BuildContext context) => showOaaPanel<void>(
 /// Everything Open Audio Analyzer remembers, in the order somebody sets it up.
 ///
 /// Signal first, because a meter with nothing going into it is not measuring
-/// anything; then the meters themselves; then where those meters go; then how
-/// they look; then what is kept between launches. Every control here writes
+/// anything; then the meters themselves; then what the two dynamics readings
+/// are called; then where those meters go; then how they look; then what is
+/// kept between launches. Every control here writes
 /// through to disk immediately — there is no OK button, because a settings
 /// panel with one is a settings panel that can be abandoned in a state the
 /// interface already showed you. The one exception is the remote display's name
@@ -115,6 +116,7 @@ class _SettingsPanelState extends ConsumerState<SettingsPanel> {
         children: [
           _signal(settings),
           _meters(settings),
+          _dynamics(settings),
           PublishSection(service: widget.remote),
           _appearance(settings),
           _session(settings, store),
@@ -375,6 +377,37 @@ class _SettingsPanelState extends ConsumerState<SettingsPanel> {
   }
 
   // --- Appearance -----------------------------------------------------------
+
+  /// One measurement, two spellings. The AES names are what every other meter
+  /// prints and what somebody types into a metric picker; the specification's
+  /// own say which definition the number is. The row exists so that a person
+  /// who knows one of them is never left wondering whether the application
+  /// measures it — see [DynamicsNaming].
+  Widget _dynamics(AppSettings settings) {
+    final controller = ref.read(settingsProvider.notifier);
+
+    return PanelSection(
+      title: 'Dynamics',
+      children: [
+        PanelRow(
+          label: 'Names',
+          note:
+              'PSR and PLR are what every other meter prints. ODR-S and ODR-I '
+              'are the Open Dynamic Range specification\'s names for the same '
+              'two numbers; only the label changes, on every module, in every '
+              'report and on a paired tablet.',
+          child: SegmentedControl<DynamicsNaming>(
+            value: settings.dynamicsNaming,
+            onChanged: controller.setDynamicsNaming,
+            segments: [
+              for (final naming in DynamicsNaming.values)
+                (value: naming, label: naming.label),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
 
   Widget _appearance(AppSettings settings) {
     final skins = ref.watch(skinLibraryProvider);

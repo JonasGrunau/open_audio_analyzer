@@ -23,16 +23,21 @@ enum Metric {
 
   crestFactor('crest', 'Crest', 'dB', 1),
 
-  // Open Dynamic Range, the two dynamics readings of this project's own
-  // standard — defined in docs/METRICS.md, and the same arithmetic as the PSR
-  // and PLR of AES TD1004 with the operands the AES leaves open pinned down.
-  // They were offered as `PSR` / `PLR` and as `DR-S` / `DR-I` before the name
-  // was chosen; "DR" is the TT Dynamic Range Meter's number, a different
-  // measurement, which is the one spelling this pair must not have. Every old
-  // id still resolves, in [fromId], so a preset that saved a Number Box on any
-  // of them opens on the same reading under its current name.
-  odrShort('odr_s', 'ODR-S', 'LU', 1),
-  odrIntegrated('odr_i', 'ODR-I', 'LU', 1),
+  // The two dynamics readings: Open Dynamic Range, this project's own
+  // specification (docs/ODR.md), which is the peak-to-loudness arithmetic the
+  // AES calls PSR and PLR with everything that note leaves open — the
+  // channel, the window's alignment, the gate, the statistic, the display —
+  // pinned down. The product prints the AES names by default, because they
+  // are what every other meter prints and what a person looks for, and the
+  // specification's own `ODR-S` / `ODR-I` a setting away; [labelIn] is the
+  // one place the two spellings meet. "DR" is the TT Dynamic Range Meter's
+  // number, a different measurement, and the one spelling this pair must not
+  // have. The pair shipped as `DR-S` / `DR-I` too, and every old id still
+  // resolves in [fromId], so a preset that saved a Number Box on any of them
+  // opens on the same reading under its current name. The ids stay `odr_*`
+  // whatever the label says: an id is a promise to files on disk.
+  odrShort('odr_s', 'PSR', 'LU', 1),
+  odrIntegrated('odr_i', 'PLR', 'LU', 1),
 
   correlation('corr', 'Correlation', '', 2),
   balance('balance', 'Balance', '', 2);
@@ -43,8 +48,17 @@ enum Metric {
   /// change one of these; add a new metric instead.
   final String id;
 
-  /// What a human sees next to the number.
+  /// What a human sees next to the number, under [DynamicsNaming.defaultNaming].
+  /// Anything that has the user's choice to hand asks [labelIn] instead.
   final String label;
+
+  /// [label] under [naming]. Only the two dynamics readings have a second
+  /// spelling; every other metric answers its [label] whatever is asked.
+  String labelIn(DynamicsNaming naming) => switch (this) {
+    Metric.odrShort => naming.short,
+    Metric.odrIntegrated => naming.integrated,
+    _ => label,
+  };
 
   /// Unit suffix, or empty for dimensionless quantities.
   final String unit;
@@ -191,5 +205,54 @@ enum Metric {
     if (!value.isFinite) return value.isNegative ? '-∞' : '∞';
     if (isAbsoluteLevel && value <= MeterShape.dbFloor) return '-∞';
     return value.toStringAsFixed(decimals);
+  }
+}
+
+/// How the two dynamics readings are labelled: by the names the AES gives the
+/// arithmetic, or by the Open Dynamic Range specification's own.
+///
+/// One measurement, two spellings, and never both at once — ODR § 6.4 forbids
+/// presenting them as distinct, because a canvas reading `PSR 7.6` beside
+/// `ODR-S 7.6` invites the question of which one is the real number. The AES
+/// names are the default: Dynameter, MiRA, Nugen and Insight all print them,
+/// and a mastering engineer who types "PSR" into a metric picker and finds
+/// nothing concludes the meter does not measure it. The specification's names
+/// exist for the reader who wants the label to say which definition it is.
+///
+/// This is a setting rather than a constant so that it can travel: the tablet
+/// display is sent the desktop's choice over the wire, like the skin and the
+/// target, so the two screens never label the same number two ways.
+enum DynamicsNaming {
+  psr('psr', 'PSR / PLR', short: 'PSR', integrated: 'PLR'),
+  odr('odr', 'ODR-S / ODR-I', short: 'ODR-S', integrated: 'ODR-I');
+
+  const DynamicsNaming(
+    this.id,
+    this.label, {
+    required this.short,
+    required this.integrated,
+  });
+
+  /// What is printed by an implementation that has not been asked, and what
+  /// [Metric.label] answers.
+  static const DynamicsNaming defaultNaming = DynamicsNaming.psr;
+
+  /// Stable identifier, in `settings.json` and on the wire.
+  final String id;
+
+  /// What the settings panel calls this choice.
+  final String label;
+
+  /// The short-term reading's name: [Metric.odrShort].
+  final String short;
+
+  /// The integrated reading's name: [Metric.odrIntegrated].
+  final String integrated;
+
+  static DynamicsNaming? fromId(String id) {
+    for (final naming in DynamicsNaming.values) {
+      if (naming.id == id) return naming;
+    }
+    return null;
   }
 }

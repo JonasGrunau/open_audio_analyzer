@@ -135,10 +135,10 @@ other thirteen.
 |---|---|
 | **Number Box** | Any single measurement, as a number. |
 | **LUFS Meter** | Momentary, short-term and integrated loudness as three bars against a target band, each with its value printed beneath. |
-| **Super Meter** | One half-gauge: short-term and integrated loudness filling from the left, ODR-S and ODR-I continuing from each loudness tip to the true peak, so the dark rest of a ring is its true-peak headroom. Names ride the outer tips, and the centre stacks the short-term pair above the delivered three — LUFS-I, ODR-I and true peak — each of the five with its unit beside it. |
+| **Super Meter** | One half-gauge: short-term and integrated loudness filling from the left, PSR and PLR continuing from each loudness tip to the true peak, so the dark rest of a ring is its true-peak headroom. Names ride the outer tips, and the centre stacks the short-term pair above the delivered three — LUFS-I, PLR and true peak — each of the five with its unit beside it. |
 | **Digital Meter** | Sample peak and RMS, per channel, up to 7.1 — as segmented bars and as numbers. |
 | **VU Meter** | A needle, on the movement the engine models. |
-| **Alert Meter** | One measurement, watched, printed as **the worst it has been**. That one number is the module — the live value is a Number Box's job — and the panel's own light is that same verdict at a hundred times the area: a wash off the left edge in the latched state's colour, held until the engine is reset and dark until something has been measured. `Metric` picks what it watches; any of the fourteen works. A quantity the engine already accumulates over the programme — LUFS-I, LRA, TP Max, Peak Max, ODR-I — is **read rather than latched**: the engine is doing the holding, and the extremum of a converging estimator is a property of how it converged rather than of the audio. `Delta` prints that worst case as its signed distance from the line the target draws instead of as itself — `+0.6 dB` rather than `−0.4 dBTP` against a −1.0 ceiling, in the unit of the *difference* — and is offered only where the active target actually draws that line: loudness, true peak and LRA always, the two ODR floors only under a target that states them, because a distance from a floor nobody stated is a number nobody measured. |
+| **Alert Meter** | One measurement, watched, printed as **the worst it has been**. That one number is the module — the live value is a Number Box's job — and the panel's own light is that same verdict at a hundred times the area: a wash off the left edge in the latched state's colour, held until the engine is reset and dark until something has been measured. `Metric` picks what it watches; any of the fourteen works. A quantity the engine already accumulates over the programme — LUFS-I, LRA, TP Max, Peak Max, PLR — is **read rather than latched**: the engine is doing the holding, and the extremum of a converging estimator is a property of how it converged rather than of the audio. `Delta` prints that worst case as its signed distance from the line the target draws instead of as itself — `+0.6 dB` rather than `−0.4 dBTP` against a −1.0 ceiling, in the unit of the *difference* — and is offered only where the active target actually draws that line: loudness, true peak and LRA always, the two dynamics floors only under a target that states them, because a distance from a floor nobody stated is a number nobody measured. |
 | **Validator** | The delivery decision, as a table. `Checks` picks which criteria this one judges — LUFS-I, true peak, LRA and each dynamics floor the target sets — ticked in a menu that stays open, because choosing four of five through a menu that closes on every tap is four trips through it. A criterion switched off leaves the verdict as well as the table; a module with nothing left to check says so rather than passing. |
 | **Histogram** | Loudness against time: how the programme moved, and when it was over target. Both bands averaged over a window its menu names, and the whole recording in an overview strip along the floor — which is also the control: drag the frame on it to scroll back through the programme, scroll, pinch or wheel over it to change how much of the programme the plot shows. The time axis is elapsed time, so a scrolled plot still says where you are. |
 | **Loudness Distribution** | How much of the programme was spent at each loudness, bracketed between the two percentiles LRA is the distance between. The axis fits the programme, so a distribution occupying eight decibels is drawn across the module instead of into a fifth of it; `Scale` gives the whole −60 to 0 range back. |
@@ -233,7 +233,7 @@ ones.
 | **Spectrum** | 4096-point Hann window at a 1024-sample hop, zero-padded to a 16384-point transform and mapped onto 512 log-spaced bands with **peak-per-bin** so narrow peaks survive; bands too narrow to hold a bin read between two. Window-compensated: a full-scale sine reads 0.0 dBFS on a bin centre and within 0.3 dB off it |
 | **Correlation** | Pearson over the block, then a 200 ms one-pole. Gated at −70 LUFS per channel, R128's absolute gate: under it the quotient is `0/0` and the reading is a dash rather than a `0` nobody took. A gate and not an underflow guard — a live input's noise floor is not exactly zero, and the correlation of two channels of noise is a random number whose sign falls whichever way the block did |
 | **Crest** | Sample peak minus RMS over the same block — the block's own values, not the held peak and smoothed RMS the meters draw, which settle at different rates. Exactly 3.0103 dB for a sine, 0 for DC |
-| **ODR-S / ODR-I** | Open Dynamic Range: true peak minus loudness over the same window, the last 3 s for ODR-S and the programme for ODR-I. Defined [below](#-open-dynamic-range). A stereo 1 kHz sine reads exactly 0 LU on both, in mono 3.01 |
+| **PSR / PLR** — or **ODR-S / ODR-I** | Open Dynamic Range: true peak minus loudness over the same window, the last 3 s for PSR and the programme for PLR. Printed under the AES names by default and under the specification's own from a setting; defined [below](#-open-dynamic-range). A stereo 1 kHz sine reads exactly 0 LU on both, in mono 3.01 |
 | **Clip** | Longest run of consecutive samples at or above 0.999 since the reset, per channel. Latched, so a clip that lasted three samples is still visible when you look back |
 
 All of these are measured today and checked in CI, the spectrum included.
@@ -246,9 +246,14 @@ transformed, about 85 ms in.
 There is no standard that says what "dynamic range" is, so Open Audio Analyzer
 defines one — **Open Dynamic Range**, `ODR-S` and `ODR-I` — says exactly which
 subtraction it means, and holds it in CI the way it holds loudness. The
-arithmetic is that of the peak-to-loudness ratios in AES TD1004; what the
-standard adds is every operand that note leaves open, so that two
-implementations of it cannot disagree. **The specification is
+arithmetic is that of the peak-to-loudness ratios the AES calls **`PSR` and
+`PLR`**, and those are the names the application prints by default, because
+they are what every other meter prints and what a person looks for;
+**Settings › Dynamics** switches every label to `ODR-S` / `ODR-I`, and the
+`oaa` CLI has the same switch as `--names`. The AES text says true peak and
+little else; what the specification adds is everything it leaves open — which
+channel's peak, the window's alignment, the gate, the statistic, the display —
+so that two implementations of it cannot disagree. **The specification is
 [docs/ODR.md](docs/ODR.md)** — normative, versioned, CC BY 4.0 so it can be
 reproduced, with the conformance cases an implementation is held to. What
 follows is the summary; nothing is tuned, weighted or smoothed on top of it.
@@ -301,7 +306,7 @@ What it is not: the `DR` of the TT Dynamic Range Meter — a different statistic
 with a different algorithm, sample peak over the loudest fifth of the
 programme's 3 s RMS blocks, rounded to an integer — which Open Audio Analyzer
 does not report under any name, and the reason the pair is not called `DR-S`
-and `DR-I`, which it was through 0.14.0 alongside `PSR` and `PLR`. Nor is it
+and `DR-I`, which it was through 0.14.0. Nor is it
 *TrueDyn*: Decibel's dynamics figure is "the equivalent of peak over average,
 but in the LUFS world", shown beside `LUFS-S` and true peak on one rim of its
 Super Meter and beside `LUFS-I` and true peak max on the other, which is, by
@@ -526,13 +531,13 @@ one target with their names in its note beats five identical entries — plus
 **Spotify Loud**, **Podcast (−16 LUFS)**, **EBU R 128**, **ATSC A/85**,
 **CD / no normalisation**, and **Dynamic master**, the one built-in that is a
 recommendation rather than a platform: the streaming target's loudness and peak
-lines with a floor of 8 LU on the minimum ODR-S, Ian Shepherd's published
+lines with a floor of 8 LU on the minimum PSR, Ian Shepherd's published
 number for the loudest passage in any genre
 ([ODR Annex A](docs/ODR.md#annex-a--reading-the-numbers-informative)).
 Anything else is a JSON file you write; see
 [Configuration](#-configuration). A target names a loudness with a tolerance,
-a true peak ceiling and an LRA ceiling, and may name an **ODR-I floor** and an
-**ODR-S floor** — the two limits that run the other way, and the ones no platform
+a true peak ceiling and an LRA ceiling, and may name a **PLR floor** and a
+**PSR floor** — the two limits that run the other way, and the ones no platform
 publishes: of the built-ins only Dynamic master carries one, and a house
 standard that wants its own writes `odr_i_min` or `odr_s_min` into its file.
 **Reset**, beside Edit in Settings, deletes
@@ -654,7 +659,7 @@ A delivery target is the same idea:
 
 `odr_i_min` and `odr_s_min` are the two lines that may be left out: a target
 without them sets no dynamics floor, and its Validator has three rows rather
-than five. The second is judged against the lowest ODR-S of the programme, not
+than five. The second is judged against the lowest PSR of the programme, not
 the current one. That is the target's half of what a Validator checks; the
 module's half is its `Checks` menu, which can leave out any of the rows the
 target does state.

@@ -216,6 +216,7 @@ Widget _box(MeterSource source, MeterClock clock) => NumberBoxModule(
   clock: clock,
   metric: Metric.lufsIntegrated,
   calibration: BuiltInCalibrations.streaming,
+  naming: DynamicsNaming.defaultNaming,
 );
 
 /// A module watching something this source does not measure. Both kinds take
@@ -225,6 +226,7 @@ Widget _unmeasuredBox(MeterSource source, MeterClock clock) => NumberBoxModule(
   clock: clock,
   metric: Metric.odrShort,
   calibration: BuiltInCalibrations.streaming,
+  naming: DynamicsNaming.defaultNaming,
 );
 
 Widget _unmeasuredAlert(MeterSource source, MeterClock clock) =>
@@ -233,6 +235,7 @@ Widget _unmeasuredAlert(MeterSource source, MeterClock clock) =>
       clock: clock,
       metric: Metric.odrShort,
       calibration: BuiltInCalibrations.streaming,
+      naming: DynamicsNaming.defaultNaming,
     );
 
 /// The Alert Meter, watching a maximum the engine holds itself — the one
@@ -245,6 +248,7 @@ Widget _alert(MeterSource source, MeterClock clock) => AlertMeterModule(
   clock: clock,
   metric: Metric.truePeakMax,
   calibration: BuiltInCalibrations.streaming,
+  naming: DynamicsNaming.defaultNaming,
 );
 
 void main() {

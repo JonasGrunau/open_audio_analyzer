@@ -249,7 +249,11 @@ class _ReportPanelState extends ConsumerState<ReportPanel> {
     // the same write with a copy of the bytes in front of it. UTF-8 explicitly
     // because a report contains an em dash for every unmeasured value and the
     // platform default encoding is not the same on all three desktops.
-    final data = exportReport(report, format);
+    final data = exportReport(
+      report,
+      format,
+      naming: ref.read(dynamicsNamingProvider),
+    );
     await File(location.path).writeAsString(data, encoding: utf8);
   }
 
@@ -264,7 +268,11 @@ class _ReportPanelState extends ConsumerState<ReportPanel> {
     if (report == null) return;
 
     final colors = OaaTheme.of(context);
-    final bytes = await renderReportCard(report, colors);
+    final bytes = await renderReportCard(
+      report,
+      colors,
+      naming: ref.read(dynamicsNamingProvider),
+    );
     if (bytes == null) return;
 
     final location = await getSaveLocation(
@@ -311,7 +319,10 @@ class _ReportPanelState extends ConsumerState<ReportPanel> {
     final report = _report;
     if (report == null) return _DropZone(active: _dropActive, onPick: _pick);
 
-    return _ReportView(report: report);
+    return _ReportView(
+      report: report,
+      naming: ref.watch(dynamicsNamingProvider),
+    );
   }
 
   Widget _progressView(OaaColors colors) {
@@ -482,9 +493,14 @@ class _Message extends StatelessWidget {
 
 /// The measured result.
 class _ReportView extends StatelessWidget {
-  const _ReportView({required this.report});
+  const _ReportView({required this.report, required this.naming});
 
   final AnalysisReport report;
+
+  /// How the two dynamics readings are labelled — the user's choice, read by
+  /// the panel state that builds this and handed down, so the view stays a
+  /// plain widget.
+  final DynamicsNaming naming;
 
   @override
   Widget build(BuildContext context) {
@@ -510,7 +526,7 @@ class _ReportView extends StatelessWidget {
           children: [
             for (final (metric, value) in report.summary)
               PanelRow(
-                label: metric.label,
+                label: metric.labelIn(naming),
                 child: _Reading(metric: metric, value: value),
               ),
           ],
@@ -539,7 +555,7 @@ class _ReportView extends StatelessWidget {
             children: [
               for (final check in report.checks)
                 PanelRow(
-                  label: check.metric.label,
+                  label: check.metric.labelIn(naming),
                   note: 'required ${check.limitLabel}',
                   child: _Verdict(check: check, colors: colors),
                 ),

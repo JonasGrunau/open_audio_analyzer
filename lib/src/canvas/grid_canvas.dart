@@ -240,6 +240,7 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
   Future<void> _showModuleMenu(Offset globalPosition, ModuleSpec module) async {
     final colors = OaaTheme.of(context);
     final calibration = ref.read(calibrationProvider);
+    final naming = ref.read(dynamicsNamingProvider);
     _controller.select(module.id);
 
     // What this module *has*, above what can be done to any module. A module is
@@ -258,7 +259,7 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
         oaaMenuItem(
           context,
           _ModuleAction.metric,
-          'Metric: ${module.metric.label}',
+          'Metric: ${module.metric.labelIn(naming)}',
         ),
       // The same row, and it is the whole of what makes this module a *target*
       // meter rather than a true-peak lamp: the three readings a delivery is
@@ -270,7 +271,7 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
         oaaMenuItem(
           context,
           _ModuleAction.metric,
-          'Metric: ${module.metric.label}',
+          'Metric: ${module.metric.labelIn(naming)}',
         ),
         // Under the metric, because it is a view of whatever that row picked.
         // **Disabled rather than dropped** where there is no line to measure
@@ -526,6 +527,7 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
 
   Future<void> _showMetricMenu(Offset globalPosition, ModuleSpec module) async {
     final colors = OaaTheme.of(context);
+    final naming = ref.read(dynamicsNamingProvider);
     final metric = await showMenu<Metric>(
       context: context,
       color: colors.panelRaised,
@@ -535,7 +537,7 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
           oaaMenuItem(
             context,
             metric,
-            metric.label,
+            metric.labelIn(naming),
             selected: metric == module.metric,
           ),
       ],
@@ -558,13 +560,14 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
   /// there is nothing to reconcile.
   Future<void> _showChecksMenu(Offset globalPosition, ModuleSpec module) async {
     final calibration = ref.read(calibrationProvider);
+    final naming = ref.read(dynamicsNamingProvider);
     final chosen = module.validatorChecks.toSet();
 
     await showOaaToggleMenu<ValidatorCheck>(
       context,
       globalPosition,
       values: ValidatorCheck.values,
-      label: (check) => check.label,
+      label: (check) => check.labelIn(naming),
       chosen: chosen,
       // A dynamics floor this target does not set is a row that could not be
       // judged, so it is greyed rather than left out — see `ValidatorCheck`.
@@ -851,6 +854,7 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
     final colors = OaaTheme.of(context);
     final workspace = ref.watch(workspaceProvider);
     final calibration = ref.watch(calibrationProvider);
+    final naming = ref.watch(dynamicsNamingProvider);
     final tab = workspace.tab;
 
     // The `Focus` stays and the bindings do not — see the class comment. It is
@@ -909,6 +913,7 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
                     module,
                     geometry,
                     calibration,
+                    naming,
                     selected: module.id == workspace.selectedModuleId,
                   ),
 
@@ -970,7 +975,8 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
   Widget _slotFor(
     ModuleSpec module,
     GridGeometry geometry,
-    Calibration calibration, {
+    Calibration calibration,
+    DynamicsNaming naming, {
     required bool selected,
   }) {
     final rect = geometry.rectFor(module.rect);
@@ -998,6 +1004,7 @@ class _GridCanvasState extends ConsumerState<GridCanvas> {
         engine: widget.engine,
         clock: widget.clock,
         calibration: calibration,
+        naming: naming,
         selected: selected,
         gripSize: _gripSize,
         gripTouchSize: gripTouch,
@@ -1052,6 +1059,7 @@ class _ModuleSlot extends StatelessWidget {
     required this.engine,
     required this.clock,
     required this.calibration,
+    required this.naming,
     required this.selected,
     required this.gripSize,
     required this.gripTouchSize,
@@ -1069,6 +1077,7 @@ class _ModuleSlot extends StatelessWidget {
   final MeterSource engine;
   final MeterClock clock;
   final Calibration calibration;
+  final DynamicsNaming naming;
   final bool selected;
   final double gripSize;
 
@@ -1196,6 +1205,7 @@ class _ModuleSlot extends StatelessWidget {
               engine: engine,
               clock: clock,
               calibration: calibration,
+              naming: naming,
               selected: selected,
               onMenu: () => onMenu(_centreOf(context)),
               onOption: onOption,

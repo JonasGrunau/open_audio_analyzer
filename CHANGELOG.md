@@ -47,6 +47,22 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   desktop downloads — TestFlight still takes every tagged release first, and
   Installing says which is which.
 
+### ⚡ Changed
+- **The two dynamics readings are printed as `PSR` and `PLR` again**, the
+  names the AES gives the arithmetic and the ones every other meter prints —
+  and **Settings › Dynamics** switches every label to the specification's own
+  `ODR-S` / `ODR-I`: on each module, in the metric picker, in the target
+  editor, in the report panel, card and text export, and on a paired tablet,
+  which is sent the choice beside the skin and the target. 0.15.0 renamed the
+  pair to `ODR-S` / `ODR-I` alone, and a person who typed PSR into the metric
+  picker found nothing and concluded the meter did not measure it. Nothing
+  measured has changed and no re-measure is warranted: the arithmetic, the
+  ids in a preset, the `odr_i` and `odr_s_min` keys of a JSON report and the
+  `odr_i_min` / `odr_s_min` floors of a delivery target are all as they were.
+- The `oaa` CLI takes the same choice as `--names psr` or `--names odr`,
+  which spells the text report and `--list-targets`; it reads no settings
+  file and still does not.
+
 ### 🐛 Fixed
 - **The privacy policy was 128 px wider than a phone screen.** The address to
   report a privacy question to is printed as a link whose text is the URL, and
@@ -109,6 +125,19 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   release through 0.15.0 is listed now.
 
 ### 🚧 Internal
+- **ODR is at 1.1.** § 6.4 permits the AES names beside the specification's
+  own and asks an implementation to say which it prints; § 2 cites the current
+  AES document, TD1008, and the 2017 convention paper that proposed PSR, in
+  place of the superseded TD1004; and § 8's PSR / PLR row no longer claims the
+  AES leaves the peak open — it does say true peak. What it leaves open, and
+  the specification pins, is the channel, the window's alignment, the gate,
+  the statistic and the display. No operand moved and every conformance case
+  reads as before.
+- The wire has a `0x0006 DYNAMICS_NAMING` frame, host to client, carrying the
+  names as `settings.json` spells them. Added under protocol version 5 without
+  moving it: it changes no table, and a display that predates it skips it by
+  length and prints the default, which is what a host that predates the
+  setting prints too. `docs/WIRE.md` says so.
 - The website has photographs of the application's own window — the Loudness
   tab and the Spectrum tab, chrome included — taken by
   `packaging/app_window_shots.sh` and encoded by `npm run window`. Nothing on

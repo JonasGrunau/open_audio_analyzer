@@ -13,6 +13,35 @@ void main() {
     });
   });
 
+  group('DynamicsNaming', () {
+    test('ids round-trip', () {
+      for (final naming in DynamicsNaming.values) {
+        expect(DynamicsNaming.fromId(naming.id), naming);
+      }
+      expect(DynamicsNaming.fromId('aes'), isNull);
+    });
+
+    test('the AES names are the default', () {
+      // What every other meter prints, and what a person types into a metric
+      // picker. See the enum.
+      expect(const AppSettings().dynamicsNaming, DynamicsNaming.psr);
+      expect(const AppSettings().toJson()['dynamics_names'], 'psr');
+    });
+
+    test('survives a launch, and a bad value costs only itself', () {
+      final saved = const AppSettings(
+        dynamicsNaming: DynamicsNaming.odr,
+        targetFps: 120,
+      ).toJson();
+      expect(saved['dynamics_names'], 'odr');
+      expect(AppSettings.fromJson(saved).dynamicsNaming, DynamicsNaming.odr);
+
+      final bad = AppSettings.fromJson({...saved, 'dynamics_names': 'dr'});
+      expect(bad.dynamicsNaming, DynamicsNaming.psr);
+      expect(bad.targetFps, 120);
+    });
+  });
+
   group('the DAW plugin as a source', () {
     test('survives a launch, with the device it was chosen over', () {
       // The selection is the thing that reopens on a DAW machine every morning,
@@ -190,6 +219,8 @@ void main() {
         expect(old.remoteDisplayFps, 30);
         expect(old.remoteDisplayName, isNull);
         expect(old.calibrationId, 'ebu-r128');
+        // And a fourth, after 0.15.0's files were on disk.
+        expect(old.dynamicsNaming, DynamicsNaming.defaultNaming);
       },
     );
 

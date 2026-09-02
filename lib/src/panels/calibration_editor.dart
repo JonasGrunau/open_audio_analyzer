@@ -79,6 +79,7 @@ class _CalibrationEditorState extends ConsumerState<CalibrationEditor> {
   Widget build(BuildContext context) {
     final colors = OaaTheme.of(context);
     final library = ref.watch(calibrationLibraryProvider.notifier);
+    final naming = ref.watch(dynamicsNamingProvider);
     final isBuiltIn = library.isBuiltIn(_base.id);
 
     return PanelScaffold(
@@ -186,14 +187,14 @@ class _CalibrationEditorState extends ConsumerState<CalibrationEditor> {
                 'No platform publishes a floor, so an empty field sets none.',
             children: [
               PanelRow(
-                label: 'ODR-I floor',
+                label: '${naming.integrated} floor',
                 note:
                     'The highest true peak over the integrated loudness. '
                     'Below this, the programme is flagged as too compressed.',
                 child: _number(_odrIntegratedFloor, 'LU'),
               ),
               PanelRow(
-                label: 'ODR-S floor',
+                label: '${naming.short} floor',
                 note:
                     'Checked against the most squeezed three seconds, which '
                     'one quiet intro cannot rescue.',
@@ -270,9 +271,13 @@ class _CalibrationEditorState extends ConsumerState<CalibrationEditor> {
 
     // The two fields that may be empty. Empty is "no floor"; anything else
     // has to be a number, the same as the rest.
-    final integratedFloor = _parseFloor(_odrIntegratedFloor, 'ODR-I floor');
+    final naming = ref.read(dynamicsNamingProvider);
+    final integratedFloor = _parseFloor(
+      _odrIntegratedFloor,
+      '${naming.integrated} floor',
+    );
     if (!integratedFloor.ok) return;
-    final shortFloor = _parseFloor(_odrShortFloor, 'ODR-S floor');
+    final shortFloor = _parseFloor(_odrShortFloor, '${naming.short} floor');
     if (!shortFloor.ok) return;
 
     final id = keepId ? _base.id : _uniqueId(name);

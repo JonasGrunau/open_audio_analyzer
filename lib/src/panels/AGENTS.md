@@ -4,8 +4,8 @@ The panels that sit over the canvas. GPL-3.0-or-later.
 
 | File | Purpose |
 |------|---------|
-| `settings_panel.dart` | Signal — the source, the capture device and the connected DAW plugin — refresh rate and delivery target, publishing, skins, session. The hub the others open from. Its Publish section is `PublishSection`, composed from `lib/src/remote/` because it reads a live socket. |
-| `calibration_editor.dart` | The eight numbers a delivery target is, two of which — the ODR-I and ODR-S floors — may be left empty, because no platform publishes one. |
+| `settings_panel.dart` | Signal — the source, the capture device and the connected DAW plugin — refresh rate and delivery target, what the dynamics readings are called (`PSR` / `PLR` or `ODR-S` / `ODR-I`), publishing, skins, session. The hub the others open from. Its Publish section is `PublishSection`, composed from `lib/src/remote/` because it reads a live socket. |
+| `calibration_editor.dart` | The eight numbers a delivery target is, two of which — the PLR and PSR floors, labelled the way the settings spell the pair — may be left empty, because no platform publishes one. |
 | `theme_editor.dart` | The thirteen colours a skin is. Previews by *being* the skin — every change goes into `skinDraftProvider`, which `skinProvider` answers with — and prints each role's contrast ratio against the surface it has to be read on. The two built-ins are fixed and it says so before anything is dragged. |
 | `report_panel.dart` | Offline analysis: drop a file, watch it run, cancel it, export the result. |
 | `report_card.dart` | The report as a **PNG** — a fixed layout drawn deliberately, not a screenshot of the panel, so two people exporting the same report get the same picture. It lives here rather than beside the other exports in `oaa_core` because rendering needs `dart:ui`. |

@@ -119,7 +119,7 @@ void main() {
       expect(result.stdout, contains('ebu-r128'));
       // The one built-in with a dynamics floor, listed like any other limit.
       expect(result.stdout, contains('dynamic-master'));
-      expect(result.stdout, contains('ODR-S ≥ 8.0 LU'));
+      expect(result.stdout, contains('PSR ≥ 8.0 LU'));
     });
 
     // --- The user's own delivery targets ---------------------------------
@@ -290,7 +290,7 @@ void main() {
       final file = _writeWav('squashed.wav', 0.1993, 8.0);
 
       final listed = _run(['--config-dir', root.path, '--list-targets']);
-      expect(listed.stdout, contains('ODR-I ≥ 8.0 LU'));
+      expect(listed.stdout, contains('PLR ≥ 8.0 LU'));
 
       final result = _run([
         '-q',
@@ -301,11 +301,42 @@ void main() {
         file.path,
       ]);
       expect(result.exitCode, 2);
-      expect(result.stdout, contains('ODR-I'));
+      expect(result.stdout, contains('PLR'));
+      expect(result.stdout, isNot(contains('ODR-I')));
       // The Annex A band word, printed after the reading in the text report:
       // 0 LU is the flattest band there is.
       expect(result.stdout, contains('(flat)'));
       expect(result.stdout, contains('VERDICT: FAIL'));
+
+      // The same run under the specification's own names: the same numbers,
+      // the same verdict, and only the labels move. The app has the same
+      // switch in its settings; the CLI reads no settings file, so it is a
+      // flag here.
+      final odr = _run([
+        '-q',
+        '--names',
+        'odr',
+        '--config-dir',
+        root.path,
+        '--target',
+        'house-dynamic',
+        file.path,
+      ]);
+      expect(odr.exitCode, 2);
+      expect(odr.stdout, contains('ODR-I'));
+      expect(odr.stdout, isNot(contains('PLR')));
+      expect(odr.stdout, contains('(flat)'));
+      expect(
+        _run([
+          '--names',
+          'odr',
+          '--config-dir',
+          root.path,
+          '--list-targets',
+        ]).stdout,
+        contains('ODR-I ≥ 8.0 LU'),
+      );
+      expect(_run(['--names', 'dr', file.path]).exitCode, 1);
     });
 
     test(
@@ -330,7 +361,7 @@ void main() {
         final file = _writeWav('steady.wav', 0.1993, 8.0);
 
         final listed = _run(['--config-dir', root.path, '--list-targets']);
-        expect(listed.stdout, contains('ODR-S ≥ 6.0 LU'));
+        expect(listed.stdout, contains('PSR ≥ 6.0 LU'));
 
         final json = _run(['-q', '--format', 'json', file.path]);
         final decoded =
@@ -350,7 +381,7 @@ void main() {
           file.path,
         ]);
         expect(result.exitCode, 2);
-        expect(result.stdout, contains('ODR-S'));
+        expect(result.stdout, contains('PSR'));
         expect(result.stdout, contains('VERDICT: FAIL'));
       },
     );

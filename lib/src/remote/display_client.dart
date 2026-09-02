@@ -75,6 +75,16 @@ class DisplayClient {
     BuiltInCalibrations.fallback,
   );
 
+  /// What the host calls the two dynamics readings.
+  ///
+  /// Starts at the default, which is what a host that predates the frame is
+  /// printing too, and follows the host from its first `0x0006` on — so the
+  /// number under a person's hand and the one across the room are spelled the
+  /// same way, which is the whole argument for a display.
+  final ValueNotifier<DynamicsNaming> dynamicsNaming = ValueNotifier(
+    DynamicsNaming.defaultNaming,
+  );
+
   /// The host's playhead, or [Transport.none] when it has none to give.
   ///
   /// Not part of the *snapshot frame*, and deliberately: transport is metadata
@@ -157,6 +167,7 @@ class DisplayClient {
     state.value = RemoteLinkState.idle;
     layout.value = null;
     skin.value = null;
+    dynamicsNaming.value = DynamicsNaming.defaultNaming;
     hostName.value = null;
     failure.value = null;
   }
@@ -225,6 +236,15 @@ class DisplayClient {
                 : Skin.fromJson(_json(_reader.payload));
           case WireFrameType.calibration:
             calibration.value = Calibration.fromJson(_json(_reader.payload));
+          case WireFrameType.dynamicsNaming:
+            // An id this build does not know is a host from the future; the
+            // default is what it would have printed before the setting
+            // existed, and a correct name for the number either way.
+            dynamicsNaming.value =
+                DynamicsNaming.fromId(
+                  _json(_reader.payload)['dynamics_names'] as String? ?? '',
+                ) ??
+                DynamicsNaming.defaultNaming;
           case WireFrameType.snapshot:
             // The frame's version chooses the table — a version 4 host with a
             // long scope run sends exactly the length a version 5 one does.
@@ -384,6 +404,7 @@ class DisplayClient {
     layout.dispose();
     skin.dispose();
     calibration.dispose();
+    dynamicsNaming.dispose();
     transport.dispose();
     hasTransport.dispose();
     hostName.dispose();

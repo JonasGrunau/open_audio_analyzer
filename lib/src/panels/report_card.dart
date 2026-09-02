@@ -38,16 +38,19 @@ const double _scale = 2;
 /// Renders [report] as PNG bytes.
 ///
 /// [colors] is the palette in force, so a card exported from a light skin is
-/// light. Returns null only if the encoder does, which it does not in practice.
+/// light, and [naming] is how the two dynamics readings are labelled, for the
+/// same reason. Returns null only if the encoder does, which it does not in
+/// practice.
 Future<Uint8List?> renderReportCard(
   AnalysisReport report,
-  OaaColors colors,
-) async {
+  OaaColors colors, {
+  DynamicsNaming naming = DynamicsNaming.defaultNaming,
+}) async {
   final recorder = ui.PictureRecorder();
   final canvas = Canvas(recorder);
   canvas.scale(_scale);
 
-  final height = _paint(canvas, report, colors);
+  final height = _paint(canvas, report, colors, naming);
 
   // The background goes on last, with `dstOver`, which paints it *behind*
   // everything already drawn. Drawing it first would have meant guessing a
@@ -82,7 +85,12 @@ Future<Uint8List?> renderReportCard(
 ///
 /// Laid out top-down with a running cursor rather than by a widget tree,
 /// because there is no tree here — this runs offscreen, against a raw Canvas.
-double _paint(Canvas canvas, AnalysisReport report, OaaColors colors) {
+double _paint(
+  Canvas canvas,
+  AnalysisReport report,
+  OaaColors colors,
+  DynamicsNaming naming,
+) {
   const left = Space.xl;
   const right = _cardWidth - Space.xl;
 
@@ -155,7 +163,7 @@ double _paint(Canvas canvas, AnalysisReport report, OaaColors colors) {
     y = headlineTop;
 
     y += draw(
-      headline[i].label,
+      headline[i].labelIn(naming),
       OaaType.caption.copyWith(color: colors.textFaint),
       x: x,
       width: columnWidth,
@@ -205,7 +213,7 @@ double _paint(Canvas canvas, AnalysisReport report, OaaColors colors) {
 
     final rowTop = y;
     final used = draw(
-      metric.label,
+      metric.labelIn(naming),
       OaaType.body.copyWith(color: colors.textMuted),
     );
     y = rowTop;
@@ -236,7 +244,7 @@ double _paint(Canvas canvas, AnalysisReport report, OaaColors colors) {
     for (final check in report.checks) {
       final rowTop = y;
       final used = draw(
-        check.metric.label,
+        check.metric.labelIn(naming),
         OaaType.body.copyWith(color: colors.textMuted),
       );
 

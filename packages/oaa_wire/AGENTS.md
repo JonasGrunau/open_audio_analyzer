@@ -15,7 +15,7 @@ in.
 
 | File | Contents |
 |------|----------|
-| `src/frame.dart` | The 12-byte header, the magic, the frame types, and the reader that skips what it does not recognise. |
+| `src/frame.dart` | The 12-byte header, the magic, the frame types — including `0x0006`, the dynamics naming, added under version 5 because it changes no table — and the reader that skips what it does not recognise. |
 | `src/hello.dart` | `HELLO` — the shape negotiation, and the rejection when two builds disagree about what a byte means. |
 | `src/snapshot_codec.dart` | `0x0003 SNAPSHOT`. Every offset in the frozen table, as named constants — the version 5 one, `SnapshotWireV4` for the version 4 one and `SnapshotWireLegacy` for the version 1–3 one, both decode-only and kept because a plugin outlives an app upgrade. Version 5 is the eight per-source spectra between `histogram` and the scope run. |
 | `src/quantise.dart` | The fixed-point encodings versions 4 and 5 carry the *plotted* arrays in, and the reserved codes that keep NaN distinct from a reading. Mirrored by hand in `plugin/src/OaaWire.h`; the two agree because they were both written against `docs/WIRE.md`. |

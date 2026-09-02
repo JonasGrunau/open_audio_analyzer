@@ -232,17 +232,19 @@ PluginLink _pluginLink() {
 
 void main() {
   group('the settings panel', () {
-    testWidgets('opens with its five sections', (tester) async {
+    testWidgets('opens with its six sections', (tester) async {
       await _open(
         tester,
         await _container(tester),
         SettingsPanel(remote: _remoteService(), plugins: _pluginLink()),
       );
 
-      // Signal in, then the meters, then where those meters go, then how they
-      // look, then what is kept between launches.
+      // Signal in, then the meters, then what the dynamics readings are
+      // called, then where those meters go, then how they look, then what is
+      // kept between launches.
       expect(find.text('SIGNAL'), findsOneWidget);
       expect(find.text('METERS'), findsOneWidget);
+      expect(find.text('DYNAMICS'), findsOneWidget);
       expect(find.text('PUBLISH'), findsOneWidget);
       expect(find.text('APPEARANCE'), findsOneWidget);
       expect(find.text('SESSION'), findsOneWidget);
@@ -361,6 +363,25 @@ void main() {
       await _tap(tester, find.text('30 FPS'));
 
       expect(container.read(settingsProvider).targetFps, 30);
+    });
+
+    testWidgets('choosing the dynamics names changes them', (tester) async {
+      final container = await _container(tester);
+      await _open(
+        tester,
+        container,
+        SettingsPanel(remote: _remoteService(), plugins: _pluginLink()),
+      );
+
+      // The AES names are the default, so the row opens on them.
+      expect(container.read(dynamicsNamingProvider), DynamicsNaming.psr);
+      expect(find.text('PSR / PLR'), findsOneWidget);
+
+      await _tap(tester, find.text('ODR-S / ODR-I'));
+      expect(container.read(dynamicsNamingProvider), DynamicsNaming.odr);
+
+      await _tap(tester, find.text('PSR / PLR'));
+      expect(container.read(dynamicsNamingProvider), DynamicsNaming.psr);
     });
 
     // The one destructive action in the application that asks in a dialog

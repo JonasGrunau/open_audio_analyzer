@@ -103,6 +103,18 @@ abstract final class WireFrameType {
   /// not a cosmetic difference.
   static const int calibration = 0x0005;
 
+  /// What the two dynamics readings are called: `PSR` / `PLR` or `ODR-S` /
+  /// `ODR-I`. Payload is UTF-8 JSON, `{"dynamics_names": "<id>"}`, the same
+  /// key and ids as `settings.json`, so there is one spelling of the choice.
+  ///
+  /// It travels for the reason the skin and the target do: the display draws
+  /// the desktop's frame, and a tablet printing `ODR-S` under the number the
+  /// desktop prints `PSR` over is two screens that look like two meters.
+  /// Added under protocol version 5 without moving it: the frame changes no
+  /// table, and a receiver that predates it skips it by length and labels the
+  /// same number with its own default, which is a correct reading.
+  static const int dynamicsNaming = 0x0006;
+
   /// `0x0010`–`0x001F` — DAW transport, sent by the plugin producer.
   static const int dawTransport = 0x0010;
 

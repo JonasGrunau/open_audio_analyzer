@@ -116,8 +116,8 @@ it; where the two differ, the specification is right.
 | Metric | Unit | Definition | Availability |
 |---|---|---|---|
 | `Crest` | dB | Sample peak minus RMS, both over the same block — the block's own values, *not* the held peak and smoothed RMS the meters draw. For a sine this is exactly 3.0103 dB and for DC it is 0. Multichannel reports the peakiest channel rather than the loudest peak minus the loudest RMS, which could describe no channel at all. | **now** |
-| `ODR-S` | LU | Open Dynamic Range, short-term: `TruePeak − LUFS-S`, both over the same sliding 3 s window. **Undefined** — NaN, drawn as a dash — while `LUFS-S` is at or below the −70 LUFS absolute gate. ODR § 4. | **now** |
-| `ODR-I` | LU | Open Dynamic Range, integrated: `TruePeakMax − LUFS-I`, both since the last reset. Undefined for as long as `LUFS-I` is; the peak is gated by nothing. ODR § 5. | **now** |
+| `PSR`, or `ODR-S` | LU | Open Dynamic Range, short-term: `TruePeak − LUFS-S`, both over the same sliding 3 s window. **Undefined** — NaN, drawn as a dash — while `LUFS-S` is at or below the −70 LUFS absolute gate. ODR § 4. Printed as `PSR` unless the setting says otherwise; see **The name** below. | **now** |
+| `PLR`, or `ODR-I` | LU | Open Dynamic Range, integrated: `TruePeakMax − LUFS-I`, both since the last reset. Undefined for as long as `LUFS-I` is; the peak is gated by nothing. ODR § 5. Printed as `PLR` unless the setting says otherwise. | **now** |
 
 In one paragraph, so that this table can be read without the specification:
 the peak is true peak, the loudest channel's, never sample peak; the loudness
@@ -129,7 +129,8 @@ moves when a platform turns the master down. A stereo 1 kHz sine reads exactly
 K filter's gain at 1 kHz cancel to nothing — and
 `packages/oaa_engine/test/conformance_test.dart` asserts every case in ODR § 7.
 
-**Where the product shows them.** ODR-S and ODR-I are Number Box and Alert
+**Where the product shows them.** ODR-S and ODR-I — printed as `PSR` and
+`PLR` by default — are Number Box and Alert
 Meter metrics; the Super Meter draws them as arcs continuing from each
 loudness arc's tip to the true peak — stacked on the same dB scale, so the
 dark rest of the ring is the true peak's headroom — and prints ODR-S in the
@@ -146,16 +147,24 @@ carries the annex's 8 LU floor on the minimum ODR-S, the one built-in that is
 a recommendation rather than a platform. Through 0.14.0 ODR-S read a
 number in silence; see the changelog.
 
-**The name.** Through 0.14.0 the pair was published as `PSR` / `PLR` and again
-as `DR-S` / `DR-I` — four names for two numbers. It has one now. Not the AES
-one, because that note names the arithmetic and not the operands, and this
-standard is the operands; not `DR`, because that is what the offline TT
-Dynamic Range meter calls its number, a different measurement with a different
+**The name.** The product prints **`PSR` and `PLR`** unless told otherwise —
+the names the AES gives this arithmetic, which every other meter prints and
+which a person types into a metric picker — and **Settings › Dynamics**
+switches every label to the specification's own **`ODR-S` and `ODR-I`**: on
+each module, in the report, in the target editor, and on a paired tablet,
+which is sent the choice beside the skin and the target. Nothing but the label
+moves; the `oaa` CLI has the same switch as `--names`. The two spellings are
+one measurement and are never shown together, per ODR § 6.4. The pair went
+through four names to get here: `PSR` / `PLR` and `DR-S` / `DR-I` through
+0.14.0, `ODR-S` / `ODR-I` alone in 0.15.0, which nobody searching for PSR
+could find. `DR` stays retired, because that is what the offline TT Dynamic
+Range meter calls its number, a different measurement with a different
 algorithm, and a reader who knows that meter would take `DR-I` for it. Open
 Audio Analyzer does not report the TT figure under any name. A Number Box
-saved on `psr`, `plr`, `dr_s` or `dr_i` opens on ODR-S or ODR-I. What ODR is
-and is not, measure by measure — the AES pair, TrueDyn, DR, LRA, crest — is
-ODR § 8.
+saved on `psr`, `plr`, `dr_s` or `dr_i` opens on the same reading, and a
+report's JSON carries `odr_i` and `odr_s_min` whatever the labels say. What
+ODR is and is not, measure by measure — the AES pair, TrueDyn, DR, LRA,
+crest — is ODR § 8.
 
 **What a value means.** High, low, crushed, wide — the interpretation is
 ODR Annex A, informative and kept apart from the definition so the guidance

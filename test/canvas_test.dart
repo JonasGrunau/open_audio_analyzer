@@ -20,6 +20,7 @@ import 'package:oaa/src/canvas/module_host.dart';
 import 'package:oaa/src/canvas/tab_strip.dart';
 import 'package:oaa/src/canvas/workspace.dart';
 import 'package:oaa/src/clock/meter_clock.dart';
+import 'package:oaa/src/data/providers.dart';
 import 'package:oaa/src/modules/spectrum_analyzer.dart';
 import 'package:oaa/src/modules/validator.dart';
 import 'package:oaa_core/oaa_core.dart';
@@ -950,6 +951,57 @@ void main() {
     await tester.tapAt(const Offset(4, 4));
     await _settle(tester);
     expect(_menuRow(ValidatorCheck.truePeak.label), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('the metric menu spells the dynamics readings as set', (
+    tester,
+  ) async {
+    final container = await _pumpSparse(tester);
+    ModuleSpec first() => container.read(workspaceProvider).tab.modules.first;
+    final settings = container.read(settingsProvider.notifier);
+
+    Future<void> openMetricMenu() async {
+      await tester.tapAt(
+        tester.getCenter(find.byType(ModuleHost).first),
+        buttons: kSecondaryButton,
+      );
+      await _settle(tester);
+      await tester.tap(_menuRow('Metric: ${first().metric.label}'));
+      await _settle(tester);
+    }
+
+    // The AES names by default: what somebody who knows Dynameter or Insight
+    // is looking for. The specification's own spelling is not on offer at the
+    // same time — one measurement, one name, per ODR § 6.4.
+    await openMetricMenu();
+    expect(_menuRow('PSR'), findsOneWidget);
+    expect(_menuRow('PLR'), findsOneWidget);
+    expect(_menuRow('ODR-S'), findsNothing);
+    await tester.tapAt(const Offset(4, 4));
+    await _settle(tester);
+
+    settings.setDynamicsNaming(DynamicsNaming.odr);
+    await _settle(tester);
+    await openMetricMenu();
+    expect(_menuRow('ODR-S'), findsOneWidget);
+    expect(_menuRow('PSR'), findsNothing);
+    await tester.tap(_menuRow('ODR-S'));
+    await _settle(tester);
+    expect(first().metric, Metric.odrShort);
+
+    // And the module's own row follows the setting back, without a reopen of
+    // anything but the menu.
+    settings.setDynamicsNaming(DynamicsNaming.psr);
+    await _settle(tester);
+    await tester.tapAt(
+      tester.getCenter(find.byType(ModuleHost).first),
+      buttons: kSecondaryButton,
+    );
+    await _settle(tester);
+    expect(_menuRow('Metric: PSR'), findsOneWidget);
+    await tester.tapAt(const Offset(4, 4));
+    await _settle(tester);
     expect(tester.takeException(), isNull);
   });
 

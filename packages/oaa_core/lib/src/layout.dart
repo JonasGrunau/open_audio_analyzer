@@ -1172,11 +1172,12 @@ enum ValidatorCheck {
   /// Judged against the lowest ODR-S since the last reset, not the live one —
   /// "never more squeezed than this" is a statement about the worst three
   /// seconds. It is the one row whose name is not its metric's, because a row
-  /// reading `ODR-S` beside a number that is not the ODR-S every other module
-  /// on the canvas is showing would be read as a disagreement.
-  odrShort('odr_s', Metric.odrShort, 'ODR-S MIN');
+  /// reading `PSR` beside a number that is not the PSR every other module on
+  /// the canvas is showing would be read as a disagreement. So its row is
+  /// `PSR MIN` — or `ODR-S MIN`, following the metric's own spelling.
+  odrShort('odr_s', Metric.odrShort, isMinimum: true);
 
-  const ValidatorCheck(this.id, this.metric, [this.rowName]);
+  const ValidatorCheck(this.id, this.metric, {this.isMinimum = false});
 
   /// Stable identifier for presets. The metric's own id, because a check is
   /// one metric held against one limit and two spellings of the same thing in
@@ -1188,11 +1189,18 @@ enum ValidatorCheck {
   /// lives with the Validator that prints it.
   final Metric metric;
 
-  /// The row's name where it is not the metric's own. See [odrShort].
-  final String? rowName;
+  /// True for the one row judged on the lowest reading rather than the live
+  /// one, which says so in its name. See [odrShort].
+  final bool isMinimum;
 
-  /// What the table and the module's menu call this row.
-  String get label => rowName ?? metric.label;
+  /// What the table and the module's menu call this row, under the default
+  /// naming. See [labelIn].
+  String get label => labelIn(DynamicsNaming.defaultNaming);
+
+  /// [label] under [naming]: the metric's own name, with ` MIN` after it for
+  /// the row that judges a minimum.
+  String labelIn(DynamicsNaming naming) =>
+      isMinimum ? '${metric.labelIn(naming)} MIN' : metric.labelIn(naming);
 
   /// Whether [calibration] says anything this row could be judged against.
   ///
@@ -1469,7 +1477,12 @@ class ModuleSpec {
   /// A Number Box is titled by what it shows rather than by what it is: six of
   /// them side by side all called "Number Box" is six modules you have to read
   /// the digits of to tell apart.
-  String get title => kind == ModuleKind.numberBox ? metric.label : kind.label;
+  String get title => titleIn(DynamicsNaming.defaultNaming);
+
+  /// [title] under [naming], which only a Number Box on a dynamics reading
+  /// notices.
+  String titleIn(DynamicsNaming naming) =>
+      kind == ModuleKind.numberBox ? metric.labelIn(naming) : kind.label;
 
   ModuleSpec copyWith({GridRect? rect, Map<String, Object?>? options}) =>
       ModuleSpec(

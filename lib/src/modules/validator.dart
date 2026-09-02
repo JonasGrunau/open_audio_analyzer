@@ -45,6 +45,7 @@ class ValidatorModule extends StatefulWidget {
     required this.engine,
     required this.clock,
     required this.calibration,
+    required this.naming,
     required this.checks,
     super.key,
   });
@@ -52,6 +53,10 @@ class ValidatorModule extends StatefulWidget {
   final MeterSource engine;
   final MeterClock clock;
   final Calibration calibration;
+
+  /// How the two dynamics readings are named, which is the one thing about a
+  /// row's name a user chooses. See `ModuleHost`.
+  final DynamicsNaming naming;
 
   /// The criteria this module was asked to judge, in the order it prints them.
   ///
@@ -125,6 +130,7 @@ class _ValidatorModuleState extends State<ValidatorModule> {
   Calibration? _builtFor;
   List<ValidatorCheck> _builtChecks = const [];
   Color? _builtColor;
+  DynamicsNaming? _builtNaming;
 
   /// The lowest ODR-S since the engine's last reset — what an ODR-S floor is
   /// checked against, because "never more squeezed than this" is a statement
@@ -182,10 +188,12 @@ class _ValidatorModuleState extends State<ValidatorModule> {
 
     if (_builtFor != widget.calibration ||
         _builtColor != colors.textFaint ||
+        _builtNaming != widget.naming ||
         !listEquals(_builtChecks, widget.checks)) {
       _builtFor = widget.calibration;
       _builtChecks = widget.checks;
       _builtColor = colors.textFaint;
+      _builtNaming = widget.naming;
 
       final label = OaaType.label.copyWith(color: colors.textFaint);
       final tick = OaaType.tick.copyWith(color: colors.textFaint);
@@ -193,7 +201,7 @@ class _ValidatorModuleState extends State<ValidatorModule> {
       _checks = _rowsFor(widget.calibration, widget.checks);
       _names = [
         for (final check in _checks)
-          layoutParagraph(check.label.toUpperCase(), label),
+          layoutParagraph(check.labelIn(widget.naming).toUpperCase(), label),
       ];
       _limits = [
         for (final check in _checks)

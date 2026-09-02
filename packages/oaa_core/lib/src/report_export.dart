@@ -44,12 +44,18 @@ enum ReportFormat {
 }
 
 /// Renders [report] in [format].
-String exportReport(AnalysisReport report, ReportFormat format) =>
-    switch (format) {
-      ReportFormat.text => exportReportText(report),
-      ReportFormat.json => exportReportJson(report),
-      ReportFormat.csv => exportReportCsv(report),
-    };
+///
+/// [naming] is how the text report labels the two dynamics readings; the
+/// other two formats carry ids and do not have a spelling to choose.
+String exportReport(
+  AnalysisReport report,
+  ReportFormat format, {
+  DynamicsNaming naming = DynamicsNaming.defaultNaming,
+}) => switch (format) {
+  ReportFormat.text => exportReportText(report, naming: naming),
+  ReportFormat.json => exportReportJson(report),
+  ReportFormat.csv => exportReportCsv(report),
+};
 
 /// The human-readable report.
 ///
@@ -72,7 +78,10 @@ String _odrBand(double odrIntegrated) {
   return 'wide';
 }
 
-String exportReportText(AnalysisReport report) {
+String exportReportText(
+  AnalysisReport report, {
+  DynamicsNaming naming = DynamicsNaming.defaultNaming,
+}) {
   final out = StringBuffer();
 
   void heading(String title) {
@@ -107,7 +116,7 @@ String exportReportText(AnalysisReport report) {
         ? '  (${_odrBand(value)})'
         : '';
     out.writeln(
-      '  ${metric.label.padRight(14)}'
+      '  ${metric.labelIn(naming).padRight(14)}'
       '${metric.format(value).padLeft(9)}$unit$band',
     );
   }
@@ -158,7 +167,7 @@ String exportReportText(AnalysisReport report) {
       final reading = '${check.metric.format(check.value).padLeft(9)}$unit';
 
       final line = StringBuffer()
-        ..write('  ${check.metric.label.padRight(14)}')
+        ..write('  ${check.metric.labelIn(naming).padRight(14)}')
         ..write(reading.padRight(15))
         ..write('required ${check.limitLabel.padRight(22)}')
         ..write(check.verdictLabel);

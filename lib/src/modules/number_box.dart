@@ -50,6 +50,7 @@ class NumberBoxModule extends StatefulWidget {
     required this.clock,
     required this.metric,
     required this.calibration,
+    required this.naming,
     super.key,
   });
 
@@ -57,6 +58,10 @@ class NumberBoxModule extends StatefulWidget {
   final MeterClock clock;
   final Metric metric;
   final Calibration calibration;
+
+  /// How the two dynamics readings are named — the only thing about a label
+  /// a user can choose. See `ModuleHost`.
+  final DynamicsNaming naming;
 
   @override
   State<NumberBoxModule> createState() => _NumberBoxModuleState();
@@ -87,6 +92,7 @@ class _NumberBoxModuleState extends State<NumberBoxModule> {
         engine: widget.engine,
         metric: widget.metric,
         calibration: widget.calibration,
+        naming: widget.naming,
         colors: colors,
         readout: _readout,
         repaint: widget.clock,
@@ -102,6 +108,7 @@ class _NumberBoxPainter extends MeterPainter {
     required this.engine,
     required this.metric,
     required this.calibration,
+    required this.naming,
     required this.colors,
     required this.readout,
     required Listenable repaint,
@@ -110,6 +117,7 @@ class _NumberBoxPainter extends MeterPainter {
   final MeterSource engine;
   final Metric metric;
   final Calibration calibration;
+  final DynamicsNaming naming;
   final OaaColors colors;
   final ReadoutPainter readout;
 
@@ -162,8 +170,10 @@ class _NumberBoxPainter extends MeterPainter {
     // The metric's name above the reading, and the pair centred as one block.
     // On a module too short to carry both, the name is the one that yields —
     // the frame still says which meter this is; the reading has no understudy.
+    // [ReadoutPainter] caches on the string, so a naming change costs one
+    // layout and a repaint, and nothing between them.
     final labelParagraph = readout.label(
-      metric.label,
+      metric.labelIn(naming),
       colors.textMuted,
       size.width,
     );
@@ -227,6 +237,7 @@ class _NumberBoxPainter extends MeterPainter {
       oldDelegate.metric != metric ||
       oldDelegate.colors != colors ||
       oldDelegate.calibration != calibration ||
+      oldDelegate.naming != naming ||
       !identical(oldDelegate.engine, engine);
 }
 

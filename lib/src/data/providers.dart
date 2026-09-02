@@ -79,6 +79,11 @@ class SettingsController extends Notifier<AppSettings> {
     _update(state.copyWith(calibrationId: id));
   }
 
+  void setDynamicsNaming(DynamicsNaming naming) {
+    if (naming == state.dynamicsNaming) return;
+    _update(state.copyWith(dynamicsNaming: naming));
+  }
+
   void setSkinId(String id) {
     if (id == state.skinId) return;
     _update(state.copyWith(skinId: id));
@@ -155,6 +160,14 @@ final pluginLinkPortProvider = Provider<int>((ref) => kPluginLinkPort);
 /// How often the meters are allowed to repaint.
 final targetFpsProvider = Provider<int>(
   (ref) => ref.watch(settingsProvider.select((s) => s.targetFps)),
+);
+
+/// What the two dynamics readings are called: `PSR` / `PLR` or `ODR-S` /
+/// `ODR-I`. A label, not a measurement — it reaches a module the way the
+/// delivery target does, as a constructor argument through `ModuleHost`, and
+/// the tablet is sent it over the wire beside the skin and the target.
+final dynamicsNamingProvider = Provider<DynamicsNaming>(
+  (ref) => ref.watch(settingsProvider.select((s) => s.dynamicsNaming)),
 );
 
 // --- Calibrations ----------------------------------------------------------

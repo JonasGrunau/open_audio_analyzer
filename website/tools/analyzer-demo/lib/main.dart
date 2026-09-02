@@ -326,6 +326,7 @@ class _AnalyzerDemoState extends State<AnalyzerDemo>
                       engine: source,
                       clock: clock,
                       calibration: _calibration,
+                      naming: DynamicsNaming.defaultNaming,
                       selected: false,
                       // Nothing on this canvas can be changed, so no module
                       // draws a menu button — a control that swallows the tap

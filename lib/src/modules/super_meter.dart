@@ -25,8 +25,10 @@ import '../data/metric_reader.dart';
 /// dynamics arc reaching the right end is a peak at 0 dBTP; past it is over.
 ///
 /// The outer ring's two tips carry their names, set along the arc outside it
-/// the way a gauge face is engraved: LUFS-S rides the loudness tip, ODR-S the
-/// dynamics tip. **Nothing else is printed on the rings.** They are read
+/// the way a gauge face is engraved: LUFS-S rides the loudness tip, PSR the
+/// dynamics tip — or ODR-S, whichever spelling the user chose; the two
+/// dynamics names and nothing else on this face follow that setting.
+/// **Nothing else is printed on the rings.** They are read
 /// against the two marks and the centre. Two other schemes have been tried
 /// here and taken out, and neither should come back: every tip's own number
 /// in the lane beside its ring — six small figures moving about a dial whose
@@ -47,8 +49,8 @@ import '../data/metric_reader.dart';
 /// loudness side — a radial tick with the target value beside it, in
 /// [OaaColors.over], the application's one colour for "the number you set".
 ///
-/// The centre carries five readings in three rows: LUFS-S and ODR-S as a
-/// small neutral row on top, LUFS-I and ODR-I under them, and TRUE PEAK
+/// The centre carries five readings in three rows: LUFS-S and PSR as a
+/// small neutral row on top, LUFS-I and PLR under them, and TRUE PEAK
 /// below. **Every one of the five prints its unit**, the way a Number Box
 /// does: beside the value, on its baseline, in the unit face. Each label is
 /// the reading's full name; the INTEGRATED heading went when the stack
@@ -82,12 +84,18 @@ class SuperMeterModule extends StatefulWidget {
     required this.engine,
     required this.clock,
     required this.calibration,
+    required this.naming,
     super.key,
   });
 
   final MeterSource engine;
   final MeterClock clock;
   final Calibration calibration;
+
+  /// How the two dynamics readings are named — `PSR` / `PLR` by default,
+  /// `ODR-S` / `ODR-I` on request. Three of the paragraphs below are those
+  /// names, so it is a key of the cache beside the palette. See `ModuleHost`.
+  final DynamicsNaming naming;
 
   @override
   State<SuperMeterModule> createState() => _SuperMeterModuleState();
@@ -262,6 +270,7 @@ class _SuperMeterModuleState extends State<SuperMeterModule> {
   ui.Paragraph? _nameLoud;
   ui.Paragraph? _nameDyn;
   OaaColors? _colorsKey;
+  DynamicsNaming? _namingKey;
 
   @override
   void dispose() {
@@ -279,16 +288,22 @@ class _SuperMeterModuleState extends State<SuperMeterModule> {
   Widget build(BuildContext context) {
     final colors = OaaTheme.of(context);
 
-    if (_colorsKey != colors) {
+    // Two keys, one guard: the palette colours every paragraph and the naming
+    // spells three of them. A guard on the palette alone would print the old
+    // names until the next skin change — a setting that appears to do nothing
+    // until something unrelated happens.
+    final naming = widget.naming;
+    if (_colorsKey != colors || _namingKey != naming) {
       _colorsKey = colors;
+      _namingKey = naming;
       final style = OaaType.label.copyWith(color: colors.textFaint);
-      // Each label is the reading's full name — LUFS-S, ODR-I — because the
+      // Each label is the reading's full name — LUFS-S, PLR — because the
       // stack carries no INTEGRATED heading any more: with two pairs in it,
       // a heading naming one block would leave the other's rows implied.
       _lufsShortLabel = layoutParagraph('LUFS-S', style);
-      _odrShortLabel = layoutParagraph('ODR-S', style);
+      _odrShortLabel = layoutParagraph(naming.short, style);
       _lufsLabel = layoutParagraph('LUFS-I', style);
-      _odrLabel = layoutParagraph('ODR-I', style);
+      _odrLabel = layoutParagraph(naming.integrated, style);
       // Not "TRUE PEAK MAX": the rows above it already read integrated, and
       // the number is the ceiling zone's own.
       _truePeakLabel = layoutParagraph('TRUE PEAK', style);
@@ -296,7 +311,7 @@ class _SuperMeterModuleState extends State<SuperMeterModule> {
       // value, on its baseline, in the unit face. The labels above name the
       // *columns*, and "LUFS-I" over "−12.8 LUFS" is the same repetition a
       // Number Box makes with its title — a distance in LU under a label
-      // that reads ODR-I is not one somebody should have to infer.
+      // that reads PLR is not one somebody should have to infer.
       //
       // **Each of the five asks its own metric**, rather than the short-term
       // pair borrowing the integrated pair's paragraphs. The four strings are
@@ -319,7 +334,7 @@ class _SuperMeterModuleState extends State<SuperMeterModule> {
         OaaType.label.copyWith(color: colors.meterAccent),
       );
       _nameDyn = layoutParagraph(
-        'ODR-S',
+        naming.short,
         OaaType.label.copyWith(color: dynInkOf(colors)),
       );
     }

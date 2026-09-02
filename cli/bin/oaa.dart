@@ -61,8 +61,14 @@ Future<void> main(List<String> arguments) async {
     return;
   }
 
+  // `allowed` has already refused anything else, so the fallback is unreachable
+  // and exists to keep the type non-null.
+  final naming =
+      DynamicsNaming.fromId(args.option('names')!) ??
+      DynamicsNaming.defaultNaming;
+
   if (args.flag('list-targets')) {
-    _listTargets(_targets(args.option('config-dir')));
+    _listTargets(_targets(args.option('config-dir')), naming);
     return;
   }
 
@@ -169,7 +175,7 @@ Future<void> main(List<String> arguments) async {
       includeTimeline: wantTimeline || format == ReportFormat.csv,
     );
 
-    rendered.add(exportReport(report, format));
+    rendered.add(exportReport(report, format, naming: naming));
 
     if (target != null && !report.isCompliant && worstExit == ExitCode.ok) {
       worstExit = ExitCode.nonCompliant;
@@ -315,7 +321,7 @@ Calibration? _byId(List<Calibration> targets, String id) {
   return null;
 }
 
-void _listTargets(List<Calibration> targets) {
+void _listTargets(List<Calibration> targets, DynamicsNaming naming) {
   stdout.writeln('Delivery targets:');
   stdout.writeln();
   for (final target in targets) {
@@ -328,8 +334,8 @@ void _listTargets(List<Calibration> targets) {
       '±${target.lufsTolerance.toStringAsFixed(1)} LUFS, '
       '≤ ${target.truePeakMax.toStringAsFixed(1)} dBTP, '
       'LRA ≤ ${target.loudnessRangeMax.toStringAsFixed(1)} LU'
-      '${integratedFloor == null ? '' : ', ODR-I ≥ ${integratedFloor.toStringAsFixed(1)} LU'}'
-      '${shortFloor == null ? '' : ', ODR-S ≥ ${shortFloor.toStringAsFixed(1)} LU'}',
+      '${integratedFloor == null ? '' : ', ${naming.integrated} ≥ ${integratedFloor.toStringAsFixed(1)} LU'}'
+      '${shortFloor == null ? '' : ', ${naming.short} ≥ ${shortFloor.toStringAsFixed(1)} LU'}',
     );
     stdout.writeln();
   }
@@ -376,6 +382,18 @@ ArgParser _buildParser() => ArgParser()
         'Where to read your own delivery targets from. Defaults to the same '
         'directory the app uses.',
     valueHelp: 'path',
+  )
+  ..addOption(
+    'names',
+    help:
+        'What the two dynamics readings are called in the text report and the '
+        'target list. The app has the same switch in Settings.',
+    allowed: ['psr', 'odr'],
+    allowedHelp: {
+      'psr': 'PSR and PLR, the names every other meter prints.',
+      'odr': 'ODR-S and ODR-I, the Open Dynamic Range specification\'s own.',
+    },
+    defaultsTo: 'psr',
   )
   ..addOption(
     'timeline-interval',

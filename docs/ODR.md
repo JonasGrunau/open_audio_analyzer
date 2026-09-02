@@ -1,6 +1,6 @@
 # Open Dynamic Range
 
-**ODR specification, version 1.0 — 2026-08-28.** This document is normative.
+**ODR specification, version 1.1 — 2026-09-02.** This document is normative.
 Where an implementation and this document disagree, this document is right and
 the implementation has a bug. The reference implementation is Open Audio
 Analyzer, and its conformance suite asserts every case in [§ 7](#7-conformance).
@@ -13,10 +13,13 @@ in loudness units.
 | **ODR-S** | `TP(3 s) − LUFS-S` | the last 3 s | `LUFS-S ≤ −70 LUFS` |
 | **ODR-I** | `TP Max − LUFS-I` | the programme | `LUFS-I` is undefined |
 
-The arithmetic is that of the peak-to-loudness ratios of AES TD1004 (its `PSR`
-and `PLR`). What this document adds is every choice that note leaves open — the
-peak, the window, the gate, the statistic, the display — so that two
-implementations of it cannot disagree by more than the tolerance in § 7.
+The arithmetic is that of the peak-to-loudness ratios the AES calls `PSR` and
+`PLR`. What this document adds is every choice those notes leave open — the
+channel the peak is taken from, the window's alignment, the gate, the
+statistic, the display — so that two implementations of it cannot disagree by
+more than the tolerance in § 7. An implementation may label the readings by
+either pair of names (§ 6.4); the reference implementation prints `PSR` and
+`PLR` unless asked otherwise.
 
 **Licence.** The text of this specification is © the Open Audio Analyzer
 contributors and is published under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/),
@@ -43,9 +46,13 @@ first an implementation of them.
 | **EBU Tech 3341** | Loudness metering: the momentary (400 ms) and short-term (3 s) measures, and the conformance signals this document's own are modelled on. |
 | **EBU R 128** | The −70 LUFS absolute gate this document reuses as its threshold of programme. |
 
-Informative: **AES TD1004.1.15-10**, *Recommendation for Loudness of Audio
-Streaming and Network File Playback*, which names PLR and PSR and is where the
-arithmetic comes from.
+Informative: **AES TD1008.1.21-9**, *Recommendations for Loudness of Internet
+Audio Streaming and On-Demand Distribution*, which supersedes TD1004 and
+defines PLR in one sentence — the ratio of maximum true peak to integrated
+loudness — and **AES Convention Paper 373** (Shepherd, Grimm, Tapper,
+Kahsnitz, Kerr, 2017), *Measuring Micro-Dynamics — A First Step: Standardizing
+PSR*, which proposes the short-term reading. Between them they are where the
+arithmetic and the names come from.
 
 ## 3 Terms
 
@@ -174,10 +181,13 @@ No streaming platform publishes a floor. This document recommends none.
 
 ### 6.4 Naming
 
-The readings shall be labelled **ODR-S** and **ODR-I**, and the minimum of
-§ 4.5 as the minimum of ODR-S. An implementation that also offers the same
-subtractions under another name (`PSR`, `PLR`, `DR-S`, `DR-I`) offers one
-measurement twice, and shall not present the two as distinct.
+The readings shall be labelled either **ODR-S** and **ODR-I**, or — by the
+names the AES gives the same arithmetic — **PSR** and **PLR**, and the minimum
+of § 4.5 as the minimum of whichever of those the short-term reading is
+called. An implementation shall state which pair it prints, may let the user
+choose, and shall not present the two pairs as distinct measurements: a
+display reading `PSR 7.6` beside `ODR-S 7.6` offers one measurement twice.
+`DR-S` and `DR-I` shall not be used, for the reason in § 8.
 
 ### 6.5 Properties an implementation may rely on
 
@@ -236,7 +246,7 @@ Notes to the cases:
 
 | Measure | Relation |
 |---|---|
-| **PSR / PLR** (AES TD1004) | The same arithmetic. This document fixes the peak (true, loudest channel), the window (aligned), the gate (−70 LUFS), the statistic (the minimum) and the display (§ 6), none of which the AES note specifies. |
+| **PSR / PLR** (AES TD1008, and Convention Paper 373) | The same arithmetic, and the same names are permitted here (§ 6.4). The AES does say true peak. What it leaves open, and this document fixes: which channel's peak (the loudest), the window (aligned with the loudness's), the gate (−70 LUFS, below which the reading is undefined rather than a number), the statistic a programme is judged on (the minimum) and the display (§ 6). |
 | **TrueDyn** (Process.Audio Decibel) | Described by its maker as "the equivalent of peak over average, but in the LUFS world", displayed beside `LUFS-S` and true peak on one rim of its Super Meter and beside `LUFS-I` and true peak max on the other — which is this pair, by that description. It is not published as a definition, so no parity is claimed. |
 | **DR** (Pleasurize Music Foundation / TT Dynamic Range Meter) | A different measurement: per channel, sample peak (the second highest) minus the RMS of the loudest 20 % of 3 s blocks, channels averaged, rounded to an integer. Sample peak, unweighted RMS and an integer result put it a generation behind; it is not ODR and shall not be labelled as such. |
 | **LRA** (EBU Tech 3342) | How far the programme's short-term loudness *moves*, between its 10th and 95th percentiles. It says nothing about limiting: a programme can be crushed flat with a wide LRA, or breathe with a narrow one. |
@@ -324,4 +334,5 @@ revised without a version bump; §§ 1–7 change only with one.
 
 | Version | Date | Change |
 |---|---|---|
+| 1.1 | 2026-09-02 | § 6.4 permits the AES names: the readings may be labelled `PSR` / `PLR` as well as `ODR-S` / `ODR-I`, and an implementation states which. The reference implementation prints `PSR` / `PLR` by default and offers the other pair as a setting. § 2 and § 8 name the current AES document (TD1008) and the paper that proposed PSR, and § 8's PSR / PLR row is corrected: the AES does specify true peak; what it leaves open is the channel, the window's alignment, the gate, the statistic and the display. No operand moved and every reading is unchanged. |
 | 1.0 | 2026-08-28 | First publication. The readings were published by Open Audio Analyzer as `PSR` / `PLR` and `DR-S` / `DR-I` through 0.14.0 with the same arithmetic; § 4.4 (the gate) and § 4.5 (the minimum) are new with this version. Annex A (informative) was added the day of publication. |

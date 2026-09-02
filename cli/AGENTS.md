@@ -60,6 +60,7 @@ stderr: stdout has to stay clean enough to pipe into `jq`.
   path resolver, a provider, a widget — makes the CLI unrunnable outside a
   Flutter checkout.
 
+- **`--names psr|odr` spells the dynamics pair, and nothing else.** The app has the same switch in Settings › Dynamics; the CLI reads no `settings.json` and does not start to, so the choice is a flag. It reaches the text report and `--list-targets`; JSON and CSV carry ids (`odr_i`, `odr_s_min`) and have no spelling to choose.
 - **A refusal is better than a guess.** `--format csv` with several files is an
   error, because CSV is one timeline and quietly writing only the last file
   would look like it worked.

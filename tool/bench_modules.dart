@@ -99,6 +99,7 @@ class _HarnessState extends State<_Harness>
                 engine: widget.source,
                 clock: clock,
                 calibration: BuiltInCalibrations.fallback,
+                naming: DynamicsNaming.defaultNaming,
                 selected: false,
                 onMenu: null,
               ),

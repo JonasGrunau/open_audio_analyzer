@@ -152,6 +152,7 @@ class _HarnessState extends State<_Harness>
                 engine: widget.source,
                 clock: clock,
                 calibration: _target,
+                naming: DynamicsNaming.defaultNaming,
               ),
             ),
           ),

@@ -322,6 +322,7 @@ void main() {
           engine: engine,
           clock: clock,
           calibration: _target,
+          naming: DynamicsNaming.defaultNaming,
         ),
         insideTheRings: true,
       ),

@@ -129,6 +129,7 @@ class AlertMeterModule extends StatefulWidget {
     required this.clock,
     required this.metric,
     required this.calibration,
+    required this.naming,
     this.delta = false,
     super.key,
   });
@@ -137,6 +138,9 @@ class AlertMeterModule extends StatefulWidget {
   final MeterClock clock;
   final Metric metric;
   final Calibration calibration;
+
+  /// How the two dynamics readings are named. See `ModuleHost`.
+  final DynamicsNaming naming;
 
   /// Print the reading as its distance from the target rather than as itself.
   final bool delta;
@@ -159,7 +163,7 @@ class _AlertMeterModuleState extends State<AlertMeterModule> {
   /// guarding on the colour alone left `Δ` on screen after the setting that
   /// put it there had been switched off, and no repaint anywhere would clear
   /// it.
-  ({Color color, Metric metric, bool delta})? _labels;
+  ({Color color, Metric metric, DynamicsNaming naming, bool delta})? _labels;
 
   /// The worst state seen, and the reading that caused it.
   ///
@@ -283,6 +287,7 @@ class _AlertMeterModuleState extends State<AlertMeterModule> {
     final labels = (
       color: colors.textMuted,
       metric: widget.metric,
+      naming: widget.naming,
       delta: widget.delta,
     );
     if (_labels != labels) {
@@ -303,7 +308,7 @@ class _AlertMeterModuleState extends State<AlertMeterModule> {
       // before the metric, the way a difference is written everywhere else it
       // is printed — the Validator's column is headed Δ and the reading under
       // it is signed.
-      final name = widget.metric.label.toUpperCase();
+      final name = widget.metric.labelIn(widget.naming).toUpperCase();
       _name = layoutParagraph(widget.delta ? 'Δ $name' : name, style);
 
       // **The unit of what is printed, which in delta is not the metric's

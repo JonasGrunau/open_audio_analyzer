@@ -78,6 +78,7 @@ class RemoteDisplayScope extends ConsumerWidget {
       layout: ref.watch(workspaceProvider).preset,
       skin: ref.watch(skinProvider),
       calibration: ref.watch(calibrationProvider),
+      naming: ref.watch(dynamicsNamingProvider),
     );
 
     return _RemoteDisplayScope(service: service, child: child);

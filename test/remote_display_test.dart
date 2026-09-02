@@ -262,7 +262,8 @@ void main() {
 
     host
       ..publishLayout(preset)
-      ..publishCalibration(calibration);
+      ..publishCalibration(calibration)
+      ..publishDynamicsNaming(DynamicsNaming.odr);
 
     await connect();
 
@@ -273,11 +274,33 @@ void main() {
       ModuleKind.lufsMeter,
     );
     expect(client.calibration.value.id, calibration.id);
+    // The names too, replayed to a display that joined after they were set:
+    // a tablet printing `PSR` under a desktop printing `ODR-S` is the
+    // disagreement the frame exists to prevent.
+    expect(client.dynamicsNaming.value, DynamicsNaming.odr);
 
     // The built-in skin travels as an empty payload, which the display reads as
     // "use the default" rather than as a missing frame.
     expect(client.skin.value, isNull);
   });
+
+  test(
+    'the dynamics names follow the host, and start at the default',
+    () async {
+      await connect();
+      // A host that has said nothing — or one that predates the frame — leaves
+      // the display on the default, which is what such a host prints itself.
+      expect(client.dynamicsNaming.value, DynamicsNaming.defaultNaming);
+
+      host.publishDynamicsNaming(DynamicsNaming.odr);
+      await _settle();
+      expect(client.dynamicsNaming.value, DynamicsNaming.odr);
+
+      host.publishDynamicsNaming(DynamicsNaming.psr);
+      await _settle();
+      expect(client.dynamicsNaming.value, DynamicsNaming.psr);
+    },
+  );
 
   test(
     'a display that joins mid-session is caught up, not left blank',

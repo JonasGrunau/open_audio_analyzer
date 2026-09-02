@@ -157,6 +157,11 @@ class DisplayHost {
   Timer? _skinCooldown;
   Calibration? _calibration;
 
+  /// What the two dynamics readings are called, replayed to a display that
+  /// joins and sent again on change. Null until the app has said, which is
+  /// before the first client can attach in practice.
+  DynamicsNaming? _naming;
+
   /// How many displays are attached, for the UI to show.
   final ValueNotifier<int> clientCount = ValueNotifier<int>(0);
 
@@ -313,6 +318,22 @@ class DisplayHost {
     }
   }
 
+  /// Publishes what the two dynamics readings are called.
+  ///
+  /// A label rather than a measurement, and it travels for the reason the
+  /// target does: a tablet printing `ODR-S` under the number the desktop has
+  /// `PSR` over is two screens somebody has to reconcile. Sent on change and
+  /// replayed to a display that joins; a display that predates the frame
+  /// skips it and prints the default, which is what the desktop prints unless
+  /// somebody chose otherwise.
+  void publishDynamicsNaming(DynamicsNaming naming) {
+    _naming = naming;
+    final frame = _dynamicsNamingFrame(naming);
+    for (final client in _clients) {
+      client.sendOnce(frame);
+    }
+  }
+
   void _accept(Socket socket) {
     // Nagle batches small writes, which is the opposite of what a 15 kB frame
     // that must land now wants.
@@ -338,6 +359,8 @@ class DisplayHost {
     if (calibration != null) {
       client.sendOnce(_calibrationFrame(calibration));
     }
+    final naming = _naming;
+    if (naming != null) client.sendOnce(_dynamicsNamingFrame(naming));
     // The playhead too, for the same reason and one of its own: transport goes
     // out on change, so a tablet that attaches to a session parked at bar 57
     // would otherwise show no position at all until somebody pressed play.
@@ -555,6 +578,13 @@ class DisplayHost {
   Uint8List _skinFrame(Skin? skin) => WireFrame.encode(
     WireFrameType.skin,
     skin == null ? Uint8List(0) : utf8.encode(jsonEncode(skin.toJson())),
+  );
+
+  /// The key is `settings.json`'s, so the choice has one spelling everywhere
+  /// it is written down. See `WireFrameType.dynamicsNaming`.
+  Uint8List _dynamicsNamingFrame(DynamicsNaming naming) => WireFrame.encode(
+    WireFrameType.dynamicsNaming,
+    utf8.encode(jsonEncode({'dynamics_names': naming.id})),
   );
 
   void dispose() {

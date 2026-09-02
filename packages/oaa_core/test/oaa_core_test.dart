@@ -19,8 +19,40 @@ void main() {
       // it meant, under the name it has now.
       expect(Metric.fromId('dr_s'), Metric.odrShort);
       expect(Metric.fromId('dr_i'), Metric.odrIntegrated);
-      expect(Metric.values.map((m) => m.label), isNot(contains('DR-S')));
-      expect(Metric.values.map((m) => m.label), isNot(contains('DR-I')));
+      for (final naming in DynamicsNaming.values) {
+        final labels = Metric.values.map((m) => m.labelIn(naming));
+        expect(labels, isNot(contains('DR-S')), reason: naming.id);
+        expect(labels, isNot(contains('DR-I')), reason: naming.id);
+      }
+    });
+
+    test('the two dynamics readings have two spellings, and only those', () {
+      // ODR § 6.4: one measurement, labelled either by the AES's names or by
+      // the specification's, never both at once. The AES names are the
+      // default because they are what every other meter prints; the plain
+      // `label` is that default, so a site that has not been handed the
+      // user's choice prints the name most people are looking for.
+      expect(DynamicsNaming.defaultNaming, DynamicsNaming.psr);
+      for (final metric in Metric.values) {
+        expect(metric.label, metric.labelIn(DynamicsNaming.defaultNaming));
+      }
+      expect(Metric.odrShort.labelIn(DynamicsNaming.psr), 'PSR');
+      expect(Metric.odrIntegrated.labelIn(DynamicsNaming.psr), 'PLR');
+      expect(Metric.odrShort.labelIn(DynamicsNaming.odr), 'ODR-S');
+      expect(Metric.odrIntegrated.labelIn(DynamicsNaming.odr), 'ODR-I');
+      // Every other metric has one name whatever is asked.
+      for (final metric in Metric.values) {
+        if (metric == Metric.odrShort || metric == Metric.odrIntegrated) {
+          continue;
+        }
+        for (final naming in DynamicsNaming.values) {
+          expect(metric.labelIn(naming), metric.label, reason: metric.id);
+        }
+      }
+      for (final naming in DynamicsNaming.values) {
+        expect(DynamicsNaming.fromId(naming.id), naming);
+      }
+      expect(DynamicsNaming.fromId('dr'), isNull);
     });
 
     test('the five the engine accumulates are named, and only those', () {
@@ -509,12 +541,19 @@ void main() {
     });
 
     test('names its rows after the metrics they judge, bar one', () {
-      // The ODR-S row is judged against the lowest reading since the reset,
-      // not the live one, and says so — a row reading `ODR-S` beside a number
-      // that is not the ODR-S every other module is showing would be read as a
-      // disagreement.
+      // The PSR row is judged against the lowest reading since the reset,
+      // not the live one, and says so — a row reading `PSR` beside a number
+      // that is not the PSR every other module is showing would be read as a
+      // disagreement. It follows the metric's spelling, so under the
+      // specification's names it is the ODR-S row that says MIN.
       expect(ValidatorCheck.lufsIntegrated.label, Metric.lufsIntegrated.label);
-      expect(ValidatorCheck.odrShort.label, 'ODR-S MIN');
+      expect(ValidatorCheck.odrShort.label, 'PSR MIN');
+      expect(ValidatorCheck.odrShort.labelIn(DynamicsNaming.odr), 'ODR-S MIN');
+      expect(ValidatorCheck.odrIntegrated.labelIn(DynamicsNaming.odr), 'ODR-I');
+      expect(
+        ValidatorCheck.lufsIntegrated.labelIn(DynamicsNaming.odr),
+        Metric.lufsIntegrated.label,
+      );
       // And its id is its metric's, so a preset holds one spelling of each.
       for (final check in ValidatorCheck.values) {
         expect(check.id, check.metric.id);

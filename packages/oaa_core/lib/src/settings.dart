@@ -7,6 +7,8 @@
 /// in the wrong file.
 library;
 
+import 'metric.dart';
+
 /// Where the signal comes from.
 ///
 /// This mirrors `OaaSource` in `oaa_engine` and deliberately is not it.
@@ -59,6 +61,7 @@ class AppSettings {
     this.remoteDisplayName,
     this.remoteDisplayPort = 47821,
     this.remoteDisplayFps = 30,
+    this.dynamicsNaming = DynamicsNaming.defaultNaming,
   });
 
   final AudioSourceKind sourceKind;
@@ -108,6 +111,11 @@ class AppSettings {
   final int remoteDisplayPort;
   final int remoteDisplayFps;
 
+  /// What the two dynamics readings are called on screen, in a report and on
+  /// the tablet: the AES names or the ODR specification's. See
+  /// [DynamicsNaming] for why the AES names are the default.
+  final DynamicsNaming dynamicsNaming;
+
   /// [clearDevice] and [clearRemoteDisplayName] exist because null means *keep*
   /// everywhere else in here, and both of those fields have a null that is an
   /// instruction rather than an absence: no device chosen, and "advertise under
@@ -127,6 +135,7 @@ class AppSettings {
     bool clearRemoteDisplayName = false,
     int? remoteDisplayPort,
     int? remoteDisplayFps,
+    DynamicsNaming? dynamicsNaming,
   }) => AppSettings(
     sourceKind: sourceKind ?? this.sourceKind,
     deviceId: clearDevice ? null : (deviceId ?? this.deviceId),
@@ -140,6 +149,7 @@ class AppSettings {
         : (remoteDisplayName ?? this.remoteDisplayName),
     remoteDisplayPort: remoteDisplayPort ?? this.remoteDisplayPort,
     remoteDisplayFps: remoteDisplayFps ?? this.remoteDisplayFps,
+    dynamicsNaming: dynamicsNaming ?? this.dynamicsNaming,
   );
 
   Map<String, Object?> toJson() => {
@@ -154,6 +164,7 @@ class AppSettings {
     if (remoteDisplayName != null) 'remote_name': remoteDisplayName,
     'remote_port': remoteDisplayPort,
     'remote_fps': remoteDisplayFps,
+    'dynamics_names': dynamicsNaming.id,
   };
 
   /// Reads settings, substituting the default for anything missing or absurd.
@@ -204,6 +215,9 @@ class AppSettings {
           remoteFps is int && kRemoteFpsOptions.contains(remoteFps)
           ? remoteFps
           : defaults.remoteDisplayFps,
+      dynamicsNaming:
+          DynamicsNaming.fromId(json['dynamics_names'] as String? ?? '') ??
+          defaults.dynamicsNaming,
     );
   }
 }

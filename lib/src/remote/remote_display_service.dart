@@ -131,6 +131,7 @@ class RemoteDisplayService {
   PresetSpec? _layout;
   Skin? _skin;
   Calibration? _calibration;
+  DynamicsNaming? _naming;
 
   Future<void> setEnabled(bool enabled) => enabled ? _start() : _stop();
 
@@ -172,6 +173,8 @@ class RemoteDisplayService {
     host.publishSkin(_skin);
     final calibration = _calibration;
     if (calibration != null) host.publishCalibration(calibration);
+    final naming = _naming;
+    if (naming != null) host.publishDynamicsNaming(naming);
 
     final responder = MdnsResponder(
       instanceName: hostName,
@@ -247,6 +250,7 @@ class RemoteDisplayService {
     required PresetSpec layout,
     required Skin skin,
     required Calibration calibration,
+    required DynamicsNaming naming,
   }) {
     final host = _host;
 
@@ -261,6 +265,10 @@ class RemoteDisplayService {
     if (_calibration != calibration) {
       _calibration = calibration;
       host?.publishCalibration(calibration);
+    }
+    if (_naming != naming) {
+      _naming = naming;
+      host?.publishDynamicsNaming(naming);
     }
   }
 

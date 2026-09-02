@@ -431,6 +431,7 @@ class _SoloState extends State<_Solo> with SingleTickerProviderStateMixin {
         engine: engine,
         clock: clock,
         calibration: BuiltInCalibrations.fallback,
+        naming: DynamicsNaming.defaultNaming,
         selected: false,
         onMenu: () {},
       ),

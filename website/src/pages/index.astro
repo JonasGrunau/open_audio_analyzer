@@ -100,8 +100,8 @@ const MODULES = [
     'A Number Box reading −14.1 LUFS in green, on target.'],
   ['lufs-meter', 'LUFS Meter', 'Momentary, short-term and integrated loudness as three bars against a target band, each with its value beneath.',
     'A LUFS Meter: three bars named MOMENTARY, SHORT and INTEGRATED against a dashed target line, each with its reading printed beneath it.'],
-  ['super-meter', 'Super Meter', 'Loudness from the left and Open Dynamic Range continuing from its tip to the true peak, on one half-gauge; LUFS, ODR and true peak in the centre.',
-    'A Super Meter: a half-gauge with teal loudness arcs filling from the left and thinner Open Dynamic Range arcs continuing from their tips to grey true-peak ticks, LUFS-S and ODR-S riding the outer tips, a red target tick, and LUFS, ODR and true peak readouts in the centre.'],
+  ['super-meter', 'Super Meter', 'Loudness from the left and Open Dynamic Range continuing from its tip to the true peak, on one half-gauge; LUFS, PLR and true peak in the centre.',
+    'A Super Meter: a half-gauge with teal loudness arcs filling from the left and thinner Open Dynamic Range arcs continuing from their tips to grey true-peak ticks, LUFS-S and PSR riding the outer tips, a red target tick, and LUFS, PLR and true peak readouts in the centre.'],
   ['digital-meter', 'Digital Meter', 'Sample peak and RMS, per channel, up to 7.1 — as segmented bars and as numbers.',
     'A Digital Meter: left and right bars with peak-hold lines held near the top of the scale.'],
   ['vu-meter', 'VU Meter', 'A needle, with the ballistics of the real thing.',
@@ -146,7 +146,7 @@ const METRICS = [
   ],
   [
     'Open Dynamic Range',
-    'True peak minus loudness over the same audio: <strong>ODR-S</strong> over the last three seconds, <strong>ODR-I</strong> over the whole programme. How hard the limiter is working, in a number that does not move when a platform turns the track down. Defined in the <a class="link" href="/docs/odr">ODR specification</a>.',
+    'True peak minus loudness over the same audio: <strong>PSR</strong> over the last three seconds, <strong>PLR</strong> over the whole programme — the names every meter prints, defined to the operand in the <a class="link" href="/docs/odr">ODR specification</a>, whose own <strong>ODR-S</strong> / <strong>ODR-I</strong> is one setting away. How hard the limiter is working, in a number that does not move when a platform turns the track down.',
   ],
   [
     'Spectrum',
@@ -612,12 +612,17 @@ const ANCHORS = [
           either one fall as you push a limiter and you are watching the squeeze happen.
         </p>
         <p class="prose">
-          The arithmetic is the AES peak-to-loudness ratio. What the specification adds is every
-          choice that note leaves open: true peak and never sample peak, both operands over the same
-          window, undefined in silence rather than reading zero, the most squeezed three seconds
-          reported beside the whole. It is held in CI against arithmetic — a stereo sine reads
-          exactly 0.0 LU on both — and a delivery target can put a floor under either, so a master
-          limited past it fails the same way one over its peak ceiling does.
+          These are the readings the AES calls <strong>PSR</strong> and <strong>PLR</strong>, and
+          that is what Open Audio Analyzer prints — the names every other meter prints, and the
+          ones a person looks for. What the AES text says is “true peak against loudness” and
+          little else; what the specification adds is everything it leaves open: which channel’s
+          peak, both operands over the same window, undefined in silence rather than reading zero,
+          the most squeezed three seconds reported beside the whole. It is held in CI against
+          arithmetic — a stereo sine reads exactly 0.0 LU on both — and a delivery target can put a
+          floor under either, so a master limited past it fails the same way one over its peak
+          ceiling does. Settings › Dynamics switches every label to the specification’s own,
+          ODR-S and ODR-I; nothing but the name changes, on the canvas, in a report or on a paired
+          tablet.
         </p>
         <p>
           <a class="link" href={`${DOCS}/odr`}>Read the ODR specification</a>
@@ -634,19 +639,19 @@ const ANCHORS = [
           </thead>
           <tbody>
             <tr>
-              <td class="q">ODR-S</td>
+              <td class="q">PSR · ODR-S</td>
               <td><code>TP(3 s) − LUFS-S</code>, the last three seconds</td>
               <td>LUFS-S is at or below the −70 LUFS absolute gate</td>
             </tr>
             <tr>
-              <td class="q">ODR-I</td>
+              <td class="q">PLR · ODR-I</td>
               <td><code>TP Max − LUFS-I</code>, the programme since reset</td>
               <td>LUFS-I is undefined</td>
             </tr>
             <tr>
-              <td class="q">min ODR-S</td>
-              <td>The lowest ODR-S the programme reached, where it was defined</td>
-              <td>ODR-S has never been defined</td>
+              <td class="q">min PSR</td>
+              <td>The lowest PSR the programme reached, where it was defined</td>
+              <td>PSR has never been defined</td>
             </tr>
           </tbody>
         </table>

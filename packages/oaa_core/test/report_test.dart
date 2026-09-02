@@ -323,13 +323,39 @@ void main() {
       expect(exportReportJson(buildReport()), isNot(contains('balanced')));
     });
 
-    test('an undefined ODR-I gets no band word', () {
+    test('an undefined PLR gets no band word', () {
       final text = exportReportText(buildReport(lufsIntegrated: double.nan));
       final line = text
           .split('\n')
-          .firstWhere((l) => l.trimLeft().startsWith('ODR-I'));
+          .firstWhere((l) => l.trimLeft().startsWith('PLR'));
       expect(line, contains('—'));
       expect(line, isNot(contains('(')));
+    });
+
+    test('the text report labels the dynamics readings as asked', () {
+      // The default is the AES pair, which is what a person reading the report
+      // is looking for; the specification's own names are one argument away
+      // and change nothing but the label — the JSON carries ids and has no
+      // spelling to choose.
+      final report = buildReport(truePeakMax: -1.0, lufsIntegrated: -14.0);
+      final aes = exportReportText(report);
+      expect(aes, contains('PLR'));
+      expect(aes, contains('PSR'));
+      expect(aes, isNot(contains('ODR-')));
+
+      final odr = exportReportText(report, naming: DynamicsNaming.odr);
+      expect(odr, contains('ODR-I'));
+      expect(odr, contains('ODR-S'));
+      expect(odr, isNot(contains('PLR')));
+      expect(odr, isNot(contains('PSR')));
+      expect(
+        exportReport(report, ReportFormat.text, naming: DynamicsNaming.odr),
+        odr,
+      );
+      expect(
+        exportReport(report, ReportFormat.json, naming: DynamicsNaming.odr),
+        exportReportJson(report),
+      );
     });
   });
 

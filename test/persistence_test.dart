@@ -66,11 +66,15 @@ void main() {
 
       container.read(settingsProvider.notifier).setTargetFps(30);
       container.read(settingsProvider.notifier).setSkinId('daylight');
+      container
+          .read(settingsProvider.notifier)
+          .setDynamicsNaming(DynamicsNaming.odr);
       await store.flush();
 
       final written = await store.readJson(ConfigFile.settings);
       expect(written!['fps'], 30);
       expect(written['skin'], 'daylight');
+      expect(written['dynamics_names'], 'odr');
     });
 
     test('what was on disk is what the session starts with', () async {

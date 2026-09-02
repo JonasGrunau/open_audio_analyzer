@@ -271,6 +271,7 @@ class _BenchAppState extends State<_BenchApp>
                   engine: _material.snapshot,
                   clock: _clock,
                   calibration: BuiltInCalibrations.fallback,
+                  naming: DynamicsNaming.defaultNaming,
                   selected: false,
                   onMenu: null,
                 ),

@@ -36,6 +36,7 @@ class ModuleHost extends StatelessWidget {
     required this.engine,
     required this.clock,
     required this.calibration,
+    required this.naming,
     required this.selected,
     required this.onMenu,
     this.onOption,
@@ -46,6 +47,13 @@ class ModuleHost extends StatelessWidget {
   final MeterSource engine;
   final MeterClock clock;
   final Calibration calibration;
+
+  /// What the two dynamics readings are called. Threaded the way
+  /// [calibration] is — an argument, never a provider read on the frame path —
+  /// and for the same reason it travels to a tablet: every surface that draws
+  /// a module gets the same answer, so a Super Meter, a Number Box and the
+  /// Validator beside it never spell the same number two ways.
+  final DynamicsNaming naming;
   final bool selected;
 
   /// Null on a surface where a module has nothing to open — the remote display.
@@ -67,7 +75,7 @@ class ModuleHost extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ModuleFrame(
-      title: spec.title,
+      title: spec.titleIn(naming),
       selected: selected,
       onMenu: onMenu,
       // Two kinds paint past the frame's inset, and both for the same reason:
@@ -123,6 +131,7 @@ class ModuleHost extends StatelessWidget {
         clock: clock,
         metric: spec.metric,
         calibration: calibration,
+        naming: naming,
       ),
       ModuleKind.lufsMeter => LufsMeterModule(
         engine: engine,
@@ -137,6 +146,7 @@ class ModuleHost extends StatelessWidget {
         engine: engine,
         clock: clock,
         calibration: calibration,
+        naming: naming,
       ),
       ModuleKind.vuMeter => VuMeterModule(
         engine: engine,
@@ -148,12 +158,14 @@ class ModuleHost extends StatelessWidget {
         clock: clock,
         metric: spec.metric,
         calibration: calibration,
+        naming: naming,
         delta: alertDeltaOf(spec, calibration),
       ),
       ModuleKind.validator => ValidatorModule(
         engine: engine,
         clock: clock,
         calibration: calibration,
+        naming: naming,
         checks: spec.validatorChecks,
       ),
       ModuleKind.histogram => HistogramModule(

@@ -7,8 +7,8 @@ halves live here.
 
 | Path | Purpose |
 |------|---------|
-| `display_host.dart` | The server. Publishes measurements to attached displays. |
-| `display_client.dart` | The client. Decodes them into a `WireSnapshot`. |
+| `display_host.dart` | The server. Publishes measurements to attached displays, and replays the layout, skin, target and dynamics naming to one that joins. |
+| `display_client.dart` | The client. Decodes them into a `WireSnapshot`, and holds the layout, skin, target and naming the host sent as `ValueNotifier`s. |
 | `display_screen.dart` | The tablet's UI: the host picker until there is a host, then that host's layout. |
 | `host_picker.dart` | Choosing a host — what discovery found, the code a camera reads, and the address you type when neither worked. One panel, pushed by the desktop's ATTACH button and shown by the display screen itself. |
 | `remote_display_service.dart` | The socket and the mDNS advertisement as one switch. |
@@ -318,6 +318,15 @@ halves live here.
   generation, so the cost of the default is a `refresh()` per vsync rather than
   wasted paints. What it really buys is a way to spend less on a slow tablet —
   see the phase scope note in `lib/src/modules/phase_scope.dart`.
+
+  **The dynamics naming took the other route, and is the precedent for what a
+  display should be *told* rather than read.** What the readings are called is
+  the desktop's choice, and a display's job is to look like the desktop — so it
+  travels as `0x0006` beside the skin and the target and arrives on
+  `DisplayClient.dynamicsNaming`: no provider, no second control, and the two
+  screens cannot spell one number two ways. `targetFps` is not that. It is a
+  property of the tablet's own display, which is why it still waits on a
+  control of its own.
 
 - **The host collects on a fast timer and sends on a slow one, and the two are
   not the same clock.** `_pump` runs every 5 ms and appends `scope` whenever the

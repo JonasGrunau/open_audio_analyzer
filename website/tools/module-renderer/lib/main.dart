@@ -370,6 +370,7 @@ class _RendererAppState extends State<RendererApp>
       engine: source,
       clock: clock,
       calibration: _calibration,
+      naming: DynamicsNaming.defaultNaming,
       selected: false,
       // Null, as on the remote display: a menu button that cannot be pressed in
       // a photograph should not be drawn in one.

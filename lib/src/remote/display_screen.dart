@@ -227,12 +227,20 @@ class _LiveDisplay extends StatelessWidget {
                 ? const _NothingToDraw()
                 : ValueListenableBuilder<Calibration>(
                     valueListenable: client.calibration,
-                    builder: (context, calibration, _) => _RemoteCanvas(
-                      tab: layout.tabs[tab.clamp(0, layout.tabs.length - 1)],
-                      source: client.snapshot,
-                      clock: clock,
-                      calibration: calibration,
-                    ),
+                    // Nested rather than merged: each arrives once per session
+                    // and on change, so two builders cost two rebuilds a year.
+                    builder: (context, calibration, _) =>
+                        ValueListenableBuilder<DynamicsNaming>(
+                          valueListenable: client.dynamicsNaming,
+                          builder: (context, naming, _) => _RemoteCanvas(
+                            tab: layout
+                                .tabs[tab.clamp(0, layout.tabs.length - 1)],
+                            source: client.snapshot,
+                            clock: clock,
+                            calibration: calibration,
+                            naming: naming,
+                          ),
+                        ),
                   ),
           ),
         ],
@@ -531,12 +539,14 @@ class _RemoteCanvas extends StatelessWidget {
     required this.source,
     required this.clock,
     required this.calibration,
+    required this.naming,
   });
 
   final TabSpec tab;
   final MeterSource source;
   final MeterClock clock;
   final Calibration calibration;
+  final DynamicsNaming naming;
 
   @override
   Widget build(BuildContext context) {
@@ -564,6 +574,7 @@ class _RemoteCanvas extends StatelessWidget {
                     engine: source,
                     clock: clock,
                     calibration: calibration,
+                    naming: naming,
                     selected: false,
                     // A display has no menu. There is nothing on it a viewer is
                     // allowed to change, and a menu that opened onto disabled
