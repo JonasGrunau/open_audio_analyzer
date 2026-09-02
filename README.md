@@ -806,10 +806,13 @@ are on the [documentation site](https://open-audio-analyzer.com/docs/install).
 > because "signed" and "a user can double-click it" are not the same thing.
 
 > [!NOTE]
-> **The iPad build goes to TestFlight and the Android build to Google Play**,
-> and neither is on the releases page. Both are built and uploaded by a tagged
-> release, after the release is published, so a store build always belongs to a
-> release that exists. Neither is attachable as an asset: an App Store signature
+> **The iPad build goes to [the App
+> Store](https://apps.apple.com/app/id6804126136) and the Android build to
+> Google Play**, and neither is on the releases page. Both are built and
+> uploaded by a tagged release, after the release is published, so a store build
+> always belongs to a release that exists. The iPad build lands in **TestFlight**
+> first and reaches the store when Apple has passed it, so the listing can be a
+> version or more behind the downloads above. Neither is attachable as an asset: an App Store signature
 > provisions no devices, so a downloaded IPA could not be installed by anyone,
 > and an `.aab` is a publishing format from which Play generates and signs each
 > device's download. Play carries it as a **closed test**, which grants access

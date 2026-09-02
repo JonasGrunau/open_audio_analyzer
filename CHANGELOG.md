@@ -37,6 +37,15 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (Impressum)" — the English for a site written in English, and the German word
   because that is the one § 5's recognisability is judged by — and it is in the
   sitemap.
+- **Open Audio Analyzer is on the [App
+  Store](https://apps.apple.com/app/id6804126136)**, free, for iPad — and the
+  front page's App Store badge is a link to it. The badge stood there dimmed
+  and unlinked through the wait for review, which said "not yet" to nobody who
+  did not already know it was waiting; that state and the opacity rule behind
+  it are gone with the wait. The store carries the build Apple has passed
+  rather than the version tagged last, so the listing can sit behind the
+  desktop downloads — TestFlight still takes every tagged release first, and
+  Installing says which is which.
 
 ### 🐛 Fixed
 - **The privacy policy was 128 px wider than a phone screen.** The address to

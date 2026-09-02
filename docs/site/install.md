@@ -250,14 +250,19 @@ beside PUBLISH in the menu bar; on the iPad, Scan
 a QR code. iPadOS asks for camera permission the first time, and refusing it
 leaves the host list and the typed address exactly as they were.
 
-It is distributed through **TestFlight** rather than from the releases page, and
-that is not an oversight. An App Store signature provisions no devices, so an
-IPA you downloaded could not be installed on your iPad by you or by anybody
-else — there is no file here that would do you any good. Every tagged release
-uploads a build; ask on the
-[repository](https://github.com/JonasGrunau/open_audio_analyzer) for access, or
-build it yourself, which needs a Mac with Xcode and no credentials beyond a free
-Apple ID:
+It is free on the [**App Store**](https://apps.apple.com/app/id6804126136), and
+there is no IPA on the releases page — which is not an oversight. An App Store
+signature provisions no devices, so an IPA you downloaded could not be installed
+on your iPad by you or by anybody else; there is no file here that would do you
+any good.
+
+The store carries the build that has cleared review, and that is not always the
+version the desktop downloads are on. **TestFlight** is where a tagged release
+lands first — every one of them uploads a build, before Apple has looked at it —
+so [ask on the
+repository](https://github.com/JonasGrunau/open_audio_analyzer/issues) if you
+want the newest one ahead of the store. Or build it yourself, which needs a Mac
+with Xcode and no credentials beyond a free Apple ID:
 
 ```sh
 flutter run -d <your ipad>    # `flutter devices` names it

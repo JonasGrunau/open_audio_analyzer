@@ -54,8 +54,7 @@ function versionFromPubspec() {
 
 export const VERSION = versionFromPubspec();
 
-/* Where the two app stores are, and the fact that only one of them has
-   anything on it.
+/* Where the two app stores are, and what each of them is carrying.
  *
  * Google Play hands out **two** links for a closed test and they are not
  * interchangeable:
@@ -89,9 +88,17 @@ export const VERSION = versionFromPubspec();
  * matches anybody against it, and a mailto in an href is a link that does
  * nothing useful. One name, derived twice, cannot disagree with itself.
  *
- * `APP_STORE` is null and the App Store badge is drawn unlinked beside its
- * `Coming soon` caption. When the iPad build clears review this becomes the
- * product URL and `index.astro` links the badge without any other change. */
+ * `APP_STORE` is the iPad listing, and the front page's badge is a link to it.
+ * It was null from the day the badge was drawn until the build cleared review,
+ * and the badge was dimmed and unlinked in the meantime — that state, the
+ * `<span>` branch that rendered it and the opacity rule behind it are all gone.
+ *
+ * **No storefront in the URL.** Apple hands you `apps.apple.com/us/app/<slug>/
+ * id<id>` in a browser, which is the US store's copy of the page; the short
+ * form here has no country in it and Apple resolves it to the reader's own
+ * storefront. This site is read from everywhere and the application is free in
+ * every store there is, so a country in the URL buys nothing and costs a
+ * reader the page their own Apple Account can install from. */
 export const PLAY_PACKAGE = 'com.openaudioanalyzer.oaa';
 export const PLAY_TESTING = `https://play.google.com/apps/testing/${PLAY_PACKAGE}`;
 export const PLAY_LISTING = `https://play.google.com/store/apps/details?id=${PLAY_PACKAGE}`;
@@ -102,4 +109,4 @@ export const TESTER_GROUP_NAME = 'open-audio-analyzer-closed-test';
 export const TESTER_GROUP = TESTER_GROUP_NAME
   ? `https://groups.google.com/g/${TESTER_GROUP_NAME}`
   : null;
-export const APP_STORE = null;
+export const APP_STORE = 'https://apps.apple.com/app/id6804126136';
