@@ -9,8 +9,8 @@
 # (TARGETED_DEVICE_FAMILY = 2), so no iPhone set is required.
 #
 # **Into the repository, not into build/.** These are what the store is given,
-# nothing in CI can take them — a fake DAW, a simulator and a person's grant to
-# post keys — and a set that lived in `build/packaging/` was one clean away from
+# nothing in CI can take them — a fake DAW, a simulator and a person to turn
+# the device — and a set that lived in `build/packaging/` was one clean away from
 # being gone. They are committed, like the feature graphic beside the Android
 # script, and a run overwrites them in place.
 #
@@ -106,11 +106,6 @@
 # the meters are showing. Nothing is frozen before a shutter — `simctl io
 # screenshot` reads the framebuffer as it stands, and a single picture has
 # nothing to agree with.
-#
-# The Simulator window has to stay uncovered for the whole run. The app inside
-# it stops drawing when its window is hidden, exactly as the desktop one does,
-# and a canvas that has stopped drawing has stopped consuming the plugin's
-# stream. Being frontmost is not the requirement; being visible is.
 #
 # ---------------------------------------------------------------------------
 # Prerequisites
