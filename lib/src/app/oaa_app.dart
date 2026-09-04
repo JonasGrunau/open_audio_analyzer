@@ -533,11 +533,27 @@ class _WorkspaceState extends ConsumerState<_Workspace>
   /// what `showOaaPanel` needs as well.
   final GlobalKey _belowScopes = GlobalKey();
 
-  /// Acts on `--open-panel`, `--publish` and `--attach`, and says so when an
-  /// argument was not understood.
+  /// Acts on `--open-panel`, `--publish`, `--attach` and `--tab`, and says so
+  /// when an argument was not understood.
   void _applyLaunchOptions() {
     if (!mounted) return;
     final options = ref.read(launchOptionsProvider);
+
+    // The tab first, and through the workspace like the `1`…`9` shortcuts, so
+    // that it is the same selection a keypress makes. A number with no tab
+    // behind it is said rather than silently clamped: a script asking for tab
+    // 3 of a two-tab session would photograph the wrong tab and not know.
+    final tab = options.tab;
+    if (tab != null) {
+      final count = ref.read(workspaceProvider).preset.tabs.length;
+      if (tab > count) {
+        ref
+            .read(storageNoticeProvider.notifier)
+            .report('--tab=$tab, but this session has $count tabs.');
+      } else {
+        ref.read(workspaceProvider.notifier).selectTab(tab - 1);
+      }
+    }
 
     if (options.warnings.isNotEmpty) {
       // Joined onto whatever the storage layer already had to say rather than

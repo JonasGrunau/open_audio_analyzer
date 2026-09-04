@@ -2,7 +2,7 @@
 
 /// What Open Audio Analyzer was started with.
 ///
-/// Four flags, and every one of them exists because of something that could not
+/// Five flags, and every one of them exists because of something that could not
 /// be done otherwise rather than because a flag seemed nice to have.
 ///
 /// **`--config-dir` is not a duplicate of `OAA_CONFIG_DIR`.** Passing an
@@ -58,6 +58,17 @@
 /// `Platform.environment`, so the obvious way round it is not one. The command
 /// line is asked for instead; see `launch_arguments.dart`, which is what makes
 /// every flag here work on an iPad rather than only this one.
+///
+/// **`--tab` is the photograph's other half, and it replaced a key.** The
+/// window shots and the store screenshots want the Spectrum tab, and the bare
+/// digit that selects one is a key — which a script can only deliver to the
+/// window that has the focus, and only by taking the focus first. A key
+/// handed to the process instead (`CGEventPostToPid`) reaches the application
+/// and not Flutter's key handling, so it selects nothing. Naming the tab on the
+/// command line is what lets `packaging/app_window_shots.sh` and
+/// `packaging/ios/screenshots.sh` open the application behind whatever the
+/// person is working in and leave it there. One-based, the way the tab strip
+/// and the `1`…`9` shortcuts count; a number with no tab behind it is a warning.
 ///
 /// **The in-window File menu is not one of these, and was for one afternoon.**
 /// Drawing the FILE button on a Mac is the same kind of debug-build affordance
@@ -115,6 +126,7 @@ class LaunchOptions {
     this.openPanel,
     this.attach,
     this.publish = false,
+    this.tab,
     this.warnings = const [],
   });
 
@@ -136,6 +148,10 @@ class LaunchOptions {
   /// comment, which is where the argument for this one is.
   final bool publish;
 
+  /// A tab to select once the first frame is on screen, **one-based**. Null
+  /// leaves the session's own choice alone.
+  final int? tab;
+
   /// Anything that was not understood, in the words the user should see.
   ///
   /// Not printed and not thrown: a misspelt flag that killed a metering session
@@ -150,7 +166,7 @@ class LaunchOptions {
 
 /// Reads [arguments] as Open Audio Analyzer's command line.
 ///
-/// Accepts `--flag=value` and `--flag value` for the three that take one,
+/// Accepts `--flag=value` and `--flag value` for the four that take one,
 /// because both are typed by people and neither is wrong. Unknown arguments are
 /// collected rather than rejected: on macOS the process is handed things nobody
 /// typed — `-psn_0_…` from the Finder, `-NSDocumentRevisionsDebugMode` from
@@ -162,6 +178,7 @@ LaunchOptions parseLaunchOptions(List<String> arguments) {
   StartupPanel? openPanel;
   ({String host, int port})? attach;
   var publish = false;
+  int? tab;
   final warnings = <String>[];
 
   String? valueFor(String argument, String flag, int index) {
@@ -220,6 +237,18 @@ LaunchOptions parseLaunchOptions(List<String> arguments) {
       continue;
     }
 
+    final tabText = valueFor(argument, '--tab', i);
+    if (tabText != null) {
+      final number = int.tryParse(tabText);
+      if (number == null || number < 1) {
+        warnings.add('--tab=$tabText is not a tab number. Try --tab=2.');
+      } else {
+        tab = number;
+      }
+      if (argument == '--tab') i++;
+      continue;
+    }
+
     if (argument == '--publish') {
       publish = true;
       continue;
@@ -231,6 +260,7 @@ LaunchOptions parseLaunchOptions(List<String> arguments) {
     openPanel: openPanel,
     attach: attach,
     publish: publish,
+    tab: tab,
     warnings: warnings,
   );
 }

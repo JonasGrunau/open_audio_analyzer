@@ -103,7 +103,10 @@ whatever the canvas would have been. Neither is gated to a debug build, because
 the photographs they exist for are of the release one; nothing persists either,
 so the next launch publishes nothing again. They are what lets a desktop and a
 tablet be photographed drawing one published frame without a mouse event being
-posted at anybody's machine — see `packaging/signal_path.sh`.
+posted at anybody's machine — see `packaging/signal_path.sh`. The fifth,
+`--tab=<n>`, opens the application on a tab, counted the way the tab strip
+counts; the screenshot scripts use it in place of pressing the digit, because a
+key can only be delivered to the window that has the focus.
 
 On a built macOS bundle, pass them with `open --args`:
 

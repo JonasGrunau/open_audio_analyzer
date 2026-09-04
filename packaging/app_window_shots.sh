@@ -58,21 +58,14 @@
 # ---------------------------------------------------------------------------
 # What is posted, and what is not
 #
-# One key per run: the tab digit. `lib/src/app/shortcuts.dart` binds the bare
-# digits to "go to a tab by number", so no modifier and no pointer is involved —
-# `CGPreflightPostEventAccess` is the only grant it needs, and the window is
-# brought forward with `NSRunningApplication.activate`, which is an API call
-# rather than a synthesised click and leaves the pointer where the person left
-# it. The Loudness run posts `1`, which selects the tab that is already
-# selected; it is sent anyway because a key that lands is also the proof that
-# the window has the focus.
-#
-# There is no `--open-tab` launch option to prefer over this, unlike `--publish`
-# and `--attach` in signal_path.sh, and one should not be added for a
-# screenshot: the digit is a shipped, documented binding and posting it exercises
-# it. What is *not* posted is anything with coordinates. See CLAUDE.md on why a
-# script that clicks at a remembered offset is a script that stops pressing
-# anything the day the row moves.
+# Nothing. The tab is `--tab=<n>`, a launch option — the bare digit is a
+# shipped binding, but a key can only be delivered to the window that has the
+# focus, and a key handed to the process instead reaches the application and
+# not Flutter's key handling. `lib/src/app/launch_options.dart` says why the
+# option exists. The application is opened with `open -g`, behind whatever the
+# person is working in, and never activated; it goes on measuring for as long
+# as any part of it is on screen, and the shutter reads the window's own image.
+# Nobody has to leave the machine alone.
 #
 # ---------------------------------------------------------------------------
 # The freeze
@@ -90,19 +83,15 @@
 #
 #   - **Screen Recording**, granted to whichever terminal runs this. Without it
 #     `screencapture` returns a black frame and exits 0. Preflighted below.
-#   - Permission to **post key events** — what `CGPreflightPostEventAccess`
-#     reports. No Accessibility grant is needed: nothing here goes through
-#     `System Events`.
-#   - **The window uncovered** for the four minutes it runs. Flutter pauses its
-#     ticker when a window is occluded and this application consumes the
-#     plugin's stream from that ticker, so a covered canvas stops measuring
-#     silently — the link stays up and the transport sits at 00:00:00:00. This
-#     is checked for what it is rather than through the usual proxy: the window
-#     list is read every five seconds and anything overlapping the window from
-#     in front ends the run, naming itself. So the application does **not** have
-#     to stay frontmost — a terminal or a browser somewhere else on a large
-#     screen is fine — and a doomed run ends in five seconds rather than after
-#     the whole settle.
+#   - **A corner of the window showing** for the four minutes it runs. Flutter
+#     pauses its ticker when a window is occluded entirely and this application
+#     consumes the plugin's stream from that ticker, so a buried canvas stops
+#     measuring silently — the link stays up and the transport sits at
+#     00:00:00:00. Checked for what it is: the window list is read every five
+#     seconds and a window with no point of it uncovered ends the run, naming
+#     what buried it. The application does **not** have to be frontmost, and is
+#     opened behind on purpose; no key is posted and no grant beyond Screen
+#     Recording is needed.
 #   - The release build: `flutter build macos --release`. Not a debug one — a
 #     Mac draws the FILE button only in a debug build, and that row is part of
 #     what these pictures are of.
@@ -201,43 +190,6 @@ FileHandle.standardError.write(
 exit(1)
 SWIFT
 
-# The tab digit, as a key rather than a click.
-#
-# `activate` first because a posted key goes wherever the focus is. It is an API
-# call and not a synthesised click, so the pointer stays where it is. 18, 19 and
-# 20 are the digits 1, 2 and 3.
-cat > "$WORK/tab.swift" <<'SWIFT'
-import Cocoa
-
-guard let digit = CommandLine.arguments.dropFirst().first.flatMap(Int.init),
-      (1...9).contains(digit) else { exit(2) }
-
-guard CGPreflightPostEventAccess() else {
-  FileHandle.standardError.write(
-    "no permission to post key events: grant Input Monitoring to this terminal\n"
-      .data(using: .utf8)!)
-  exit(3)
-}
-guard let app = NSRunningApplication.runningApplications(
-  withBundleIdentifier: "com.openaudioanalyzer.oaa").first else {
-  FileHandle.standardError.write("Open Audio Analyzer is not running\n".data(using: .utf8)!)
-  exit(1)
-}
-app.activate(options: [])
-usleep(800_000)
-
-// kVK_ANSI_1 is 18, and 1–8 run consecutively from there; 9 does not, which is
-// why the table is written out rather than computed.
-let keys: [Int: CGKeyCode] = [1: 18, 2: 19, 3: 20, 4: 21, 5: 23,
-                              6: 22, 7: 26, 8: 28, 9: 25]
-let source = CGEventSource(stateID: .hidSystemState)
-for down in [true, false] {
-  CGEvent(keyboardEventSource: source, virtualKey: keys[digit]!, keyDown: down)?
-    .post(tap: .cghidEventTap)
-  usleep(80_000)
-}
-SWIFT
-
 # The window id, and whether anything is lying on top of it.
 #
 # **Two questions, one list, and the second is the one that matters.** Flutter
@@ -285,10 +237,20 @@ for w in list {
         let bounds = rect(w) else { continue }
 
   if owner == "Open Audio Analyzer" {
-    // A window covered by a *sliver* is still a window Flutter stops drawing,
-    // so any overlap at all is reported rather than a fraction of the area.
-    for (name, other) in above where other.intersects(bounds) {
-      FileHandle.standardError.write("covered by \(name)\n".data(using: .utf8)!)
+    // Any part showing is enough: macOS reports a window visible while any of
+    // it is, and that is the signal Flutter pauses on. So this samples a grid
+    // over the bounds and objects only when every point is under something.
+    var shown = 0
+    for i in 0..<40 {
+      for j in 0..<25 {
+        let p = CGPoint(x: bounds.minX + bounds.width * (CGFloat(i) + 0.5) / 40,
+                        y: bounds.minY + bounds.height * (CGFloat(j) + 0.5) / 25)
+        if !above.contains(where: { $0.1.contains(p) }) { shown += 1 }
+      }
+    }
+    if shown == 0 {
+      let names = Set(above.filter { $0.1.intersects(bounds) }.map { $0.0 }).sorted()
+      FileHandle.standardError.write("covered entirely by \(names.joined(separator: ", "))\n".data(using: .utf8)!)
       exit(4)
     }
     print(id)
@@ -307,17 +269,13 @@ APP_FRAME="$(swift "$WORK/layout.swift" "$WIN_W" "$WIN_H")" \
   || die "No screen big enough for a ${WIN_W}x${WIN_H} window."
 
 # ---------------------------------------------------------------------------
-# Nothing may lie on top of the window
+# Some of the window must show
 #
-# Not "nothing else may have the focus" — see the header of `window.swift`. The
-# window may sit behind the terminal that started this, and this run will still
-# be thrown away, so it is polled rather than checked once: a doomed run ends in
-# five seconds instead of in seventy-five.
-#
-# The application does *not* have to be frontmost, which matters here: the tab
-# key is posted through `NSRunningApplication.activate` and everything after it
-# is a signal, so a person can click elsewhere on a large screen without
-# spoiling the picture.
+# Not "the window must be frontmost", and not "nothing may overlap it" either.
+# macOS reports a window visible while any part of it shows, and that is the
+# signal Flutter pauses on — so a window three quarters under a browser goes on
+# measuring, and only one buried entirely stops. The run is polled rather than
+# checked once, so a doomed run ends in five seconds instead of seventy-five.
 
 wait_uncovered() { # wait_uncovered <seconds>
   waited=0
@@ -327,8 +285,8 @@ wait_uncovered() { # wait_uncovered <seconds>
 $(printf '%s' "The window is ${COVER:-gone} after ${waited}s.")
   Flutter pauses its ticker when a window is occluded and this application
   consumes the plugin's stream from that ticker, so a covered canvas stops
-  measuring — the picture would show a transport that never moved. Leave the
-  window uncovered for the whole run."
+  measuring — the picture would show a transport that never moved. Leave a
+  corner of the window showing for the whole run."
     fi
     sleep 5
     waited=$((waited + 5))
@@ -359,7 +317,11 @@ shoot_tab() { # shoot_tab <name> <digit>
   # permission to the *responsible* process, and a bare exec of the executable
   # is refused where the bundle is allowed.
   say "Starting the application..."
-  open "$APP" --args --config-dir="$WORK/config"
+  # `-g`: behind whatever is in front, never activated, and on the tab it was
+  # asked for — a launch option, because a key can only be delivered to the
+  # window with the focus. It goes on measuring for as long as any part of it
+  # is on screen, and the shutter reads the window's own image.
+  open -g "$APP" --args --config-dir="$WORK/config" --tab="$digit"
   sleep 8
 
   APP_PID="$(pgrep -x "Open Audio Analyzer" | head -1)"
@@ -387,8 +349,6 @@ shoot_tab() { # shoot_tab <name> <digit>
     [ "$waited" -ge 30 ] && die "The plugin never connected on 47822 — check the notice on the canvas."
   done
 
-  say "Selecting the $name tab..."
-  swift "$WORK/tab.swift" "$digit" || die "Could not post the tab key — see the header."
 
   say "Playing $SETTLE s of programme..."
   wait_uncovered "$SETTLE"

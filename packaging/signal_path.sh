@@ -65,24 +65,31 @@
 # line nor an environment, so the runner has to be asked. See
 # `lib/src/app/launch_options.dart` and `ios/Runner/OaaLaunchArguments.swift`.
 #
-# **One thing is still posted, and it is a key.** The device has to be in
-# landscape, and nothing will put it there without asking a person: `simctl`
-# cannot rotate, and `SimulatorWindowOrientation` in the Simulator's preferences
-# turns out to describe the *window* rather than the device — write LandscapeLeft
-# into it and the springboard comes up portrait anyway. What is left is the
-# Simulator's own Rotate Right, so this posts ⌘→ once. A key event moves no
-# pointer and steals no cursor; the Simulator is brought forward through
-# `NSRunningApplication.activate`, which moves none either. The device is
-# rebooted first so that one press is always enough — a fresh boot is portrait,
-# which is the one fact that makes a blind rotation deterministic.
+# **Nothing is posted, and nothing is brought to the front.** Every way of
+# turning the device from a script — a posted ⌘→, a key handed to the
+# Simulator's process, its own Device menu through the accessibility API — takes
+# effect only while the Simulator is frontmost, and making it frontmost takes the
+# focus from whoever is at the machine. A run that does that in the middle of
+# somebody's afternoon is a run that gets interrupted, and was. So the device is
+# turned once, by a person, and left booted: its orientation is state that lives
+# for as long as the boot does, this script keeps a booted device as it finds
+# it, and it refuses — with the menu path to use — rather than reaching for the
+# keyboard. `SimulatorWindowOrientation` and its angle are *removed* from the
+# Simulator's preferences before launch, as `ios/screenshots.sh` does: written,
+# they pin the device so that nothing rotates it at all.
 #
-# It still needs the machine to itself for about two minutes, for a different
-# reason: **both windows have to stay visible the whole time.** Flutter pauses
-# its ticker when a window is occluded and this application consumes the
-# plugin's stream from that one ticker, so a covered canvas stops measuring
-# silently — the link stays up, the format still reads 44.1 kHz, and the
-# transport sits at 00:00:00:00. The two are laid out side by side on the widest
-# screen for exactly that reason; neither has to be frontmost, only uncovered.
+# Both applications open in the **background** (`open -g`) and stay there. The
+# device needs no visible window — `simctl io` reads the framebuffer, and the
+# simulated app goes on rendering under whatever covers it. The desktop
+# application needs *some* of its window on screen: Flutter pauses its ticker
+# when a window is occluded and this application consumes the plugin's stream
+# from that one ticker, so a canvas covered entirely stops measuring silently —
+# the link stays up, the format still reads 44.1 kHz, and the transport sits at
+# 00:00:00:00. macOS reports a window visible while any part of it shows, and
+# that is the signal Flutter reads, so a corner showing from behind a browser is
+# enough; the shutter reads the window's own image, not the screen, so what lies
+# over it is not in the picture. The wait ends by measuring how much showed and
+# refuses only on none. Nobody has to leave the machine alone.
 #
 # ---------------------------------------------------------------------------
 # Prerequisites
@@ -90,10 +97,7 @@
 #   - **Screen Recording**, granted to whichever terminal runs this. Without it
 #     `screencapture` returns an entirely black frame and exits 0 — see
 #     CLAUDE.md. `CGPreflightScreenCaptureAccess` is checked up front.
-#   - Permission to **post key events** — Input Monitoring, or whatever the
-#     Accessibility-adjacent grant `CGPreflightPostEventAccess` reports — for the
-#     one ⌘→ that turns the device on its side. No pointer event is posted.
-#   - Only one booted simulator, because that key goes to a window.
+#   - Only one booted simulator, and that one already turned on its side.
 #   - About 3000 points of width to lay the two windows out in. The script says
 #     so rather than overlapping them.
 #
@@ -103,9 +107,10 @@
 #     answers yes, because posting events and reading a window are two different
 #     TCC services. Every geometry either application has is a *preference*:
 #     `NSWindow Frame OaaMainWindow` for this one, and
-#     `SimulatorWindowGeometry` / `SimulatorWindowOrientation` per device for the
-#     Simulator. Writing them before launch is both permission-free and exact,
-#     where clicking Window > Point Accurate was neither.
+#     `SimulatorWindowGeometry` per device for the Simulator. Writing them
+#     before launch is both permission-free and exact, where clicking Window >
+#     Point Accurate was neither. (`SimulatorWindowOrientation` is the one
+#     preference deliberately *not* written — see above.)
 #   - The release build: `flutter build macos --release`. **Not a debug or
 #     profile one** — a Mac shows the FILE button only in a debug build, and a
 #     differently signed copy of the same bundle identifier is a different
@@ -238,35 +243,35 @@ FileHandle.standardError.write(
 exit(1)
 SWIFT
 
-# Rotate Right, as a key rather than a click.
-#
-# The Simulator is activated first because a posted key goes wherever the focus
-# is; `activate` is an API call and not a synthesised click, so the pointer stays
-# wherever the person left it. 124 is the right arrow.
-cat > "$WORK/rotate.swift" <<'SWIFT'
+
+# The Simulator's device window, as one word: `landscape` or `portrait`. The
+# same probe `packaging/ios/screenshots.sh` uses, for the same reason: a posted
+# key goes wherever the focus is, and `activate` from a process that is not
+# itself active does not reliably raise a window on macOS 26 — so the press is
+# *checked*, off `kCGWindowBounds`, which needs no grant. Before this the key
+# went once into whichever window had the focus and the plates were shot with
+# the iPad standing on end.
+cat > "$WORK/orientation.swift" <<'SWIFT'
 import Cocoa
 
-guard CGPreflightPostEventAccess() else {
-  FileHandle.standardError.write(
-    "no permission to post key events: grant Input Monitoring to this terminal\n"
-      .data(using: .utf8)!)
-  exit(3)
-}
 guard let sim = NSRunningApplication.runningApplications(
-  withBundleIdentifier: "com.apple.iphonesimulator").first else {
-  FileHandle.standardError.write("Simulator is not running\n".data(using: .utf8)!)
+  withBundleIdentifier: "com.apple.iphonesimulator").first else { exit(1) }
+guard let list = CGWindowListCopyWindowInfo(
+  [.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else {
   exit(1)
 }
-sim.activate(options: [])
-usleep(600_000)
-
-let source = CGEventSource(stateID: .hidSystemState)
-for down in [true, false] {
-  let event = CGEvent(keyboardEventSource: source, virtualKey: 124, keyDown: down)
-  event?.flags = .maskCommand
-  event?.post(tap: .cghidEventTap)
-  usleep(80_000)
+var best: CGSize? = nil
+for w in list {
+  guard let pid = w[kCGWindowOwnerPID as String] as? Int32, pid == sim.processIdentifier,
+        let layer = w[kCGWindowLayer as String] as? Int, layer == 0,
+        let bounds = w[kCGWindowBounds as String] as? [String: Any],
+        let width = bounds["Width"] as? Double, let height = bounds["Height"] as? Double,
+        width > 300 else { continue }
+  let size = CGSize(width: width, height: height)
+  if best == nil || size.width * size.height > best!.width * best!.height { best = size }
 }
+guard let size = best else { exit(1) }
+print(size.width > size.height ? "landscape" : "portrait")
 SWIFT
 
 # The window id, from the public window list. `kCGWindowBounds` is available to
@@ -293,6 +298,47 @@ for w in list {
         let id = w[kCGWindowNumber as String] as? Int else { continue }
   print(id)
   exit(0)
+}
+FileHandle.standardError.write("no Open Audio Analyzer window on screen\n".data(using: .utf8)!)
+exit(1)
+SWIFT
+
+# How much of the application's window is on screen, as a whole percentage:
+# the share of a grid of points over its bounds that no window above it covers.
+# Zero is the only answer that matters — see the wait — and it prints the
+# number so a run that scraped by on a sliver says so.
+cat > "$WORK/visible.swift" <<'SWIFT'
+import CoreGraphics
+import Foundation
+
+guard let list = CGWindowListCopyWindowInfo(
+  [.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else {
+  exit(1)
+}
+func rect(_ w: [String: Any]) -> CGRect? {
+  (w[kCGWindowBounds as String] as? [String: Any])
+    .flatMap { CGRect(dictionaryRepresentation: $0 as CFDictionary) }
+}
+var above: [CGRect] = []
+for w in list {
+  guard let owner = w[kCGWindowOwnerName as String] as? String,
+        let layer = w[kCGWindowLayer as String] as? Int, layer == 0,
+        let bounds = rect(w) else { continue }
+  if owner == "Open Audio Analyzer" {
+    var shown = 0, total = 0
+    for i in 0..<40 {
+      for j in 0..<25 {
+        let p = CGPoint(x: bounds.minX + bounds.width * (CGFloat(i) + 0.5) / 40,
+                        y: bounds.minY + bounds.height * (CGFloat(j) + 0.5) / 25)
+        total += 1
+        if !above.contains(where: { $0.contains(p) }) { shown += 1 }
+      }
+    }
+    print(shown * 100 / total)
+    exit(0)
+  }
+  // Fully transparent helper windows cover nothing and are legion.
+  if (w[kCGWindowAlpha as String] as? Double ?? 1) > 0.01 { above.append(bounds) }
 }
 FileHandle.standardError.write("no Open Audio Analyzer window on screen\n".data(using: .utf8)!)
 exit(1)
@@ -325,8 +371,14 @@ prefs["ShowChrome"] = False
 # is this one.
 prefs["CurrentDeviceUDID"] = udid
 device = prefs.setdefault("DevicePreferences", {}).setdefault(udid, {})
-device["SimulatorWindowOrientation"] = "LandscapeLeft"
-device["SimulatorWindowRotationAngle"] = 90.0
+# Removed rather than written, as `ios/screenshots.sh` does. This wrote
+# LandscapeLeft and 90 here, on the reading that the pair describes the window
+# and the device is turned by the key afterwards; with the pair present the
+# Simulator on macOS 26 rotates nothing at all — not for the key, not for its
+# own Device menu — and the plates were shot with the iPad standing on end.
+# Without them a fresh boot is portrait and one press of Rotate Right lands.
+device.pop("SimulatorWindowOrientation", None)
+device.pop("SimulatorWindowRotationAngle", None)
 # Written under every screen key this device already has, as well as the one
 # the layout picked. `WindowCenter` is a *global* point, so whichever key the
 # Simulator decides is the current screen puts the window in the same place —
@@ -368,38 +420,61 @@ if [ -z "$UDID" ]; then
   UDID="$(xcrun simctl create "$DEVICE_NAME" "$DEVICE_TYPE" "$RUNTIME")"
 fi
 
-# Only this one may be booted. The rotation below is a key posted at whichever
-# window has the focus, and a second device is a second window to land in.
+# Only this one may be booted: a second device is a second window for the
+# orientation check to read, and a second copy of the application on the port.
 OTHERS="$(xcrun simctl list devices booted -j \
   | python3 -c 'import json,sys;d=json.load(sys.stdin)["devices"];print(" ".join(x["name"] for r in d.values() for x in r if x["udid"] != "'"$UDID"'"))')"
-[ -z "$OTHERS" ] || die "Other simulators are booted ($OTHERS). Shut them down: the rotation key would go to one of their windows."
+[ -z "$OTHERS" ] || die "Other simulators are booted ($OTHERS). Shut them down."
 
-# **Booted from cold, every time.** A fresh boot is portrait, and that is what
-# makes one press of Rotate Right enough without any way to ask which way up the
-# device already is. It also takes the locale below, which needs a reboot.
-xcrun simctl shutdown "$UDID" >/dev/null 2>&1 || true
-xcrun simctl spawn "$UDID" defaults write .GlobalPreferences AppleLanguages -array en-US 2>/dev/null || true
-xcrun simctl spawn "$UDID" defaults write .GlobalPreferences AppleLocale -string en_US 2>/dev/null || true
-xcrun simctl boot "$UDID" >/dev/null 2>&1 || true
-xcrun simctl bootstatus "$UDID" -b >/dev/null 2>&1 || true
+# **A booted device is left as it is.** Its orientation is state that lives for
+# as long as the boot does, and nothing here can set it without taking the
+# focus — see the header — so a device somebody has already turned on its side
+# is worth more than a fresh one. A cold boot is portrait and takes the locale.
+if xcrun simctl list devices booted -j | grep -q "\"$UDID\""; then
+  say "The device is already booted; keeping it as it is."
+else
+  xcrun simctl spawn "$UDID" defaults write .GlobalPreferences AppleLanguages -array en-US 2>/dev/null || true
+  xcrun simctl spawn "$UDID" defaults write .GlobalPreferences AppleLocale -string en_US 2>/dev/null || true
+  xcrun simctl boot "$UDID" >/dev/null 2>&1 || true
+  xcrun simctl bootstatus "$UDID" -b >/dev/null 2>&1 || true
+fi
 
 # 9:41, full battery, no carrier. Per boot, so after the reboot above.
 xcrun simctl status_bar "$UDID" override \
   --time "9:41" --batteryState charged --batteryLevel 100 \
   --wifiMode active --wifiBars 3 --cellularMode notSupported
 
-# Quit first, so that the preferences below are not overwritten on the way out
-# by a copy that was already running with the old ones.
-osascript -e 'tell application "Simulator" to quit' >/dev/null 2>&1 || true
-sleep 2
-simulator_prefs "$SIM_SCREEN" "$SIM_CENTRE"
+# **A running Simulator is left running.** Quitting it is what loses the
+# device's orientation — the Simulator, not the device, remembers which way up
+# it is, and a relaunch comes up portrait — and the only reason to relaunch was
+# to write the window's geometry, which no longer matters because the window
+# need not be seen. So the preferences are written, and the Simulator opened,
+# only when it is not already running; `-g` opens it behind whatever the person
+# is working in, never activated.
+if pgrep -x Simulator >/dev/null 2>&1; then
+  say "The Simulator is already running; leaving it as it is."
+else
+  simulator_prefs "$SIM_SCREEN" "$SIM_CENTRE"
+  open -g -a Simulator
+  sleep 8
+fi
 
-open -a Simulator
-sleep 8
-
-say "Turning the device on its side..."
-swift "$WORK/rotate.swift" || die "Could not rotate the device — see the header."
-sleep 3
+say "Checking the device is on its side..."
+# Checked, never pressed. Every way of turning the device from a script — a
+# posted ⌘→, a key handed to the Simulator's process, its own Device menu through
+# the accessibility API — takes effect only while the Simulator is frontmost,
+# and making it frontmost takes the focus from whoever is at the machine. So
+# the device is turned once, by a person, and stays turned for as long as it
+# is booted; this refuses rather than reaching for the keyboard.
+waited=0
+until [ "$(swift "$WORK/orientation.swift" 2>/dev/null)" = "landscape" ]; do
+  waited=$((waited + 1))
+  [ "$waited" -le 10 ] || die "\
+The device is not in landscape. Turn it once yourself — Device › Orientation ›
+  Landscape Left in the Simulator — and run this again; it stays turned for as
+  long as it is booted, and this script does not press keys at your machine."
+  sleep 2
+done
 
 # Nothing else may be holding the ingest port — including a copy of this
 # application left running on another simulator.
@@ -433,7 +508,12 @@ mkdir -p "$WORK/config"
 # autosave, which lives in the bundle's defaults, so it is written here and the
 # window opens where it is wanted rather than where this Mac last left it.
 defaults write "$BUNDLE_ID" "NSWindow Frame OaaMainWindow" "$APP_FRAME"
-open "$APP" --args --config-dir="$WORK/config" --publish
+# `-g`: behind whatever is in front, never activated. It goes on measuring for
+# as long as any part of it is on screen — macOS reports a window visible while
+# any of it shows, and that is the signal Flutter pauses on — and the shutter
+# below reads the window's own image, not the screen, so what is over it does
+# not matter. It only has to not be covered entirely; see the wait.
+open -g "$APP" --args --config-dir="$WORK/config" --publish
 sleep 8
 
 if ! lsof -nP -iTCP:"$DISPLAY_PORT" -sTCP:LISTEN >/dev/null 2>&1; then
@@ -491,18 +571,19 @@ lsof -nP -iTCP:"$DISPLAY_PORT" -sTCP:ESTABLISHED >/dev/null 2>&1 \
 say "Playing $SETTLE s of programme..."
 sleep "$SETTLE"
 
-# **Both windows must have been visible the whole time.** An occluded canvas
-# stops measuring silently; the readings are then right while the transport
-# never moved. Neither has to be frontmost, so this refuses only when something
-# *else* took the screen.
-FRONT="$(osascript -e 'tell application "System Events" to name of first process whose frontmost is true' 2>/dev/null || true)"
-case "$FRONT" in
-  "Open Audio Analyzer" | "Simulator") ;;
-  *) die "\
-$(printf '%s' "$FRONT took the foreground during the wait.")
-  A covered canvas stops measuring, so the pictures would show a transport that
-  never moved. Run this with the machine to itself." ;;
+# **Some of the canvas must be on screen the whole time.** A window covered
+# entirely stops measuring silently; the readings are then right while the
+# transport never moved. Any part showing is enough — that is macOS's own
+# definition of a visible window and the one Flutter pauses on — so this
+# refuses only when other windows have buried it completely. Whether it is
+# frontmost is nobody's business: it was opened behind on purpose.
+VISIBLE="$(swift "$WORK/visible.swift")" || die "Lost the application's window."
+case "$VISIBLE" in
+  0*) die "\
+The application's window was covered entirely during the wait, so the canvas
+  stopped measuring. Leave a corner of it showing and run this again." ;;
 esac
+say "$VISIBLE % of the window was showing."
 
 # ---------------------------------------------------------------------------
 # The freeze, and then the shutter

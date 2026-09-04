@@ -46,6 +46,9 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   rather than the version tagged last, so the listing can sit behind the
   desktop downloads — TestFlight still takes every tagged release first, and
   Installing says which is which.
+- `--tab=<n>` opens the application on a tab, counted the way the tab strip
+  counts. It exists for the screenshot scripts, which no longer press a key at
+  the window — see Internal — and it works on every platform.
 
 ### ⚡ Changed
 - **The two dynamics readings are printed as `PSR` and `PLR` again**, the
@@ -125,6 +128,25 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   release through 0.15.0 is listed now.
 
 ### 🚧 Internal
+- **The screenshot scripts take nothing from the person at the machine.**
+  `packaging/signal_path.sh`, `packaging/app_window_shots.sh` and
+  `packaging/ios/screenshots.sh` used to bring the application and the
+  Simulator to the front and post keys at them — the tab digit and the ⌘→ that
+  turns the iPad — so a run stole the focus from whoever was working, and was
+  interrupted for it. They post nothing now: both applications open in the
+  background with `open -g`, the tab is the `--tab` launch option, and the
+  device's orientation is checked and never set, because every way of turning
+  it from a script works only while the Simulator is frontmost. A booted device
+  is kept as it is, and a portrait one is refused with the menu path to use. The
+  desktop window no longer has to be uncovered either: macOS reports a window
+  visible while any part of it shows, which is the signal Flutter pauses on,
+  and the shutter reads the window's own image — so a corner showing from
+  behind a browser is enough, and the run says how much showed.
+- **`signal_path.sh` shot a portrait iPad.** It wrote `SimulatorWindowOrientation`
+  and a rotation angle into the Simulator's preferences and then pressed ⌘→, on
+  the theory that the pair shapes the window and the key turns the device;
+  present, the pair pins the device so that nothing turns it, and the press
+  went unchecked. The keys are removed before launch, as the iPad script does.
 - **ODR is at 1.1.** § 6.4 permits the AES names beside the specification's
   own and asks an implementation to say which it prints; § 2 cites the current
   AES document, TD1008, and the 2017 convention paper that proposed PSR, in

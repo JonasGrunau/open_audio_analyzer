@@ -129,6 +129,18 @@ void main() {
       expect(parseLaunchOptions(const ['--publish']).publish, isTrue);
     });
 
+    test('--tab names a tab the way the tab strip counts', () {
+      expect(parseLaunchOptions(const []).tab, isNull);
+      expect(parseLaunchOptions(const ['--tab=2']).tab, 2);
+      expect(parseLaunchOptions(const ['--tab', '3']).tab, 3);
+      // Not a number, and not a tab: said, not clamped, not zero.
+      for (final bad in const ['--tab=spectrum', '--tab=0', '--tab=-1']) {
+        final options = parseLaunchOptions([bad]);
+        expect(options.tab, isNull, reason: bad);
+        expect(options.warnings, hasLength(1), reason: bad);
+      }
+    });
+
     test('a flag with nothing after it is a warning, not a crash', () {
       final options = parseLaunchOptions(const ['--config-dir']);
       expect(options.configDir, isNull);

@@ -49,48 +49,40 @@
 # different one and the remote-display picture came out as the plain canvas.
 # Every picture was still real, which is why nothing said so.
 #
-# Nothing with coordinates is posted any more, and the three things a picture
-# needs are each done another way:
+# Nothing is posted any more, at anything, and nothing is brought to the front.
+# The three things a picture needs are each done another way:
 #
-# **The tab is a key.** `lib/src/app/shortcuts.dart` binds the bare digits to
-# "go to a tab by number", so `2` opens the Spectrum tab with no modifier and no
-# pointer. The Simulator forwards a hardware keyboard to the device, and a bare
-# digit is what it forwards — a chord with ⌘ in it is the Simulator's own (⌘1
-# to ⌘3 scale the window), which is why the earlier note here said the app's
-# shortcuts "do not work" from a script. The Loudness runs post `1`, which
-# selects the tab that is already selected; it is sent anyway so that every run
-# takes the same path.
+# **The tab is a launch option.** `--tab=2` opens the application on the
+# Spectrum tab — `lib/src/app/launch_options.dart` says why it exists. It
+# replaced a key: the bare digit is a shipped binding, but a key can only be
+# delivered to the window that has the focus, and taking the focus is taking it
+# from whoever is at the machine. A key handed to the Simulator's *process*
+# instead (`CGEventPostToPid`) arrives and selects nothing — Flutter's key
+# handling is not on that path.
 #
 # **The skin is a file.** A skin is a setting, and settings are `settings.json`
 # in the app's configuration directory, which on iOS is inside the app's data
 # container — `xcrun simctl get_app_container` says where. It is written before
 # the launch that photographs it, so the light picture is the application
-# starting up in Daylight exactly as an iPad that had chosen it would, rather
-# than the theme panel being opened and a row pressed. `AppSettings.fromJson`
-# defends every field separately, so a document naming only the skin is read as
-# the defaults plus that skin.
+# starting up in Daylight exactly as an iPad that had chosen it would.
 #
-# **The orientation is one key too, and it is checked.** `simctl` cannot
-# rotate, and the Simulator's `SimulatorWindowOrientation` preference describes
-# the *window* rather than the device — write LandscapeLeft into it and the
-# springboard comes up portrait anyway. What is left is the Simulator's own
-# Rotate Right, ⌘→, posted at a device booted from cold, because a fresh boot
-# is portrait. The press is not trusted blind: the first run of this version
-# posted it eight seconds after opening the Simulator, the window was not ready
-# to take it, and the run went on to photograph a portrait canvas. So the
-# Simulator's device window is waited for first, and after each press its
-# bounds are read back off the public window list — `kCGWindowBounds` is
-# available to anyone, and a landscape device is a window wider than it is
-# tall, because the Simulator turns its window with the device. That is also
-# why the orientation preference is *not* written here: it would shape the
-# window without turning the device, and the check would then pass on a
-# portrait springboard. The framebuffer stays the panel's, so every capture is
-# turned by `sips` afterwards.
+# **The orientation is checked and never set.** `simctl` cannot rotate, and
+# every way of turning the device from a script — a posted ⌘→, a key handed to
+# the Simulator's process, its Device menu through the accessibility API —
+# takes effect only while the Simulator is frontmost. So the device is turned
+# once, by a person, and left booted: its orientation lives for as long as the
+# boot does, this script keeps a booted device as it finds it, and it refuses,
+# naming the menu to use, rather than reaching for the keyboard. The check reads
+# the Simulator's window off the public window list — `kCGWindowBounds` needs
+# no grant — because the Simulator turns its window with the device; that is
+# also why `SimulatorWindowOrientation` is *removed* from its preferences
+# rather than written: present, it pins the device so that nothing rotates it.
+# The framebuffer stays the panel's, so every capture is turned by `sips`.
 #
-# Both keys need only the grant `CGPreflightPostEventAccess` reports; the
-# Simulator is brought forward with `NSRunningApplication.activate`, which is
-# an API call and not a synthesised click. No Accessibility grant is needed
-# anywhere in this file — `System Events` is not used.
+# The Simulator is opened with `open -g`, behind whatever the person is
+# working in, and stays there: `simctl io` reads the framebuffer, so its window
+# need not be visible at all. No Accessibility grant, no Input Monitoring, no
+# `System Events`, and no Screen Recording either.
 #
 # ---------------------------------------------------------------------------
 # One launch per picture
@@ -124,12 +116,9 @@
 # Prerequisites
 #
 #   - Xcode, and an iOS runtime with an iPad Pro 13-inch device type.
-#   - Permission to post key events — Input Monitoring, or whatever the
-#     Accessibility-adjacent grant `CGPreflightPostEventAccess` reports — for
-#     the ⌘→ that turns the device on its side and the digit that picks a tab.
-#     No pointer event is posted. The script checks up front and says which
-#     grant it is short of.
-#   - Only one booted simulator, because a key goes to a window.
+#   - Only one booted simulator, already turned on its side — Device ›
+#     Orientation › Landscape Left, once, by hand. It stays turned for as long
+#     as it is booted, and a portrait one is refused rather than turned.
 #   - `test_audio/citizens-apathy.flac`: `dart run tool/fetch_test_audio.dart`.
 #   - The fake DAW and the VST3, which is the full plugin build:
 #       cmake -B plugin/build -S plugin -DCMAKE_BUILD_TYPE=Release
@@ -196,65 +185,6 @@ die() { printf '%s\n' "$*" >&2; exit 1; }
 
 # ---------------------------------------------------------------------------
 # The helpers that are not shell
-
-# Posts one key at the Simulator. `key <virtual key> [command]`.
-#
-# The Simulator is activated first because a posted key goes wherever the
-# focus is; `activate` is an API call and not a synthesised click, so the
-# pointer stays wherever the person left it.
-cat > "$WORK/key.swift" <<'SWIFT'
-import Cocoa
-
-let a = CommandLine.arguments
-guard a.count >= 2, let code = UInt16(a[1]) else {
-  FileHandle.standardError.write("usage: key <virtual key> [command]\n".data(using: .utf8)!)
-  exit(2)
-}
-let command = a.count >= 3 && a[2] == "command"
-
-guard CGPreflightPostEventAccess() else {
-  FileHandle.standardError.write(
-    "no permission to post key events: grant Input Monitoring to this terminal\n"
-      .data(using: .utf8)!)
-  exit(3)
-}
-guard let sim = NSRunningApplication.runningApplications(
-  withBundleIdentifier: "com.apple.iphonesimulator").first else {
-  FileHandle.standardError.write("Simulator is not running\n".data(using: .utf8)!)
-  exit(1)
-}
-sim.activate(options: [])
-usleep(600_000)
-
-let source = CGEventSource(stateID: .hidSystemState)
-for down in [true, false] {
-  let event = CGEvent(keyboardEventSource: source, virtualKey: code, keyDown: down)
-  if command { event?.flags = .maskCommand }
-  event?.post(tap: .cghidEventTap)
-  usleep(80_000)
-}
-SWIFT
-
-# Whether the grant is there, before anything is booted. The same check the
-# helper makes, made once up front so that a missing permission costs seconds
-# and not a device boot.
-cat > "$WORK/preflight.swift" <<'SWIFT'
-import CoreGraphics
-exit(CGPreflightPostEventAccess() ? 0 : 3)
-SWIFT
-swift "$WORK/preflight.swift" \
-  || die "No permission to post key events. Grant Input Monitoring (or Accessibility) to this terminal in System Settings — the tab digit and the rotation are keys, and nothing else is posted."
-
-# Virtual key codes. 124 is the right arrow; the digits are the ANSI row, which
-# a German layout maps to the same characters.
-VK_RIGHT=124
-vk_digit() { # vk_digit <1..9>
-  case "$1" in
-    1) echo 18 ;; 2) echo 19 ;; 3) echo 20 ;; 4) echo 21 ;; 5) echo 23 ;;
-    6) echo 22 ;; 7) echo 26 ;; 8) echo 28 ;; 9) echo 25 ;;
-    *) die "no such tab digit: $1" ;;
-  esac
-}
 
 # The Simulator's window, as the preferences that decide it.
 #
@@ -347,19 +277,26 @@ say "Device $UDID"
 # focus, and a second device is a second window to land in.
 OTHERS="$(xcrun simctl list devices booted -j \
   | python3 -c 'import json,sys;d=json.load(sys.stdin)["devices"];print(" ".join(x["name"] for r in d.values() for x in r if x["udid"] != "'"$UDID"'"))')"
-[ -z "$OTHERS" ] || die "Other simulators are booted ($OTHERS). Shut them down: a posted key would go to one of their windows."
+[ -z "$OTHERS" ] || die "Other simulators are booted ($OTHERS). Shut them down: the orientation check reads one window."
 
 # **Booted from cold, every time.** A fresh boot is portrait, which is what
 # lets the rotation below start from a known state. It also takes the locale,
 # which needs a reboot — and the locale is set to English so the status bar's
 # date is not the developer's. And it ends whatever this device was running,
 # including a copy of the application a previous run left holding the port.
-say "Booting the device..."
-xcrun simctl shutdown "$UDID" >/dev/null 2>&1 || true
-xcrun simctl spawn "$UDID" defaults write .GlobalPreferences AppleLanguages -array en-US 2>/dev/null || true
-xcrun simctl spawn "$UDID" defaults write .GlobalPreferences AppleLocale -string en_US 2>/dev/null || true
-xcrun simctl boot "$UDID" >/dev/null 2>&1 || true
-xcrun simctl bootstatus "$UDID" -b >/dev/null 2>&1 || true
+# **A booted device is kept as it is** — its orientation lives for as long as
+# the boot does, and nothing here can turn it without taking the focus; see the
+# header. Only a device that is not running is booted, and that boot is what
+# takes the locale.
+if xcrun simctl list devices booted -j | grep -q "\"$UDID\""; then
+  say "The device is already booted; keeping it as it is."
+else
+  say "Booting the device..."
+  xcrun simctl spawn "$UDID" defaults write .GlobalPreferences AppleLanguages -array en-US 2>/dev/null || true
+  xcrun simctl spawn "$UDID" defaults write .GlobalPreferences AppleLocale -string en_US 2>/dev/null || true
+  xcrun simctl boot "$UDID" >/dev/null 2>&1 || true
+  xcrun simctl bootstatus "$UDID" -b >/dev/null 2>&1 || true
+fi
 
 # Nothing else may be holding the ingest port. The plugin dials one socket and
 # the first listener wins, so a copy of the application left running on this
@@ -377,17 +314,19 @@ xcrun simctl status_bar "$UDID" override \
   --time "9:41" --batteryState charged --batteryLevel 100 \
   --wifiMode active --wifiBars 3 --cellularMode notSupported
 
-# Quit first, so that the preferences below are not overwritten on the way out
-# by a copy that was already running with the old ones. The Apple Event needs
-# the Automation grant and a terminal without it gets an error rather than a
-# quit, so a plain signal stands behind it.
-osascript -e 'tell application "Simulator" to quit' >/dev/null 2>&1 || true
-sleep 2
-pkill -x Simulator 2>/dev/null || true
-sleep 1
-python3 "$WORK/simprefs.py" "$UDID"
-
-open -a Simulator
+# **A running Simulator is left running.** Quitting it is what loses the
+# device's orientation — the Simulator, not the device, remembers which way up
+# it is, and a relaunch comes up portrait — and the only reason to relaunch was
+# to write window preferences that no longer matter, because the window need
+# not be seen. So the preferences are written, and the Simulator opened, only
+# when it is not already running; and `-g` opens it behind whatever the person
+# is working in, never activated.
+if pgrep -x Simulator >/dev/null 2>&1; then
+  say "The Simulator is already running; leaving it as it is."
+else
+  python3 "$WORK/simprefs.py" "$UDID"
+  open -g -a Simulator
+fi
 
 # The window, before any key is aimed at it. A fixed sleep here is how the
 # first run of this version came to photograph a portrait canvas.
@@ -400,13 +339,20 @@ until swift "$WORK/window.swift" >/dev/null 2>&1; do
 done
 sleep 3
 
-say "Turning the device on its side..."
-presses=0
+say "Checking the device is on its side..."
+# Checked, never pressed: every way of turning it from here works only while
+# the Simulator is frontmost, and making it frontmost takes the focus from
+# whoever is at the machine. See the header.
+# Polled, because a window that has just reopened is portrait-shaped for a
+# moment before it follows the device.
+waited=0
 until [ "$(swift "$WORK/window.swift" 2>/dev/null)" = "landscape" ]; do
-  presses=$((presses + 1))
-  [ "$presses" -le 4 ] || die "The device is still portrait after $((presses - 1)) presses of ⌘→ — see the header."
-  swift "$WORK/key.swift" "$VK_RIGHT" command || die "Could not rotate the device — see the header."
-  sleep 3
+  waited=$((waited + 1))
+  [ "$waited" -le 10 ] || die "\
+The device is not in landscape. Turn it once yourself — Device › Orientation ›
+  Landscape Left in the Simulator — and run this again; it stays turned for as
+  long as it is booted, and this script does not press keys at your machine."
+  sleep 2
 done
 
 say "Installing the app..."
@@ -440,11 +386,12 @@ shoot() { # shoot <name> <tab digit> <skin id or "">
     printf '{"version": 1, "skin": "%s"}\n' "$skin" > "$CONFIG/settings.json"
   fi
 
-  xcrun simctl launch "$UDID" "$BUNDLE_ID" >/dev/null
+  # The tab is a launch option rather than a key: a key can only be delivered
+  # to the window with the focus. See `lib/src/app/launch_options.dart`.
+  xcrun simctl launch "$UDID" "$BUNDLE_ID" --args "--tab=$digit" >/dev/null
   sleep 8
 
-  say "  selecting tab $digit..."
-  swift "$WORK/key.swift" "$(vk_digit "$digit")" || die "Could not post the tab key — see the header."
+  say "  on tab $digit..."
   sleep 2
 
   # The shipped path: the fake DAW plays the track through the real VST3, the

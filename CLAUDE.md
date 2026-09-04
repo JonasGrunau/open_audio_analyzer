@@ -66,7 +66,7 @@ built, and `CHANGELOG.md` for what shipped when.
 | `cli/bin/oaa.dart` | The `oaa` analyser. Its exit code is the product — see `cli/AGENTS.md`. |
 | `lib/src/app/shortcuts.dart` | Every keyboard shortcut, as one table. The bindings, the `?` sheet, `docs/site/keyboard.md` **and the macOS File menu's key equivalents** are all derived from it; `test/shortcuts_test.dart` fails when the page has drifted. |
 | `lib/src/app/preset_file.dart` | **The preset as a document.** Which file the canvas came from, whether it still matches that file, and the six File menu commands — one implementation, reached from the keyboard, from the macOS menu bar and from the FILE button at the leading edge of the window's own menu bar. The file dialogs sit behind a seam a test replaces. The file is remembered in `session.json` and adopted at launch, so `Save` overwrites it the next morning too. Its name is what the menu bar prints in the middle of the row, and `Unnamed` until somebody saves it. |
-| `lib/src/app/launch_options.dart` | `--config-dir` and `--open-panel`. Both exist to make something else testable — see the file. |
+| `lib/src/app/launch_options.dart` | `--config-dir`, `--open-panel`, `--publish`, `--attach` and `--tab`. Every one exists to make something else testable or photographable without pressing anything — see the file. |
 | `packaging/icon/make_icons.dart` | The app mark, **read** from `assets/brand/oaa-logo.svg` and rendered into every container the six platforms want — a rounded tile for the desktops, two layers on a 108dp canvas for Android, and a layered `AppIcon.icon` for macOS and iOS that the system lights itself. It carries a path rasteriser because the mark is a stroked cubic path. It also writes the rest of `assets/brand/`, `packaging/icon/oaa.svg` and `website/public/`'s icons — every one except `website/public/favicon.svg`, which is a browser tab's 16 px and is drawn by hand. It wrote the tile over that file until 0.10.0, and there is a note where the line was. |
 | `.tool-versions` | Pins Flutter `3.44.5-stable` and the JDK the Android build uses. CI pins both — `FLUTTER_VERSION` and `JAVA_VERSION` at the top of `ci.yml` — keep them in step. |
 
@@ -407,26 +407,40 @@ stale and the fix is to delete the claim, not to soften it. `mobile_scanner`,
   seconds without a frame and a stale snapshot is *cleared*, every reading to a
   dash. Three signals in a row, not three captures.
 
-  **Both windows have to stay uncovered for the whole wait.** Flutter pauses its
-  ticker when a window is occluded and this application consumes the plugin's
-  stream from that one ticker, so a covered canvas stops measuring *silently*:
-  the link stays up, the format still reads 44.1 kHz, and the transport sits at
-  00:00:00:00. Being frontmost is not the requirement and could not be — two
-  windows are wanted at once — so they are laid out side by side and the run
-  refuses if a third application took the screen.
+  **Some of the desktop window has to show for the whole wait.** Flutter pauses
+  its ticker when a window is occluded and this application consumes the
+  plugin's stream from that one ticker, so a canvas covered *entirely* stops
+  measuring silently: the link stays up, the format still reads 44.1 kHz, and
+  the transport sits at 00:00:00:00. macOS reports a window visible while any
+  part of it shows, and that is the signal Flutter reads — so the window may sit
+  behind a browser with a corner out, and the shutter (`screencapture -l`) reads
+  the window's own image rather than the screen. The Simulator's window need
+  not show at all: `simctl io` reads the framebuffer and the simulated app goes
+  on rendering under whatever covers it. Both open with `open -g` and are never
+  activated; the run measures how much of the window showed and refuses only on
+  none. Frontmost is nobody's business.
 
   **A screenshot script that has to press something in the interface is a
-  script that will hijack somebody's pointer.** `packaging/ios/screenshots.sh`
+  script that will hijack somebody's pointer — and one that activates a window
+  hijacks their focus, which is the same interruption.** `packaging/ios/screenshots.sh`
   posted mouse CGEvents at the Simulator's window and owned the mouse for the
   two minutes it ran; it is also how ATTACH stopped being pressed at all,
   because its tap coordinates were read off a finished screenshot and the row
-  moved twice underneath them. It posts two *keys* now — ⌘→ to turn the device,
-  checked against the Simulator's window bounds, and the tab digit, which is
-  the shipped binding — and writes the skin into `settings.json` before the
-  launch; nothing with coordinates. Prefer a launch option, which is what
-  `--publish` and `--attach` are — see `lib/src/app/launch_options.dart`,
-  including why neither is gated to a debug build — or a setting the app
-  already persists, which is what a skin is.
+  moved twice underneath them. It then posted two *keys* — ⌘→ to turn the
+  device and the tab digit — each after `NSRunningApplication.activate`, and
+  that took the focus from whoever was typing in a browser; the person
+  interrupted the run to say so. **Nothing is posted or activated now.** The
+  tab is `--tab=<n>`; the skin is written into `settings.json` before the
+  launch; the orientation is checked off the Simulator's window bounds and
+  never set, because every way of turning the device from a script — a posted
+  key, `CGEventPostToPid`, the Device menu through the accessibility API —
+  works only while the Simulator is frontmost, so a booted device is kept as
+  it is and a portrait one is refused with the menu to use. Prefer a launch
+  option, which is what `--publish`, `--attach` and `--tab` are — see
+  `lib/src/app/launch_options.dart`, including why none is gated to a debug
+  build — or a setting the app already persists, which is what a skin is. A key
+  handed to a process reaches the application and not Flutter's key handling,
+  so it is not a third way.
 
 - **A feature that only fails on the device is a feature nobody tested.** Three
   of Open Audio Analyzer's platforms lie about the network in a way a
