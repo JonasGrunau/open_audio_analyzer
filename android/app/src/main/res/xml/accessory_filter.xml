@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The accessory a publishing desktop presents - see OaaAccessory.kt and
+     packages/oaa_usb/lib/src/accessory.dart, which sends these two strings.
+     No version: a filter that names one stops matching the day it moves. -->
+<resources>
+    <usb-accessory manufacturer="Open Audio Analyzer" model="Display"/>
+</resources>

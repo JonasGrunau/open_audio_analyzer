@@ -429,6 +429,13 @@ packages:
       relative: true
     source: path
     version: "0.11.0"
+  oaa_usb:
+    dependency: "direct main"
+    description:
+      path: "packages/oaa_usb"
+      relative: true
+    source: path
+    version: "0.1.0"
   oaa_wire:
     dependency: "direct main"
     description:

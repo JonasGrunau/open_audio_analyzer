@@ -11,7 +11,10 @@ halves live here.
 | `display_client.dart` | The client. Decodes them into a `WireSnapshot`, and holds the layout, skin, target and naming the host sent as `ValueNotifier`s. |
 | `display_screen.dart` | The tablet's UI: the host picker until there is a host, then that host's layout. `DisplayPreferences` — what this device remembers about being a display, handed in — and `DisplayOptionsPanel`, the display's own refresh rate and screen setting. |
 | `host_picker.dart` | Choosing a host — a desktop down a USB cable, what discovery found, the hosts shown before, the code a camera reads, and the address you type when none of those worked. One panel, pushed by the desktop's ATTACH button and shown by the display screen itself. |
-| `usb_link.dart` | A display on a cable, both ends: `UsbHostProbe`, the tablet's knock on its own loopback port, and `AdbReverse`, which forwards the desktop's display port to every Android device `adb` can see while publishing. |
+| `usb_link.dart` | A display on a cable, both ends: `UsbHostProbe`, the tablet's knock on its own loopback ports; `AdbReverse`, which forwards the desktop's display port to every Android device `adb` can see while publishing; `DesktopUsb`, the three desktop routes started and stopped as one; and `UsbRoute`, the shape of the two that hand a tablet a relay. |
+| `usb_relay.dart` | A cable with no developer mode: `TabletRelay`, the tablet's two loopback ports — the cable arrives at 47823 and a display connects to 47824 — and `UsbRelayHost`, which hands every channel of a cable to the `DisplayHost` as an accepted display. `docs/WIRE.md` § USB carriage. |
+| `usbmux.dart` | The iPad's cable: `UsbMux`, just enough of `usbmuxd`'s protocol to list devices and open a tunnel to a port on one, and `IpadUsb`, which dials 47823 on every cabled iPad while publishing. |
+| `accessory_usb.dart` | The Android cable without USB debugging: `AccessoryUsb` asks an Android device to become an accessory once per plug-in, opens it when it has, and hands it a relay. The protocol is `packages/oaa_usb`; the tablet's pump is `android/.../OaaAccessory.kt`. |
 | `keep_awake.dart` | `KeepAwake`: the screen stays on while a host is attached. Its native halves are `android/.../OaaKeepAwake.kt` and `ios/Runner/OaaKeepAwake.swift`. |
 | `remote_display_service.dart` | The socket and the mDNS advertisement as one switch. |
 | `pair_link.dart` | `oaa://host:port` — what a pairing code carries, and the one parser behind both it and the address somebody types. |
@@ -141,8 +144,10 @@ halves live here.
   is exact: the only thing that can be listening on the display port in this
   process is this process.
 
-- **A USB cable is a route, not a protocol.** Nothing in `docs/WIRE.md` knows
-  about it. `adb reverse tcp:47821 tcp:<port>` makes the desktop's display port
+- **A USB cable is a route, not a protocol.** Three of them reach the same
+  display port, and only one needs anything switched on. `adb reverse` is the
+  developer's; the accessory and `usbmuxd` are everybody's, and they meet in
+  `usb_relay.dart` — see the rule after this one. `adb reverse tcp:47821 tcp:<port>` makes the desktop's display port
   answer at the tablet's own loopback, so the tablet dials `127.0.0.1` and
   everything after that is the ordinary link. `AdbReverse` runs it for every
   device `adb devices` lists as ready, every three seconds while PUBLISH is on,
@@ -165,11 +170,37 @@ halves live here.
     developer's own `adb` against whatever phone is plugged into their machine.
     `oaa_app.dart` also withholds it under `FLUTTER_TEST`.
 
-  Android only, at both ends. An iPad has `usbmuxd`, which forwards desktop to
-  device — the tablet would have to be the one listening. USB tethering needs
-  nothing here: it is a network, discovery finds the host on it, and the picker
-  lists a host whose address is on a `rndis`, `usb` or `ncm` interface's subnet
-  under Over USB as well (`ThisMachine.isOverUsb`).
+  `adb reverse` is Android only, at both ends. USB tethering needs nothing
+  here: it is a network, discovery finds the host on it, and the picker lists a
+  host whose address is on a `rndis`, `usb` or `ncm` interface's subnet under
+  Over USB as well (`ThisMachine.isOverUsb`).
+
+- **The cables with no developer mode are one stream each, so the tablet runs
+  a relay and the display does not know.** An Android accessory is two bulk
+  endpoints and an iPad's `usbmuxd` tunnel is one socket the *desktop* dials —
+  the reverse of every other route. `TabletRelay` takes the cable on loopback
+  47823 (the tunnel on an iPad; `OaaAccessory.kt`'s pump on Android, which only
+  moves bytes) and offers the display 47824, where `UsbHostProbe` knocks as it
+  knocks on an `adb` forward. Each display connection is a channel of the
+  cable, and `UsbRelayHost` hands each channel to `DisplayHost.adopt` — so the
+  link inside it is the display port's byte for byte, flow control included.
+  Four things about it are load-bearing:
+
+  - **47824 is bound on the desktop's preamble, not on the connection.** A
+    knock then fails at once when no cable is up, and anything else that finds
+    47823 never gets a display to it.
+  - **One flush at a time per cable,** because several channels share one sink
+    and a sink with a flush outstanding refuses `add` — the same trap
+    `_RemoteClient`'s `_waiting` exists for. `_Outbox` queues and coalesces.
+  - **An Android device is asked to become an accessory once per plug-in, and
+    only while publishing.** Asking a phone that is only charging costs it file
+    transfer until it is unplugged and shows a prompt about an app it may not
+    have. A replug is a new bus location and is asked again.
+  - **The iPad is dialled, not watched.** `IpadUsb` asks `usbmuxd` for its
+    devices every two seconds and dials 47823 on each cabled one without a
+    relay: the moment that matters is the application coming to the front,
+    which the daemon cannot see. A refusal is the ordinary answer. Devices
+    `usbmuxd` reaches over Wi-Fi sync are never dialled.
 
 - **ATTACH remembers what answered, and nothing else.** `RemoteDisplayScreen`
   records a host once its `HELLO` has arrived and the link is live, under the

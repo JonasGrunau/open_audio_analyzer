@@ -31,7 +31,10 @@ import '../plugin/plugin_link.dart';
 import '../plugin/plugin_scope.dart';
 import '../remote/remote_control.dart';
 import '../remote/remote_display_service.dart';
+import '../remote/accessory_usb.dart';
 import '../remote/usb_link.dart';
+import '../remote/usb_relay.dart';
+import '../remote/usbmux.dart';
 import '../storage/startup_config.dart';
 import 'bar_controls.dart';
 import 'file_menu.dart';
@@ -150,10 +153,25 @@ class _WorkspaceState extends ConsumerState<_Workspace>
   late final RemoteDisplayService _remote = RemoteDisplayService(
     null, // no engine yet; `_openFor` attaches one
     abiVersion: OaaEngine.abiVersion,
-    // Forwarding the display port down USB cables runs `adb`, and the widget
-    // suite must not run the developer's against whatever is plugged in.
-    usb: Platform.environment.containsKey('FLUTTER_TEST') ? null : AdbReverse(),
+    // Forwarding the display port down USB cables runs `adb` and talks to
+    // `usbmuxd`, and the widget suite must not do either against whatever is
+    // plugged into the developer's machine.
+    usb: Platform.environment.containsKey('FLUTTER_TEST')
+        ? null
+        : DesktopUsb(
+            adb: AdbReverse(),
+            ipad: IpadUsb(),
+            accessory: AccessoryUsb.create(),
+          ),
   );
+
+  /// The tablet's end of a cable with no developer mode — see
+  /// `usb_relay.dart`. Two loopback ports, bound at launch so a tablet that is
+  /// plugged in is ready before anybody opens a picker.
+  late final TabletRelay? _relay =
+      TabletRelay.supported && !Platform.environment.containsKey('FLUTTER_TEST')
+      ? TabletRelay(name: RemoteDisplayService.defaultHostName())
+      : null;
 
   /// Plugin inserts, accepted on loopback.
   ///
@@ -326,7 +344,11 @@ class _WorkspaceState extends ConsumerState<_Workspace>
     // A debounced write that has not landed yet has to land before the process
     // goes away, or the last edit before quitting is the one edit that is
     // always lost.
+    unawaited(_relay?.start());
     _lifecycle = AppLifecycleListener(
+      // An iPad may take a listening socket away from an application in the
+      // background; binding again is a no-op when it did not.
+      onResume: () => unawaited(_relay?.start()),
       onExitRequested: () async {
         await ref.read(configStoreProvider).flush();
         return AppExitResponse.exit;
@@ -804,6 +826,7 @@ class _WorkspaceState extends ConsumerState<_Workspace>
     _plugins.removeListener(_onPluginsChanged);
     _plugins.dispose();
     _remote.dispose();
+    _relay?.dispose();
     _clock?.dispose();
     _engine?.dispose();
     super.dispose();

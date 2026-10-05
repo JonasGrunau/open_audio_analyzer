@@ -268,6 +268,15 @@ with Xcode and no credentials beyond a free Apple ID:
 flutter run -d <your ipad>    # `flutter devices` names it
 ```
 
+**A USB cable works as well as the network.** Open Open Audio Analyzer on the
+iPad and plug it into a desktop that is publishing; the iPad shows the desktop
+under **Over USB** in ATTACH. Nothing is switched on on either side: the desktop
+reaches the iPad through the same Apple service Finder syncs it with, which
+macOS has built in, Linux has as `usbmuxd` (packaged by most distributions),
+and Windows has with iTunes or the Apple Devices app. Accept **Trust This
+Computer** on the iPad the first time. The application has to be open on the
+iPad for the desktop to find it.
+
 ## Android
 
 The Android build is **the same application as the desktop one** — the same
@@ -349,14 +358,21 @@ publishing on the network. `NEARBY_WIFI_DEVICES` is deliberately not declared:
 it covers scanning and managing networks, which this application never does.
 
 **A USB cable works as well as the network, and is the thing to try when the
-Wi-Fi is slow.** It needs USB debugging switched on under the tablet's
-Developer options, and the Android SDK's platform tools — `adb` — on the
-desktop, in the SDK's usual place or on `ANDROID_HOME`. Plug the tablet in and
-allow debugging when it asks; while PUBLISH is on, the desktop forwards its
-display port down the cable, Settings › Publish says to which device, and the
-tablet shows the desktop under **Over USB** in ATTACH. USB tethering works too
-and needs neither: a desktop found over it is listed in the same place. Nothing
-new is asked for — the cable reaches the same port the network does.
+Wi-Fi is slow.** On a Mac or a Linux desktop it needs nothing switched on:
+while PUBLISH is on, plug the tablet in, and Android asks whether to open Open
+Audio Analyzer for the USB accessory — say yes, tick *always* if you like, and
+the tablet shows the desktop under **Over USB** in ATTACH, with Settings ›
+Publish naming the tablet. While the cable is in, the tablet is the desktop's
+accessory rather than a drive, so its files are not offered to the desktop
+until it is unplugged. A device is asked once each time it is plugged in.
+
+On Windows, or with USB debugging already on, the other route still works: with
+USB debugging switched on under the tablet's Developer options and the Android
+SDK's platform tools — `adb` — on the desktop, in the SDK's usual place or on
+`ANDROID_HOME`, the desktop forwards its display port down the cable. USB
+tethering works too and needs neither: a desktop found over it is listed in the
+same place. Nothing new is asked for by any of them — the cable reaches the
+same port the network does.
 
 ## In a DAW
 

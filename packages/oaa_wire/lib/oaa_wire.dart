@@ -19,4 +19,5 @@ export 'src/hello.dart';
 export 'src/lufs_mode.dart';
 export 'src/quantise.dart';
 export 'src/snapshot_codec.dart';
+export 'src/usb_carriage.dart';
 export 'src/wire_snapshot.dart';

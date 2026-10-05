@@ -365,8 +365,20 @@ class DisplayHost {
     // Nagle batches small writes, which is the opposite of what a 15 kB frame
     // that must land now wants.
     socket.setOption(SocketOption.tcpNoDelay, true);
+    adopt(_SocketLink(socket));
+  }
 
-    final client = _RemoteClient(socket, _remove, () => maxUnreceived);
+  /// Attaches a display that did not arrive through the listening socket — a
+  /// channel of a USB pipe, see `usb_relay.dart` — exactly as if it had.
+  ///
+  /// Refused, by closing it, while this host is not publishing: a cable is a
+  /// route to the display port and not a way around turning it on.
+  void adopt(DisplayLink link) {
+    if (_server == null) {
+      link.destroy();
+      return;
+    }
+    final client = _RemoteClient(link, _remove, () => maxUnreceived);
     _clients.add(client);
     clientCount.value = _clients.length;
 
@@ -627,6 +639,61 @@ class _FrameSlot {
   int inFlight = 0;
 }
 
+/// What a display is attached by: a socket, or one channel of a USB pipe.
+///
+/// The five things [_RemoteClient] does with a connection, and no more, so
+/// that a channel of a pipe can stand where a `Socket` stands without
+/// pretending to be the whole of `IOSink`.
+abstract interface class DisplayLink {
+  StreamSubscription<Uint8List> listen(
+    void Function(Uint8List) onData, {
+    Function? onError,
+    void Function()? onDone,
+    bool? cancelOnError,
+  });
+
+  /// Completes when the link is finished, from either end.
+  Future<void> get done;
+
+  void add(List<int> bytes);
+
+  /// Completes when what was added has left this process — the kernel took
+  /// it, or the pipe did. One at a time: the caller never overlaps two.
+  Future<void> flush();
+
+  void destroy();
+}
+
+class _SocketLink implements DisplayLink {
+  _SocketLink(this._socket);
+  final Socket _socket;
+
+  @override
+  StreamSubscription<Uint8List> listen(
+    void Function(Uint8List) onData, {
+    Function? onError,
+    void Function()? onDone,
+    bool? cancelOnError,
+  }) => _socket.listen(
+    onData,
+    onError: onError,
+    onDone: onDone,
+    cancelOnError: cancelOnError,
+  );
+
+  @override
+  Future<void> get done => _socket.done;
+
+  @override
+  void add(List<int> bytes) => _socket.add(bytes);
+
+  @override
+  Future<void> flush() => _socket.flush();
+
+  @override
+  void destroy() => _socket.destroy();
+}
+
 class _RemoteClient {
   _RemoteClient(this._socket, this._onGone, this._window) {
     _socket.listen(
@@ -640,7 +707,7 @@ class _RemoteClient {
     );
   }
 
-  final Socket _socket;
+  final DisplayLink _socket;
   final void Function(_RemoteClient) _onGone;
 
   /// [DisplayHost.maxUnreceived], read on every send so that a rate changed

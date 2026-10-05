@@ -26,13 +26,14 @@ import 'usb_link.dart';
 class RemoteDisplayService {
   RemoteDisplayService(this._source, {required this.abiVersion, this.usb});
 
-  /// The display port, forwarded down every USB cable `adb` can see while
-  /// publishing. See `usb_link.dart`.
+  /// The display port, carried down every USB cable a tablet is on while
+  /// publishing — `adb reverse`, an iPad's `usbmuxd` tunnel, an Android
+  /// accessory. See `usb_link.dart` and `usb_relay.dart`.
   ///
   /// Null unless the application hands one in, which it does on a desktop: a
   /// suite that switched publishing on would otherwise run the developer's
   /// real `adb` against whatever phone is plugged into their machine.
-  final AdbReverse? usb;
+  final DesktopUsb? usb;
 
   /// What is being measured here. Read-only: nothing a display does can reach
   /// back through this.
@@ -207,7 +208,7 @@ class RemoteDisplayService {
 
     // Not awaited: finding `adb` runs a process or several, and publishing to
     // the network does not wait on a cable.
-    if (_isDesktop) unawaited(usb?.start(host.port ?? _port));
+    if (_isDesktop) unawaited(usb?.start(host));
   }
 
   static bool get _isDesktop =>

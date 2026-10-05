@@ -42,6 +42,8 @@ import 'package:flutter/foundation.dart';
 import 'package:oaa_wire/oaa_wire.dart';
 
 import 'display_host.dart';
+import 'usb_relay.dart';
+import 'usbmux.dart';
 
 // ---------------------------------------------------------------------------
 // The tablet's half
@@ -88,20 +90,27 @@ class UsbHost {
 /// which costs it a `HELLO`, a layout and a skin — a few kilobytes every two
 /// seconds, while a picker is open and not otherwise.
 class UsbHostProbe {
-  UsbHostProbe({
-    this.port = DisplayHost.defaultPort,
-    this.interval = const Duration(seconds: 2),
-  });
+  UsbHostProbe({List<int>? ports, this.interval = const Duration(seconds: 2)})
+    : ports = ports ?? defaultPorts;
 
-  final int port;
+  /// Knocked in order; the first to answer is the row.
+  final List<int> ports;
   final Duration interval;
 
-  /// Whether this platform has a USB link to probe. Android only — see the
-  /// library comment. Overridden by the suite, which runs on a desktop.
+  /// The far end of an `adb reverse` on Android, and the relay a cable with no
+  /// developer mode arrives at on either tablet — see `usb_relay.dart`.
+  static List<int> get defaultPorts => [
+    if (platformSupported ?? Platform.isAndroid) DisplayHost.defaultPort,
+    kUsbRelayPort,
+  ];
+
+  /// Whether this platform has a USB link to probe: the two tablets.
+  /// Overridden by the suite, which runs on a desktop.
   @visibleForTesting
   static bool? platformSupported;
 
-  static bool get supported => platformSupported ?? Platform.isAndroid;
+  static bool get supported =>
+      platformSupported ?? (Platform.isAndroid || Platform.isIOS);
 
   /// Who answered the last knock, or null.
   final ValueNotifier<UsbHost?> host = ValueNotifier(null);
@@ -120,9 +129,12 @@ class UsbHostProbe {
     if (_knocking || _disposed) return;
     _knocking = true;
     try {
-      final found = DisplayHost.listeningPorts.contains(port)
-          ? null
-          : await knock(InternetAddress.loopbackIPv4, port);
+      UsbHost? found;
+      for (final port in ports) {
+        if (DisplayHost.listeningPorts.contains(port)) continue;
+        found = await knock(InternetAddress.loopbackIPv4, port);
+        if (found != null || _disposed) break;
+      }
       if (!_disposed) host.value = found;
     } finally {
       _knocking = false;
@@ -369,4 +381,73 @@ class AdbReverse {
     unawaited(stop());
     devices.dispose();
   }
+}
+
+/// Every cable a desktop reaches a tablet by, started and stopped together
+/// with publishing.
+///
+/// Three routes, one list of devices: `adb reverse` for an Android tablet with
+/// USB debugging, `usbmuxd` for an iPad ([IpadUsb]), and the Android accessory
+/// for an Android tablet without it ([accessory], from `packages/oaa_usb`).
+/// Each is optional — a desktop with no `adb`, no `usbmuxd` and no libusb
+/// build simply has fewer — and none reports a failure, for the reasons
+/// [AdbReverse] gives.
+class DesktopUsb {
+  DesktopUsb({this.adb, this.ipad, this.accessory}) {
+    for (final route in _routes) {
+      route.addListener(_merge);
+    }
+  }
+
+  final AdbReverse? adb;
+  final IpadUsb? ipad;
+  final UsbRoute? accessory;
+
+  List<ValueNotifier<List<String>>> get _routes => [
+    ?adb?.devices,
+    ?ipad?.devices,
+    ?accessory?.devices,
+  ];
+
+  /// Every tablet on a cable, by name — for Settings › Publish to say so.
+  final ValueNotifier<List<String>> devices = ValueNotifier(const []);
+
+  void _merge() {
+    final names = List<String>.unmodifiable([
+      for (final route in _routes) ...route.value,
+    ]);
+    if (!listEquals(names, devices.value)) devices.value = names;
+  }
+
+  Future<void> start(DisplayHost host) async {
+    ipad?.start(host);
+    accessory?.start(host);
+    final port = host.port;
+    if (port != null) await adb?.start(port);
+  }
+
+  Future<void> stop() async {
+    ipad?.stop();
+    accessory?.stop();
+    await adb?.stop();
+  }
+
+  void dispose() {
+    for (final route in _routes) {
+      route.removeListener(_merge);
+    }
+    adb?.dispose();
+    ipad?.dispose();
+    accessory?.dispose();
+    devices.dispose();
+  }
+}
+
+/// A route a desktop reaches tablets by that hands each one a relay — the
+/// shape [IpadUsb] has, and the accessory route `packages/oaa_usb` provides.
+abstract interface class UsbRoute {
+  ValueNotifier<List<String>> get devices;
+  void start(DisplayHost host);
+  void stop();
+  void dispose();
 }

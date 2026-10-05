@@ -822,3 +822,54 @@ The port comes from the SRV record. Typing an IP address is also supported and
 always will be: multicast is the first thing a guest network blocks, and a
 display that only works when discovery works is a display that fails in exactly
 the rooms it is needed in.
+
+## USB carriage
+
+A tablet on a USB cable reaches the host's display port without a network
+and without developer mode at either end, over one of two byte streams: an
+Android tablet in **accessory mode** (AOSP's Android Open Accessory protocol —
+two bulk endpoints), or an iPad's **`usbmuxd` tunnel** (a TCP connection the
+desktop opens to a port on the device). Each is a single stream, and a display
+port is many connections — a display knocks to find a host, hangs up, and
+connects again to attach. The carriage puts the second inside the first. It is
+not a frame type and changes no table above: inside a channel the bytes are the
+display port's, `HELLO` first.
+
+**Ports, on the tablet, loopback only.** The cable arrives at **47823**: the
+desktop's `usbmuxd` tunnel dials it on an iPad, and on Android the application's
+accessory pump connects to it from the other side. A display connects to
+**47824**, which is bound only while a cable is up, exactly as it would connect
+to the far end of an `adb reverse` on 47821.
+
+**Preamble.** Each side sends eight bytes first: `4F 41 41 55 53 42` (`OAAUSB`)
+and a `u16` carriage version, `1`. A side that receives anything else first
+closes the pipe. The tablet binds 47824 only once the desktop's preamble has
+arrived.
+
+**Messages.** Then, in both directions:
+
+| offset | type | field |
+|---|---|---|
+| 0 | `u8` | kind |
+| 1 | `u32` | channel |
+| 5 | `u32` | payload length, at most 1 048 576 |
+| 9 | bytes | payload |
+
+All little-endian, like every other field in this document.
+
+| kind | name | direction | meaning |
+|---|---|---|---|
+| 1 | `OPEN` | tablet → desktop | a display connected to 47824; the desktop treats the channel as an accepted display connection and sends `HELLO` on it |
+| 2 | `DATA` | both | bytes of one channel |
+| 3 | `CLOSE` | both | the channel is finished; never answered |
+| 4 | `NAME` | tablet → desktop | channel 0, sent after the preamble: the tablet's name, UTF-8 |
+
+Channel numbers are the tablet's to choose and are never reused within a pipe.
+`DATA` or `CLOSE` for a channel that is not open is ignored. An unknown kind or
+an oversized length closes the pipe. When the pipe closes, every channel in it
+is closed with it.
+
+**The display port's rules hold inside a channel unchanged** — the trust
+boundary, the refusal of the control range, flow control by `0x0007` — because
+the desktop hands each channel to the same code that serves its listening
+socket. A desktop that is not publishing closes every channel it is offered.

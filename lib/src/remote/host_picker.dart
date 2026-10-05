@@ -10,6 +10,7 @@ import 'pair_link.dart';
 import 'qr_scanner.dart';
 import 'this_machine.dart';
 import 'usb_link.dart';
+import 'usb_relay.dart';
 
 /// Choosing a host to attach to: what discovery found, and the address you type
 /// when discovery cannot work.
@@ -310,7 +311,9 @@ class _HostPickerPanelState extends State<HostPickerPanel> {
                         if (forwarded != null)
                           PanelListRow(
                             title: forwarded.name,
-                            note: 'USB cable, forwarded by adb',
+                            note: forwarded.port == kUsbRelayPort
+                                ? 'USB cable'
+                                : 'USB cable, forwarded by adb',
                             mark: OaaMark.usb,
                             opens: true,
                             onTap: () =>

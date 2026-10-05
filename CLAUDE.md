@@ -52,7 +52,7 @@ built, and `CHANGELOG.md` for what shipped when.
 | `packages/oaa_core/lib/src/meter_source.dart` | `MeterSource` — everything a module is allowed to read. `OaaEngine` implements it; so does the remote display's decoder. |
 | `docs/WIRE.md` | The wire protocol, normative. Three implementations, none written against another. |
 | `docs/ODR.md` | **Open Dynamic Range**, the project's own dynamics standard — `ODR-S` and `ODR-I` defined to the operand, with numbered conformance cases. Normative and versioned in its own header: the definition changes only with a version bump and a revision-history row, and `packages/oaa_engine/test/conformance_test.dart` asserts every case in its § 7. Annex A is informative — what a reading means — and moves without a bump. `METRICS.md` and the README summarise it and point at it; they do not restate it, so there is one text to drift from. Its prose is CC BY 4.0, the one file in `docs/` that is not GPL, because a specification nobody may reproduce is not open. |
-| `ios/Runner/OaaBonjour.swift` | One of the application's **nine** platform channels, and every one of them exists because a platform will not answer a question Flutter can. iOS refuses an app the multicast socket every other platform browses with, so a tablet searches through the system's Bonjour responder instead; `lib/src/remote/mdns/host_discovery.dart` is where the two meet. The others: `lib/src/app/window_chrome.dart` over `oaa/window_chrome`, which removes the macOS title bar; `macos/Runner/OaaFileMenu.swift` over `oaa/file_menu`, which is the File menu, because `PlatformMenuBar` can carry no checkmark and would replace the stock Edit menu — see `lib/src/app/file_menu.dart`, which sends it labels, ticks and the chords off the shortcut table; and Android's three — `OaaMulticastLock.kt`, without which its multicast socket receives nothing; `OaaFilesDir.kt`, without which it has nowhere to save; and `OaaMicPermission.kt`, without which it cannot open an input at all. All three are registered in `android/app/src/main/kotlin/com/openaudioanalyzer/oaa/MainActivity.kt`, and all three are the same failure shape — an Android capability that is *absent* rather than broken, with every call below it succeeding and nothing logged. Two of the three shipped missing. The seventh is `ios/Runner/OaaLaunchArguments.swift` over `oaa/launch_arguments`, which answers with `argv`, because iOS hands Dart's `main` an empty argument list **and** an empty `Platform.environment` — so every flag in `lib/src/app/launch_options.dart` did nothing on the one platform a tablet runs on, silently, with `xcrun simctl launch --args` looking for all the world like it had worked. The eighth is `OaaKeepAwake` — `android/.../OaaKeepAwake.kt` and `ios/Runner/OaaKeepAwake.swift` over `com.openaudioanalyzer.oaa/keep_awake` — which keeps a display's screen on while a host is attached, because a display is a screen nobody touches and Flutter has no way to ask. The ninth is `OaaDocuments` — `android/.../OaaDocuments.kt` and `ios/Runner/OaaDocuments.swift` over `com.openaudioanalyzer.oaa/documents` — the system's document picker, because `file_selector` has no save dialog on either tablet and opens a *copy* of what was picked, so Save as did nothing there and Save after Open wrote to the copy; a picked document is a `content://` URI or an `oaa-bookmark:` that `ConfigStore` routes to it, see `lib/src/storage/picked_documents.dart`. |
+| `ios/Runner/OaaBonjour.swift` | One of the application's **nine** platform channels, and every one of them exists because a platform will not answer a question Flutter can. iOS refuses an app the multicast socket every other platform browses with, so a tablet searches through the system's Bonjour responder instead; `lib/src/remote/mdns/host_discovery.dart` is where the two meet. The others: `lib/src/app/window_chrome.dart` over `oaa/window_chrome`, which removes the macOS title bar; `macos/Runner/OaaFileMenu.swift` over `oaa/file_menu`, which is the File menu, because `PlatformMenuBar` can carry no checkmark and would replace the stock Edit menu — see `lib/src/app/file_menu.dart`, which sends it labels, ticks and the chords off the shortcut table; and Android's three — `OaaMulticastLock.kt`, without which its multicast socket receives nothing; `OaaFilesDir.kt`, without which it has nowhere to save; and `OaaMicPermission.kt`, without which it cannot open an input at all. All three are registered in `android/app/src/main/kotlin/com/openaudioanalyzer/oaa/MainActivity.kt`, and all three are the same failure shape — an Android capability that is *absent* rather than broken, with every call below it succeeding and nothing logged. Two of the three shipped missing. The seventh is `ios/Runner/OaaLaunchArguments.swift` over `oaa/launch_arguments`, which answers with `argv`, because iOS hands Dart's `main` an empty argument list **and** an empty `Platform.environment` — so every flag in `lib/src/app/launch_options.dart` did nothing on the one platform a tablet runs on, silently, with `xcrun simctl launch --args` looking for all the world like it had worked. The eighth is `OaaKeepAwake` — `android/.../OaaKeepAwake.kt` and `ios/Runner/OaaKeepAwake.swift` over `com.openaudioanalyzer.oaa/keep_awake` — which keeps a display's screen on while a host is attached, because a display is a screen nobody touches and Flutter has no way to ask. (`android/.../OaaAccessory.kt` is registered beside them and is not a channel: it pumps a USB accessory into the relay's loopback port and nobody asks it anything — see `lib/src/remote/usb_relay.dart`.) The ninth is `OaaDocuments` — `android/.../OaaDocuments.kt` and `ios/Runner/OaaDocuments.swift` over `com.openaudioanalyzer.oaa/documents` — the system's document picker, because `file_selector` has no save dialog on either tablet and opens a *copy* of what was picked, so Save as did nothing there and Save after Open wrote to the copy; a picked document is a `content://` URI or an `oaa-bookmark:` that `ConfigStore` routes to it, see `lib/src/storage/picked_documents.dart`. |
 | `packages/oaa_core/lib/src/grid.dart` | Every rule about where a module may go, as pure functions. No pixels. |
 | `lib/src/canvas/grid_canvas.dart` | The canvas: drag, resize, selection, the preview overlay. |
 | `lib/src/canvas/workspace.dart` | The one path every layout edit takes, and the undo history. |
@@ -79,6 +79,7 @@ built, and `CHANGELOG.md` for what shipped when.
 | `packages/oaa_core/` | Domain model. Pure Dart. | GPL-3.0-or-later |
 | `packages/oaa_wire/` | The remote-display protocol. Pure Dart, no I/O. | GPL-3.0-or-later |
 | `packages/oaa_ui/` | Design tokens and shared primitives. | GPL-3.0-or-later |
+| `packages/oaa_usb/` | The Android Open Accessory protocol, desktop side: an Android tablet on a cable with no USB debugging. Vendors libusb and builds it on macOS and Linux only. | GPL-3.0-or-later; libusb LGPL-2.1-or-later |
 | `lib/` | The application. | GPL-3.0-or-later |
 | `cli/` | The `oaa` command-line analyser. No Flutter binding. | GPL-3.0-or-later |
 | `plugin/` | Headless VST3 / AU / AAX. Measures the DAW's audio, streams it to the app. Contains `host/`, the fake DAW that drives it. The AAX is a release-archive artefact only until it is PACE-signed — see `plugin/AGENTS.md` § AAX. | **AGPL-3.0-or-later** |
@@ -703,6 +704,9 @@ cd packages/oaa_engine && dart run test/reclaim_orphans.dart
                                       # the process-global reset, in a process
                                       # of its own. After the suite, never
                                       # inside it — see the file's header
+cd packages/oaa_usb && dart test      # the accessory's libusb builds, loads
+                                      # and scans; the accessory itself is a
+                                      # check by hand, see its AGENTS.md
 cd cli && dart test                   # the `oaa` binary, as a subprocess
 cd cli && dart build cli -o build     # the CLI builds the way a release builds it
 sh plugin/test/sources_match.sh       # the engine's two build lists agree
@@ -747,8 +751,8 @@ is made of**: `OAA_FORMATS`, the bus layouts, the processor's declarations.
 AAX's `auval`, and like `auval` it is the only thing short of the host itself
 that will say the bundle is real.
 
-All thirteen gates are jobs in `ci.yml`, which is the only workflow. The repeated
-`dart test packages/oaa_wire` is not a fourteenth: it is the same suite, run
+All fourteen gates are jobs in `ci.yml`, which is the only workflow. The repeated
+`dart test packages/oaa_wire` is not a fifteenth: it is the same suite, run
 again where a built plugin turns its end-to-end cases from skipped into real.
 Neither is `reclaim_orphans.dart` — it is a second command in the `engine` job's
 own step, and it is a separate command rather than a test for a reason the file
@@ -758,7 +762,7 @@ The line after it is one file of the `flutter test` suite for the same reason �
 the only thing anywhere that runs a DAW's audio through the plugin, the app and
 out to a display.
 
-Two of the thirteen do not run on a push. `dart build cli` does, and is there
+Two of the fourteen do not run on a push. `dart build cli` does, and is there
 because nothing else builds the CLI the way a release does: `cli/test` runs it with
 `dart run`, so `dart compile exe` was broken for an unknown length of time and
 was found by tagging a release. **The full plugin build runs only on a release or a manual
@@ -814,7 +818,9 @@ Two of these fail in a way that looks like something else:
 ### Internal
 
 `lib/` → `oaa_ui` → `oaa_core`; `lib/` → `oaa_engine` → `engine/`;
-`lib/` → `oaa_wire` → `oaa_core`. `oaa_core` depends on nothing.
+`lib/` → `oaa_wire` → `oaa_core`; `lib/` → `oaa_usb`. `oaa_core` depends on
+nothing, and neither does `oaa_usb` — it moves bytes and knows no protocol of
+ours; `lib/src/remote/usb_relay.dart` gives them meaning.
 
 `oaa_engine` → `oaa_core` as well, for `MeterSource` and nothing else. The rule
 that matters is unchanged and points the other way: **`oaa_core` must never
@@ -854,6 +860,12 @@ a phase and was wrong.
   that is what keeps `dart build cli` working and the CLI usable in CI. Not
   `dart compile exe` — that refuses a package whose dependencies have build
   hooks, and `oaa_engine` has one.
+- **USB accessory:** `libusb` 1.0.30, vendored under
+  `packages/oaa_usb/third_party/libusb/` with its `COPYING`. **LGPL-2.1**, the
+  one vendored library that is not permissive; it is compatible with the GPL
+  the application is under, and it ships as its own dynamic library, so it can
+  be replaced as the LGPL asks. Built for macOS and Linux only — see
+  `packages/oaa_usb/AGENTS.md` for why not Windows yet.
 - **Engine:** `miniaudio` (capture), `pffft` (FFT) and `dr_libs` — `dr_wav`,
   `dr_flac`, `dr_mp3` (file decoding). All vendored under
   `engine/third_party/`, all permissive, all single-header.

@@ -27,6 +27,11 @@ dependencies:
   # link — this binary is the host on a desktop and the display on a tablet.
   oaa_wire:
     path: packages/oaa_wire
+  # The Android Open Accessory protocol over a vendored libusb: an Android
+  # tablet on a cable with no USB debugging. Builds for macOS and Linux only;
+  # see packages/oaa_usb/AGENTS.md.
+  oaa_usb:
+    path: packages/oaa_usb
 
   # Configuration and UI state only. Measurements never pass through it: they
   # go from native memory to a CustomPainter without touching the widget tree,

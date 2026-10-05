@@ -134,11 +134,12 @@ arrives. The one thing a display sends back is a note that it has received a
 frame, which the host uses only to avoid sending it more than it can keep up
 with.
 
-While publishing is on, a desktop with Android's `adb` installed also forwards
-the display port to any Android device connected over USB with debugging
-enabled, so that a tablet on a cable can attach. That reaches no one the
-network port does not: it is the same port, to a device you have already
-trusted for debugging. The reasoning is written out in full under
+While publishing is on, the desktop also offers the display port down USB
+cables, so that a tablet on a cable can attach: to an iPad through Apple's own
+device service, to an Android tablet that it asks — once each time it is
+plugged in — to become its USB accessory, and with Android's `adb` installed to
+any Android device with debugging enabled. That reaches no one the network port
+does not: it is the same port, to a device plugged into this computer. The reasoning is written out in full under
 [**They do not have the same trust boundary**](wire.html#they-do-not-have-the-same-trust-boundary).
 
 What follows from that, practically: publish on a network you trust. On a shared

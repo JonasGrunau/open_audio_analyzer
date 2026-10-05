@@ -10,6 +10,16 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### ✨ Added
+- **A USB cable needs nothing switched on.** An iPad plugged into a publishing
+  desktop now appears under **Over USB** with no developer mode, reached
+  through the service Finder syncs it with — built into macOS, `usbmuxd` on
+  Linux, the Apple Devices app on Windows. An Android tablet plugged into a
+  publishing Mac or Linux desktop is asked to become its USB accessory, Android
+  offers to open Open Audio Analyzer, and it appears in the same place with no
+  USB debugging and no `adb`. A device is asked once each time it is plugged
+  in, and never while PUBLISH is off; while it is the desktop's accessory its
+  files are not offered to the desktop. On Windows an Android tablet still needs
+  USB debugging and `adb`. (#5)
 - **A tablet on a USB cable is a display.** An Android tablet plugged into the
   desktop now shows up in ATTACH under **Over USB**, marked with a plug where a
   network host has the broadcast mark, and attaching to it bypasses the room's
@@ -191,6 +201,14 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - A fourth Android channel and a third iOS one, `OaaKeepAwake`, over
   `com.openaudioanalyzer.oaa/keep_awake`: `FLAG_KEEP_SCREEN_ON` on the
   activity's window, and `isIdleTimerDisabled`. (#5)
+- `docs/WIRE.md` defines the **USB carriage**: how a tablet's relay carries
+  each display connection as a channel of one cable, on loopback 47823 and
+  47824. It changes no table of the display port, and inside a channel the
+  bytes are the display port's. (#5)
+- `packages/oaa_usb`, a fifth local package: the Android Open Accessory
+  protocol over a vendored libusb 1.0.30 (LGPL-2.1), built on macOS and Linux
+  and tested by the `engine` job on all three. `OaaAccessory.kt` pumps the
+  accessory into the tablet's relay and is not a channel. (#5)
 - A fifth Android channel and a fourth iOS one, `OaaDocuments`, over
   `com.openaudioanalyzer.oaa/documents`: the system's create and open pickers,
   and reads and writes through the `ContentResolver` on Android and a

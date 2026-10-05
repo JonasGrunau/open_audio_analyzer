@@ -107,10 +107,11 @@ network blocks. Scanning needs a camera, so it is offered on Android, iPadOS and
 macOS and not on Windows or Linux. A code carries an address and nothing else: a
 display that scans one can still only watch.
 
-An Android tablet can also be plugged in. While PUBLISH is on, the desktop
-forwards its display port down the cable with `adb reverse`, and the tablet
-lists it under **Over USB**, marked with a plug — it needs the Android SDK's
-platform tools on the desktop and USB debugging on the tablet. Every host a
+A tablet can also be plugged in. While PUBLISH is on, the desktop finds an iPad
+or an Android tablet on a USB cable and the tablet lists it under **Over USB**,
+marked with a plug — with nothing switched on on either, on a Mac or Linux. An
+Android tablet with USB debugging on also works through `adb`, which is the
+route on Windows. Every host a
 tablet has shown is listed under **Recent**, so an address is typed once. While
 it is attached a display keeps its screen on, and OPTIONS on its bar sets how
 often it redraws.

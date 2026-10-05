@@ -6,7 +6,7 @@ import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 
 /**
- * Registers Open Audio Analyzer's own five channels alongside the generated
+ * Registers Open Audio Analyzer's own five channels, and the accessory pump, alongside the generated
  * ones.
  *
  * The first three exist for the same reason: Android is the platform where
@@ -27,6 +27,9 @@ import io.flutter.embedding.engine.FlutterEngine
  * fifth, `OaaDocuments.kt`, opens and saves the files a user picks through the
  * system's own picker, because `file_selector` cannot save on Android and opens
  * a copy rather than the file.
+ *
+ * `OaaAccessory.kt` is registered here too and is not a channel: it pumps a USB
+ * accessory into the relay's loopback port, and nothing asks it anything.
  */
 class MainActivity : FlutterActivity() {
   override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -38,5 +41,6 @@ class MainActivity : FlutterActivity() {
     flutterEngine.plugins.add(OaaMicPermission())
     flutterEngine.plugins.add(OaaKeepAwake())
     flutterEngine.plugins.add(OaaDocuments())
+    flutterEngine.plugins.add(OaaAccessory())
   }
 }

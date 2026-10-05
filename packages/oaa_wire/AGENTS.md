@@ -22,6 +22,8 @@ in.
 | `src/wire_snapshot.dart` | `WireSnapshot` — a decoded frame presented as a `MeterSource`, so the fourteen modules cannot tell it from an engine. **`decode` takes the frame's version and chooses the table by it, never by the length** — a version 4 relay frame with a long scope run is as long as a version 5 one — so every caller passes `FrameReader.version`. Carries the DAW's playhead too, written from outside as transport frames decode: it is not in the snapshot frame, and a module has nowhere else to read it. |
 | `src/daw_transport.dart` | `0x0010 DAW_TRANSPORT`, and the presence bits. |
 | `src/lufs_mode.dart` | `0x0020 SET_LUFS_MODE` — the one frame that travels consumer → producer, and the only one this package *encodes for sending to a producer*. Ingest port only; the reasoning is in `docs/WIRE.md` and it is the security model, not a detail. |
+| `src/usb_carriage.dart` | `docs/WIRE.md` § USB carriage: the preamble, the four message kinds and the reader. Not a frame type — it carries display-port connections inside one cable and never reads what is in them. |
+| `test/usb_carriage_test.dart` | The carriage, cut at every offset; and refused on a foreign preamble, an unknown kind and an oversized length. |
 | `test/plugin_golden_test.dart` | This codec against bytes the C++ actually wrote. |
 | `test/plugin_e2e_test.dart` | This codec against a *running* plugin: it spawns `plugin/host/`'s fake DAW headless and decodes what comes off the socket. Skips without a built plugin, which is every run outside `ci.yml`'s `plugin` job. |
 

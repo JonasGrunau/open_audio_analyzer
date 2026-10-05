@@ -74,7 +74,7 @@ void main() {
 
       UsbHostProbe.platformSupported = true;
       addTearDown(() => UsbHostProbe.platformSupported = null);
-      final probe = UsbHostProbe(port: host.port!)..start();
+      final probe = UsbHostProbe(ports: [host.port!])..start();
       addTearDown(probe.dispose);
       await Future<void>.delayed(const Duration(milliseconds: 300));
 

@@ -53,6 +53,9 @@
          untestable on hardware: the check is Play's device catalogue after an
          upload, and nothing before that will tell you it worked. -->
     <supports-screens android:requiresSmallestWidthDp="600"/>
+    <!-- The accessory cable. Not required: a tablet without USB accessory
+         support is still a display over the network. -->
+    <uses-feature android:name="android.hardware.usb.accessory" android:required="false"/>
     <application
         android:label="Audio Analyzer"
         android:name="${applicationName}"
@@ -78,6 +81,18 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+            <!-- A desktop that is publishing and finds this tablet on a cable
+                 asks it to become a USB accessory - see OaaAccessory.kt. This
+                 is what makes Android offer to open the application when it
+                 does, and what grants the permission to open the accessory
+                 when somebody says yes: no USB debugging, no adb. The filter
+                 names the accessory by the two strings the desktop sends. -->
+            <intent-filter>
+                <action android:name="android.hardware.usb.action.USB_ACCESSORY_ATTACHED"/>
+            </intent-filter>
+            <meta-data
+                android:name="android.hardware.usb.action.USB_ACCESSORY_ATTACHED"
+                android:resource="@xml/accessory_filter"/>
         </activity>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->

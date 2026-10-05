@@ -106,7 +106,8 @@ What ships today:
   [Configuration](#-configuration).
 - **Files are analysed offline** by the app and by the
   [`oaa` CLI](#-analysing-files).
-- **A tablet mirrors the canvas** over Wi-Fi, or over a USB cable on Android.
+- **A tablet mirrors the canvas** over Wi-Fi, or over a USB cable with nothing
+  switched on.
   Flip **PUBLISH** in the menu bar; the tablet finds it by itself, reads a
   pairing code off the screen, or takes an address typed by hand. Three routes,
   because the first one is what a venue's Wi-Fi blocks — and it remembers the
@@ -901,6 +902,7 @@ cd packages/oaa_engine && dart run test/reclaim_orphans.dart
                                       # the process-global reset, in a process
                                       # of its own. After the suite, never
                                       # inside it — see the file's header
+cd packages/oaa_usb && dart test      # the USB accessory's libusb builds and loads
 cd cli && dart test                   # the `oaa` binary, as a subprocess
 cd cli && dart build cli -o build     # and it still builds the way a release does
 sh plugin/test/sources_match.sh       # the engine's two build lists agree
@@ -1011,12 +1013,15 @@ and it can watch but not change anything — see
 
 ATTACH lists, top to bottom:
 
-- **Over USB** — a desktop at the other end of a cable, marked with a plug. On
-  Android this is `adb reverse`: while PUBLISH is on, the desktop forwards its
-  display port to every Android device `adb` can see, so it needs the Android
-  SDK's platform tools on the desktop and USB debugging on the tablet. A host
-  found over **USB tethering** is listed here too. A cable is the thing to try
-  when the room's Wi-Fi is what is slow.
+- **Over USB** — a desktop at the other end of a cable, marked with a plug.
+  While PUBLISH is on, the desktop reaches an **iPad** through `usbmuxd`, the
+  service Finder syncs it with, and asks an **Android** tablet to become its USB
+  accessory — on a Mac or Linux, with no USB debugging and no `adb`. Either way
+  the tablet relays the cable to its own loopback port and the display connects
+  there; see `docs/WIRE.md` § USB carriage. An Android tablet with USB debugging
+  on is also reached by `adb reverse`, which is the route on Windows, and a
+  host found over **USB tethering** is listed here too. A cable is the thing to
+  try when the room's Wi-Fi is what is slow.
 - **On this network** — every machine that is publishing, found by mDNS.
 - **Recent** — the hosts this tablet has shown before, by name, newest first,
   each with a Forget button. Only a host that answered is remembered.
@@ -1311,12 +1316,17 @@ position" branch described above.
   client→host frame, which the display port lacks by policy rather than by
   limitation — or the host keys assignments by address, which breaks on DHCP.
   Until then the display shows the whole preset and the viewer picks the tab.
-- **USB is Android only, and needs `adb`.** The desktop forwards its display
-  port down the cable with `adb reverse`, so it needs the Android SDK's
-  platform tools on the desktop and USB debugging on the tablet. An iPad has no
-  equivalent a desktop can drive — `usbmuxd` forwards the other way round — and
-  USB tethering, which needs neither, is a network, found the way any network
-  host is.
+- **An Android tablet on a Windows desktop needs `adb` for USB.** The accessory
+  route opens the tablet through libusb, and Windows binds an accessory-mode
+  device to no driver until a WinUSB driver has been installed for it — an
+  installer step that has not been written. On Windows the cable needs USB
+  debugging and `adb`, as it did everywhere before; an iPad works on Windows
+  with Apple's own device service installed.
+- **The two cables with no developer mode have only been driven end to end by
+  their tests.** Everything after the cable — the relay, the carriage, the
+  display attaching — runs in the suite and on an iPad simulator and an Android
+  emulator; `usbmuxd` itself was spoken to on a real Mac. Neither a real
+  accessory nor a real tunnel to a device has carried a session yet.
 - **Tablets are display-first.** FFI works fine on iPadOS and Android, but
   audio *input* selection differs sharply per platform. The tablet build's
   primary role is the remote display.
