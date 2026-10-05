@@ -1328,11 +1328,11 @@ position" branch described above.
   installer step that has not been written. On Windows the cable needs USB
   debugging and `adb`, as it did everywhere before; an iPad works on Windows
   with Apple's own device service installed.
-- **The two cables with no developer mode have only been driven end to end by
-  their tests.** Everything after the cable — the relay, the carriage, the
-  display attaching — runs in the suite and on an iPad simulator and an Android
-  emulator; `usbmuxd` itself was spoken to on a real Mac. Neither a real
-  accessory nor a real tunnel to a device has carried a session yet.
+- **The iPad cable has not carried a session from a real iPad yet.** The
+  Android accessory has, on a real phone and a Mac — switched, opened, relayed
+  and attached, including across a restart of the application with the cable
+  in. The iPad's half has run against `usbmuxd` on a real Mac and, after the
+  tunnel, on an iPad simulator, but never through a tunnel to a device.
 - **Tablets are display-first.** FFI works fine on iPadOS and Android, but
   audio *input* selection differs sharply per platform. The tablet build's
   primary role is the remote display.

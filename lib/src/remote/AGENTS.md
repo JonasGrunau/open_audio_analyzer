@@ -189,6 +189,17 @@ halves live here.
   - **47824 is bound on the desktop's preamble, not on the connection.** A
     knock then fails at once when no cable is up, and anything else that finds
     47823 never gets a display to it.
+  - **The tablet greets and repeats; the desktop only answers.** An Android
+    accessory drops what is written while no application has it open, and an
+    application restarted with the cable in reconnects to a pipe the desktop
+    never saw close. The first version had the desktop greet once, on open,
+    and that greeting was lost on the first reinstall on a real phone — the
+    cable stayed up, the name arrived, and 47824 was never bound. So the
+    desktop's reader skips to the first preamble, and a preamble in place of a
+    message is `CarriageKind.restart`: channels closed, answered again.
+  - **The tablet's pump dials `127.0.0.1` by number.** `InetAddress
+    .getLoopbackAddress()` answers `::1` on Android and the relay binds IPv4
+    loopback only. See `OaaAccessory.kt`.
   - **One flush at a time per cable,** because several channels share one sink
     and a sink with a flush outstanding refuses `add` — the same trap
     `_RemoteClient`'s `_waiting` exists for. `_Outbox` queues and coalesces.

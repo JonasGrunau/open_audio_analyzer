@@ -64,7 +64,13 @@ enum CarriageKind {
   close(3),
 
   /// Tablet → desktop, channel 0: the tablet's name, UTF-8.
-  name(4);
+  name(4),
+
+  /// Never encoded: what [CarriageReader] reports when the other side's
+  /// preamble arrives *again*, in place of a message. Its code is the
+  /// preamble's first byte, `O`, which no message kind uses — so a side that
+  /// started over is told apart from a corrupt pipe by reading eight bytes.
+  restart(0x4F);
 
   const CarriageKind(this.code);
   final int code;
@@ -78,7 +84,17 @@ enum CarriageKind {
 /// Throws [FormatException] on a preamble that is not ours, a kind it does
 /// not know, or a length over the ceiling — after any of which the pipe is
 /// not worth reading further.
+///
+/// With [resync], bytes before the first preamble are skipped rather than
+/// refused. That is the desktop's reader, and an Android accessory is why: the
+/// cable outlives the application at the far end of it, so what arrives first
+/// on a cable the desktop has just opened can be the tail of a session nobody
+/// is reading any more.
 class CarriageReader {
+  CarriageReader({this.resync = false});
+
+  final bool resync;
+
   final BytesBuilder _pending = BytesBuilder(copy: false);
   Uint8List _buffer = Uint8List(0);
   int _offset = 0;
@@ -108,18 +124,40 @@ class CarriageReader {
     }
     final available = _buffer.length - _offset;
 
+    final want = UsbCarriage.preamble.length;
     if (!_preambleSeen) {
-      final want = UsbCarriage.preamble.length;
-      final seen = available < want ? available : want;
-      for (var i = 0; i < seen; i++) {
-        if (_buffer[_offset + i] != UsbCarriage.preamble[i]) {
-          throw const FormatException('Not a USB carriage pipe.');
+      if (resync) {
+        // Drop everything before the first byte that could start a preamble,
+        // and anything that starts one and does not finish it.
+        while (_offset < _buffer.length && !_preambleAt(_offset)) {
+          _offset++;
         }
+        if (_buffer.length - _offset < want) return false;
+      } else {
+        final seen = available < want ? available : want;
+        for (var i = 0; i < seen; i++) {
+          if (_buffer[_offset + i] != UsbCarriage.preamble[i]) {
+            throw const FormatException('Not a USB carriage pipe.');
+          }
+        }
+        if (available < want) return false;
       }
-      if (available < want) return false;
       _offset += want;
       _preambleSeen = true;
       return moveNext();
+    }
+
+    if (available == 0) return false;
+    if (_buffer[_offset] == CarriageKind.restart.code) {
+      if (available < want) return false;
+      if (!_preambleAt(_offset)) {
+        throw const FormatException('Not a USB carriage pipe.');
+      }
+      _offset += want;
+      kind = CarriageKind.restart;
+      channel = 0;
+      payload = Uint8List(0);
+      return true;
     }
 
     if (available < UsbCarriage.headerBytes) return false;
@@ -127,7 +165,7 @@ class CarriageReader {
     final code = view.getUint8(0);
     final length = view.getUint32(5, Endian.little);
     final known = CarriageKind.byCode(code);
-    if (known == null) {
+    if (known == null || known == CarriageKind.restart) {
       throw FormatException('Unknown carriage message $code.');
     }
     if (length > UsbCarriage.maxPayloadBytes) {
@@ -140,6 +178,16 @@ class CarriageReader {
     final start = _offset + UsbCarriage.headerBytes;
     payload = Uint8List.sublistView(_buffer, start, start + length);
     _offset = start + length;
+    return true;
+  }
+
+  /// Whether the preamble starts at [at], as far as the buffer goes: a prefix
+  /// of it at the very end counts, because the rest may be in the next chunk.
+  bool _preambleAt(int at) {
+    for (var i = 0; i < UsbCarriage.preamble.length; i++) {
+      if (at + i >= _buffer.length) return true;
+      if (_buffer[at + i] != UsbCarriage.preamble[i]) return false;
+    }
     return true;
   }
 }

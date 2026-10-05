@@ -115,6 +115,9 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   file and still does not.
 
 ### 🐛 Fixed
+- An Android tablet is called **Android tablet** where it names itself — as a
+  publishing host, and in a desktop's list of tablets on a cable — rather than
+  **localhost**, which is all Android tells an application its name is.
 - **Save as, Export this tab and the report exports work on an Android tablet
   and on an iPad.** They opened nothing and saved nothing on either, because
   `file_selector` has no save dialog on Android or iOS; they now open the

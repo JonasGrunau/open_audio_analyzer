@@ -61,4 +61,32 @@ void main() {
       ..add([...UsbCarriage.preamble, 2, 1, 0, 0, 0, 0, 0, 0, 0x40]);
     expect(huge.moveNext, throwsFormatException);
   });
+
+  test('a desktop skips what came before the first preamble', () {
+    // The tail of a session on an accessory nobody was reading any more.
+    final reader = CarriageReader(resync: true)
+      ..add([2, 9, 0, 0, 0, 1, 0, 0, 0, 7, 0x4F, 0x41])
+      ..add(pipe([UsbCarriage.encodeName('Tab')]));
+    expect(reader.moveNext(), isTrue);
+    expect(reader.kind, CarriageKind.name);
+    expect(String.fromCharCodes(reader.payload), 'Tab');
+  });
+
+  test('a preamble mid-stream is a restart, not a corrupt pipe', () {
+    final reader = CarriageReader()
+      ..add(pipe([UsbCarriage.encode(CarriageKind.open, 1)]))
+      ..add(UsbCarriage.preamble)
+      ..add(UsbCarriage.encodeName('Again'));
+    final kinds = <CarriageKind>[];
+    while (reader.moveNext()) {
+      kinds.add(reader.kind);
+    }
+    expect(kinds, [CarriageKind.open, CarriageKind.restart, CarriageKind.name]);
+  });
+
+  test('restart is never a kind on the wire', () {
+    final reader = CarriageReader()
+      ..add([...UsbCarriage.preamble, 0x4F, 0, 0, 0, 0, 0, 0, 0, 0]);
+    expect(reader.moveNext, throwsFormatException);
+  });
 }

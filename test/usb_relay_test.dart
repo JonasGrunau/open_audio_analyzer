@@ -16,6 +16,7 @@ import 'package:oaa/src/remote/display_client.dart';
 import 'package:oaa/src/remote/display_host.dart';
 import 'package:oaa/src/remote/usb_link.dart';
 import 'package:oaa/src/remote/usb_relay.dart';
+import 'package:oaa_wire/oaa_wire.dart';
 
 import 'support/fake_source.dart';
 
@@ -154,4 +155,38 @@ void main() {
       expect(relay.attached.value, isFalse);
     },
   );
+
+  test('a tablet that starts over on a cable that stayed up is answered '
+      'again', () async {
+    // An Android application restarted with the accessory still attached: the
+    // desktop's end of the cable never closed, and the new relay greets it.
+    final desktop = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(desktop.close);
+    final accepted = desktop.first;
+    final tablet = await Socket.connect(
+      InternetAddress.loopbackIPv4,
+      desktop.port,
+    );
+    addTearDown(tablet.destroy);
+    cable = UsbRelayHost(SocketPipe(await accepted), host);
+
+    final fromDesktop = <int>[];
+    tablet.listen(fromDesktop.addAll);
+    tablet
+      ..add(UsbCarriage.preamble)
+      ..add(UsbCarriage.encodeName('First'))
+      ..add(UsbCarriage.encode(CarriageKind.open, 1));
+    await _until(() => host.clientCount.value == 1);
+    expect(fromDesktop.take(8), UsbCarriage.preamble);
+
+    // The restart: the old channel is gone, and the desktop says hello again.
+    fromDesktop.clear();
+    tablet
+      ..add(UsbCarriage.preamble)
+      ..add(UsbCarriage.encodeName('Second'));
+    await _until(() => cable!.name.value == 'Second');
+    await _until(() => host.clientCount.value == 0);
+    expect(host.clientCount.value, 0);
+    expect(fromDesktop.take(8), UsbCarriage.preamble);
+  });
 }

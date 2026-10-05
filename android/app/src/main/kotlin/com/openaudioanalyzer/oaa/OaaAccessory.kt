@@ -13,6 +13,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.ParcelFileDescriptor
+import android.util.Log
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.embedding.engine.plugins.activity.ActivityAware
 import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding
@@ -53,6 +54,7 @@ class OaaAccessory : FlutterPlugin, ActivityAware {
     const val PERMISSION = "com.openaudioanalyzer.oaa.USB_ACCESSORY_PERMISSION"
     /** AOA's own advice: read at least 16 kB, or a transfer is truncated. */
     const val BUFFER = 16384
+    const val TAG = "OaaAccessory"
   }
 
   private var context: Context? = null
@@ -121,7 +123,8 @@ class OaaAccessory : FlutterPlugin, ActivityAware {
     val manager = context.getSystemService(Context.USB_SERVICE) as? UsbManager ?: return
     val accessory = manager.accessoryList?.firstOrNull {
       it.manufacturer == MANUFACTURER && it.model == MODEL
-    } ?: return
+    }
+    if (accessory == null) return
 
     if (!manager.hasPermission(accessory)) {
       // Granted already when the attach intent launched us; asked for when the
@@ -136,7 +139,8 @@ class OaaAccessory : FlutterPlugin, ActivityAware {
     }
     val descriptor = try {
       manager.openAccessory(accessory)
-    } catch (_: Exception) {
+    } catch (error: Exception) {
+      Log.w(TAG, "could not open the accessory", error)
       null
     } ?: return
     open = Pump(accessory, descriptor).also { it.start() }
@@ -157,16 +161,24 @@ class OaaAccessory : FlutterPlugin, ActivityAware {
       val input = FileInputStream(descriptor.fileDescriptor)
       val output = FileOutputStream(descriptor.fileDescriptor)
       // The relay binds at launch; the attach intent may arrive before it has.
+      //
+      // **127.0.0.1 by number, not `getLoopbackAddress()`**, which answers
+      // `::1` on Android — and the relay binds IPv4 loopback only, so the
+      // connection was refused every time, silently, forever.
       var relay: Socket? = null
+      var failures = 0
       while (!stopped && relay == null) {
         relay = try {
-          Socket(InetAddress.getLoopbackAddress(), PIPE_PORT).apply { tcpNoDelay = true }
-        } catch (_: Exception) {
+          Socket(InetAddress.getByAddress(byteArrayOf(127, 0, 0, 1)), PIPE_PORT)
+            .apply { tcpNoDelay = true }
+        } catch (error: Exception) {
+          if (failures++ == 0) Log.w(TAG, "relay not there yet: $error")
           Thread.sleep(300)
           null
         }
       }
       if (relay == null) return finish()
+      Log.i(TAG, "accessory relayed")
       socket = relay
 
       val toDesktop = Thread({

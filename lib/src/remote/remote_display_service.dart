@@ -363,12 +363,24 @@ class RemoteDisplayService {
   /// DNS-SD allows exactly one label — see `MdnsResponder.instanceLabel` for
   /// what that did to discovery. The domain is also noise in a list where
   /// everything is on the local network by definition.
+  ///
+  /// **Android answers `localhost`** — it gives an application no host name at
+  /// all — which reads in a device list as this machine rather than as the
+  /// tablet on the cable. So that name, like an empty one, falls back to what
+  /// the device is.
   static String defaultHostName() {
+    final fallback = Platform.isAndroid
+        ? 'Android tablet'
+        : Platform.isIOS
+        ? 'iPad'
+        : 'Open Audio Analyzer';
     try {
       final name = Platform.localHostname.trim().split('.').first;
-      return name.isEmpty ? 'Open Audio Analyzer' : name;
+      return name.isEmpty || name.toLowerCase() == 'localhost'
+          ? fallback
+          : name;
     } on Object {
-      return 'Open Audio Analyzer';
+      return fallback;
     }
   }
 

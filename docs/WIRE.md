@@ -841,10 +841,21 @@ accessory pump connects to it from the other side. A display connects to
 **47824**, which is bound only while a cable is up, exactly as it would connect
 to the far end of an `adb reverse` on 47821.
 
-**Preamble.** Each side sends eight bytes first: `4F 41 41 55 53 42` (`OAAUSB`)
-and a `u16` carriage version, `1`. A side that receives anything else first
-closes the pipe. The tablet binds 47824 only once the desktop's preamble has
-arrived.
+**Preamble.** Each side opens with eight bytes: `4F 41 41 55 53 42` (`OAAUSB`)
+and a `u16` carriage version, `1`. **The tablet speaks first**, followed by its
+`NAME`, and repeats both every 1.5 seconds until the desktop's preamble arrives.
+**The desktop answers and never volunteers**: it sends its preamble in reply to
+each one it receives. The tablet binds 47824 once the desktop's has arrived.
+
+Both rules are there because an Android accessory outlives the application at
+its far end. Bytes written to it while no application has it open are lost, and
+an application restarted with the cable in reconnects to a pipe the desktop
+never saw close. So the desktop skips anything before the first preamble on a
+pipe it has just opened, and a preamble arriving **in place of a message** —
+its first byte, `0x4F`, is no message kind — means the tablet started over: the
+desktop closes every channel and answers again. The tablet treats a second
+preamble from the desktop as an answer it already had. Anything else that
+does not begin with the preamble closes the pipe.
 
 **Messages.** Then, in both directions:
 

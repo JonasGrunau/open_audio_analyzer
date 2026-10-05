@@ -165,7 +165,6 @@ class _Outbox {
 class UsbRelayHost {
   UsbRelayHost(this._pipe, this._host, {this.onClosed})
     : _out = _Outbox(_pipe) {
-    _out.add(UsbCarriage.preamble);
     _subscription = _pipe.input.listen(
       _receive,
       onError: (Object _) => close(),
@@ -177,7 +176,10 @@ class UsbRelayHost {
   final UsbPipe _pipe;
   final DisplayHost _host;
   final _Outbox _out;
-  final CarriageReader _reader = CarriageReader();
+
+  /// Lenient about what comes before the tablet's first preamble: on an
+  /// Android accessory that can be the tail of a session nobody is reading.
+  final CarriageReader _reader = CarriageReader(resync: true);
   final Map<int, _ChannelLink> _channels = {};
   late final StreamSubscription<Uint8List> _subscription;
 
@@ -198,9 +200,24 @@ class UsbRelayHost {
     if (_closed) return;
     _reader.add(chunk);
     try {
-      while (_reader.moveNext()) {
+      final before = _reader.preambleSeen;
+      final more = _reader.moveNext();
+      // **Answered, never volunteered.** The desktop's preamble goes out when
+      // the tablet's arrives, because only then is anybody reading: an Android
+      // accessory drops what was written while no application had it open.
+      if (!before && _reader.preambleSeen) _answer();
+      if (!more) return;
+      do {
         final channel = _reader.channel;
         switch (_reader.kind) {
+          case CarriageKind.restart:
+            // The tablet's relay started over on a cable that stayed up — the
+            // application was restarted. Its channels went with it.
+            for (final link in List.of(_channels.values)) {
+              link._ended();
+            }
+            _channels.clear();
+            _answer();
           case CarriageKind.name:
             name.value = utf8.decode(_reader.payload, allowMalformed: true);
           case CarriageKind.open:
@@ -213,10 +230,15 @@ class UsbRelayHost {
           case CarriageKind.close:
             _channels.remove(channel)?._ended();
         }
-      }
+      } while (_reader.moveNext());
     } on FormatException {
       close();
     }
+  }
+
+  void _answer() {
+    _out.add(UsbCarriage.preamble);
+    unawaited(_out.flush().catchError((Object _) {}));
   }
 
   void _forget(int channel) => _channels.remove(channel);
@@ -334,6 +356,7 @@ class TabletRelay {
   final Map<int, Socket> _displays = {};
   int _nextChannel = 1;
   bool _disposed = false;
+  Timer? _greeting;
 
   /// Binds the cable's port. Safe to call again — on an iPad coming back to the
   /// foreground, whose listening socket the system may have taken away.
@@ -367,10 +390,19 @@ class TabletRelay {
     _pipe = socket;
     _out = out;
     _reader = reader;
-    out
-      ..add(UsbCarriage.preamble)
-      ..add(UsbCarriage.encodeName(name));
-    unawaited(out.flush().catchError((Object _) {}));
+    _greet(out);
+    // **Said again until it is answered.** The desktop answers a preamble and
+    // never volunteers one, and on an Android accessory the first may have
+    // gone into a cable that was still draining an older session — the
+    // desktop skips to the next preamble it sees, so repeating is free.
+    _greeting?.cancel();
+    _greeting = Timer.periodic(const Duration(milliseconds: 1500), (timer) {
+      if (!identical(_out, out) || (_reader?.preambleSeen ?? true)) {
+        timer.cancel();
+        return;
+      }
+      _greet(out);
+    });
 
     socket.listen(
       (chunk) => _fromDesktop(socket, chunk),
@@ -378,6 +410,13 @@ class TabletRelay {
       onDone: () => _pipeGone(socket),
       cancelOnError: true,
     );
+  }
+
+  void _greet(_Outbox out) {
+    out
+      ..add(UsbCarriage.preamble)
+      ..add(UsbCarriage.encodeName(name));
+    unawaited(out.flush().catchError((Object _) {}));
   }
 
   Future<void> _bindRelay() async {
@@ -441,7 +480,10 @@ class TabletRelay {
       final more = reader.moveNext();
       // The relay port opens on the desktop's preamble, not on the connection:
       // anything else that finds the cable's port never gets a display to it.
-      if (!before && reader.preambleSeen) unawaited(_bindRelay());
+      if (!before && reader.preambleSeen) {
+        _greeting?.cancel();
+        unawaited(_bindRelay());
+      }
       if (!more) return;
       do {
         final channel = reader.channel;
@@ -454,8 +496,9 @@ class TabletRelay {
             }
           case CarriageKind.close:
             _displays.remove(channel)?.destroy();
-          case CarriageKind.open || CarriageKind.name:
-            // The tablet's to send, never the desktop's.
+          case CarriageKind.open || CarriageKind.name || CarriageKind.restart:
+            // The first two are the tablet's to send; a second preamble is the
+            // desktop answering a greeting it had already answered.
             break;
         }
       } while (reader.moveNext());
@@ -469,6 +512,8 @@ class TabletRelay {
   }
 
   void _dropPipe() {
+    _greeting?.cancel();
+    _greeting = null;
     final pipe = _pipe;
     _pipe = null;
     _out = null;
