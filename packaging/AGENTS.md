@@ -32,10 +32,10 @@ GPL-3.0-or-later.
 | `ios/app-store.md` | The listing text: name, subtitle, keywords, description, and the rest of the submission. Kept here so it moves with the build it describes; nothing reads it. |
 | `windows/oaa.iss` | The Inno Setup script: the components, the VST3 destination, the uninstaller. Compiled by the script below, never opened in the IDE — the paths it needs are staged first. |
 | `windows/make_installer.ps1` | Build, stage, `signtool`, `iscc`, `signtool` again. Replaced `make_msix.ps1`: an msix cannot write the shared VST3 directory, so it could not carry the plug-in. |
-| `linux/oaa.desktop` | The desktop entry, shared by the AppImage and the flatpak. |
+| `linux/oaa.desktop` | The desktop entry, shared by the AppImage and the flatpak. The AppImage's copy has `SingleMainWindow` renamed to `X-GNOME-SingleWindow`, because the validator on Ubuntu 22.04 — the one AppImageHub's catalog test runs — predates the standard key and rejects it. |
 | `linux/com.openaudioanalyzer.oaa.metainfo.xml` | AppStream metadata. Required by flatpak, read by GNOME Software and KDE Discover. |
 | `linux/icons/` | Generated hicolor PNGs. |
-| `linux/make_appimage.sh` | Build, AppDir, `appimagetool`. Application only — an AppImage never installs anything. |
+| `linux/make_appimage.sh` | Build, AppDir, `desktop-file-validate`, `appimagetool`. Application only — an AppImage never installs anything. |
 | `linux/make_installer.sh` | Build, stage the bundle and the VST3, tar. The only Linux artefact that carries the plug-in. |
 | `linux/install.sh` | Ships *inside* that tarball and is what asks the question. Also the uninstaller, kept beside what it installed. |
 | `linux/make_flatpak.sh` | Build, stage, `flatpak-builder`, bundle. |

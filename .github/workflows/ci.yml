@@ -882,13 +882,15 @@ jobs:
 
       # Flutter's Linux embedder is GTK on GL; libasound is what miniaudio opens
       # a capture device through. Both are build-time as well as run-time.
+      # desktop-file-utils is neither: it is the validator AppImageHub's catalog
+      # test runs, at the version 22.04 ships, which make_appimage.sh runs too.
       - name: Toolchain
         run: |
           sudo apt-get update
           sudo apt-get install -y \
             clang cmake ninja-build pkg-config \
             libgtk-3-dev liblzma-dev libstdc++-12-dev libasound2-dev \
-            fuse libfuse2
+            fuse libfuse2 desktop-file-utils
 
       - name: Build and package
         run: sh packaging/linux/make_appimage.sh

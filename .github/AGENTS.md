@@ -325,6 +325,11 @@ The jobs are split by what they need, and that split is deliberate:
   loader refuses is not a loader error a user sees, it is a plug-in absent from
   the DAW's browser, which is what installing it in the wrong folder also looks
   like.
+- **`linux-appimage` installs `desktop-file-utils`, and `make_appimage.sh`
+  validates the desktop entry with it.** 22.04's is the version AppImageHub's
+  catalog test runs, and it rejected 0.15.0 over `SingleMainWindow`, a key
+  newer than it. With the same validator on the same runner, a key it does not
+  know fails the release rather than the catalog listing.
 - **The IPA is built and deliberately not published.** An App Store signature
   provisions no devices, so nobody who downloaded it could install it. The
   publish step excludes `testflight-ipa` by path rather than narrowing its

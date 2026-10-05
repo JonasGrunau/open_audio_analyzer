@@ -78,10 +78,29 @@ cp -r "$bundle"/* "$appdir/usr/bin/"
 # The desktop file and the icon are needed twice: once where the standard says
 # they live, and once at the root of the AppDir, which is where appimagetool
 # looks. Symlinks rather than copies so there is one of each to edit.
-install -Dm644 packaging/linux/oaa.desktop \
-  "$appdir/usr/share/applications/com.openaudioanalyzer.oaa.desktop"
+#
+# **`SingleMainWindow` is renamed on the way in, and only here.** It is a
+# Desktop Entry 1.5 key, and desktop-file-utils learned it in 0.27; Ubuntu 22.04
+# ships 0.26, which rejects it as an unknown key without an `X-` prefix. That is
+# the validator AppImageHub's catalog test runs, and it refused 0.15.0 on this
+# line and nothing else. So the AppImage carries GNOME's older name for the same
+# hint — gnome-shell reads both — and the flatpak, which a current runtime
+# validates, keeps the standard one.
+desktop="$appdir/usr/share/applications/com.openaudioanalyzer.oaa.desktop"
+mkdir -p "$(dirname "$desktop")"
+sed 's/^SingleMainWindow=/X-GNOME-SingleWindow=/' packaging/linux/oaa.desktop >"$desktop"
+chmod 644 "$desktop"
 ln -sf usr/share/applications/com.openaudioanalyzer.oaa.desktop \
   "$appdir/com.openaudioanalyzer.oaa.desktop"
+
+# The catalog's validator, run here so that a key it does not know fails the
+# release instead of the catalog. `ci.yml` installs it on the same 22.04 the
+# catalog tests on; a machine without it only builds.
+if command -v desktop-file-validate >/dev/null 2>&1; then
+  desktop-file-validate "$desktop"
+else
+  echo "make_appimage: desktop-file-validate not found, desktop entry not validated" >&2
+fi
 
 for size in 16 32 48 64 128 256 512; do
   install -Dm644 "packaging/linux/icons/${size}x${size}/com.openaudioanalyzer.oaa.png" \

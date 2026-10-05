@@ -168,6 +168,11 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   centre prints; it stopped being written after 0.11.0, so four releases
   installed while the store beside them described the one before them. Every
   release through 0.15.0 is listed now.
+- **The AppImage's desktop entry passes the validator on Ubuntu 22.04.** That
+  version predates the `SingleMainWindow` key and rejects it, and it is the one
+  AppImageHub's catalog test runs, so 0.15.0 was refused a listing on that one
+  line. The AppImage now carries GNOME's older `X-GNOME-SingleWindow`, which
+  gnome-shell reads the same way; the flatpak keeps the standard key.
 
 ### 🚧 Internal
 - `docs/WIRE.md` defines `0x0007 RECEIVED`, the one frame a display sends on the
