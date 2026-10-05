@@ -54,4 +54,6 @@ half is `android/.../OaaAccessory.kt` and the manifest's
   publish on the desktop, plug the tablet in, say yes to "Open Audio Analyzer"
   on it, and its ATTACH panel lists the desktop under Over USB as "USB cable".
   `test/usb_relay_test.dart` in the application holds everything after the
-  bulk endpoints.
+  bulk endpoints. Last done 2026-10-05 on a Nothing Phone (2a) and a Mac, with
+  debugging off (18D1:2D00) and on (2D01), and across a reinstall of the
+  application with the cable in.
