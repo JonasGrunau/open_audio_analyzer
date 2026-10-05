@@ -381,6 +381,10 @@ the buffer your DAW gives them and stream it to the desktop application, which
 displays it — so the app has to be running, and the plugin finds it by itself on
 `127.0.0.1:47822` whichever of the two you start first.
 
+It has been tested in **Ableton Live, Logic Pro, Cubase, FL Studio and Studio
+One** — Logic through the Audio Unit, the others through the VST3 — and it
+accepts any track or bus from mono to 7.1.
+
 There is an **AAX** for Pro Tools as well, in the `oaa-plugin-<platform>`
 archive and in none of the installers. It is not yet signed for Pro Tools —
 [see below](#the-aax-and-pro-tools).

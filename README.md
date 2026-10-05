@@ -1048,6 +1048,12 @@ a live input. The plugin measures and streams; the app
 displays. That split is what stops there being two implementations of every
 meter drifting apart from each other.
 
+**Tested in Ableton Live, Logic Pro, Cubase, FL Studio and Studio One** —
+Logic through the Audio Unit, the others through the VST3. It takes any layout
+from mono to 7.1 whose input matches its output: eight channels is
+`OAA_MAX_CHANNELS`, and a wider bus is refused rather than measured on its
+first eight.
+
 **A connected plugin is a source in the picker**, beside the test tone and the
 machine's own inputs — `DAW plugin — Logic Pro`, with the host it is running in
 — so it is chosen and left the same way an interface is, and the selection is

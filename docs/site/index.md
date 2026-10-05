@@ -6,8 +6,9 @@ histogram — across as many tabs as you want, saved as presets, measured agains
 delivery targets and coloured by skins. It analyses files as well as live audio,
 and it mirrors a tab to a tablet over Wi-Fi.
 
-It is free software, and where it cannot honestly measure something it says so:
-a dash rather than an approximation.
+It is free software and it costs nothing — there is no paid tier, no trial and
+no account. Where it cannot honestly measure something it says so: a dash
+rather than an approximation.
 
 [Install it](install.html) · [What every number means](metrics.html) ·
 [Source on GitHub](https://github.com/JonasGrunau/open_audio_analyzer)
@@ -117,7 +118,8 @@ it is attached a display keeps its screen on, and OPTIONS on its bar sets how
 often it redraws.
 
 **A DAW.** A headless VST3 and Audio Unit plugin measures what your host is
-playing and streams it, with the transport, to the application. There is an AAX
+playing and streams it, with the transport, to the application. It has been
+tested in Ableton Live, Logic Pro, Cubase, FL Studio and Studio One. There is an AAX
 for Pro Tools as well, in the plugin archive rather than the installers, and not
 yet signed for a released Pro Tools — see
 [Installing](install.html#the-aax-and-pro-tools). The plugin

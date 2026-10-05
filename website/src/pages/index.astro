@@ -318,7 +318,7 @@ const ANCHORS = [
       <span class="hero-sep" aria-hidden="true">/</span>
       <span class="num">VST3 · Audio Unit · CLI</span>
       <span class="hero-sep" aria-hidden="true">/</span>
-      <span class="num">Free, GPL-3.0</span>
+      <span class="num">Free · no paid tier · GPL-3.0</span>
     </p>
 
     <figure class="facade" data-facade>
@@ -714,8 +714,9 @@ const ANCHORS = [
         <h3>In a DAW</h3>
         <p class="prose reach-p">
           A <strong>VST3</strong> and an <strong>Audio Unit</strong>, on a track, a bus or the
-          master. What you read while mixing is not a second set of meters built to look like the
-          first — it is the first, watching your session.
+          master, mono through 7.1. What you read while mixing is not a second set of meters built
+          to look like the first — it is the first, watching your session. Tested in Ableton Live,
+          Logic Pro, Cubase, FL Studio and Studio One.
         </p>
       </article>
 
@@ -816,6 +817,20 @@ const ANCHORS = [
     </div>
 
     <div class="dl">
+      {/* A price, stated as one. "Free and open-source" in the deck is a
+          licence as much as a price, and a reader — or a directory's crawler —
+          looking for what it costs has to decide which "free" was meant.
+          iTechGuides listed the application on 2026-09-20 with no sourced
+          price while sourcing one for every free analyser around it, because
+          no page here said it in so many words. The channel ceiling is here for
+          the same reason: the engine, the plugin and the file reader all stop
+          at OAA_MAX_CHANNELS, and nothing on the page said how many that was. */}
+      <p class="prose dl-price">
+        <strong>Price: free.</strong> No paid tier, no trial, no account and nothing to unlock —
+        every download below is the whole application, the plugin and the command-line analyser
+        included. It measures up to eight channels, mono through 7.1.
+      </p>
+
       <div class="table-scroll" tabindex="0" role="region" aria-label="Download artefacts">
       <table class="spec">
         <thead>
@@ -1919,6 +1934,10 @@ const ANCHORS = [
   }
 
   /* ---------- download ---------- */
+
+  .dl-price {
+    margin: 0 0 var(--s32);
+  }
 
   .dl-plug {
     font-size: 0.75rem;

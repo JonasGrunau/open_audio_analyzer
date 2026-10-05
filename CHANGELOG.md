@@ -91,6 +91,12 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `--tab=<n>` opens the application on a tab, counted the way the tab strip
   counts. It exists for the screenshot scripts, which no longer press a key at
   the window — see Internal — and it works on every platform.
+- The website and the documentation name the DAWs the plugin has been tested
+  in — Ableton Live, Logic Pro, Cubase, FL Studio and Studio One — and say what
+  it costs in so many words: free, with no paid tier, no trial and no account.
+  They also state the channel ceiling, eight, mono through 7.1. "Free and
+  open-source" was the only price on the site, and it reads as a licence to
+  anyone looking for a price.
 
 ### ⚡ Changed
 - **The two dynamics readings are printed as `PSR` and `PLR` again**, the
