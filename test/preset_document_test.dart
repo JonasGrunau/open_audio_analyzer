@@ -19,6 +19,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:oaa/src/app/file_menu.dart';
 import 'package:oaa/src/app/oaa_app.dart';
 import 'package:oaa/src/app/preset_file.dart';
+import 'package:oaa/src/app/tab_file.dart';
 import 'package:oaa/src/canvas/canvas_notice.dart';
 import 'package:oaa/src/canvas/workspace.dart';
 import 'package:oaa/src/data/providers.dart';
@@ -416,6 +417,133 @@ void main() {
         );
       },
     );
+  });
+
+  // One tab out of a preset and back in, and one put back as it was. A tab
+  // file is a preset with one tab, so everything here goes through the same
+  // parser and the same dialogs as the preset itself.
+  group('a tab on its own', () {
+    PresetSpec twoTabs() => PresetSpec(
+      name: 'Studio',
+      tabs: [
+        _preset('x').tabs.single.copyWith(name: 'Loudness'),
+        const TabSpec(name: 'Spectrum', modules: []),
+      ],
+    );
+
+    testWidgets('exports as a preset of one tab that Open can read', (
+      tester,
+    ) async {
+      final path = '${_tempDir().path}/Loudness.json';
+      final dialogs = _FakeDialogs(savePath: path);
+      final container = _container(await _storeFor(tester), dialogs: dialogs);
+      container.read(workspaceProvider.notifier).loadPreset(twoTabs());
+      final host = await _pump(tester, container);
+
+      unawaited(runFileCommand(FileCommand.exportTab, host.context, host.ref));
+      await _until(tester, () => File(path).existsSync());
+
+      expect(dialogs.suggestedName, 'Loudness.json');
+      final written = PresetSpec.tryFromJson(_read(path))!;
+      expect(written.name, 'Loudness');
+      expect([for (final tab in written.tabs) tab.name], ['Loudness']);
+      expect(written.tabs.single.modules.single.id, 'm1');
+      // A tab carries no delivery target or skin: importing one must not
+      // retarget the session it lands in.
+      expect(written.calibrationId, isNull);
+      expect(written.skinId, isNull);
+      // The notice that said so, which clears itself.
+      expect(container.read(canvasNoticeProvider), contains('Loudness'));
+      await tester.pump(const Duration(seconds: 5));
+    });
+
+    testWidgets('a one-tab file imports beside the tabs already here', (
+      tester,
+    ) async {
+      final path = '${_tempDir().path}/Loudness.json';
+      File(path).writeAsStringSync(
+        jsonEncode(
+          PresetSpec(
+            name: 'Loudness',
+            tabs: [_preset('x').tabs.single.copyWith(name: 'Loudness')],
+          ).toJson(),
+        ),
+      );
+      final dialogs = _FakeDialogs(openPath: path);
+      final container = _container(await _storeFor(tester), dialogs: dialogs);
+      container.read(workspaceProvider.notifier).loadPreset(twoTabs());
+      final host = await _pump(tester, container);
+
+      unawaited(runFileCommand(FileCommand.importTabs, host.context, host.ref));
+      await _until(
+        tester,
+        () => container.read(workspaceProvider).preset.tabs.length == 3,
+      );
+
+      final workspace = container.read(workspaceProvider);
+      // Named apart from the one already here, and shown.
+      expect(
+        [for (final tab in workspace.preset.tabs) tab.name],
+        ['Loudness', 'Spectrum', 'Loudness 2'],
+      );
+      expect(workspace.activeTab, 2);
+      // Undoable, like every other edit.
+      container.read(workspaceProvider.notifier).undo();
+      expect(container.read(workspaceProvider).preset.tabs, hasLength(2));
+    });
+
+    testWidgets('a preset of several asks which, and takes the one tapped', (
+      tester,
+    ) async {
+      final path = '${_tempDir().path}/Studio.json';
+      File(path).writeAsStringSync(jsonEncode(twoTabs().toJson()));
+      final dialogs = _FakeDialogs(openPath: path);
+      final container = _container(await _storeFor(tester), dialogs: dialogs);
+      final host = await _pump(tester, container);
+      final before = container.read(workspaceProvider).preset.tabs.length;
+
+      unawaited(runFileCommand(FileCommand.importTabs, host.context, host.ref));
+      await _until(
+        tester,
+        () => find.text('IMPORT TABS').evaluate().isNotEmpty,
+      );
+
+      await tester.tap(find.text('Spectrum'));
+      await tester.pumpAndSettle();
+
+      final tabs = container.read(workspaceProvider).preset.tabs;
+      expect(tabs, hasLength(before + 1));
+      expect(tabs.last.name, startsWith('Spectrum'));
+    });
+
+    testWidgets('a tab put back is the tab as it was saved', (tester) async {
+      final container = _container(await _storeFor(tester));
+      final host = await _pump(tester, container);
+      final workspace = container.read(workspaceProvider.notifier);
+      final original = container.read(workspaceProvider).preset.tabs.first;
+
+      expect(savedTab(host.ref, 0), isNull, reason: 'nothing has changed yet');
+
+      workspace.removeModule(original.modules.first.id);
+      expect(savedTab(host.ref, 0), isNotNull);
+
+      revertTab(host.ref, 0);
+      final reverted = container.read(workspaceProvider).preset.tabs.first;
+      expect(
+        [for (final module in reverted.modules) module.id],
+        [for (final module in original.modules) module.id],
+      );
+      expect(savedTab(host.ref, 0), isNull);
+      // Nothing else had changed, so nothing is modified any more.
+      expect(container.read(presetModifiedProvider), isFalse);
+
+      // And the revert itself can be taken back.
+      workspace.undo();
+      expect(
+        container.read(workspaceProvider).preset.tabs.first.modules,
+        hasLength(original.modules.length - 1),
+      );
+    });
   });
 
   group('the commands', () {

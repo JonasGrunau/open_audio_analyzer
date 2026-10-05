@@ -253,4 +253,66 @@ void main() {
       );
     });
   });
+
+  group('the hosts a display remembers', () {
+    test('survive a launch, newest first', () {
+      final saved = const AppSettings(
+        recentHosts: [
+          RecentHost(host: '192.168.1.20', port: 47821, name: 'Studio Mac'),
+          RecentHost(host: 'booth.local', port: 50000),
+        ],
+      ).toJson();
+
+      final restored = AppSettings.fromJson(saved).recentHosts;
+      expect(restored, hasLength(2));
+      expect(restored.first.host, '192.168.1.20');
+      expect(restored.first.name, 'Studio Mac');
+      expect(restored.last.port, 50000);
+      expect(restored.last.name, isNull);
+    });
+
+    test('an entry that cannot be dialled costs only itself', () {
+      final restored = AppSettings.fromJson({
+        'recent_hosts': [
+          {'host': '', 'port': 47821},
+          {'host': 'a', 'port': 70000},
+          {'host': 'b'},
+          'c',
+          {'host': 'studio.local', 'port': 47821},
+        ],
+      }).recentHosts;
+
+      expect([for (final host in restored) host.host], ['studio.local']);
+      expect(AppSettings.fromJson({'recent_hosts': 'x'}).recentHosts, isEmpty);
+    });
+
+    test('remembering moves a host to the front and keeps a handful', () {
+      var list = const <RecentHost>[];
+      for (var i = 0; i < kRecentHostLimit + 2; i++) {
+        list = RecentHost.remember(
+          list,
+          RecentHost(host: '10.0.0.$i', port: 47821),
+        );
+      }
+      expect(list, hasLength(kRecentHostLimit));
+      expect(list.first.host, '10.0.0.${kRecentHostLimit + 1}');
+
+      // The same address again, renamed since: one row, at the top, under the
+      // name it answered with this time.
+      final again = RecentHost.remember(
+        list,
+        const RecentHost(host: '10.0.0.3', port: 47821, name: 'Booth'),
+      );
+      expect(again, hasLength(kRecentHostLimit));
+      expect(again.first.name, 'Booth');
+      expect(again.where((host) => host.host == '10.0.0.3'), hasLength(1));
+    });
+
+    test('the screen stays on by default, and the choice survives', () {
+      expect(const AppSettings().keepDisplayAwake, isTrue);
+      final saved = const AppSettings(keepDisplayAwake: false).toJson();
+      expect(AppSettings.fromJson(saved).keepDisplayAwake, isFalse);
+      expect(AppSettings.fromJson(const {}).keepDisplayAwake, isTrue);
+    });
+  });
 }

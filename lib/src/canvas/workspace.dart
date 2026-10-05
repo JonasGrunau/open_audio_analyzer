@@ -128,9 +128,14 @@ class WorkspaceController extends Notifier<Workspace> {
   /// An undoable edit, deliberately. Loading the wrong preset is exactly the
   /// mistake somebody wants back out of, and having spent the history to get
   /// here is a smaller loss than losing the arrangement it replaced.
-  void loadPreset(PresetSpec preset) {
+  void loadPreset(PresetSpec preset, {int activeTab = 0}) {
     if (preset.tabs.isEmpty) return;
-    _commit(Workspace(preset: preset, activeTab: 0));
+    _commit(
+      Workspace(
+        preset: preset,
+        activeTab: activeTab.clamp(0, preset.tabs.length - 1),
+      ),
+    );
   }
 
   /// Renames the open layout.
@@ -313,6 +318,57 @@ class WorkspaceController extends Notifier<Workspace> {
       ),
     );
     return true;
+  }
+
+  /// Appends [incoming] and shows the first of them.
+  ///
+  /// Names are made unique against the tabs already here, because the tab
+  /// strip and the tablet's page control are both read by name: importing a
+  /// second "Loudness" beside the first is two tabs nobody can tell apart.
+  /// Module ids need no such care — they are unique within a tab and a tab is
+  /// brought in whole.
+  void insertTabs(List<TabSpec> incoming) {
+    if (incoming.isEmpty) return;
+    final names = {for (final tab in state.preset.tabs) tab.name};
+    final added = <TabSpec>[];
+    for (final tab in incoming) {
+      var name = tab.name.trim().isEmpty ? 'Tab' : tab.name.trim();
+      if (names.contains(name)) {
+        var n = 2;
+        while (names.contains('$name $n')) {
+          n++;
+        }
+        name = '$name $n';
+      }
+      names.add(name);
+      added.add(TabSpec(name: name, modules: tab.modules));
+    }
+    final first = state.preset.tabs.length;
+    _commit(
+      Workspace(
+        preset: state.preset.copyWith(tabs: [...state.preset.tabs, ...added]),
+        activeTab: first,
+      ),
+    );
+  }
+
+  /// Puts [tab] where the tab at [index] is, keeping its place in the strip.
+  ///
+  /// One undo step, like every other edit: reverting a tab to what was saved
+  /// is exactly the kind of thing somebody does and then wants back.
+  void replaceTab(int index, TabSpec tab) {
+    if (index < 0 || index >= state.preset.tabs.length) return;
+    _commit(
+      Workspace(
+        preset: state.preset.copyWith(
+          tabs: [
+            for (var i = 0; i < state.preset.tabs.length; i++)
+              if (i == index) tab else state.preset.tabs[i],
+          ],
+        ),
+        activeTab: index,
+      ),
+    );
   }
 
   void duplicateTab(int index) {

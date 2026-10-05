@@ -10,6 +10,7 @@
 import 'package:oaa/src/app/transport_readout.dart';
 import 'package:oaa/src/remote/display_host.dart';
 import 'package:oaa/src/remote/display_screen.dart';
+import 'package:oaa/src/remote/keep_awake.dart';
 import 'package:oaa/src/remote/this_machine.dart';
 import 'package:oaa_core/oaa_core.dart';
 import 'package:oaa_ui/oaa_ui.dart';
@@ -328,5 +329,176 @@ void main() {
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.runAsync(host.stop);
+  });
+
+  group('what this device remembers about being a display', () {
+    late DisplayHost host;
+    late int port;
+    final calls = <bool>[];
+
+    setUp(() {
+      calls.clear();
+      KeepAwake.reset();
+      KeepAwake.platformSupported = true;
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(keepAwakeChannel, (call) async {
+            calls.add((call.arguments as Map)['on'] as bool);
+            return true;
+          });
+    });
+
+    tearDown(() {
+      KeepAwake.platformSupported = null;
+      KeepAwake.reset();
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(keepAwakeChannel, null);
+    });
+
+    Future<void> attach(
+      WidgetTester tester, {
+      required String address,
+      required DisplayPreferences preferences,
+    }) async {
+      tester.view.physicalSize = const Size(1600, 1000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      host = DisplayHost(
+        source: null,
+        hostName: 'Studio Desktop',
+        abiVersion: 0,
+      );
+      addTearDown(host.dispose);
+      await tester.runAsync(() => host.start(port: 0));
+      port = host.port!;
+      host.publishLayout(
+        const PresetSpec(
+          name: 'One',
+          tabs: [TabSpec(name: 'Master', modules: [])],
+        ),
+      );
+
+      await tester.pumpWidget(
+        OaaTheme(
+          colors: OaaColors.precisionInstrument,
+          child: MaterialApp(
+            home: RemoteDisplayScreen(
+              host: address,
+              port: port,
+              preferences: preferences,
+            ),
+          ),
+        ),
+      );
+      await _pumpUntil(
+        tester,
+        () => find.text('Studio Desktop').evaluate().isNotEmpty,
+      );
+    }
+
+    Future<void> leave(WidgetTester tester) async {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.runAsync(host.stop);
+    }
+
+    testWidgets('a host that answered is remembered, by its name', (
+      tester,
+    ) async {
+      final remembered = <RecentHost>[];
+      // `0.0.0.0` reaches this machine on Linux and macOS without being a
+      // loopback address, which a USB cable's `127.0.0.1` is and which is
+      // deliberately not remembered — see the test below.
+      await attach(
+        tester,
+        address: '0.0.0.0',
+        preferences: DisplayPreferences(onRemember: remembered.add),
+      );
+
+      expect(remembered, hasLength(1));
+      expect(remembered.single.host, '0.0.0.0');
+      expect(remembered.single.port, port);
+      expect(remembered.single.name, 'Studio Desktop');
+      await leave(tester);
+    });
+
+    testWidgets('loopback is not, because a cable is found by plugging it in', (
+      tester,
+    ) async {
+      final remembered = <RecentHost>[];
+      await attach(
+        tester,
+        address: '127.0.0.1',
+        preferences: DisplayPreferences(onRemember: remembered.add),
+      );
+      expect(remembered, isEmpty);
+      await leave(tester);
+    });
+
+    testWidgets('the screen stays on while attached, and not after', (
+      tester,
+    ) async {
+      await attach(
+        tester,
+        address: '127.0.0.1',
+        preferences: const DisplayPreferences(keepAwake: true),
+      );
+      expect(calls, [true]);
+
+      await leave(tester);
+      expect(calls, [true, false]);
+    });
+
+    testWidgets('and never, when this device said not to', (tester) async {
+      await attach(
+        tester,
+        address: '127.0.0.1',
+        preferences: const DisplayPreferences(keepAwake: false),
+      );
+      await leave(tester);
+      expect(calls, isNot(contains(true)));
+    });
+
+    testWidgets('the display has options of its own, and they apply', (
+      tester,
+    ) async {
+      final rates = <int>[];
+      final awake = <bool>[];
+      await attach(
+        tester,
+        address: '127.0.0.1',
+        preferences: DisplayPreferences(
+          onTargetFps: rates.add,
+          onKeepAwake: awake.add,
+        ),
+      );
+      // The route is still sliding in when the first frame lands.
+      await tester.pump(const Duration(milliseconds: 400));
+
+      await tester.tap(find.text('OPTIONS'));
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.text('THIS DISPLAY'), findsOneWidget);
+
+      await tester.tap(find.text('30 FPS'));
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(rates, [30]);
+
+      await tester.tap(
+        find.bySemanticsLabel('Keep the screen on while attached'),
+      );
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(awake, [true]);
+
+      await leave(tester);
+    });
+
+    testWidgets('and a bare screen offers none', (tester) async {
+      await attach(
+        tester,
+        address: '127.0.0.1',
+        preferences: const DisplayPreferences(),
+      );
+      expect(find.text('OPTIONS'), findsNothing);
+      await leave(tester);
+    });
   });
 }

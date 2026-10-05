@@ -121,6 +121,37 @@ class SettingsController extends Notifier<AppSettings> {
     _update(state.copyWith(restoreSession: value));
   }
 
+  /// Puts a host this machine has just become a display for at the top of the
+  /// recent list. See [AppSettings.recentHosts] for why that is remembered
+  /// when publishing is not.
+  void rememberHost(RecentHost host) {
+    final next = RecentHost.remember(state.recentHosts, host);
+    final current = state.recentHosts;
+    if (next.length == current.length &&
+        next.indexed.every((entry) {
+          final (index, host) = entry;
+          final was = current[index];
+          return host.sameAddress(was) && host.name == was.name;
+        })) {
+      return;
+    }
+    _update(state.copyWith(recentHosts: next));
+  }
+
+  void forgetHost(RecentHost host) {
+    final next = [
+      for (final entry in state.recentHosts)
+        if (!entry.sameAddress(host)) entry,
+    ];
+    if (next.length == state.recentHosts.length) return;
+    _update(state.copyWith(recentHosts: next));
+  }
+
+  void setKeepDisplayAwake(bool value) {
+    if (value == state.keepDisplayAwake) return;
+    _update(state.copyWith(keepDisplayAwake: value));
+  }
+
   /// Records what the user is listening to, so the next launch reopens it.
   void setSource(AudioSourceKind kind, {String? deviceId, String? deviceName}) {
     if (kind != AudioSourceKind.device) {

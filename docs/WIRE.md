@@ -85,6 +85,12 @@ meters" into "anyone on the venue Wi-Fi can reset the mix engineer's
 measurement". It needs an authentication story before it happens, and it does
 not have one.
 
+**One frame travels the other way on it, and it is not control.**
+[`0x0007 RECEIVED`](#0x0007--received) says "I have read a snapshot", carries
+nothing, and is used by the host only to decide what *not* to send. It cannot
+start, stop, reset, retarget or reconfigure anything, and a host that has never
+heard of it loses nothing but a way to keep a slow display current.
+
 The **ingest** port is the other case, and version 3 is where the distinction
 starts to pay. It is loopback, the peer is a plugin running as this user, and
 `0x0020` travels app → plugin over it. The frame range `0x0020`–`0x002F` remains
@@ -99,8 +105,8 @@ human turns it on.
 
 The protocol has a **producer** — whatever is measuring — and a **consumer**,
 whatever is drawing. The producer sends `HELLO` first and then everything else.
-The consumer sends nothing at all on the display port, and on the ingest port
-sends only `0x0020`. Which of the two opened the TCP connection is a separate
+On the display port the consumer sends only `0x0007`, and on the ingest port
+only `0x0020`. Which of the two opened the TCP connection is a separate
 question, and Open Audio Analyzer needs it both ways round:
 
 | port | service | listener | producer |
@@ -222,6 +228,7 @@ reported **unavailable** against a version-2 producer rather than requested.
 | `0x0004` | `SKIN` | host → client | after `HELLO`, and whenever the skin changes |
 | `0x0005` | `CALIBRATION` | host → client | after `HELLO`, and whenever the target changes |
 | `0x0006` | `DYNAMICS_NAMING` | host → client | after `HELLO`, and whenever the names change |
+| `0x0007` | `RECEIVED` | client → host | display port only; once per `0x0003` decoded |
 | `0x0010`–`0x001F` | plugin transport | producer → app, app → client | see [DAW transport](#0x0010--daw_transport) |
 | `0x0020` | `SET_LUFS_MODE` | app → producer | ingest port only; on change, and once per connection |
 | `0x0021`–`0x002F` | *reserved* | — | the rest of the control range, undefined |
@@ -329,6 +336,48 @@ which is what a host that predates the setting prints, so a display that
 never sees this frame is not wrong, only unasked. A consumer that reads an id
 it does not know treats it the same way. Not rate-limited; it changes from a
 segmented control, never from a pointer drag.
+
+### `0x0007` — RECEIVED
+
+Payload is empty. A display sends one for every `0x0003` it has decoded, in the
+order it decoded them — twelve bytes, the same every time. It is sent on the
+display port and nowhere else; the ingest port has no use for it.
+
+**It exists because a host cannot see a display falling behind from its own
+side of the socket.** [Rate and flow control](#rate-and-flow-control) requires a
+host to drop a snapshot rather than queue it for a client that has not caught
+up, and until this frame the only test a host had was whether its last write
+had *flushed* — which is whether the kernel has taken the bytes, not whether the
+display has. Between the two sit a send buffer, the network and a receive
+buffer, each of which the operating system sizes for throughput, and all of
+which filled before a single frame was dropped. A display slower than its
+frames — a heavy layout on a tablet — then drew seconds of the past in order,
+and nothing on either screen said so. Measured on loopback before this frame
+existed: a display that stopped reading for four seconds had 62 of the 120
+snapshots published in that time waiting for it.
+
+**What a host does with it.** It counts the snapshots it has sent a display and
+the `0x0007`s it has received from it. While the difference is at the host's
+limit it sends that display no snapshot. The limit is the host's to choose; Open
+Audio Analyzer's is a tenth of a second of frames at the link rate and never
+fewer than two, so that a healthy link on a slow access point still runs at the
+full rate. Other frames — layout, skin, target, naming, transport — are not
+counted and are never held back.
+
+**Only a display that sends it is judged by it.** A host treats a display as
+reporting from the first `0x0007` it receives, and a display that never sends
+one — any display that predates the frame — is judged by the flush alone, as
+every display was before. A host must not wait for a `0x0007` that may never
+come.
+
+**A host reads nothing else from the display port.** Every other type is
+skipped by length, the control range `0x0020`–`0x002F` included, which is how it
+is refused there; a stream that is not framed at all is dropped.
+
+**Added under version 5 without moving the version**, as `0x0006` was. A host
+that predates it never reads its display sockets, so a new display's `0x0007`s
+are discarded unread; a display that predates it never sends one, so a new host
+feeds it by the old rule. No table changed.
 
 ### `0x0003` — SNAPSHOT
 
@@ -741,7 +790,9 @@ default 30 — which is a property of the link and not of either screen's refres
 rate.
 
 **If a client's socket still has an unflushed write when the next frame comes
-round, that client's frame is dropped rather than queued.** A meter is a picture
+round — or, for a client that sends [`0x0007`](#0x0007--received), if it has
+not yet said it received the snapshots in front of this one — that client's
+frame is dropped rather than queued.** A meter is a picture
 of *now*. A display that has fallen behind and then works through a backlog is
 showing, with total confidence, what the signal did half a second ago — and
 unlike a dropped frame, nothing about it looks wrong. Dropping is the honest

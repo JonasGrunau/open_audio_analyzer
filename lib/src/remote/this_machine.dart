@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
+import 'display_host.dart';
 import 'mdns/mdns_service.dart';
 import 'remote_display_service.dart';
 
@@ -28,10 +29,15 @@ import 'remote_display_service.dart';
 /// and the scanned code go through the same question, because the wrong answer
 /// is the same wrong answer whichever way it was given.
 ///
-/// It asks about an address and not about an address and a port. There is
-/// nothing else on this machine to attach to — the display port belongs to one
-/// instance and a second one cannot bind it — so a self address on some other
-/// port is not a second host, it is a mistyped port.
+/// **What is refused is this instance, not this machine** — [isThisInstance]
+/// asks about an address *and* a port, and the port has to be one this process
+/// is listening on. It used to ask about the address alone, on the argument
+/// that nothing else on this machine could be attached to, and the argument
+/// stopped being true the day a tablet could be plugged in: an Android tablet
+/// on a USB cable reaches its desktop at `127.0.0.1`, through the reverse
+/// forward `adb` sets up, and that address is this machine by every test in
+/// this file. What is at the other end of it is a different instance on a
+/// different computer. See `usb_link.dart`.
 ///
 /// **What it cannot see is a renamed iPad.** iOS browses through the system
 /// responder, which hands back the SRV target rather than an address, so a
@@ -40,9 +46,11 @@ import 'remote_display_service.dart';
 /// Settings → Publish. Every other platform resolves to an address and is
 /// matched exactly.
 class ThisMachine {
-  ThisMachine() : _loopbackIsSelf = true {
+  ThisMachine() : _loopbackIsSelf = true, _listening = _hostPorts {
     _addresses.addAll(_loopbackNames.map(_key));
   }
+
+  static Iterable<int> _hostPorts() => DisplayHost.listeningPorts;
 
   /// A machine that answers to exactly these, plus loopback.
   ///
@@ -51,10 +59,20 @@ class ThisMachine {
   /// loop never returns to, so a test that awaited [resolve] would hang until
   /// the runner killed it — and one that did not await it would assert against
   /// whatever the machine running the suite happens to be plugged into.
+  ///
+  /// [listening] is the ports this instance holds; null means every port,
+  /// which is what a test of the address half wants. [overUsb] is this
+  /// machine's own addresses on a USB link, as `resolve` would have found them
+  /// on a tethered tablet.
   @visibleForTesting
-  ThisMachine.at(Iterable<String> addresses)
-    : _resolved = true,
-      _loopbackIsSelf = true {
+  ThisMachine.at(
+    Iterable<String> addresses, {
+    Iterable<int>? listening,
+    Iterable<String> overUsb = const [],
+  }) : _resolved = true,
+       _loopbackIsSelf = true,
+       _listening = listening == null ? null : (() => listening) {
+    _usbSubnets.addAll(overUsb.map(_subnet));
     _addresses
       ..addAll(_loopbackNames.map(_key))
       ..addAll(addresses.map(_key));
@@ -68,7 +86,10 @@ class ThisMachine {
   /// machine and the product is right to refuse it; a suite that cannot say
   /// otherwise can only cover the typed-address path by not using it.
   @visibleForTesting
-  ThisMachine.nowhere() : _resolved = true, _loopbackIsSelf = false;
+  ThisMachine.nowhere()
+    : _resolved = true,
+      _loopbackIsSelf = false,
+      _listening = null;
 
   /// True on every machine there is, so that `localhost` is refused before an
   /// interface has said anything.
@@ -85,6 +106,17 @@ class ThisMachine {
   /// Whether 127/8 and the names above are this machine. They are, on every
   /// machine that is not [ThisMachine.nowhere].
   final bool _loopbackIsSelf;
+
+  /// The ports this instance is listening on, or null for "all of them".
+  final Iterable<int> Function()? _listening;
+
+  /// The first three octets of every IPv4 address on an interface that is a
+  /// USB link: Android's `rndis0`, `usb0` or `ncm0` while USB tethering is
+  /// on. A host found on one of those subnets was found down the cable, and
+  /// the picker says so. See [isOverUsb].
+  final Set<String> _usbSubnets = {};
+
+  static final RegExp _usbInterface = RegExp(r'^(rndis|usb|ncm)\d');
 
   bool _resolved = false;
 
@@ -105,8 +137,12 @@ class ThisMachine {
         type: InternetAddressType.any,
       );
       for (final interface in interfaces) {
+        final usb = _usbInterface.hasMatch(interface.name);
         for (final address in interface.addresses) {
           _addresses.add(_key(address.address));
+          if (usb && address.type == InternetAddressType.IPv4) {
+            _usbSubnets.add(_subnet(address.address));
+          }
         }
       }
     } on Object {
@@ -130,6 +166,29 @@ class ThisMachine {
       ..add(_key('$name.local'))
       ..add(_key(oaaHostName(name)));
   }
+
+  /// Whether attaching to [host] on [port] would attach this instance to
+  /// itself — which is the only attach that is refused. See the class comment.
+  bool isThisInstance(String host, int port) {
+    if (!contains(host)) return false;
+    final listening = _listening;
+    return listening == null || listening().contains(port);
+  }
+
+  /// Whether [address] is on the far side of a USB link rather than the
+  /// network: a host found over USB tethering. Loopback is not asked about
+  /// here; a reverse forward is recognised by the probe that found it.
+  bool isOverUsb(String address) {
+    final parsed = InternetAddress.tryParse(_clean(address));
+    if (parsed == null || parsed.type != InternetAddressType.IPv4) {
+      return false;
+    }
+    return _usbSubnets.contains(_subnet(parsed.address));
+  }
+
+  /// A /24, which is what every Android tethering subnet is.
+  static String _subnet(String ipv4) =>
+      ipv4.substring(0, ipv4.lastIndexOf('.'));
 
   /// Whether [host] is this machine.
   bool contains(String host) {

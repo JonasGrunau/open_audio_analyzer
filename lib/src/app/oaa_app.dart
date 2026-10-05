@@ -3,6 +3,7 @@
 // `AppExitResponse` is a `dart:ui` enum rather than a Flutter one, so neither
 // material.dart nor widgets.dart brings it into scope.
 import 'dart:async' show Timer, unawaited;
+import 'dart:io' show Platform;
 import 'dart:math' as math;
 import 'dart:ui' show AppExitResponse;
 
@@ -28,9 +29,9 @@ import '../panels/theme_editor.dart';
 import '../panels/shortcuts_sheet.dart';
 import '../plugin/plugin_link.dart';
 import '../plugin/plugin_scope.dart';
-import '../remote/display_screen.dart';
 import '../remote/remote_control.dart';
 import '../remote/remote_display_service.dart';
+import '../remote/usb_link.dart';
 import '../storage/startup_config.dart';
 import 'bar_controls.dart';
 import 'file_menu.dart';
@@ -149,6 +150,9 @@ class _WorkspaceState extends ConsumerState<_Workspace>
   late final RemoteDisplayService _remote = RemoteDisplayService(
     null, // no engine yet; `_openFor` attaches one
     abiVersion: OaaEngine.abiVersion,
+    // Forwarding the display port down USB cables runs `adb`, and the widget
+    // suite must not run the developer's against whatever is plugged in.
+    usb: Platform.environment.containsKey('FLUTTER_TEST') ? null : AdbReverse(),
   );
 
   /// Plugin inserts, accepted on loopback.
@@ -582,12 +586,9 @@ class _WorkspaceState extends ConsumerState<_Workspace>
     // way back. See `RemoteDisplayScreen._leave`.
     final attach = options.attach;
     if (attach != null) {
-      Navigator.of(context).push(
-        MaterialPageRoute<void>(
-          builder: (_) =>
-              RemoteDisplayScreen(host: attach.host, port: attach.port),
-        ),
-      );
+      Navigator.of(
+        context,
+      ).push(RemoteDisplayRoute.route(host: attach.host, port: attach.port));
     }
 
     switch (options.openPanel) {
@@ -1147,11 +1148,8 @@ class _EngineFailure extends StatelessWidget {
             // hardware it was built for.
             OaaButton(
               label: 'Use as a remote display',
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => const RemoteDisplayScreen(),
-                ),
-              ),
+              onPressed: () =>
+                  Navigator.of(context).push(RemoteDisplayRoute.route()),
             ),
           ],
         ),

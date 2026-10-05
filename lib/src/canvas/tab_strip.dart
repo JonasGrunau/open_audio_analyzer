@@ -4,6 +4,7 @@ import 'package:oaa_ui/oaa_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../app/tab_file.dart';
 import 'menus.dart';
 import 'workspace.dart';
 
@@ -83,6 +84,10 @@ class _TabStripState extends ConsumerState<TabStrip> {
     final controller = ref.read(workspaceProvider.notifier);
     final tabs = ref.read(workspaceProvider).preset.tabs;
     final colors = OaaTheme.of(context);
+    // Asked once, as the menu opens: whether this tab differs from the preset
+    // as it was last opened or saved. A disabled row says there is nothing to
+    // go back to, which is itself worth knowing — see `tab_file.dart`.
+    final saved = savedTab(ref, index);
 
     final action = await showMenu<_TabAction>(
       context: context,
@@ -91,6 +96,13 @@ class _TabStripState extends ConsumerState<TabStrip> {
       items: [
         oaaMenuItem(context, _TabAction.rename, 'Rename'),
         oaaMenuItem(context, _TabAction.duplicate, 'Duplicate'),
+        oaaMenuItem(
+          context,
+          _TabAction.revert,
+          'Revert to saved',
+          enabled: saved != null,
+        ),
+        oaaMenuItem(context, _TabAction.export, 'Export…'),
         oaaMenuItem(
           context,
           _TabAction.delete,
@@ -109,6 +121,10 @@ class _TabStripState extends ConsumerState<TabStrip> {
         _startRename(index, tabs[index].name);
       case _TabAction.duplicate:
         controller.duplicateTab(index);
+      case _TabAction.revert:
+        revertTab(ref, index);
+      case _TabAction.export:
+        await exportTab(ref, index);
       case _TabAction.delete:
         controller.removeTab(index);
     }
@@ -238,7 +254,7 @@ class _TabStripState extends ConsumerState<TabStrip> {
   }
 }
 
-enum _TabAction { rename, duplicate, delete }
+enum _TabAction { rename, duplicate, revert, export, delete }
 
 class _Tab extends StatelessWidget {
   const _Tab({

@@ -8,6 +8,7 @@ import 'package:flutter/foundation.dart';
 
 import 'display_host.dart';
 import 'mdns/mdns_service.dart';
+import 'usb_link.dart';
 
 /// Publishing this machine's meters, as one switch.
 ///
@@ -23,7 +24,15 @@ import 'mdns/mdns_service.dart';
 /// reach it, and that is a decision to offer, not one to make on the user's
 /// behalf while they are not looking.
 class RemoteDisplayService {
-  RemoteDisplayService(this._source, {required this.abiVersion});
+  RemoteDisplayService(this._source, {required this.abiVersion, this.usb});
+
+  /// The display port, forwarded down every USB cable `adb` can see while
+  /// publishing. See `usb_link.dart`.
+  ///
+  /// Null unless the application hands one in, which it does on a desktop: a
+  /// suite that switched publishing on would otherwise run the developer's
+  /// real `adb` against whatever phone is plugged into their machine.
+  final AdbReverse? usb;
 
   /// What is being measured here. Read-only: nothing a display does can reach
   /// back through this.
@@ -195,7 +204,14 @@ class RemoteDisplayService {
       const Duration(seconds: 5),
       (_) => _responder?.txt = _txt(),
     );
+
+    // Not awaited: finding `adb` runs a process or several, and publishing to
+    // the network does not wait on a cable.
+    if (_isDesktop) unawaited(usb?.start(host.port ?? _port));
   }
+
+  static bool get _isDesktop =>
+      Platform.isMacOS || Platform.isWindows || Platform.isLinux;
 
   Future<void> _stop() async {
     _formatWatch?.cancel();
@@ -229,9 +245,13 @@ class RemoteDisplayService {
     advertisementFailure.value = null;
     isPublishing.value = false;
     clients.value = 0;
+    // Started before the first suspension for the same reason: it clears the
+    // device list it publishes synchronously, and only then waits on `adb`.
+    final unforwarding = usb?.stop();
 
     await responder?.stop();
     responder?.dispose();
+    await unforwarding;
     await host?.stop();
   }
 
@@ -363,5 +383,6 @@ class RemoteDisplayService {
     clients.dispose();
     failure.dispose();
     advertisementFailure.dispose();
+    usb?.dispose();
   }
 }

@@ -24,5 +24,10 @@ import UIKit
     if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "OaaLaunchArguments") {
       OaaLaunchArguments.register(with: registrar)
     }
+    // And the third: Auto-Lock turns off a display nobody touches. See
+    // `OaaKeepAwake.swift`.
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "OaaKeepAwake") {
+      OaaKeepAwake.register(with: registrar)
+    }
   }
 }

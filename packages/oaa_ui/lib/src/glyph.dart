@@ -18,13 +18,19 @@ import 'tokens.dart';
 /// **The set is closed, and it is short on purpose.** A vocabulary that gains a
 /// mark per panel is one nobody learns: the reader has to stop and decode each
 /// one, which is slower than the word it replaced and looks busier than the
-/// plain row it replaced. Nine of these eleven earn their place by saying
+/// plain row it replaced. Ten of these twelve earn their place by saying
 /// something the text beside them does not —
 ///
 /// - [broadcast] is a machine putting measurements on the network. It marks the
 ///   half of the remote panel that sends, and every host a search found.
 /// - [display] is a screen showing somebody else's. It marks the half that
 ///   receives, and the two are otherwise a pair of near-identical text rows.
+/// - [usb] is a host at the end of a cable rather than on the network. In the
+///   host picker it stands where [broadcast] stands for a host a search found,
+///   and the pair is the whole of its argument: two rows naming the same
+///   machine, one reached through the air and one through a cable, differ in
+///   nothing else a reader can see at a glance — and the cable is the one that
+///   keeps working when the room's Wi-Fi does not.
 /// - [chevron] says a row opens something rather than selecting in place. A
 ///   `PanelListRow` is normally a choice among peers; a chevron is how the two
 ///   that push a panel say so before they are pressed.
@@ -79,6 +85,9 @@ enum OaaMark {
 
   /// A screen on a stand: this machine used as somebody else's display.
   display,
+
+  /// A plug on a cable: a host reached over USB rather than over the network.
+  usb,
 
   /// This row opens something.
   chevron,
@@ -189,6 +198,26 @@ class _MarkPainter extends CustomPainter {
           canvas.drawArc(box, -0.7, 1.4, false, stroke);
           canvas.drawArc(box, 3.1416 - 0.7, 1.4, false, stroke);
         }
+
+      // A plug seen from the side: the contacts, the body, and the cable
+      // leaving it. Not the USB trident, which is a logo drawn to be printed
+      // on the plug and turns to a smudge of three arms at sixteen pixels.
+      case OaaMark.usb:
+        canvas.drawRect(
+          Rect.fromLTRB(0.38 * s, 0.08 * s, 0.62 * s, 0.30 * s),
+          stroke,
+        );
+        for (final x in const [0.44, 0.56]) {
+          canvas.drawCircle(p(x, 0.19), OaaStroke.hairline, fill);
+        }
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(
+            Rect.fromLTRB(0.28 * s, 0.30 * s, 0.72 * s, 0.62 * s),
+            OaaRadius.xs,
+          ),
+          stroke,
+        );
+        canvas.drawLine(p(0.5, 0.62), p(0.5, 0.92), stroke);
 
       case OaaMark.display:
         canvas.drawRRect(

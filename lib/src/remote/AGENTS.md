@@ -9,13 +9,15 @@ halves live here.
 |------|---------|
 | `display_host.dart` | The server. Publishes measurements to attached displays, and replays the layout, skin, target and dynamics naming to one that joins. |
 | `display_client.dart` | The client. Decodes them into a `WireSnapshot`, and holds the layout, skin, target and naming the host sent as `ValueNotifier`s. |
-| `display_screen.dart` | The tablet's UI: the host picker until there is a host, then that host's layout. |
-| `host_picker.dart` | Choosing a host — what discovery found, the code a camera reads, and the address you type when neither worked. One panel, pushed by the desktop's ATTACH button and shown by the display screen itself. |
+| `display_screen.dart` | The tablet's UI: the host picker until there is a host, then that host's layout. `DisplayPreferences` — what this device remembers about being a display, handed in — and `DisplayOptionsPanel`, the display's own refresh rate and screen setting. |
+| `host_picker.dart` | Choosing a host — a desktop down a USB cable, what discovery found, the hosts shown before, the code a camera reads, and the address you type when none of those worked. One panel, pushed by the desktop's ATTACH button and shown by the display screen itself. |
+| `usb_link.dart` | A display on a cable, both ends: `UsbHostProbe`, the tablet's knock on its own loopback port, and `AdbReverse`, which forwards the desktop's display port to every Android device `adb` can see while publishing. |
+| `keep_awake.dart` | `KeepAwake`: the screen stays on while a host is attached. Its native halves are `android/.../OaaKeepAwake.kt` and `ios/Runner/OaaKeepAwake.swift`. |
 | `remote_display_service.dart` | The socket and the mDNS advertisement as one switch. |
 | `pair_link.dart` | `oaa://host:port` — what a pairing code carries, and the one parser behind both it and the address somebody types. |
-| `this_machine.dart` | Whether an address is the machine asking. A publishing desktop hears its own announcement, so the picker has to know which row is itself. |
+| `this_machine.dart` | Whether an address and a port are this running instance — the only attach that is refused — and whether a host was found over a USB interface. A publishing desktop hears its own announcement, so the picker has to know which row is itself. |
 | `qr_scanner.dart` | The camera half of pairing: a viewfinder over `mobile_scanner`, and `canScanQrCodes`, which is why the row is absent on Windows and Linux rather than disabled. |
-| `remote_control.dart` | `RemoteDisplayScope`, which drives the service and carries it, and the three controls the menu bar shows: `PublishSwitch`, `PairingCodeButton`, `AttachButton`. |
+| `remote_control.dart` | `RemoteDisplayScope`, which drives the service and carries it; the three controls the menu bar shows: `PublishSwitch`, `PairingCodeButton`, `AttachButton`; and `RemoteDisplayRoute`, the one place a display screen is handed this device's settings. |
 | `publish_settings.dart` | `PublishSection` — everything about publishing except the switch — and `PairingCodePanel` behind it. |
 | `mdns/dns_message.dart` | Just enough DNS to advertise and find one service. |
 | `mdns/mdns_service.dart` | The responder, and the browser every platform but iOS uses. |
@@ -130,6 +132,53 @@ halves live here.
   a search that has just found this one sends somebody to check a network that
   is working.
 
+  **What is refused is this instance, not this machine.** The question used to
+  be the address alone, and `127.0.0.1` was refused outright — true on a
+  desktop, and wrong the day a tablet could be plugged in, because an Android
+  tablet reaches its desktop at exactly that address through `adb reverse`.
+  `ThisMachine.isThisInstance` asks about the address *and* the port, and the
+  port has to be one `DisplayHost.listeningPorts` says this process holds. That
+  is exact: the only thing that can be listening on the display port in this
+  process is this process.
+
+- **A USB cable is a route, not a protocol.** Nothing in `docs/WIRE.md` knows
+  about it. `adb reverse tcp:47821 tcp:<port>` makes the desktop's display port
+  answer at the tablet's own loopback, so the tablet dials `127.0.0.1` and
+  everything after that is the ordinary link. `AdbReverse` runs it for every
+  device `adb devices` lists as ready, every three seconds while PUBLISH is on,
+  and removes the forwards on the way out — a forward belongs to `adbd` on the
+  device and outlives the process that made it.
+
+  Three things about it are load-bearing:
+
+  - **A knock is a handshake, not a connect.** `adbd` accepts on a forwarded
+    port whether or not anything is listening at the desktop end and hangs up a
+    moment later, so an open socket is not a host. `UsbHostProbe.knock` waits
+    for a `HELLO` and shows its name; anything else is nobody.
+  - **`adb` is looked for where it is, not only on the `PATH`.** An application
+    launched from the Dock or the Start menu does not get the shell's `PATH`, so
+    the SDK's default locations and `ANDROID_HOME` are tried first. With none
+    of them there, nothing runs and nothing is said: most machines have no
+    `adb`, and a line about it on every one of them would be noise.
+  - **The application hands the service its `AdbReverse`; a test's service has
+    none.** A suite that switched publishing on would otherwise run the
+    developer's own `adb` against whatever phone is plugged into their machine.
+    `oaa_app.dart` also withholds it under `FLUTTER_TEST`.
+
+  Android only, at both ends. An iPad has `usbmuxd`, which forwards desktop to
+  device — the tablet would have to be the one listening. USB tethering needs
+  nothing here: it is a network, discovery finds the host on it, and the picker
+  lists a host whose address is on a `rndis`, `usb` or `ncm` interface's subnet
+  under Over USB as well (`ThisMachine.isOverUsb`).
+
+- **ATTACH remembers what answered, and nothing else.** `RemoteDisplayScreen`
+  records a host once its `HELLO` has arrived and the link is live, under the
+  name it gave — never on the tap, or every mistyped address would come back as
+  somewhere to go. Loopback is never recorded, because it is a cable, and a
+  cable is found again whenever it is plugged in. The list is
+  `AppSettings.recentHosts`, and remembering is the receiving side's decision
+  where publishing is asked for every time: attaching opens no port.
+
 - **A pairing code is an address, and `PairLink` is the only thing that reads
   one.** The field and the camera are the same question asked twice, and two
   parsers would be two opinions about whether a bare `studio-mac.local` means
@@ -185,10 +234,12 @@ halves live here.
   neither screen could be trusted. If something cannot be drawn from a
   `MeterSource`, the fix is to the interface, not to a second painter.
 
-- **A display shows; it does not touch.** Version 1 of the protocol is
-  one-directional. Nothing here may gain a way to reset, retarget or
-  reconfigure the host — see the trust-boundary section of `docs/WIRE.md` for
-  why the answer is different on the plugin's loopback port.
+- **A display shows; it does not touch.** Nothing here may gain a way to reset,
+  retarget or reconfigure the host — see the trust-boundary section of
+  `docs/WIRE.md` for why the answer is different on the plugin's loopback port.
+  The one frame a display sends, `0x0007`, reports and asks nothing, and the
+  host reads no other type from a display socket: the control range is skipped
+  there, which is how it is refused.
 
 - **A link that has gone quiet says so, and drops what it was showing.** After
   two seconds without a frame the client calls `markStale()`: every reading
@@ -202,9 +253,26 @@ halves live here.
   Silence is a measurement. NaN is the absence of one.
 
 - **A client that falls behind loses frames; it never queues them.**
-  `DisplayHost` skips any client whose last write has not flushed. A display
-  working through a backlog shows what the signal did half a second ago with
-  total confidence, and unlike a dropped frame nothing about it looks wrong.
+  `DisplayHost` skips any client whose last write has not flushed, and any
+  client that reports `0x0007` once it is `maxUnreceived` snapshots ahead of
+  what that client has said it read. A display working through a backlog shows
+  what the signal did half a second ago with total confidence, and unlike a
+  dropped frame nothing about it looks wrong.
+
+  **The flush alone never enforced this**, and it took a report from an Android
+  tablet to find out. A flush completes when the kernel has taken the bytes, so
+  every buffer between the host and the display — the host's send buffer, the
+  network, the tablet's receive buffer — filled before anything was dropped, and
+  a display slower than its frames drew seconds of the past in order. Bounding
+  the kernel's buffers was tried first and does not work: macOS takes 640 KB on
+  loopback with `SO_SNDBUF` and `SO_RCVBUF` both set to 64 KB. Counting what the
+  display says it read is the only measure no buffer can hide.
+  `test/remote_display_test.dart` stalls a raw socket that reports and one that
+  does not, and requires the first to be queued no more than the window.
+
+  **`DisplayClient` acknowledges on decode, not on paint.** What the host must
+  not outrun is the display's reading; a display that decodes on time and paints
+  late is drawing the newest frame late, which the refresh rate below is for.
 
 - **What this publishes may itself have arrived over a wire.** When a plugin is
   active the app points the host's source at that session's `WireSnapshot`, so
@@ -298,7 +366,7 @@ halves live here.
   the first consumes the answer and the second is told nothing happened, so one
   of the two screens silently stops repainting. Do not put that back.
 
-- **The display screen sets the clock's ceiling, and cannot yet set its rate.**
+- **The display screen sets the clock's ceiling and its rate.**
   On the desktop both `MeterClock.targetFps` and `MeterClock.reducedMotion` are
   pushed by `_StatusBar` in `lib/src/app/oaa_app.dart`, and this screen has no
   status bar — so for eight phases a tablet ran at the constructor default of
@@ -306,18 +374,27 @@ halves live here.
   hardware where a person is most likely to have asked for it. `build` now sets
   `reducedMotion` from the window, which needs nothing but a `MediaQuery`.
 
-  **`targetFps` is still unset, and closing that needs a decision rather than a
-  line of code.** The value lives in `settingsProvider`, and
-  `RemoteDisplayScreen` is deliberately not a `ConsumerWidget` — reading it
-  means either making it one, which puts a `ProviderScope` requirement on every
-  test that mounts this screen, or passing it in from the two call sites, one of
-  which (`_EngineFailure`) has no `ref`. Either way the tablet also wants a
-  control of its own, because the setting is on a screen a display is not
-  showing. Note that the link rate and the repaint rate are separate: the host
-  publishes at 15/30/60 and `MeterClock` already skips a tick with no new
-  generation, so the cost of the default is a `refresh()` per vsync rather than
-  wasted paints. What it really buys is a way to spend less on a slow tablet —
-  see the phase scope note in `lib/src/modules/phase_scope.dart`.
+  **`targetFps` is set too, from `DisplayPreferences`.** It was unset for a
+  phase because the value lives in `settingsProvider` and the screen is
+  deliberately not a Riverpod consumer — reading it would put a `ProviderScope`
+  on every test that mounts the screen. The answer was the one this note said it
+  would take: the screen is handed what it needs, and `RemoteDisplayRoute` in
+  `remote_control.dart` is the one place that builds it from the settings,
+  for all three routes into a display. The tablet's control of its own is
+  OPTIONS on the display's bar, which opens `DisplayOptionsPanel` with
+  the refresh rate and the screen setting. The rate is this device's
+  `targetFps` — the one its canvas uses — and it is separate from the link rate,
+  which is the host's: the host publishes at 15/30/60 and the clock skips a tick
+  with no new generation. What a lower rate buys is a slow tablet spending less
+  on the phase scope and the stereo cloud; see `lib/src/modules/phase_scope.dart`.
+
+  **The screen stays on while a host is attached, and only then.** `KeepAwake`
+  is asked on every change of link state — on while anything but `idle`, off on
+  `idle` and in `dispose` — so a tablet left on the picker sleeps as the system
+  says, and one whose link dropped stays on while the picture comes back.
+  `FLAG_KEEP_SCREEN_ON` rather than a wake lock on Android: it belongs to the
+  window, needs no permission and cannot outlive the activity, and it is
+  re-applied on a new activity because a rotation replaces the window.
 
   **The dynamics naming took the other route, and is the precedent for what a
   display should be *told* rather than read.** What the readings are called is

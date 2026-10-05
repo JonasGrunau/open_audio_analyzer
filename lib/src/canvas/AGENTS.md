@@ -8,7 +8,7 @@ The arrangeable canvas. GPL-3.0-or-later.
 | `grid_canvas.dart` | The canvas: positioning, drag, resize, selection, the drag preview overlay, and the six-layer stack per module that decides what a pointer over one means — wrapped in the `TapRegion` that clears a selection on a press anywhere else. |
 | `canvas_notice.dart` | The one line the canvas says out loud. Refusals only. |
 | `module_host.dart` | The only place that knows which `ModuleKind`s exist as code, and where "too small" is decided — in cells *and* in pixels. Also where the delivery target and the dynamics naming reach a module, as constructor arguments and never as a provider read. |
-| `tab_strip.dart` | Tabs, inline rename, and the add/undo/redo buttons. Three of the four are a word with a `OaaMark` or a `+` beside it; only the tab plus stands alone. |
+| `tab_strip.dart` | Tabs, inline rename, the tab menu — whose revert and export are `lib/src/app/tab_file.dart`'s — and the add/undo/redo buttons. Three of the four are a word with a `OaaMark` or a `+` beside it; only the tab plus stands alone. |
 | `menus.dart` | The popup menus the canvas and the strip share, including `showOaaToggleMenu` — the one that holds a set rather than a value and so stays open while its rows are ticked. |
 
 The placement rules themselves are **not here** — they are pure functions over

@@ -657,6 +657,114 @@ void main() {
     },
   );
 
+  // The lag somebody reported from an Android tablet: fine on the default
+  // layout, seconds behind once their own tab was on it. A display that falls
+  // behind was always meant to lose frames rather than queue them — but the
+  // host decided "behind" from `flush`, and a flush completes when the kernel
+  // has taken the bytes, not when the tablet has. Every buffer between the two
+  // filled first, and the display then drew them in order, each one a little
+  // older than the last. Measured here before the fix: 67 of 120 frames
+  // queued behind a display that had stopped reading, 2.2 s of the past.
+  group('a display that stops reading', () {
+    /// A display that reads nothing at all until [resume], the way one whose
+    /// paint has stalled its event loop does — not a paused stream, which
+    /// Dart goes on filling from the socket underneath.
+    Future<({Future<int> Function() resume})> stall({
+      required bool reports,
+    }) async {
+      final socket = await RawSocket.connect(
+        InternetAddress.loopbackIPv4,
+        host.port!,
+      );
+      addTearDown(socket.close);
+
+      final reader = FrameReader();
+      final decoded = WireSnapshot();
+      var reading = true;
+      var stalled = false;
+      // Frames from the stall itself, which is generation 1 to 119: what the
+      // display finds waiting when it looks again. The host's own timer goes
+      // on publishing generation 120 once the loop below is done, and those
+      // are current, not a backlog.
+      var backlog = 0;
+      socket.listen((event) {
+        if (event != RawSocketEvent.read || !reading) return;
+        final chunk = socket.read();
+        if (chunk == null) return;
+        reader.add(chunk);
+        while (reader.moveNext()) {
+          if (reader.type != WireFrameType.snapshot) continue;
+          decoded.decode(reader.payload, version: reader.version);
+          if (stalled && decoded.generation < 120) backlog++;
+          if (reports) socket.write(WireFrameType.receivedFrame);
+        }
+      });
+
+      // A few frames read and answered, so the host has heard from it.
+      for (var i = 0; i < 5; i++) {
+        source.generation = 1000 + i;
+        host.publishNow();
+        await _settle(milliseconds: 20);
+      }
+      reading = false;
+      stalled = true;
+      socket.readEventsEnabled = false;
+
+      return (
+        resume: () async {
+          reading = true;
+          socket.readEventsEnabled = true;
+          await _settle(milliseconds: 400);
+          return backlog;
+        },
+      );
+    }
+
+    Future<void> publishFor({required int frames}) async {
+      for (var i = 0; i < frames; i++) {
+        source.generation = i + 1;
+        host.publishNow();
+        await Future<void>.delayed(const Duration(milliseconds: 2));
+      }
+    }
+
+    test('is not queued a backlog', () async {
+      await host.start(port: 0);
+      final display = await stall(reports: true);
+      await publishFor(frames: 120);
+
+      final queued = await display.resume();
+      expect(
+        queued,
+        lessThanOrEqualTo(host.maxUnreceived),
+        reason:
+            'a display that stalled was queued $queued of 120 frames, every '
+            'one of them older than the next',
+      );
+    });
+
+    test('that predates saying so is still fed as it was', () async {
+      // A tablet on an older build never sends `0x0007`, and a host that waited
+      // for one would starve it after the first two frames.
+      await host.start(port: 0);
+      final display = await stall(reports: false);
+      await publishFor(frames: 120);
+
+      expect(await display.resume(), greaterThan(host.maxUnreceived));
+    });
+
+    test('a display that reports is not held back when it keeps up', () async {
+      await connect();
+      final start = client.snapshot.generation;
+      for (var i = 0; i < 30; i++) {
+        source.generation = start + i + 1;
+        host.publishNow();
+        await _settle(milliseconds: 15);
+      }
+      expect(client.snapshot.generation, start + 30);
+    });
+  });
+
   test('the host notices a display leaving', () async {
     await connect();
     expect(host.clientCount.value, 1);

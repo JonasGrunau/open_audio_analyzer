@@ -12,6 +12,7 @@ import '../canvas/canvas_notice.dart';
 import '../canvas/workspace.dart';
 import '../data/providers.dart';
 import '../panels/report_panel.dart';
+import 'tab_file.dart';
 
 /// The preset as a document: the file it came from, and what was in it.
 ///
@@ -233,6 +234,11 @@ enum FileCommand {
   save('save', 'Save'),
   saveAs('saveAs', 'Save as…'),
 
+  /// A tab in and a tab out — see `tab_file.dart`. Export takes the tab that
+  /// is showing; the tab's own menu exports any of them.
+  importTabs('importTabs', 'Import tabs…'),
+  exportTab('exportTab', 'Export this tab…'),
+
   /// The two rows that carry a checkmark rather than doing something.
   carryCalibration(
     'carryCalibration',
@@ -259,6 +265,7 @@ enum FileCommand {
 /// A divider goes above these, in both menus.
 const Set<FileCommand> fileCommandDividers = {
   FileCommand.save,
+  FileCommand.importTabs,
   FileCommand.carryCalibration,
 };
 
@@ -291,6 +298,10 @@ Future<void> runFileCommand(
       await _save(ref);
     case FileCommand.saveAs:
       await _saveAs(ref);
+    case FileCommand.importTabs:
+      await importTabs(context, ref);
+    case FileCommand.exportTab:
+      await exportTab(ref, ref.read(workspaceProvider).activeTab);
     case FileCommand.carryCalibration:
       final workspace = ref.read(workspaceProvider.notifier);
       final carried = ref.read(workspaceProvider).preset.calibrationId;

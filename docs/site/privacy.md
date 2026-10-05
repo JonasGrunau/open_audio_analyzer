@@ -130,7 +130,15 @@ That is a deliberate trade for a feature that is LAN-only, and it is why the
 host does not listen at all unless a person switches it on. It is also why the
 link is one-directional: a connected display can draw the meters and can change
 nothing — the protocol has no frame that lets it, and the port rejects one if it
-arrives. The reasoning is written out in full under
+arrives. The one thing a display sends back is a note that it has received a
+frame, which the host uses only to avoid sending it more than it can keep up
+with.
+
+While publishing is on, a desktop with Android's `adb` installed also forwards
+the display port to any Android device connected over USB with debugging
+enabled, so that a tablet on a cable can attach. That reaches no one the
+network port does not: it is the same port, to a device you have already
+trusted for debugging. The reasoning is written out in full under
 [**They do not have the same trust boundary**](wire.html#they-do-not-have-the-same-trust-boundary).
 
 What follows from that, practically: publish on a network you trust. On a shared

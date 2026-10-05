@@ -77,13 +77,14 @@ for, and [Known gaps](#-known-gaps-stated-plainly) unsoftened.
 10. [Building](#-building)
     - [Tests](#-tests)
 11. [Analysing files](#-analysing-files)
-12. [In a DAW](#-in-a-daw)
+12. [On a tablet](#-on-a-tablet)
+13. [In a DAW](#-in-a-daw)
     - [Building and installing it by hand](#-building-and-installing-it-by-hand)
     - [What the DAW adds that a live input cannot](#-what-the-daw-adds-that-a-live-input-cannot)
     - [Testing the plugin without a DAW](#-testing-the-plugin-without-a-daw)
-13. [Known gaps, stated plainly](#-known-gaps-stated-plainly)
-14. [Contributing](#-contributing)
-15. [License](#-license)
+14. [Known gaps, stated plainly](#-known-gaps-stated-plainly)
+15. [Contributing](#-contributing)
+16. [License](#-license)
 
 ---
 
@@ -105,10 +106,13 @@ What ships today:
   [Configuration](#-configuration).
 - **Files are analysed offline** by the app and by the
   [`oaa` CLI](#-analysing-files).
-- **A tablet mirrors the canvas** over Wi-Fi. Flip **PUBLISH** in the menu bar;
-  the tablet finds it by itself, reads a pairing code off the screen, or takes
-  an address typed by hand. Three routes, because the first one is what a
-  venue's Wi-Fi blocks.
+- **A tablet mirrors the canvas** over Wi-Fi, or over a USB cable on Android.
+  Flip **PUBLISH** in the menu bar; the tablet finds it by itself, reads a
+  pairing code off the screen, or takes an address typed by hand. Three routes,
+  because the first one is what a venue's Wi-Fi blocks — and it remembers the
+  hosts it has shown, so the address is typed once. A display keeps its screen
+  on while it is attached, and can be told to redraw at a lower rate. See
+  [On a tablet](#-on-a-tablet).
 - **A headless [VST3 / AU / AAX plugin](#-in-a-daw)** meters what your DAW is
   playing.
 - **Your system's own output is metered with nothing to install** — WASAPI
@@ -434,7 +438,7 @@ on a 32" monitor and an 11" tablet with nobody writing responsive code.
 **Drag a module's title bar** to move it, **drag the corner grip** to resize,
 **alt-drag** to duplicate, **right-click or long-press empty canvas** to add a
 module there, **right-click a module** for its options, and **right-click or
-long-press a tab** to rename, duplicate or delete it. **Click anywhere else** —
+long-press a tab** to rename, duplicate, revert, export or delete it. **Click anywhere else** —
 empty canvas, the menu bar, the tab strip, another module — and the selection
 clears, on the press; a module's own menu is not "anywhere else", so choosing an
 option for it leaves it selected. Buttons for add, undo and redo sit in the tab
@@ -466,6 +470,15 @@ cells bright when the drop is legal and red when it is not. The meters do not
 stop, because dimming is a wash painted over them rather than a pause, and a
 wash rather than a blur because a full-screen blur would be recomputed every
 frame over exactly the readings that are still arriving.
+
+**A tab can be kept on its own.** *Revert to saved* in a tab's menu puts it
+back as it was when the preset was last opened or saved, in one step you can
+undo; *Export…* writes it to a file, which is a preset with one tab in it, so
+File › Open reads it as well. File › *Import tabs…* adds tabs from any preset
+beside the ones already there, and asks which when there are several — so a
+folder of presets doubles as a library of tabs, and a strip of tabs need only
+hold the ones in use. Undo does not replace any of this: it is shared by every
+tab in the preset and forgotten at the next launch.
 
 A module resized below its minimum shows `TOO SMALL` instead of an unreadable
 smear, and a module kind with no painter yet says `NOT BUILT YET` instead of
@@ -984,6 +997,39 @@ panel, so two people exporting the same report get the same picture.
 
 ---
 
+## 📱 On a tablet
+
+A tablet is the same application as the desktop, and it can also draw another
+machine's meters: press **PUBLISH** on the machine that is measuring, and
+**ATTACH** on the one that should show it. The display draws the host's layout
+with the host's skin and delivery target, through the same fourteen painters,
+and it can watch but not change anything — see
+[`docs/WIRE.md`](docs/WIRE.md) for the protocol and why it is read-only.
+
+ATTACH lists, top to bottom:
+
+- **Over USB** — a desktop at the other end of a cable, marked with a plug. On
+  Android this is `adb reverse`: while PUBLISH is on, the desktop forwards its
+  display port to every Android device `adb` can see, so it needs the Android
+  SDK's platform tools on the desktop and USB debugging on the tablet. A host
+  found over **USB tethering** is listed here too. A cable is the thing to try
+  when the room's Wi-Fi is what is slow.
+- **On this network** — every machine that is publishing, found by mDNS.
+- **Recent** — the hosts this tablet has shown before, by name, newest first,
+  each with a Forget button. Only a host that answered is remembered.
+- **By camera** — the pairing code the desktop shows beside PUBLISH.
+- **By address** — typed, for a network that blocks all of the above.
+
+While a host is attached the tablet's screen stays on, and the system's own
+sleep setting applies again as soon as it disconnects. **OPTIONS** on the
+display's bar opens *This display*: that setting, and the rate the display
+redraws at. A tablet that falls behind a heavy layout — a phase scope and a
+stereo cloud are the most expensive modules to draw — keeps up at 30 fps. A
+display that falls behind anyway loses frames rather than having them queued,
+so it is never drawing the past.
+
+---
+
 ## 🎹 In a DAW
 
 Open Audio Analyzer installs as a **VST3** and an **Audio Unit** that draws
@@ -1258,10 +1304,16 @@ position" branch described above.
 - **A remote display shows every tab, not a chosen one.** `TabSpec` carries a
   `displayTargetId` and nothing honours it yet: assigning tabs to a screen means
   the host has to tell two displays apart, and in a protocol where the display
-  says nothing at all, it cannot. Either the display identifies itself — a
+  says nothing but that it received a frame, it cannot. Either the display identifies itself — a
   client→host frame, which the display port lacks by policy rather than by
   limitation — or the host keys assignments by address, which breaks on DHCP.
   Until then the display shows the whole preset and the viewer picks the tab.
+- **USB is Android only, and needs `adb`.** The desktop forwards its display
+  port down the cable with `adb reverse`, so it needs the Android SDK's
+  platform tools on the desktop and USB debugging on the tablet. An iPad has no
+  equivalent a desktop can drive — `usbmuxd` forwards the other way round — and
+  USB tethering, which needs neither, is a network, found the way any network
+  host is.
 - **Tablets are display-first.** FFI works fine on iPadOS and Android, but
   audio *input* selection differs sharply per platform. The tablet build's
   primary role is the remote display.

@@ -10,6 +10,38 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### ✨ Added
+- **A tablet on a USB cable is a display.** An Android tablet plugged into the
+  desktop now shows up in ATTACH under **Over USB**, marked with a plug where a
+  network host has the broadcast mark, and attaching to it bypasses the room's
+  Wi-Fi. While PUBLISH is on, the desktop forwards its display port to every
+  Android device `adb` can see (`adb reverse`), so it needs `adb` on the desktop
+  and USB debugging on the tablet. A host found over **USB tethering** is listed
+  in the same section. An iPad has no equivalent the desktop can drive, so this
+  is Android only. Attaching a machine to *itself* is still refused; what is
+  refused now is this running copy, not every address on this machine. (#5)
+- **ATTACH remembers.** Every host this device has been a display for is listed
+  under **Recent**, newest first, up to five, with its name and address, and
+  each one can be forgotten. A host is remembered only once it has answered, so
+  a mistyped address never comes back. In a room that blocks discovery that is
+  the difference between typing an IP address at every session and tapping it
+  once. (#5)
+- **A display keeps the screen on.** While a host is attached, an Android or
+  iPad display no longer goes to sleep, and the system's own sleep setting
+  applies again the moment it disconnects. On by default; OPTIONS on the display's bar
+  turns it off. (#5)
+- **The display has options of its own:** OPTIONS on its bar opens
+  *This display*, with the refresh rate — the one the canvas on this device uses
+  — and the screen setting above. A tablet that falls behind a heavy layout can
+  now be told to redraw at 30 fps; before this it ran at 60 whatever it was
+  set to. (#5)
+- **A single tab can be saved, loaded and put back.** A tab's menu has *Revert to
+  saved*, which returns it to the preset as it was last opened or saved in one
+  undoable step, and *Export…*, which writes it as a preset with one tab. File ›
+  *Import tabs…* adds tabs from any preset file beside the ones already there,
+  asking which when there are several, and *Export this tab…* exports the one
+  showing. A tab file is an ordinary preset, so File › Open reads it too.
+  Undo was not enough: it is shared by every tab and forgotten at the next
+  launch. (#5)
 - **An AAX build for Pro Tools.** The plugin now builds a fourth format on macOS
   and Windows, universal on macOS and targeting 14.2 like the other bundles, and
   it ships in the `oaa-plugin-<platform>` release archive. **It is not signed
@@ -67,6 +99,16 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   file and still does not.
 
 ### 🐛 Fixed
+- **A display that falls behind is no longer drawn seconds in the past.** A
+  tablet slower than the frames it was sent — a heavy layout on an Android
+  tablet was the report — worked through a backlog in order, so the delay grew
+  and nothing on screen said so. The host skipped a display only while its last
+  write was still leaving the machine, and every network and kernel buffer
+  between the two filled before that happened; in a test, a display that stopped
+  reading was queued 62 of 120 frames. A display now tells the host each time it
+  has read a snapshot, and the host sends it at most a tenth of a second ahead
+  of that, dropping the rest. A display from an earlier release still works, and
+  is fed as before. (#5)
 - **The privacy policy was 128 px wider than a phone screen.** The address to
   report a privacy question to is printed as a link whose text is the URL, and
   a 57-character word has no break opportunity in it — so on a 390 px phone it
@@ -128,6 +170,15 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   release through 0.15.0 is listed now.
 
 ### 🚧 Internal
+- `docs/WIRE.md` defines `0x0007 RECEIVED`, the one frame a display sends on the
+  display port: empty, once per snapshot, read by the host only to decide what
+  not to send. Added under protocol version 5 without moving it, the way
+  `0x0006` was; a host that predates it never reads the socket, and a display
+  that predates it is judged by the flush alone. The display port still carries
+  no control of any kind. (#5)
+- A fourth Android channel and a third iOS one, `OaaKeepAwake`, over
+  `com.openaudioanalyzer.oaa/keep_awake`: `FLAG_KEEP_SCREEN_ON` on the
+  activity's window, and `isIdleTimerDisabled`. (#5)
 - **The screenshot scripts take nothing from the person at the machine.**
   `packaging/signal_path.sh`, `packaging/app_window_shots.sh` and
   `packaging/ios/screenshots.sh` used to bring the application and the

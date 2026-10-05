@@ -262,17 +262,60 @@ class AttachButton extends StatelessWidget {
   Future<void> _attach(BuildContext context) {
     return showOaaPanel<void>(
       context: context,
-      builder: (context) => HostPickerPanel(
-        onClose: () => Navigator.of(context).pop(),
-        onConnect: (host, port) {
-          Navigator.of(context)
-            ..pop()
-            ..push(
-              MaterialPageRoute<void>(
-                builder: (_) => RemoteDisplayScreen(host: host, port: port),
-              ),
-            );
-        },
+      // A `Consumer` inside the route, so that Forget redraws the list it is
+      // pressed in; see [RemoteDisplayRoute] for why the panel itself does not
+      // read the settings.
+      builder: (context) => Consumer(
+        builder: (context, ref, _) => HostPickerPanel(
+          recentHosts: ref.watch(settingsProvider.select((s) => s.recentHosts)),
+          onForget: ref.read(settingsProvider.notifier).forgetHost,
+          onClose: () => Navigator.of(context).pop(),
+          onConnect: (host, port) {
+            Navigator.of(context)
+              ..pop()
+              ..push(RemoteDisplayRoute.route(host: host, port: port));
+          },
+        ),
+      ),
+    );
+  }
+}
+
+/// The display screen as the application pushes it: with this device's
+/// settings behind it.
+///
+/// [RemoteDisplayScreen] takes its [DisplayPreferences] as an argument and
+/// reads no provider, so that a test can mount it bare. This is the one place
+/// they are built from `settingsProvider`, and every route into a display in
+/// the application goes through [route] — the ATTACH button, `--attach`, and
+/// the button on the screen a tablet with no capture device opens on — so the
+/// three cannot come to remember different things.
+class RemoteDisplayRoute extends ConsumerWidget {
+  const RemoteDisplayRoute({this.host, this.port, super.key});
+
+  final String? host;
+  final int? port;
+
+  static Route<void> route({String? host, int? port}) =>
+      MaterialPageRoute<void>(
+        builder: (_) => RemoteDisplayRoute(host: host, port: port),
+      );
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final settings = ref.watch(settingsProvider);
+    final controller = ref.read(settingsProvider.notifier);
+    return RemoteDisplayScreen(
+      host: host,
+      port: port,
+      preferences: DisplayPreferences(
+        recentHosts: settings.recentHosts,
+        onRemember: controller.rememberHost,
+        onForget: controller.forgetHost,
+        targetFps: settings.targetFps,
+        onTargetFps: controller.setTargetFps,
+        keepAwake: settings.keepDisplayAwake,
+        onKeepAwake: controller.setKeepDisplayAwake,
       ),
     );
   }

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import 'package:oaa_core/oaa_core.dart';
 import 'package:oaa_ui/oaa_ui.dart';
 import 'package:flutter/material.dart';
 
@@ -8,6 +9,7 @@ import 'mdns/host_discovery.dart';
 import 'pair_link.dart';
 import 'qr_scanner.dart';
 import 'this_machine.dart';
+import 'usb_link.dart';
 
 /// Choosing a host to attach to: what discovery found, and the address you type
 /// when discovery cannot work.
@@ -35,12 +37,24 @@ import 'this_machine.dart';
 /// typing them into a tablet, which is the point at which a feature stops
 /// being used. It is offered only where there is a camera to offer; see
 /// [canScanQrCodes], and note that the typed field below it never goes away.
+///
+/// Two lists sit above those three, and both are there because of the same
+/// report from somebody using an Android tablet as a display. **Over USB** is a
+/// desktop at the far end of a cable, marked with a plug where a network host
+/// has the broadcast mark, because the two rows can name the same machine and
+/// the cable is the one that does not share the room's Wi-Fi — see
+/// `usb_link.dart`. **Recent** is every host this device has been a display
+/// for, because a venue that blocks discovery used to mean typing the same
+/// four numbers into the tablet at every session.
 class HostPickerPanel extends StatefulWidget {
   const HostPickerPanel({
     required this.onConnect,
     this.onClose,
     this.discovery,
     this.thisMachine,
+    this.recentHosts = const [],
+    this.onForget,
+    this.usb,
     super.key,
   });
 
@@ -64,6 +78,20 @@ class HostPickerPanel extends StatefulWidget {
   /// suite happens to be running on. See [ThisMachine].
   final ThisMachine? thisMachine;
 
+  /// Hosts this device has shown before, newest first. Remembering is the
+  /// caller's business — a host is recorded once it has answered, which this
+  /// panel never sees — and so is forgetting, through [onForget]; the panel
+  /// only draws them.
+  final List<RecentHost> recentHosts;
+
+  /// Removes one from the recent list. Null draws no Forget button.
+  final ValueChanged<RecentHost>? onForget;
+
+  /// The knock on loopback that finds a desktop down a USB cable. Null means
+  /// the one this platform runs, which on anything but Android is none; a test
+  /// passes its own.
+  final UsbHostProbe? usb;
+
   @override
   State<HostPickerPanel> createState() => _HostPickerPanelState();
 }
@@ -78,6 +106,10 @@ class _HostPickerPanelState extends State<HostPickerPanel> {
   /// The machine this panel is on, so that none of the three ways out of it
   /// can point back at it. See [ThisMachine] for why that is worth a file.
   late final ThisMachine _self = widget.thisMachine ?? ThisMachine();
+
+  /// Owned here when the caller did not pass one, for the reason [_browser]
+  /// is: it holds a timer, and a list nothing refreshes is worse than none.
+  late final UsbHostProbe _usb = widget.usb ?? UsbHostProbe();
 
   final TextEditingController _address = TextEditingController();
 
@@ -102,6 +134,7 @@ class _HostPickerPanelState extends State<HostPickerPanel> {
   void initState() {
     super.initState();
     _browser.start();
+    _usb.start();
     // Not awaited, and the rebuild is asked for rather than assumed. It
     // completes in milliseconds — an interface list and a host name, no
     // network — but it is still a future, and the list it filters is drawn
@@ -115,6 +148,7 @@ class _HostPickerPanelState extends State<HostPickerPanel> {
   @override
   void dispose() {
     _browser.dispose();
+    if (widget.usb == null) _usb.dispose();
     _address.dispose();
     super.dispose();
   }
@@ -142,7 +176,7 @@ class _HostPickerPanelState extends State<HostPickerPanel> {
   /// pointed a camera at; the tapped path keeps it because a row can be drawn
   /// before [ThisMachine.resolve] has said what this machine is.
   void _connect(String host, int port) {
-    if (_self.contains(host)) {
+    if (_self.isThisInstance(host, port)) {
       setState(() => _refusal = _Refusal.thisMachine);
       return;
     }
@@ -213,6 +247,7 @@ class _HostPickerPanelState extends State<HostPickerPanel> {
               _browser.hosts,
               _browser.isBrowsing,
               _browser.failure,
+              _usb.host,
             ]),
             builder: (context, _) {
               // **This machine is dropped rather than shown and refused.** A
@@ -226,67 +261,103 @@ class _HostPickerPanelState extends State<HostPickerPanel> {
               // check the network when discovery has just demonstrated that it
               // works.
               final found = _browser.hosts.value;
-              final hosts = [
+              final others = [
                 for (final host in found)
-                  if (!_self.contains(host.address)) host,
+                  if (!_self.isThisInstance(host.address, host.port)) host,
               ];
-              final onlySelf = hosts.isEmpty && found.isNotEmpty;
+              // A host found on a USB interface is a host down the cable, and
+              // is listed with the one a reverse forward answered for: which
+              // of the two routes a cable took is not the reader's business.
+              final tethered = [
+                for (final host in others)
+                  if (_self.isOverUsb(host.address)) host,
+              ];
+              final hosts = [
+                for (final host in others)
+                  if (!_self.isOverUsb(host.address)) host,
+              ];
+              final forwarded = _usb.host.value;
+              final onlySelf = others.isEmpty && found.isNotEmpty;
               final browsing = _browser.isBrowsing.value;
               final failure = _browser.failure.value;
 
-              return PanelSection(
-                title: 'On this network',
-                note: hosts.isNotEmpty
-                    ? 'Tap a host to show its meters here.'
-                    : onlySelf
-                    ? 'The only host on this network is this machine, and a '
-                          'machine cannot be its own display.'
-                    // A search that is running *and* has something in its way
-                    // does not get to say it is looking: on Android a browse
-                    // whose multicast lock was refused sends its query, hears
-                    // nothing, and would otherwise present exactly the same
-                    // face as a search that is about to succeed.
-                    : browsing && failure == null
-                    ? 'Looking for hosts on this network…'
-                    : null,
-                ruled: false,
+              // Recent hosts that are not already on screen as live rows — the
+              // same address twice, once found and once remembered, is two rows
+              // for one tap.
+              final shown = [
+                for (final host in others) (host.address, host.port),
+                if (forwarded != null) (forwarded.address, forwarded.port),
+              ];
+              final recent = [
+                for (final host in widget.recentHosts)
+                  if (!shown.any(
+                    (live) =>
+                        live.$1.toLowerCase() == host.host.toLowerCase() &&
+                        live.$2 == host.port,
+                  ))
+                    host,
+              ];
+
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  for (final host in hosts)
-                    PanelListRow(
-                      title: host.displayName,
-                      note: _describe(host),
-                      // A found host is a machine that is publishing, which is
-                      // the same fact the sending half of the pairing panel
-                      // wears — one mark, one meaning, in both directions of
-                      // the link. Nothing in this list is ever `selected`, so
-                      // the row brightens under the pointer instead.
-                      mark: OaaMark.broadcast,
-                      opens: true,
-                      onTap: () => _connect(host.address, host.port),
+                  if (forwarded != null || tethered.isNotEmpty)
+                    PanelSection(
+                      title: 'Over USB',
+                      note: 'Tap a host to show its meters here.',
+                      ruled: false,
+                      children: [
+                        if (forwarded != null)
+                          PanelListRow(
+                            title: forwarded.name,
+                            note: 'USB cable, forwarded by adb',
+                            mark: OaaMark.usb,
+                            opens: true,
+                            onTap: () =>
+                                _connect(forwarded.address, forwarded.port),
+                          ),
+                        for (final host in tethered)
+                          PanelListRow(
+                            title: host.displayName,
+                            note: 'USB tethering  ·  ${_describe(host)}',
+                            mark: OaaMark.usb,
+                            opens: true,
+                            onTap: () => _connect(host.address, host.port),
+                          ),
+                      ],
                     ),
-                  // Stated rather than shown as an empty list, which reads as
-                  // "nothing is running" and sends somebody to check the wrong
-                  // machine — and stated in the words of whatever actually
-                  // stopped it where those are known, because "cannot search"
-                  // and "macOS is not letting Open Audio Analyzer search" send
-                  // that person to two different places.
-                  //
-                  // Shown while a search is still running too, when there is a
-                  // reason to show: Android's multicast lock can be refused on
-                  // a socket that binds and joins perfectly, and a browse in
-                  // that state is running and deaf.
-                  // Never over [onlySelf]: a search that has just found this
-                  // machine is a search that is working, and both of the
-                  // sentences below would be saying it is not.
-                  if (hosts.isEmpty &&
-                      !onlySelf &&
-                      (failure != null || !browsing))
-                    PanelNote(
-                      failure ??
-                          'This device cannot search the network for hosts. '
-                              'Enter an address below.',
-                      tone: colors.warn,
-                      mark: OaaMark.warning,
+                  _network(
+                    // Ruled off from the USB rows when there are any; the
+                    // first section under the title bar is never ruled.
+                    ruled: forwarded != null || tethered.isNotEmpty,
+                    colors: colors,
+                    hosts: hosts,
+                    onlySelf: onlySelf,
+                    browsing: browsing,
+                    failure: failure,
+                  ),
+                  if (recent.isNotEmpty)
+                    PanelSection(
+                      title: 'Recent',
+                      note:
+                          'Hosts this device has shown before. One that is '
+                          'not publishing now will not answer.',
+
+                      children: [
+                        for (final host in recent)
+                          PanelListRow(
+                            title: host.name ?? host.host,
+                            note: _hostAndPort(host.host, host.port),
+                            opens: widget.onForget == null,
+                            trailing: widget.onForget == null
+                                ? null
+                                : OaaButton(
+                                    label: 'Forget',
+                                    onPressed: () => widget.onForget!(host),
+                                  ),
+                            onTap: () => _connect(host.host, host.port),
+                          ),
+                      ],
                     ),
                 ],
               );
@@ -368,6 +439,75 @@ class _HostPickerPanelState extends State<HostPickerPanel> {
       ),
     );
   }
+
+  /// Hosts discovery found on the network — every one of them except this
+  /// instance and those that were found down a USB cable.
+  Widget _network({
+    required bool ruled,
+    required OaaColors colors,
+    required List<DiscoveredHost> hosts,
+    required bool onlySelf,
+    required bool browsing,
+    required String? failure,
+  }) {
+    return PanelSection(
+      title: 'On this network',
+      note: hosts.isNotEmpty
+          ? 'Tap a host to show its meters here.'
+          : onlySelf
+          ? 'The only host on this network is this machine, and a '
+                'machine cannot be its own display.'
+          // A search that is running *and* has something in its way
+          // does not get to say it is looking: on Android a browse
+          // whose multicast lock was refused sends its query, hears
+          // nothing, and would otherwise present exactly the same
+          // face as a search that is about to succeed.
+          : browsing && failure == null
+          ? 'Looking for hosts on this network…'
+          : null,
+      ruled: ruled,
+      children: [
+        for (final host in hosts)
+          PanelListRow(
+            title: host.displayName,
+            note: _describe(host),
+            // A found host is a machine that is publishing, which is
+            // the same fact the sending half of the pairing panel
+            // wears — one mark, one meaning, in both directions of
+            // the link. Nothing in this list is ever `selected`, so
+            // the row brightens under the pointer instead.
+            mark: OaaMark.broadcast,
+            opens: true,
+            onTap: () => _connect(host.address, host.port),
+          ),
+        // Stated rather than shown as an empty list, which reads as
+        // "nothing is running" and sends somebody to check the wrong
+        // machine — and stated in the words of whatever actually
+        // stopped it where those are known, because "cannot search"
+        // and "macOS is not letting Open Audio Analyzer search" send
+        // that person to two different places.
+        //
+        // Shown while a search is still running too, when there is a
+        // reason to show: Android's multicast lock can be refused on
+        // a socket that binds and joins perfectly, and a browse in
+        // that state is running and deaf.
+        // Never over [onlySelf]: a search that has just found this
+        // machine is a search that is working, and both of the
+        // sentences below would be saying it is not.
+        if (hosts.isEmpty && !onlySelf && (failure != null || !browsing))
+          PanelNote(
+            failure ??
+                'This device cannot search the network for hosts. '
+                    'Enter an address below.',
+            tone: colors.warn,
+            mark: OaaMark.warning,
+          ),
+      ],
+    );
+  }
+
+  static String _hostAndPort(String host, int port) =>
+      port == DisplayHost.defaultPort ? host : '$host:$port';
 
   static String _describe(DiscoveredHost host) {
     final format = host.format;

@@ -115,6 +115,29 @@ abstract final class WireFrameType {
   /// same number with its own default, which is a correct reading.
   static const int dynamicsNaming = 0x0006;
 
+  /// A display saying it has decoded one snapshot. Consumer → host, **on the
+  /// display port**, with an empty payload, once per `0x0003` received.
+  ///
+  /// It asks for nothing and it can change nothing: the only thing a host does
+  /// with it is decide what *not* to send. It exists because "a display that
+  /// is behind loses frames" had been decided from `flush`, and a flush
+  /// completes when the kernel has taken the bytes — so every buffer between
+  /// the two machines filled before anything was dropped, and a slow tablet
+  /// drew seconds of the past in order. Counting what the display says it has
+  /// read is the only measure of "behind" that no buffer can hide. See
+  /// `docs/WIRE.md` § Rate and flow control. Added under version 5 without
+  /// moving it: a host that predates it does not read its display sockets at
+  /// all, and a display that predates it is never throttled by one that
+  /// does.
+  static const int received = 0x0007;
+
+  /// [received] as it goes on the wire: twelve bytes, the same every time, so
+  /// a display can send it without building anything.
+  static final Uint8List receivedFrame = WireFrame.encode(
+    received,
+    Uint8List(0),
+  );
+
   /// `0x0010`–`0x001F` — DAW transport, sent by the plugin producer.
   static const int dawTransport = 0x0010;
 

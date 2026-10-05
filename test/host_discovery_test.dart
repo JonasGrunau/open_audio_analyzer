@@ -20,6 +20,8 @@ import 'package:oaa/src/remote/mdns/host_discovery.dart';
 import 'package:oaa/src/remote/mdns/mdns_service.dart';
 import 'package:oaa/src/remote/mdns/multicast_lock.dart';
 import 'package:oaa/src/remote/this_machine.dart';
+import 'package:oaa/src/remote/usb_link.dart';
+import 'package:oaa_core/oaa_core.dart';
 import 'package:oaa_ui/oaa_ui.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -730,6 +732,118 @@ void main() {
     });
   });
 
+  // Two lists above the three ways in, both from one report by somebody using
+  // an Android tablet as a display: a cable to try when the Wi-Fi lagged, and
+  // an address that did not have to be typed again at every session.
+  group('a host down a cable, and a host from last time', () {
+    DiscoveredHost at(String address, String name) => DiscoveredHost(
+      instanceName: name.toLowerCase().replaceAll(' ', '-'),
+      address: address,
+      port: DisplayHost.defaultPort,
+      txt: {'name': name},
+      seenAt: DateTime.utc(2026),
+    );
+
+    testWidgets('a desktop at the far end of adb reverse is a USB row', (
+      tester,
+    ) async {
+      final usb = UsbHostProbe()
+        ..host.value = const UsbHost(name: 'Studio Mac');
+      addTearDown(usb.dispose);
+      final dialled = <String>[];
+
+      await tester.pumpWidget(
+        _panel(
+          _StaticDiscovery()..isBrowsing.value = true,
+          usb: usb,
+          // This instance holds no port, so loopback is somebody else's.
+          self: ThisMachine.at(const [], listening: const []),
+          onConnect: (host, port) => dialled.add('$host:$port'),
+        ),
+      );
+
+      expect(find.text('OVER USB'), findsOneWidget);
+      final row = find.ancestor(
+        of: find.text('Studio Mac'),
+        matching: find.byType(PanelListRow),
+      );
+      expect(tester.widget<PanelListRow>(row).mark, OaaMark.usb);
+
+      await tester.tap(find.text('Studio Mac'));
+      await tester.pumpAndSettle();
+      expect(dialled, ['127.0.0.1:${DisplayHost.defaultPort}']);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('a host found over USB tethering is listed with it', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _panel(
+          _StaticDiscovery()
+            ..isBrowsing.value = true
+            ..hosts.value = [
+              at('192.168.42.20', 'Studio Mac'),
+              at('192.168.1.31', 'Live Room'),
+            ],
+          self: ThisMachine.at(
+            const ['192.168.42.129'],
+            overUsb: const ['192.168.42.129'],
+          ),
+        ),
+      );
+
+      PanelListRow rowOf(String title) => tester.widget<PanelListRow>(
+        find.ancestor(
+          of: find.text(title),
+          matching: find.byType(PanelListRow),
+        ),
+      );
+      expect(rowOf('Studio Mac').mark, OaaMark.usb);
+      expect(rowOf('Studio Mac').note, startsWith('USB tethering'));
+      expect(rowOf('Live Room').mark, OaaMark.broadcast);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('the hosts shown before are offered, and can be forgotten', (
+      tester,
+    ) async {
+      final dialled = <String>[];
+      final forgotten = <RecentHost>[];
+      const booth = RecentHost(host: '10.0.0.8', port: 50000, name: 'Booth');
+      const live = RecentHost(host: '192.168.1.31', port: 47821, name: 'Old');
+
+      await tester.pumpWidget(
+        _panel(
+          _StaticDiscovery()
+            ..isBrowsing.value = true
+            ..hosts.value = [at('192.168.1.31', 'Live Room')],
+          recent: const [booth, live],
+          onForget: forgotten.add,
+          onConnect: (host, port) => dialled.add('$host:$port'),
+        ),
+      );
+
+      expect(find.text('RECENT'), findsOneWidget);
+      expect(find.text('Booth'), findsOneWidget);
+      expect(find.text('10.0.0.8:50000'), findsOneWidget);
+      // Already on screen as a live row, so not a second time as a memory.
+      expect(find.text('Old'), findsNothing);
+
+      await tester.tap(find.text('Booth'));
+      await tester.pumpAndSettle();
+      expect(dialled, ['10.0.0.8:50000']);
+
+      await tester.tap(find.text('FORGET'));
+      await tester.pumpAndSettle();
+      expect(forgotten, [booth]);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+  });
+
   group('what the panel says when it cannot search', () {
     testWidgets('the reason, when there is one', (tester) async {
       final discovery = _StaticDiscovery()
@@ -796,12 +910,18 @@ Widget _panel(
   HostDiscovery discovery, {
   ThisMachine? self,
   void Function(String host, int port)? onConnect,
+  List<RecentHost> recent = const [],
+  ValueChanged<RecentHost>? onForget,
+  UsbHostProbe? usb,
 }) => OaaTheme(
   colors: OaaColors.precisionInstrument,
   child: MaterialApp(
     home: HostPickerPanel(
       onConnect: onConnect ?? (_, _) {},
       discovery: discovery,
+      recentHosts: recent,
+      onForget: onForget,
+      usb: usb,
       // Never the real one in a test. `ThisMachine` reads the interfaces, so
       // the alternative is a suite that passes or fails on what the machine
       // running it is plugged into — and an awaited real read inside a

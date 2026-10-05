@@ -18,7 +18,7 @@
 /// **It cannot draw a checkmark.** The `flutter/menu` channel carries `label`,
 /// `enabled`, `children`, `isDivider` and the shortcut keys, and no checked
 /// state at all — Flutter's own sample toggles a menu item by rewriting its
-/// *label*. Two of this menu's six rows are the state of the open preset, and a
+/// *label*. Two of this menu's eight rows are the state of the open preset, and a
 /// hand-drawn tick in a label sits in the wrong column of a Mac menu.
 ///
 /// **It owns the whole menu bar.** `setMenus` replaces every top-level menu,
@@ -155,11 +155,12 @@ class FileMenuButton extends ConsumerWidget {
               colors: colors,
               selected: checks[command],
               // **Every row of this menu keeps the check's column, including
-              // the four that can never be ticked.** Two of the six are the
-              // state of the open preset and four are things to do, so without
+              // the six that can never be ticked.** Two of the eight are the
+              // state of the open preset and six are things to do, so without
               // this the labels sit in two columns 16 px apart with a divider
               // between them — and the same menu, drawn by macOS from the same
-              // table, puts all six in one column with the ticks in the margin.
+              // table, puts all eight in one column with the ticks in the
+              // margin.
               reservesCheck: true,
               child: Row(
                 children: [

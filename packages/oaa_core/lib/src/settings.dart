@@ -62,6 +62,8 @@ class AppSettings {
     this.remoteDisplayPort = 47821,
     this.remoteDisplayFps = 30,
     this.dynamicsNaming = DynamicsNaming.defaultNaming,
+    this.recentHosts = const [],
+    this.keepDisplayAwake = true,
   });
 
   final AudioSourceKind sourceKind;
@@ -116,6 +118,29 @@ class AppSettings {
   /// [DynamicsNaming] for why the AES names are the default.
   final DynamicsNaming dynamicsNaming;
 
+  /// The hosts this machine has been a display for, newest first, at most
+  /// [kRecentHostLimit] of them.
+  ///
+  /// **Remembered on the receiving side, and that is not the same decision as
+  /// the one [remoteDisplayPort] refuses.** Publishing opens a port with no
+  /// password on it, so it is asked for every time. Attaching opens nothing: it
+  /// is a connection this machine makes to somebody who has already chosen to
+  /// publish, and it can only watch. Forgetting the address meant typing four
+  /// numbers into a tablet every session, in exactly the rooms where discovery
+  /// is blocked and typing is the only way in.
+  ///
+  /// Recorded only once a host has answered — see `RemoteDisplayScreen` — so a
+  /// typo is never offered back as somewhere to go.
+  final List<RecentHost> recentHosts;
+
+  /// Whether the screen stays on while this machine is somebody's display.
+  ///
+  /// On by default, because a display is a screen nobody touches and that is
+  /// exactly the screen an idle timeout switches off. It governs only the
+  /// display: the canvas, the panels and every other application on the device
+  /// keep the system's own timeout.
+  final bool keepDisplayAwake;
+
   /// [clearDevice] and [clearRemoteDisplayName] exist because null means *keep*
   /// everywhere else in here, and both of those fields have a null that is an
   /// instruction rather than an absence: no device chosen, and "advertise under
@@ -136,6 +161,8 @@ class AppSettings {
     int? remoteDisplayPort,
     int? remoteDisplayFps,
     DynamicsNaming? dynamicsNaming,
+    List<RecentHost>? recentHosts,
+    bool? keepDisplayAwake,
   }) => AppSettings(
     sourceKind: sourceKind ?? this.sourceKind,
     deviceId: clearDevice ? null : (deviceId ?? this.deviceId),
@@ -150,6 +177,8 @@ class AppSettings {
     remoteDisplayPort: remoteDisplayPort ?? this.remoteDisplayPort,
     remoteDisplayFps: remoteDisplayFps ?? this.remoteDisplayFps,
     dynamicsNaming: dynamicsNaming ?? this.dynamicsNaming,
+    recentHosts: recentHosts ?? this.recentHosts,
+    keepDisplayAwake: keepDisplayAwake ?? this.keepDisplayAwake,
   );
 
   Map<String, Object?> toJson() => {
@@ -165,6 +194,9 @@ class AppSettings {
     'remote_port': remoteDisplayPort,
     'remote_fps': remoteDisplayFps,
     'dynamics_names': dynamicsNaming.id,
+    if (recentHosts.isNotEmpty)
+      'recent_hosts': [for (final host in recentHosts) host.toJson()],
+    'keep_display_awake': keepDisplayAwake,
   };
 
   /// Reads settings, substituting the default for anything missing or absurd.
@@ -185,6 +217,7 @@ class AppSettings {
     final remoteName = json['remote_name'];
     final remotePort = json['remote_port'];
     final remoteFps = json['remote_fps'];
+    final recent = json['recent_hosts'];
 
     return AppSettings(
       sourceKind:
@@ -218,8 +251,72 @@ class AppSettings {
       dynamicsNaming:
           DynamicsNaming.fromId(json['dynamics_names'] as String? ?? '') ??
           defaults.dynamicsNaming,
+      // Entry by entry, like everything else here: one mangled address costs
+      // that address and not the list.
+      recentHosts: recent is List
+          ? [
+              for (final entry in recent)
+                if (entry is Map)
+                  ?RecentHost.tryFromJson(entry.cast<String, Object?>()),
+            ].take(kRecentHostLimit).toList(growable: false)
+          : const [],
+      keepDisplayAwake:
+          json['keep_display_awake'] as bool? ?? defaults.keepDisplayAwake,
     );
   }
+}
+
+/// How many hosts [AppSettings.recentHosts] keeps.
+///
+/// A handful: the studio, the venue, the rehearsal room. A list long enough to
+/// scroll is a list where the one that was used yesterday is not where it was.
+const int kRecentHostLimit = 5;
+
+/// A host this machine has been a display for, as it was reached.
+///
+/// The address is the one that was *dialled*, not one the host reported about
+/// itself — the same host has as many addresses as it has networks, and the
+/// one that worked from here is the one worth trying again. [name] is what the
+/// host called itself when it answered, for the row to be read by; it is not
+/// used to find anything.
+class RecentHost {
+  const RecentHost({required this.host, required this.port, this.name});
+
+  final String host;
+  final int port;
+  final String? name;
+
+  /// Whether [other] is the same place to connect to. The name is not part of
+  /// it: a host renamed since last time is still the same address.
+  bool sameAddress(RecentHost other) =>
+      host.toLowerCase() == other.host.toLowerCase() && port == other.port;
+
+  Map<String, Object?> toJson() => {
+    'host': host,
+    'port': port,
+    if (name != null) 'name': name,
+  };
+
+  /// Null for anything that could not be dialled.
+  static RecentHost? tryFromJson(Map<String, Object?> json) {
+    final host = json['host'];
+    final port = json['port'];
+    final name = json['name'];
+    if (host is! String || host.trim().isEmpty) return null;
+    if (port is! int || port < 1 || port > 65535) return null;
+    return RecentHost(
+      host: host.trim(),
+      port: port,
+      name: name is String && name.trim().isNotEmpty ? name.trim() : null,
+    );
+  }
+
+  /// [list] with [host] at the front, any earlier entry for the same address
+  /// removed, and the tail cut at [kRecentHostLimit].
+  static List<RecentHost> remember(List<RecentHost> list, RecentHost host) => [
+    host,
+    ...list.where((entry) => !entry.sameAddress(host)),
+  ].take(kRecentHostLimit).toList(growable: false);
 }
 
 /// The refresh rates offered.

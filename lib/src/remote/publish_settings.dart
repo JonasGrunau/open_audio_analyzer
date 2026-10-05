@@ -193,6 +193,20 @@ class _PublishSectionState extends ConsumerState<PublishSection> {
                 'If a display cannot find this machine, type '
                 '${_addresses.first}:${settings.remoteDisplayPort} into it.',
               ),
+            // The cable, said only while there is one: most machines have no
+            // `adb`, and a line about USB debugging on every one of them would
+            // be a paragraph about a feature they will never see.
+            if (service.usb case final usb?)
+              ValueListenableBuilder<List<String>>(
+                valueListenable: usb.devices,
+                builder: (context, devices, _) => !publishing || devices.isEmpty
+                    ? const SizedBox.shrink()
+                    : PanelNote(
+                        'Also over USB, to ${devices.join(', ')}. On the '
+                        'tablet it appears under Over USB in ATTACH.',
+                        mark: OaaMark.usb,
+                      ),
+              ),
 
             PanelRow(
               label: 'Update rate',

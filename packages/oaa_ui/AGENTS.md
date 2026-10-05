@@ -266,9 +266,11 @@ the caret should be, on both menus, on every platform. Draw it — `src/glyph.da
 holds the set, `_Caret` is the one that predates it, and `OaaMark.check` is the
 second of the two the sentence above names.
 
-**The set of marks is closed, and it is eleven.** `OaaMark.broadcast`,
-`display`, `chevron`, `check`, `qr`, `scan`, `warning`, `undo`, `redo`,
-`settings` and `restart`. `display` has
+**The set of marks is closed, and it is twelve.** `OaaMark.broadcast`,
+`display`, `usb`, `chevron`, `check`, `qr`, `scan`, `warning`, `undo`, `redo`,
+`settings` and `restart`. `usb` is the newest, and its argument is the pair it
+makes with `broadcast` in the host picker: two rows that can name the same
+machine, one reached over the network and one down a cable. `display` has
 had no call site since the remote display's chooser panel became two controls in
 the menu bar; it is kept rather than deleted because it is half of a pair
 — "this machine sends" against "this machine shows" — and the set is a
@@ -278,7 +280,7 @@ is slower than the word it replaced — so a new mark is a decision to make in
 `glyph.dart`, with a sentence saying what it tells the reader that the text
 beside it does not. There is no icon font here and there is not going to be one.
 
-**Nine of the eleven annotate a word; the last two replace one, and that is an
+**Ten of the twelve annotate a word; the last two replace one, and that is an
 exception with its argument written down.** `settings` and `restart` are the
 menu bar's two panel commands drawn as marks, and what earns them the exception
 is arithmetic rather than taste: that row's width is what decides whether the

@@ -250,6 +250,11 @@ class DisplayClient {
             // long scope run sends exactly the length a version 5 one does.
             snapshot.decode(_reader.payload, version: _reader.version);
             _lastFrameAt = DateTime.now();
+            // Said once per snapshot, after it is decoded, and it is the only
+            // thing a display ever says. It is how the host knows this
+            // display is behind — see `WireFrameType.received` for why the
+            // host's own flush could not tell it.
+            _acknowledge();
             if (state.value != RemoteLinkState.live) {
               state.value = RemoteLinkState.live;
             }
@@ -280,6 +285,20 @@ class DisplayClient {
       // A stream that has lost sync stays lost, so there is nothing to do with
       // it but drop it and start again.
       _lost(_describe(error));
+    }
+  }
+
+  /// Tells the host one snapshot has been read.
+  ///
+  /// `add` and never `flush`: twelve bytes that need no answer, and a flush
+  /// outstanding would make the next one throw — a socket with a flush in
+  /// flight refuses `add`. A socket that has gone is found by the reading side,
+  /// which is where every other loss is handled, so a failure here is dropped.
+  void _acknowledge() {
+    try {
+      _socket?.add(WireFrameType.receivedFrame);
+    } on Object {
+      // See above.
     }
   }
 

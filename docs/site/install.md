@@ -348,6 +348,16 @@ permission with no dialog, and it is what lets the tablet see a desktop
 publishing on the network. `NEARBY_WIFI_DEVICES` is deliberately not declared:
 it covers scanning and managing networks, which this application never does.
 
+**A USB cable works as well as the network, and is the thing to try when the
+Wi-Fi is slow.** It needs USB debugging switched on under the tablet's
+Developer options, and the Android SDK's platform tools — `adb` — on the
+desktop, in the SDK's usual place or on `ANDROID_HOME`. Plug the tablet in and
+allow debugging when it asks; while PUBLISH is on, the desktop forwards its
+display port down the cable, Settings › Publish says to which device, and the
+tablet shows the desktop under **Over USB** in ATTACH. USB tethering works too
+and needs neither: a desktop found over it is listed in the same place. Nothing
+new is asked for — the cable reaches the same port the network does.
+
 ## In a DAW
 
 The plugin is a **VST3** and an **Audio Unit** that draw nothing. They measure

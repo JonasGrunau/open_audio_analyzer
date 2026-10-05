@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import 'dart:async' show unawaited;
+import 'dart:io' show InternetAddress;
 
 import 'package:oaa_core/oaa_core.dart';
 import 'package:oaa_ui/oaa_ui.dart';
@@ -11,6 +12,7 @@ import '../canvas/module_host.dart';
 import '../clock/meter_clock.dart';
 import 'display_client.dart';
 import 'host_picker.dart';
+import 'keep_awake.dart';
 import 'this_machine.dart';
 
 /// The tablet's whole world: attach to a host, then draw what it is measuring.
@@ -34,6 +36,7 @@ class RemoteDisplayScreen extends StatefulWidget {
     this.host,
     this.port,
     this.thisMachine,
+    this.preferences = const DisplayPreferences(),
     super.key,
   });
 
@@ -55,8 +58,63 @@ class RemoteDisplayScreen extends StatefulWidget {
   /// whether an address may be attached to is the picker.
   final ThisMachine? thisMachine;
 
+  /// What this device remembers about being a display, and how to tell it
+  /// something new. See [DisplayPreferences] for why this is handed in rather
+  /// than read.
+  final DisplayPreferences preferences;
+
   @override
   State<RemoteDisplayScreen> createState() => _RemoteDisplayScreenState();
+}
+
+/// This device's own choices about being a display, handed to the screen by
+/// whoever pushes it.
+///
+/// **Handed in rather than read from `settingsProvider`**, because the screen
+/// is deliberately not a Riverpod consumer: every test that mounts it would
+/// then need a `ProviderScope` and a configuration store behind it. The
+/// application builds one of these from its settings in `RemoteDisplayRoute`
+/// (`remote_control.dart`) and a test builds whatever it is testing. The
+/// default is a display with nothing remembered and no way to remember
+/// anything, which is what the screen was before these existed.
+///
+/// All of it is *this device's*, which is what separates it from the skin, the
+/// target and the dynamics naming: those are the host's and arrive over the
+/// wire, because a display's job is to look like the desktop. How often this
+/// screen redraws and whether it may sleep are questions about the tablet, and
+/// the desktop has no business answering them.
+@immutable
+class DisplayPreferences {
+  const DisplayPreferences({
+    this.recentHosts = const [],
+    this.onRemember,
+    this.onForget,
+    this.targetFps = 60,
+    this.onTargetFps,
+    this.keepAwake = false,
+    this.onKeepAwake,
+  });
+
+  /// Hosts shown before, for the picker. See `AppSettings.recentHosts`.
+  final List<RecentHost> recentHosts;
+
+  /// Called once per attach, the first time the host answers — so an address
+  /// that never did is never offered back.
+  final ValueChanged<RecentHost>? onRemember;
+  final ValueChanged<RecentHost>? onForget;
+
+  /// The ceiling on this screen's repaint rate: `AppSettings.targetFps`, the
+  /// same setting the canvas on this device uses. The link rate is the host's
+  /// and separate; see `lib/src/remote/AGENTS.md`.
+  final int targetFps;
+  final ValueChanged<int>? onTargetFps;
+
+  /// Whether the screen stays on while a host is attached.
+  final bool keepAwake;
+  final ValueChanged<bool>? onKeepAwake;
+
+  /// Whether there is anything the display's own options panel can change.
+  bool get adjustable => onTargetFps != null || onKeepAwake != null;
 }
 
 class _RemoteDisplayScreenState extends State<RemoteDisplayScreen>
@@ -67,6 +125,15 @@ class _RemoteDisplayScreenState extends State<RemoteDisplayScreen>
 
   int _tab = 0;
 
+  /// Where the client was last pointed, for the recent list.
+  String? _host;
+  int? _port;
+
+  /// Whether this attach has been remembered yet. Once per attach: the name a
+  /// host answers with does not change while it stays attached, and a
+  /// reconnect after a dropped link is the same attach.
+  bool _remembered = false;
+
   @override
   void initState() {
     super.initState();
@@ -76,21 +143,87 @@ class _RemoteDisplayScreenState extends State<RemoteDisplayScreen>
     // clock nor the modules can tell the difference.
     _clock = MeterClock(engine: _client.snapshot, vsync: this);
 
+    _client.state.addListener(_onLink);
+    _client.hostName.addListener(_onLink);
+
     final host = widget.host;
     final port = widget.port;
-    if (host != null && port != null) _client.connect(host, port);
+    if (host != null && port != null) _attach(host, port);
+  }
+
+  @override
+  void didUpdateWidget(RemoteDisplayScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.preferences.keepAwake != widget.preferences.keepAwake) {
+      _onLink();
+    }
   }
 
   @override
   void dispose() {
+    _client.state.removeListener(_onLink);
+    _client.hostName.removeListener(_onLink);
+    // Before the client goes, and unconditionally: a display that is leaving
+    // is not a display any more, whatever the setting says.
+    unawaited(KeepAwake.set(false));
     _clock.dispose();
     _client.dispose();
     super.dispose();
   }
 
-  void _connect(String host, int port) {
+  void _attach(String host, int port) {
+    _host = host;
+    _port = port;
+    _remembered = false;
     _client.connect(host, port);
+  }
+
+  void _connect(String host, int port) {
+    _attach(host, port);
     setState(() => _tab = 0);
+  }
+
+  /// The two things that follow the link rather than the layout.
+  ///
+  /// **The screen stays on while a host is attached, not while this screen is
+  /// mounted.** The picker is also this screen, and a tablet left on it has
+  /// nothing to show; a link that dropped is still an attach, and the picture
+  /// is coming back, so it stays on through that.
+  ///
+  /// **A host is remembered once it has answered**, by name, which is the
+  /// `HELLO`. Remembering on the tap would put every mistyped address into the
+  /// list, and it is a list of places to go back to. Loopback is not
+  /// remembered: it is what a USB cable answers at, and a cable is found
+  /// again by the picker whenever it is plugged in — an entry for it would
+  /// offer a host that is only there while the cable is.
+  void _onLink() {
+    final preferences = widget.preferences;
+    final state = _client.state.value;
+    unawaited(
+      KeepAwake.set(preferences.keepAwake && state != RemoteLinkState.idle),
+    );
+
+    final name = _client.hostName.value;
+    final host = _host;
+    final port = _port;
+    final remember = preferences.onRemember;
+    if (_remembered ||
+        remember == null ||
+        state != RemoteLinkState.live ||
+        name == null ||
+        host == null ||
+        port == null) {
+      return;
+    }
+    _remembered = true;
+    if (_isLoopback(host)) return;
+    remember(RecentHost(host: host, port: port, name: name));
+  }
+
+  static bool _isLoopback(String host) {
+    final text = host.trim().toLowerCase();
+    if (text == 'localhost') return true;
+    return InternetAddress.tryParse(text)?.isLoopback ?? false;
   }
 
   /// The way out of a display is the way back into the application.
@@ -136,6 +269,12 @@ class _RemoteDisplayScreenState extends State<RemoteDisplayScreen>
     // which needs a control this screen does not yet have.
     _clock.reducedMotion =
         MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+    // And the rate, which is this device's setting — the same one its canvas
+    // uses — handed in with the rest of [DisplayPreferences]. It is the
+    // cheapest thing a tablet that cannot keep up can be asked to do: the
+    // phase scope and the stereo cloud cost it the same per repaint whatever
+    // the host sends, and a repaint it does not do costs nothing.
+    _clock.targetFps = widget.preferences.targetFps;
 
     // The palette follows the host's skin, so the two screens look like one
     // instrument. Rebuilt only when the skin actually changes — a skin arrives
@@ -167,6 +306,8 @@ class _RemoteDisplayScreenState extends State<RemoteDisplayScreen>
                       ? HostPickerPanel(
                           onConnect: _connect,
                           thisMachine: widget.thisMachine,
+                          recentHosts: widget.preferences.recentHosts,
+                          onForget: widget.preferences.onForget,
                           onClose: Navigator.of(context).canPop()
                               ? () => Navigator.of(context).pop()
                               : null,
@@ -174,6 +315,7 @@ class _RemoteDisplayScreenState extends State<RemoteDisplayScreen>
                       : _LiveDisplay(
                           client: _client,
                           clock: _clock,
+                          preferences: widget.preferences,
                           state: state,
                           tab: _tab,
                           onTab: (index) => setState(() => _tab = index),
@@ -194,6 +336,7 @@ class _LiveDisplay extends StatelessWidget {
   const _LiveDisplay({
     required this.client,
     required this.clock,
+    required this.preferences,
     required this.state,
     required this.tab,
     required this.onTab,
@@ -202,6 +345,7 @@ class _LiveDisplay extends StatelessWidget {
 
   final DisplayClient client;
   final MeterClock clock;
+  final DisplayPreferences preferences;
   final RemoteLinkState state;
   final int tab;
   final ValueChanged<int> onTab;
@@ -216,6 +360,7 @@ class _LiveDisplay extends StatelessWidget {
           _LinkBar(
             client: client,
             clock: clock,
+            preferences: preferences,
             state: state,
             layout: layout,
             tab: tab,
@@ -261,6 +406,7 @@ class _LinkBar extends StatelessWidget {
   const _LinkBar({
     required this.client,
     required this.clock,
+    required this.preferences,
     required this.state,
     required this.layout,
     required this.tab,
@@ -274,6 +420,7 @@ class _LinkBar extends StatelessWidget {
   /// of its own to spare either.
   final MeterClock clock;
 
+  final DisplayPreferences preferences;
   final RemoteLinkState state;
   final PresetSpec? layout;
   final int tab;
@@ -422,6 +569,30 @@ class _LinkBar extends StatelessWidget {
             // the host. Neighbours on a touch screen are mis-tapped, and this
             // is the one control on the bar nobody wants to hit by accident.
             const SizedBox(width: Space.md),
+
+            // **This device's own options, one gap in front of the way out.**
+            // How often this screen redraws and whether it may sleep. Behind
+            // the pages, so it moves nothing a finger is on its way to — see
+            // the note above — and absent where there is nothing to change.
+            //
+            // A word, not the settings mark. The menu bar draws that mark in
+            // place of a word because its width decides whether the document
+            // name fits, and `packages/oaa_ui/AGENTS.md` says in as many words
+            // not to extend the exception by analogy; this bar has a message
+            // that gives way instead.
+            if (preferences.adjustable) ...[
+              OaaButton(
+                label: 'Options',
+                onPressed: () => showOaaPanel<void>(
+                  context: context,
+                  builder: (context) => DisplayOptionsPanel(
+                    preferences: preferences,
+                    onClose: () => Navigator.of(context).pop(),
+                  ),
+                ),
+              ),
+              const SizedBox(width: Space.md),
+            ],
 
             OaaButton(label: 'Disconnect', onPressed: onDisconnect),
           ],
@@ -586,6 +757,100 @@ class _RemoteCanvas extends StatelessWidget {
             ],
           );
         },
+      ),
+    );
+  }
+}
+
+/// How this screen behaves as a display: the two things about it that are the
+/// tablet's to decide rather than the host's.
+///
+/// Its own panel rather than a section of Settings, because a display has no
+/// menu bar and Settings is not reachable from it — and because these two are
+/// asked about while standing at the display, not at the canvas. They are
+/// still the device's settings: the refresh rate is the one the canvas uses,
+/// and both are persisted with everything else.
+///
+/// Holds its own copy of the two values. The panel is a route and is built
+/// once; the preferences it was handed are the ones in force when it opened,
+/// and the controls have to move when they are pressed.
+class DisplayOptionsPanel extends StatefulWidget {
+  const DisplayOptionsPanel({
+    required this.preferences,
+    required this.onClose,
+    super.key,
+  });
+
+  final DisplayPreferences preferences;
+  final VoidCallback onClose;
+
+  @override
+  State<DisplayOptionsPanel> createState() => _DisplayOptionsPanelState();
+}
+
+class _DisplayOptionsPanelState extends State<DisplayOptionsPanel> {
+  late int _fps = widget.preferences.targetFps;
+  late bool _awake = widget.preferences.keepAwake;
+
+  @override
+  Widget build(BuildContext context) {
+    final preferences = widget.preferences;
+    final onFps = preferences.onTargetFps;
+    final onAwake = preferences.onKeepAwake;
+
+    return PanelScaffold(
+      title: 'This display',
+      onClose: widget.onClose,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (onFps != null)
+            PanelSection(
+              title: 'Refresh rate',
+              ruled: false,
+              note:
+                  'How often this screen redraws the meters. A tablet that '
+                  'falls behind a busy layout keeps up at a lower rate; the '
+                  'host goes on sending at its own.',
+              children: [
+                PanelRow(
+                  label: 'Redraw at',
+                  child: SegmentedControl<int>(
+                    value: _fps,
+                    segments: [
+                      for (final fps in kTargetFpsOptions)
+                        (value: fps, label: '$fps fps'),
+                    ],
+                    onChanged: (fps) {
+                      setState(() => _fps = fps);
+                      onFps(fps);
+                    },
+                  ),
+                ),
+              ],
+            ),
+          if (onAwake != null)
+            PanelSection(
+              title: 'Screen',
+              ruled: onFps != null,
+              children: [
+                PanelRow(
+                  label: 'Keep the screen on',
+                  note:
+                      'While a host is attached. The system’s own sleep '
+                      'setting still applies everywhere else.',
+                  child: OaaToggle(
+                    value: _awake,
+                    semanticLabel: 'Keep the screen on while attached',
+                    onChanged: (value) {
+                      setState(() => _awake = value);
+                      onAwake(value);
+                    },
+                  ),
+                ),
+              ],
+            ),
+        ],
       ),
     );
   }

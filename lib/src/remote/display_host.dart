@@ -3,6 +3,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:oaa_core/oaa_core.dart';
 import 'package:oaa_wire/oaa_wire.dart';
@@ -26,9 +27,11 @@ import 'package:flutter/foundation.dart';
 ///
 /// **A client that has fallen behind loses frames instead of accumulating
 /// them.** If a socket has not flushed the last frame when the next one is due,
-/// that client is skipped. Queueing would keep the display busy drawing what
-/// the signal did half a second ago, and unlike a dropped frame, nothing about
-/// it looks wrong.
+/// that client is skipped — and a display that says what it has received
+/// (`0x0007`) is skipped too once it is [maxUnreceived] snapshots behind, which
+/// is the half of the rule the flush cannot see. Queueing would keep the
+/// display busy drawing what the signal did half a second ago, and unlike a
+/// dropped frame, nothing about it looks wrong.
 ///
 /// **It does not listen until a human turns it on.** There is no authentication
 /// on this port and everything it publishes is readable by anyone who can reach
@@ -171,6 +174,28 @@ class DisplayHost {
 
   bool get isListening => _server != null;
 
+  /// The ports a host in this process is listening on.
+  ///
+  /// **What "this instance" means to the host picker.** A loopback address
+  /// used to be refused outright, because on a desktop the only thing at
+  /// `127.0.0.1` is the machine asking — but an Android tablet on a USB cable
+  /// reaches its desktop at exactly that address, through the reverse forward
+  /// `adb` sets up. The two are told apart by whether *this* process is the
+  /// one listening there, which is a question with an exact answer here and
+  /// nowhere else. See `ThisMachine.isThisInstance`.
+  static Iterable<int> get listeningPorts => _listeningPorts;
+  static final Set<int> _listeningPorts = {};
+
+  /// How many snapshots a display may be sent that it has not yet said it
+  /// received.
+  ///
+  /// A tenth of a second of frames, and never fewer than two — one on the
+  /// wire and one behind it, which is what lets a healthy link on a slow
+  /// access point run at the full rate. What it bounds is the delay: a display
+  /// can be this far behind the host and no further, whatever the network and
+  /// the kernel are holding. See `WireFrameType.received`.
+  int get maxUnreceived => math.max(2, (_fps / 10).ceil());
+
   int get fps => _fps;
   int _fps = 30;
 
@@ -193,6 +218,7 @@ class DisplayHost {
     // subnet the host would guess.
     final server = await ServerSocket.bind(InternetAddress.anyIPv4, port);
     _server = server;
+    _listeningPorts.add(server.port);
     server.listen(_accept, onError: (Object _) {}, cancelOnError: false);
     _restartTimer();
   }
@@ -218,6 +244,7 @@ class DisplayHost {
 
     final server = _server;
     _server = null;
+    if (server != null) _listeningPorts.remove(server.port);
     await server?.close();
   }
 
@@ -339,7 +366,7 @@ class DisplayHost {
     // that must land now wants.
     socket.setOption(SocketOption.tcpNoDelay, true);
 
-    final client = _RemoteClient(socket, _remove);
+    final client = _RemoteClient(socket, _remove, () => maxUnreceived);
     _clients.add(client);
     clientCount.value = _clients.length;
 
@@ -601,12 +628,9 @@ class _FrameSlot {
 }
 
 class _RemoteClient {
-  _RemoteClient(this._socket, this._onGone) {
+  _RemoteClient(this._socket, this._onGone, this._window) {
     _socket.listen(
-      // A display-only protocol has nothing to say back in version 1. Anything
-      // arriving here is a scanner or a confused client; ignoring it is
-      // cheaper than parsing it and there is nothing it could ask for.
-      (_) {},
+      _receive,
       onError: (Object _) => close(),
       onDone: close,
       cancelOnError: true,
@@ -619,7 +643,46 @@ class _RemoteClient {
   final Socket _socket;
   final void Function(_RemoteClient) _onGone;
 
+  /// [DisplayHost.maxUnreceived], read on every send so that a rate changed
+  /// mid-session applies to the displays already attached.
+  final int Function() _window;
+
   bool _closed = false;
+
+  /// What the display says back, which is `0x0007` and nothing else.
+  ///
+  /// Parsed rather than ignored now that there is something worth hearing —
+  /// but **nothing a display sends is an instruction.** Every other type is
+  /// skipped, the control range included: `docs/WIRE.md` requires the display
+  /// port to refuse `0x0020`–`0x002F`, and a frame that is read and then
+  /// discarded is refused. A stream that is not framed at all is a scanner or
+  /// something worse, and is hung up on.
+  final FrameReader _reader = FrameReader(
+    initialCapacity: WireFrame.headerBytes,
+  );
+
+  /// Snapshots sent since this display connected, less the ones it has said it
+  /// received.
+  int _unreceived = 0;
+
+  /// Whether this display says what it receives at all. A display that
+  /// predates `0x0007` never does, and is judged by the flush alone, as every
+  /// display was before it existed.
+  bool _reports = false;
+
+  void _receive(Uint8List chunk) {
+    if (_closed) return;
+    _reader.add(chunk);
+    try {
+      while (_reader.moveNext()) {
+        if (_reader.type != WireFrameType.received) continue;
+        _reports = true;
+        if (_unreceived > 0) _unreceived--;
+      }
+    } on Object {
+      close();
+    }
+  }
 
   /// The slot this client is still flushing, if any. Non-null means "behind" —
   /// the next frame is skipped rather than queued behind this one.
@@ -658,6 +721,10 @@ class _RemoteClient {
   /// finished with the last one.
   void sendPooled(_FrameSlot slot) {
     if (_closed || _inFlight != null) return;
+    // Behind by what the display has *read*, which is what the flush above
+    // cannot see: it completes when the kernel takes the bytes.
+    if (_reports && _unreceived >= _window()) return;
+    _unreceived++;
 
     _inFlight = slot;
     slot.inFlight++;
