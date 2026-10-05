@@ -6,7 +6,7 @@ import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 
 /**
- * Registers Open Audio Analyzer's own four channels alongside the generated
+ * Registers Open Audio Analyzer's own five channels alongside the generated
  * ones.
  *
  * The first three exist for the same reason: Android is the platform where
@@ -23,7 +23,10 @@ import io.flutter.embedding.engine.FlutterEngine
  * of the three shipped missing.
  *
  * The fourth is a different kind of thing: `OaaKeepAwake.kt` keeps the screen
- * on while the tablet is a display, which Flutter has no way to ask for.
+ * on while the tablet is a display, which Flutter has no way to ask for. The
+ * fifth, `OaaDocuments.kt`, opens and saves the files a user picks through the
+ * system's own picker, because `file_selector` cannot save on Android and opens
+ * a copy rather than the file.
  */
 class MainActivity : FlutterActivity() {
   override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -34,5 +37,6 @@ class MainActivity : FlutterActivity() {
     flutterEngine.plugins.add(OaaFilesDir())
     flutterEngine.plugins.add(OaaMicPermission())
     flutterEngine.plugins.add(OaaKeepAwake())
+    flutterEngine.plugins.add(OaaDocuments())
   }
 }

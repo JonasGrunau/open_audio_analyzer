@@ -99,6 +99,13 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   file and still does not.
 
 ### 🐛 Fixed
+- **Save as, Export this tab and the report exports work on an Android tablet
+  and on an iPad.** They opened nothing and saved nothing on either, because
+  `file_selector` has no save dialog on Android or iOS; they now open the
+  system's own document picker. A preset opened on a tablet is now the file
+  that was picked rather than a copy of it, so Save writes back to that file —
+  it used to write to the copy, succeed, and leave the file untouched — and the
+  file is remembered across launches like on every other platform.
 - **A display that falls behind is no longer drawn seconds in the past.** A
   tablet slower than the frames it was sent — a heavy layout on an Android
   tablet was the report — worked through a backlog in order, so the delay grew
@@ -184,6 +191,12 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - A fourth Android channel and a third iOS one, `OaaKeepAwake`, over
   `com.openaudioanalyzer.oaa/keep_awake`: `FLAG_KEEP_SCREEN_ON` on the
   activity's window, and `isIdleTimerDisabled`. (#5)
+- A fifth Android channel and a fourth iOS one, `OaaDocuments`, over
+  `com.openaudioanalyzer.oaa/documents`: the system's create and open pickers,
+  and reads and writes through the `ContentResolver` on Android and a
+  security-scoped bookmark on iOS. A picked document travels through the app as
+  `<handle>#<display name>`, routed by `ConfigStore`, because a handle need not
+  contain the file's name.
 - **The screenshot scripts take nothing from the person at the machine.**
   `packaging/signal_path.sh`, `packaging/app_window_shots.sh` and
   `packaging/ios/screenshots.sh` used to bring the application and the

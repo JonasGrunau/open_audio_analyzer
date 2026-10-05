@@ -35,6 +35,7 @@ import 'package:oaa_ui/oaa_ui.dart';
 import '../canvas/canvas_notice.dart';
 import '../canvas/workspace.dart';
 import '../data/providers.dart';
+import '../storage/picked_documents.dart';
 import 'preset_file.dart';
 
 /// The tab at [index] as it is in the preset last opened or saved, or null if
@@ -153,7 +154,9 @@ Future<void> importTabs(BuildContext context, WidgetRef ref) async {
   if (preset == null) {
     ref
         .read(canvasNoticeProvider.notifier)
-        .say('${path.split(Platform.pathSeparator).last} has no tabs in it.');
+        .say(
+          '${documentName(path, separator: Platform.pathSeparator)} has no tabs in it.',
+        );
     return;
   }
 

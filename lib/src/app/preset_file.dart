@@ -12,6 +12,7 @@ import '../canvas/canvas_notice.dart';
 import '../canvas/workspace.dart';
 import '../data/providers.dart';
 import '../panels/report_panel.dart';
+import '../storage/picked_documents.dart';
 import 'tab_file.dart';
 
 /// The preset as a document: the file it came from, and what was in it.
@@ -193,8 +194,12 @@ class NativePresetDialogs extends PresetDialogs {
     uniformTypeIdentifiers: ['public.json'],
   );
 
+  /// **A tablet goes to the system's picker itself** — see
+  /// `picked_documents.dart`. `file_selector` cannot save on either, and what it
+  /// opens is a copy, so a Save after Open never reached the file.
   @override
   Future<String?> open({String? initialDirectory}) async {
+    if (Platform.isAndroid || Platform.isIOS) return PickedDocuments.open();
     final file = await openFile(
       acceptedTypeGroups: const [_presets],
       initialDirectory: initialDirectory,
@@ -207,6 +212,12 @@ class NativePresetDialogs extends PresetDialogs {
     String? initialDirectory,
     required String suggestedName,
   }) async {
+    if (Platform.isAndroid || Platform.isIOS) {
+      return PickedDocuments.create(
+        suggestedName: suggestedName,
+        mimeType: 'application/json',
+      );
+    }
     final location = await getSaveLocation(
       acceptedTypeGroups: const [_presets],
       initialDirectory: initialDirectory,
@@ -417,7 +428,8 @@ String _suggestedFileName(String name) {
   return '${cleaned.isEmpty ? 'Preset' : cleaned}.json';
 }
 
-String _basename(String path) => path.split(Platform.pathSeparator).last;
+String _basename(String path) =>
+    documentName(path, separator: Platform.pathSeparator);
 
 /// The filename without its extension, which is the preset's name.
 String _stem(String path) {

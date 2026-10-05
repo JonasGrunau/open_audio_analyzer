@@ -6,6 +6,7 @@ import 'dart:io';
 
 import 'package:oaa_core/oaa_core.dart';
 
+import 'picked_documents.dart';
 import 'android_files_dir.dart';
 
 /// A JSON document as it was found on disk, with the file it came from.
@@ -146,8 +147,33 @@ class ConfigStore {
   /// still goes through this class, because every rule about not throwing and
   /// naming the file that failed applies to a file somebody picked at least as
   /// much as to one we wrote.
-  Future<Map<String, Object?>?> readJsonAt(String absolutePath) =>
-      _read(File(absolutePath));
+  ///
+  /// A tablet's picked document — see `picked_documents.dart` — is read by the
+  /// platform rather than as a file, and fails the same way a file
+  /// does: null, with the reason in [lastError].
+  Future<Map<String, Object?>?> readJsonAt(String absolutePath) {
+    if (isPickedDocument(absolutePath)) return _readDocument(absolutePath);
+    return _read(File(absolutePath));
+  }
+
+  Future<Map<String, Object?>?> _readDocument(String path) async {
+    final name = documentName(path);
+    try {
+      final decoded = jsonDecode(utf8.decode(await PickedDocuments.read(path)));
+      if (decoded is! Map) {
+        _error = '$name is not a JSON object.';
+        return null;
+      }
+      _error = null;
+      return decoded.cast<String, Object?>();
+    } on FormatException catch (error) {
+      _error = 'Could not parse $name: ${error.message}';
+      return null;
+    } on DocumentException catch (error) {
+      _error = 'Could not read $name: $error';
+      return null;
+    }
+  }
 
   /// Whether a file the user chose is still where it was.
   ///
@@ -157,6 +183,9 @@ class ConfigStore {
   /// of the next `Save`. False on anything that cannot be answered, because
   /// "cannot tell" and "not there" lead to the same place — a save panel.
   Future<bool> existsAt(String absolutePath) async {
+    if (isPickedDocument(absolutePath)) {
+      return PickedDocuments.exists(absolutePath);
+    }
     try {
       return await File(absolutePath).exists();
     } on FileSystemException {
@@ -261,14 +290,67 @@ class ConfigStore {
   /// says nothing about a directory the user has just pointed a save dialog at,
   /// and refusing here would mean a session with no configuration directory
   /// could not save a preset to the Desktop either.
-  Future<bool> writeJsonAt(String absolutePath, Map<String, Object?> json) =>
-      _write(File(absolutePath), json);
+  ///
+  /// **A tablet's picked document is the one write here that is not atomic.**
+  /// An Android provider offers no rename and an iOS grant covers the one file,
+  /// so there is no temporary to put beside it; the document is truncated and
+  /// written in one go, which is the most either system allows anybody.
+  Future<bool> writeJsonAt(String absolutePath, Map<String, Object?> json) {
+    if (isPickedDocument(absolutePath)) {
+      return writeBytesAt(absolutePath, utf8.encode(_encode(json)));
+    }
+    return _write(File(absolutePath), json);
+  }
+
+  /// Bytes to a path the user chose — a report, a picture of one. Atomic for a
+  /// file, like every other write here; through the resolver for an Android
+  /// document, like [writeJsonAt].
+  Future<bool> writeBytesAt(String absolutePath, List<int> bytes) async {
+    final name = documentName(absolutePath, separator: Platform.pathSeparator);
+    if (isPickedDocument(absolutePath)) {
+      try {
+        await PickedDocuments.write(absolutePath, bytes);
+        _error = null;
+        return true;
+      } on DocumentException catch (error) {
+        _error = 'Could not write $name: $error';
+        return false;
+      }
+    }
+
+    final file = File(absolutePath);
+    final temporary = File('$absolutePath.tmp');
+    try {
+      await temporary.writeAsBytes(bytes, flush: true);
+      try {
+        await temporary.rename(file.path);
+      } on FileSystemException {
+        if (await file.exists()) await file.delete();
+        await temporary.rename(file.path);
+      }
+      _error = null;
+      return true;
+    } on FileSystemException catch (error) {
+      _error =
+          'Could not write ${file.path}: '
+          '${error.osError?.message ?? error.message}';
+      try {
+        if (await temporary.exists()) await temporary.delete();
+      } on FileSystemException {
+        // The caller already has the real error.
+      }
+      return false;
+    }
+  }
+
+  // Indented on purpose. These files are meant to be opened, read and edited
+  // by hand — that is the entire argument for JSON over anything binary — and
+  // a single-line document is not.
+  static String _encode(Map<String, Object?> json) =>
+      const JsonEncoder.withIndent('  ').convert(json);
 
   Future<bool> _write(File file, Map<String, Object?> json) async {
-    // Indented on purpose. These files are meant to be opened, read and edited
-    // by hand — that is the entire argument for JSON over anything binary —
-    // and a single-line document is not.
-    final text = const JsonEncoder.withIndent('  ').convert(json);
+    final text = _encode(json);
     final temporary = File('${file.path}.tmp');
 
     try {

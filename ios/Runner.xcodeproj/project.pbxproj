@@ -20,6 +20,7 @@
 		D17DE9E84744F93298B2FE67 /* OaaBonjour.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2337D91E94105701846F5B87 /* OaaBonjour.swift */; };
 		A1B2C3D400000000000000B2 /* OaaLaunchArguments.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D400000000000000A1 /* OaaLaunchArguments.swift */; };
 		A1B2C3D400000000000000C2 /* OaaKeepAwake.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D400000000000000C1 /* OaaKeepAwake.swift */; };
+		A1B2C3D400000000000000D2 /* OaaDocuments.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D400000000000000D1 /* OaaDocuments.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -51,6 +52,7 @@
 		2337D91E94105701846F5B87 /* OaaBonjour.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = OaaBonjour.swift; sourceTree = "<group>"; };
 		A1B2C3D400000000000000A1 /* OaaLaunchArguments.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = OaaLaunchArguments.swift; sourceTree = "<group>"; };
 		A1B2C3D400000000000000C1 /* OaaKeepAwake.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = OaaKeepAwake.swift; sourceTree = "<group>"; };
+		A1B2C3D400000000000000D1 /* OaaDocuments.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = OaaDocuments.swift; sourceTree = "<group>"; };
 		331C807B294A618700263BE5 /* RunnerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunnerTests.swift; sourceTree = "<group>"; };
 		331C8081294A63A400263BE5 /* RunnerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RunnerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		3B3967151E833CAA004F5970 /* AppFrameworkInfo.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = AppFrameworkInfo.plist; path = Flutter/AppFrameworkInfo.plist; sourceTree = "<group>"; };
@@ -136,6 +138,7 @@
 				2337D91E94105701846F5B87 /* OaaBonjour.swift */,
 				A1B2C3D400000000000000A1 /* OaaLaunchArguments.swift */,
 				A1B2C3D400000000000000C1 /* OaaKeepAwake.swift */,
+				A1B2C3D400000000000000D1 /* OaaDocuments.swift */,
 			);
 			path = Runner;
 			sourceTree = "<group>";
@@ -300,6 +303,7 @@
 				D17DE9E84744F93298B2FE67 /* OaaBonjour.swift in Sources */,
 				A1B2C3D400000000000000B2 /* OaaLaunchArguments.swift in Sources */,
 				A1B2C3D400000000000000C2 /* OaaKeepAwake.swift in Sources */,
+				A1B2C3D400000000000000D2 /* OaaDocuments.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

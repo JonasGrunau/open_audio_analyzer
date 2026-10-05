@@ -11,6 +11,8 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/services.dart';
+import 'package:oaa/src/storage/picked_documents.dart';
 import 'package:oaa/src/storage/android_files_dir.dart';
 import 'package:oaa/src/storage/config_store.dart';
 import 'package:oaa/src/storage/startup_config.dart';
@@ -34,9 +36,9 @@ Future<ConfigStore> _store(Directory root) async {
 }
 
 void main() {
-  // For the one channel this layer has: Android is the only platform that will
-  // not tell a process where it may write through the environment. Everything
-  // else here is a real filesystem and no binding at all.
+  // For the two channels this layer has, both Android's: where a process may
+  // write, which no environment variable says, and the documents a user picks,
+  // which are not files. Everything else here is a real filesystem.
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('resolveConfigRoot', () {
@@ -632,6 +634,106 @@ void main() {
       final config = await loadStartupConfig(ConfigStore.disabled());
       expect(config.notice, isNotNull);
       expect(config.settings.targetFps, 60);
+    });
+  });
+
+  group('picked documents', () {
+    // The system picker's documents, reached through a channel. The provider
+    // is played by a map here; what is under test is that the store routes a
+    // `content://` path to it and keeps every one of its own rules doing so.
+    const doc =
+        'content://com.android.providers.downloads.documents/document/msf%3A12'
+        '#My%20Set.json';
+    late Map<String, Uint8List> provider;
+    late List<String> calls;
+
+    setUp(() {
+      provider = {};
+      calls = [];
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(documentsChannel, (call) async {
+            calls.add(call.method);
+            final path = (call.arguments as Map)['path'] as String?;
+            switch (call.method) {
+              case 'read':
+                final bytes = provider[path];
+                if (bytes == null) {
+                  throw PlatformException(code: 'document', message: 'gone');
+                }
+                return bytes;
+              case 'write':
+                provider[path!] = (call.arguments as Map)['bytes'] as Uint8List;
+                return null;
+              case 'exists':
+                return provider.containsKey(path);
+            }
+            return null;
+          });
+      addTearDown(
+        () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(documentsChannel, null),
+      );
+    });
+
+    test(
+      'a document is named by its fragment, a file by its last component',
+      () {
+        expect(documentName(doc), 'My Set.json');
+        expect(
+          documentName('oaa-bookmark:Ym9vaw==#Live%20Set.json'),
+          'Live Set.json',
+        );
+        expect(
+          isPickedDocument('oaa-bookmark:Ym9vaw==#Live%20Set.json'),
+          isTrue,
+        );
+        expect(documentName('/Users/me/Desktop/Live.json'), 'Live.json');
+        expect(isPickedDocument(doc), isTrue);
+        expect(isPickedDocument('/sdcard/Live.json'), isFalse);
+      },
+    );
+
+    test(
+      'writes and reads through the provider, never the filesystem',
+      () async {
+        final store = await _store(_tempDir());
+
+        expect(await store.existsAt(doc), isFalse);
+        expect(await store.writeJsonAt(doc, {'a': 1}), isTrue);
+        expect(await store.existsAt(doc), isTrue);
+        expect(await store.readJsonAt(doc), {'a': 1});
+        expect(
+          calls,
+          containsAllInOrder(['exists', 'write', 'exists', 'read']),
+        );
+        // Indented, like every other document this store writes.
+        expect(utf8.decode(provider[doc]!), contains('\n  "a": 1'));
+      },
+    );
+
+    test('a refused read is null and names the document', () async {
+      final store = await _store(_tempDir());
+
+      expect(await store.readJsonAt(doc), isNull);
+      expect(store.lastError, 'Could not read My Set.json: gone');
+    });
+
+    test('a document that is not JSON is refused by name', () async {
+      final store = await _store(_tempDir());
+      provider[doc] = Uint8List.fromList(utf8.encode('{"a": '));
+
+      expect(await store.readJsonAt(doc), isNull);
+      expect(store.lastError, startsWith('Could not parse My Set.json'));
+    });
+
+    test('bytes to a file are written whole and leave no temporary', () async {
+      final dir = _tempDir();
+      final store = await _store(dir);
+      final path = '${dir.path}${Platform.pathSeparator}card.png';
+
+      expect(await store.writeBytesAt(path, [1, 2, 3]), isTrue);
+      expect(File(path).readAsBytesSync(), [1, 2, 3]);
+      expect(File('$path.tmp').existsSync(), isFalse);
     });
   });
 }

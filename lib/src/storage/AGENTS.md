@@ -6,7 +6,8 @@ Everything Open Audio Analyzer remembers between launches. GPL-3.0-or-later.
 |------|---------|
 | `config_store.dart` | Reading and writing it. Atomic writes, debounced session saves, and no exceptions. |
 | `startup_config.dart` | The one read of the whole directory, performed before the first frame. |
-| `android_files_dir.dart` | `getFilesDir()`, over the one channel this layer has. Android is the only platform that will not name a writable directory through the environment; its native half is `android/.../OaaFilesDir.kt`. |
+| `picked_documents.dart` | The files a user picks on a tablet, which are grants and not paths: the system's create and open pickers, and the reads and writes. Carried as `<handle>#<display name>` — a `content://` URI on Android, `oaa-bookmark:<base64>` on iOS — so a document stands wherever a path does; `documentName` reads either. Its native halves are `android/.../OaaDocuments.kt` and `ios/Runner/OaaDocuments.swift`. |
+| `android_files_dir.dart` | `getFilesDir()`, over a channel of its own. Android is the only platform that will not name a writable directory through the environment; its native half is `android/.../OaaFilesDir.kt`. |
 
 **Where the configuration lives is not here either.** `resolveConfigRoot`,
 `ConfigDir`, `ConfigFile` and `slugify` are in
@@ -46,7 +47,16 @@ This directory knows about files; it does not know what is in them.
   Desktop is written atomically, and one that cannot be read there names itself
   in `lastError` instead of throwing. Nothing outside this directory opens a
   `File` — which is why `existsAt` is here too, for the one question about a
-  user's file that is not a read.
+  user's file that is not a read, and `writeBytesAt`, for a report export.
+
+- **On a tablet a user's file is a document, and the `*At` methods route it.**
+  A path starting `content://` or `oaa-bookmark:` goes to
+  `picked_documents.dart` instead of `dart:io`. It is the one write here that
+  is not atomic — an Android provider has no rename, and an iOS grant covers
+  the one file and not a sibling to rename from — and it fails the same way a
+  file does: false, with the document's name in `lastError`. The name is the
+  handle's fragment, because the Downloads provider's URI is `document/12` and
+  a bookmark is opaque bytes.
 
 - **`session.json` carries the preset file the canvas is open on, and
   `loadStartupConfig` drops it if that file has gone.** The path is what makes

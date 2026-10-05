@@ -46,6 +46,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/offline_job.dart';
 import '../data/providers.dart';
+import '../storage/picked_documents.dart';
 import 'report_card.dart';
 
 /// Opens the analysis panel.
@@ -237,24 +238,54 @@ class _ReportPanelState extends ConsumerState<ReportPanel> {
     final report = _report;
     if (report == null) return;
 
-    final location = await getSaveLocation(
+    final path = await _saveLocation(
       suggestedName: format.suggestedFileName(report),
-      acceptedTypeGroups: [
-        XTypeGroup(label: format.label, extensions: [format.extension]),
-      ],
+      group: XTypeGroup(label: format.label, extensions: [format.extension]),
+      mimeType: format.mimeType,
     );
-    if (location == null) return;
+    if (path == null) return;
 
-    // Written through dart:io rather than XFile.saveTo, which on desktop is
-    // the same write with a copy of the bytes in front of it. UTF-8 explicitly
-    // because a report contains an em dash for every unmeasured value and the
-    // platform default encoding is not the same on all three desktops.
+    // UTF-8 explicitly, because a report contains an em dash for every
+    // unmeasured value and the platform default encoding is not the same on
+    // all three desktops.
     final data = exportReport(
       report,
       format,
       naming: ref.read(dynamicsNamingProvider),
     );
-    await File(location.path).writeAsString(data, encoding: utf8);
+    await _write(path, utf8.encode(data));
+  }
+
+  /// Where an export goes, or null if the dialog was dismissed.
+  ///
+  /// Neither tablet has a save dialog in `file_selector`, so they ask the system's
+  /// document picker instead — see `picked_documents.dart`.
+  Future<String?> _saveLocation({
+    required String suggestedName,
+    required XTypeGroup group,
+    required String mimeType,
+  }) async {
+    if (Platform.isAndroid || Platform.isIOS) {
+      return PickedDocuments.create(
+        suggestedName: suggestedName,
+        mimeType: mimeType,
+      );
+    }
+    final location = await getSaveLocation(
+      suggestedName: suggestedName,
+      acceptedTypeGroups: [group],
+    );
+    return location?.path;
+  }
+
+  /// Through the store, which writes a file atomically and a tablet's picked
+  /// document through the platform, and says so when either fails.
+  Future<void> _write(String path, List<int> bytes) async {
+    final store = ref.read(configStoreProvider);
+    if (await store.writeBytesAt(path, bytes)) return;
+    ref
+        .read(storageNoticeProvider.notifier)
+        .report(store.lastError ?? 'Could not write $path.');
   }
 
   /// The report as a PNG, for pasting into a message rather than parsing.
@@ -275,16 +306,15 @@ class _ReportPanelState extends ConsumerState<ReportPanel> {
     );
     if (bytes == null) return;
 
-    final location = await getSaveLocation(
+    final path = await _saveLocation(
       suggestedName:
           '${_stem(report.fileName)} — Open Audio Analyzer report.png',
-      acceptedTypeGroups: const [
-        XTypeGroup(label: 'PNG', extensions: ['png']),
-      ],
+      group: const XTypeGroup(label: 'PNG', extensions: ['png']),
+      mimeType: 'image/png',
     );
-    if (location == null) return;
+    if (path == null) return;
 
-    await File(location.path).writeAsBytes(bytes);
+    await _write(path, bytes);
   }
 
   static String _stem(String fileName) => fileName.contains('.')

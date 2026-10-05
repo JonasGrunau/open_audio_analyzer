@@ -29,5 +29,10 @@ import UIKit
     if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "OaaKeepAwake") {
       OaaKeepAwake.register(with: registrar)
     }
+    // And the fourth: `file_selector` has no save dialog on iOS, and opens a
+    // copy. See `OaaDocuments.swift`.
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "OaaDocuments") {
+      OaaDocuments.register(with: registrar)
+    }
   }
 }

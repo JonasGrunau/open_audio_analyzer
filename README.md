@@ -524,7 +524,10 @@ reaching anywhere else you point it; `Save` writes back to the file it came
 from, without asking, on the next launch as well as this one — the session
 remembers which file that is, and drops it only if the file has gone; `Save
 as…` places a copy anywhere and takes the preset's name from the filename,
-which is why there is no name field. An unsaved layout is called
+which is why there is no name field. On an Android tablet and an iPad both go
+through the system's document picker, and Save writes back to the document that
+was picked. An
+unsaved layout is called
 **Unnamed**, and that is the word the save dialog opens with. The open preset's
 name is centred in the menu bar, with a dot beside it when the canvas differs
 from the file. On macOS the menu is in the system menu bar; on Windows and Linux
