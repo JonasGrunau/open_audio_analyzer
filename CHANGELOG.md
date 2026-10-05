@@ -221,6 +221,16 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   security-scoped bookmark on iOS. A picked document travels through the app as
   `<handle>#<display name>`, routed by `ConfigStore`, because a handle need not
   contain the file's name.
+- `robots.txt` names the AI crawlers rather than leaving them to `User-agent: *`
+  — OpenAI's three agents, Anthropic's three, Perplexity's two, Common Crawl,
+  Meta's two, Mistral, DuckDuckGo, Amazon, ByteDance, and the `Google-Extended`
+  and `Applebot-Extended` control tokens, all allowed everything. It grants
+  nothing that was not already granted; what it fixes is that **a crawler reads
+  exactly one group and never merges it with `*`**, so a `Disallow:` added to
+  `*` in future would have silently exempted every one of them. The file records
+  that it is only half the policy: Cloudflare can refuse an AI crawler at the
+  edge before the Worker is reached, so the check is a request wearing the
+  agent's own name, and the `curl` for it is in the file.
 - **The screenshot scripts take nothing from the person at the machine.**
   `packaging/signal_path.sh`, `packaging/app_window_shots.sh` and
   `packaging/ios/screenshots.sh` used to bring the application and the
