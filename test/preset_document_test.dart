@@ -441,7 +441,16 @@ void main() {
       final host = await _pump(tester, container);
 
       unawaited(runFileCommand(FileCommand.exportTab, host.context, host.ref));
-      await _until(tester, () => File(path).existsSync());
+      // **The notice, not just the file.** The file is on disk the moment the
+      // rename lands; the line that says so runs only when the write's `await`
+      // resumes, which needs another turn of the real loop. On a CI runner that
+      // turn came after the file did, and the notice read null.
+      await _until(
+        tester,
+        () =>
+            File(path).existsSync() &&
+            container.read(canvasNoticeProvider) != null,
+      );
 
       expect(dialogs.suggestedName, 'Loudness.json');
       final written = PresetSpec.tryFromJson(_read(path))!;
