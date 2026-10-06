@@ -803,7 +803,7 @@ are on the [documentation site](https://open-audio-analyzer.com/docs/install).
 | macOS 14.2+ | `Open.Audio.Analyzer-<version>-macos.pkg` | VST3 + AU | Universal — Apple silicon and Intel. |
 | Windows 10 1809+ | `Open.Audio.Analyzer-<version>-windows-x64.exe` | VST3 | Uninstaller in Installed apps. |
 | Linux | `Open.Audio.Analyzer-<version>-linux-<arch>.tar.gz` | VST3 | `./install.sh`, no root. |
-| Linux | `Open.Audio.Analyzer-<version>-<arch>.AppImage` | — | One file, no root, GTK from the host. |
+| Linux | `Open.Audio.Analyzer-<version>-<arch>.AppImage` | — | One file, no root, GTK from the host. Updates with AppImageUpdate. |
 | Linux | `Open.Audio.Analyzer-<version>-<arch>.flatpak` | — | Sandboxed, carries its own runtime. |
 | Any | `oaa-cli-<platform>.tar.gz` / `.zip` | — | `bin/oaa` beside the engine. No Flutter runtime. |
 | Any | `oaa-plugin-<platform>.tar.gz` / `.zip` | the bundles | For installing by hand, and the only place the **AAX** is. See [In a DAW](#-in-a-daw). |

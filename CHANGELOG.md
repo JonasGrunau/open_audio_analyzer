@@ -9,6 +9,13 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### ✨ Added
+- **The AppImage can update itself.** It carries update information, and every
+  release now publishes the `.zsync` file beside it, so AppImageUpdate, or a
+  tool built on it, replaces it with the newest release and downloads only the
+  parts that changed. An AppImage from 0.16.0 or earlier carries none, so moving
+  off one still means downloading the new file once.
+
 ## [0.16.0] — 2026-10-05
 
 ### ✨ Added

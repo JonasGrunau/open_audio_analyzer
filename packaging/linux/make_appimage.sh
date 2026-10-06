@@ -6,7 +6,8 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
 # Usage:  sh packaging/linux/make_appimage.sh [--skip-build]
-# Output: build/packaging/Open Audio Analyzer-<version>-<arch>.AppImage
+# Output: build/packaging/Open.Audio.Analyzer-<version>-<arch>.AppImage
+#         and its .zsync, when zsyncmake is installed
 #
 # ---------------------------------------------------------------------------
 # What an AppImage is for here, given there is also a flatpak
@@ -42,7 +43,9 @@ arch=$(uname -m)
 bundle="build/linux/$( [ "$arch" = "aarch64" ] && echo arm64 || echo x64 )/release/bundle"
 out="build/packaging"
 appdir="build/packaging/Open Audio Analyzer.AppDir"
-image="$out/Open Audio Analyzer-$version-$arch.AppImage"
+# Dots, not spaces, and the only artefact named that way on disk — see
+# "Update information" below.
+image="$out/Open.Audio.Analyzer-$version-$arch.AppImage"
 
 if [ "${1:-}" != "--skip-build" ]; then
   echo "==> flutter build linux --release"
@@ -130,12 +133,53 @@ exec "$here/usr/bin/open-audio-analyzer" "$@"
 APPRUN
 chmod +x "$appdir/AppRun"
 
+# --- Update information ----------------------------------------------------
+#
+# What lets AppImageUpdate, and anything built on it, replace this file with the
+# next release: a string embedded in the image saying where to look, and a
+# .zsync published beside it saying which blocks changed. appimagetool writes
+# both, and the .zsync only if `zsyncmake` is on the PATH — without it the
+# string is embedded anyway, naming a file no release will carry, and nothing
+# fails. So the string goes in only when the file can come out with it, and on
+# CI, where releases are built, a missing zsyncmake is an error rather than an
+# AppImage that cannot update.
+#
+# **The name has dots instead of spaces, and only this one does.** The .zsync
+# records the AppImage's file name, and the updater fetches that name from
+# beside it. Every other script here writes spaces and lets GitHub turn them
+# into dots on upload (packaging/AGENTS.md), so a .zsync naming the spaced file
+# would send every update to a 404. Written dotted, the name the build produces
+# is the name the release page serves.
+
+repo=${GITHUB_REPOSITORY:-JonasGrunau/open_audio_analyzer}
+update=""
+if command -v zsyncmake >/dev/null 2>&1; then
+  update="gh-releases-zsync|${repo%%/*}|${repo#*/}|latest|Open.Audio.Analyzer-*-$arch.AppImage.zsync"
+elif [ -n "${CI:-}" ]; then
+  echo "make_appimage: zsyncmake not found; the AppImage would carry no update information" >&2
+  exit 1
+else
+  echo "make_appimage: zsyncmake not found, building without update information" >&2
+fi
+
 # --- Pack ------------------------------------------------------------------
 
 echo "==> appimagetool"
 mkdir -p "$out"
 # ARCH is read by appimagetool and is not inferred from the AppDir.
-ARCH="$arch" "$tool" "$appdir" "$image"
+if [ -n "$update" ]; then
+  zsync="$(basename "$image").zsync"
+  rm -f "$zsync" "$out/$zsync"
+  ARCH="$arch" "$tool" -u "$update" "$appdir" "$image"
+  # zsyncmake writes into the working directory rather than beside its input.
+  [ -f "$zsync" ] && mv "$zsync" "$out/"
+  if [ ! -f "$out/$zsync" ]; then
+    echo "make_appimage: appimagetool wrote no $zsync" >&2
+    exit 1
+  fi
+else
+  ARCH="$arch" "$tool" "$appdir" "$image"
+fi
 rm -rf "$appdir"
 
 echo "$image"

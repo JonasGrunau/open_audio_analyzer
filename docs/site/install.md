@@ -14,7 +14,7 @@ ticked. If you use a DAW, those are the ones to take.
 | macOS 14.2+ | `Open.Audio.Analyzer-<version>-macos.pkg` | <span class="plug">VST3 + AU</span> | Universal — Apple silicon and Intel. |
 | Windows 10 1809+ | `Open.Audio.Analyzer-<version>-windows-x64.exe` | <span class="plug">VST3</span> | |
 | Linux | `Open.Audio.Analyzer-<version>-linux-<arch>.tar.gz` | <span class="plug">VST3</span> | Unpack and run `./install.sh`. No root needed. |
-| Linux | `Open.Audio.Analyzer-<version>-<arch>.AppImage` | — | One file, no root. Application only. |
+| Linux | `Open.Audio.Analyzer-<version>-<arch>.AppImage` | — | One file, no root, updates with AppImageUpdate. Application only. |
 | Linux | `Open.Audio.Analyzer-<version>-<arch>.flatpak` | — | Sandboxed, updates in place. Application only. |
 | Any | `oaa-cli-<platform>.tar.gz` / `.zip` | — | The command-line analyser. No Flutter runtime. |
 | Any | `oaa-plugin-<platform>.tar.gz` / `.zip` | — | The bare bundles, for installing by hand, and the only place the AAX is. See [In a DAW](#in-a-daw). |
@@ -31,7 +31,8 @@ Releases are on the
 The periods in those names are GitHub's: the build calls the file
 `Open Audio Analyzer-<version>-…` and GitHub replaces the spaces when it
 publishes it, so a file you download is dot-separated and one you build
-yourself is not.
+yourself is not. The AppImage is the exception and is built with the dots
+already in its name, because its update file refers to it by name.
 
 ## macOS
 
@@ -218,6 +219,12 @@ GTK 3 is expected from the host — every desktop Linux that can run a Flutter
 application already has it — and everything else travels inside the file. It is
 built on the oldest distribution the project supports, so it starts on newer
 ones as well.
+
+An AppImage from any release after 0.16.0 carries update information, so
+[AppImageUpdate](https://github.com/AppImageCommunity/AppImageUpdate), or a
+tool built on it, can replace it with the newest release and downloads only the
+parts that changed. 0.16.0 and earlier carry none: moving off one of those means
+downloading the new file once.
 
 ### Flatpak
 

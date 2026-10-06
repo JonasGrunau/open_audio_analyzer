@@ -332,6 +332,12 @@ The jobs are split by what they need, and that split is deliberate:
   catalog test runs, and it rejected 0.15.0 over `SingleMainWindow`, a key
   newer than it. With the same validator on the same runner, a key it does not
   know fails the release rather than the catalog listing.
+- **`linux-appimage` also installs `zsync`, and uploads the `.zsync` beside the
+  AppImage.** `appimagetool` embeds update information either way but writes
+  the `.zsync` only when `zsyncmake` exists, so without it a release would
+  advertise an update file it never published. `make_appimage.sh` therefore
+  fails on CI when `zsyncmake` is missing, and `publish` attaches the `.zsync`
+  with no change of its own, because it takes every file in every artefact.
 - **The IPA is built and deliberately not published.** An App Store signature
   provisions no devices, so nobody who downloaded it could install it. The
   publish step excludes `testflight-ipa` by path rather than narrowing its

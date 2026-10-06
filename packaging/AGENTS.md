@@ -35,7 +35,7 @@ GPL-3.0-or-later.
 | `linux/oaa.desktop` | The desktop entry, shared by the AppImage and the flatpak. The AppImage's copy has `SingleMainWindow` renamed to `X-GNOME-SingleWindow`, because the validator on Ubuntu 22.04 — the one AppImageHub's catalog test runs — predates the standard key and rejects it. |
 | `linux/com.openaudioanalyzer.oaa.metainfo.xml` | AppStream metadata. Required by flatpak, read by GNOME Software and KDE Discover. |
 | `linux/icons/` | Generated hicolor PNGs. |
-| `linux/make_appimage.sh` | Build, AppDir, `desktop-file-validate`, `appimagetool`. Application only — an AppImage never installs anything. |
+| `linux/make_appimage.sh` | Build, AppDir, `desktop-file-validate`, `appimagetool` with update information and the `.zsync` AppImageUpdate reads. Application only — an AppImage never installs anything. |
 | `linux/make_installer.sh` | Build, stage the bundle and the VST3, tar. The only Linux artefact that carries the plug-in. |
 | `linux/install.sh` | Ships *inside* that tarball and is what asks the question. Also the uninstaller, kept beside what it installed. |
 | `linux/make_flatpak.sh` | Build, stage, `flatpak-builder`, bundle. |
@@ -66,6 +66,12 @@ is what the download link says; the spaced form is what a `find` in the publish
 step has to survive, which is why that step reads its asset list NUL-delimited.
 The two are the same file, and a change to either half of the name has to be
 made in both places.
+
+**The AppImage is the one exception, and it is deliberate.** `make_appimage.sh`
+writes `Open.Audio.Analyzer-<version>-<arch>.AppImage` with the dots already in,
+because its `.zsync` records the file's own name and AppImageUpdate downloads
+that name from the release. Spaces there would point every update at a file
+GitHub renamed on upload.
 
 Three of the five carry the plug-in and install it behind a checkbox — the
 `pkg`, the Windows `.exe` and the Linux tarball. They therefore cannot be

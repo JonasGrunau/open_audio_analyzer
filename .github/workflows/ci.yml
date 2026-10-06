@@ -895,13 +895,15 @@ jobs:
       # a capture device through. Both are build-time as well as run-time.
       # desktop-file-utils is neither: it is the validator AppImageHub's catalog
       # test runs, at the version 22.04 ships, which make_appimage.sh runs too.
+      # zsync is the zsyncmake that writes the .zsync AppImageUpdate reads, and
+      # make_appimage.sh refuses to build a release AppImage without it.
       - name: Toolchain
         run: |
           sudo apt-get update
           sudo apt-get install -y \
             clang cmake ninja-build pkg-config \
             libgtk-3-dev liblzma-dev libstdc++-12-dev libasound2-dev \
-            fuse libfuse2 desktop-file-utils
+            fuse libfuse2 desktop-file-utils zsync
 
       - name: Build and package
         run: sh packaging/linux/make_appimage.sh
@@ -909,7 +911,9 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: oaa-linux-appimage
-          path: build/packaging/*.AppImage
+          path: |
+            build/packaging/*.AppImage
+            build/packaging/*.AppImage.zsync
           if-no-files-found: error
 
   linux-flatpak:
