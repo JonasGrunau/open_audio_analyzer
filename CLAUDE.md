@@ -79,7 +79,7 @@ built, and `CHANGELOG.md` for what shipped when.
 | `packages/oaa_core/` | Domain model. Pure Dart. | GPL-3.0-or-later |
 | `packages/oaa_wire/` | The remote-display protocol. Pure Dart, no I/O. | GPL-3.0-or-later |
 | `packages/oaa_ui/` | Design tokens and shared primitives. | GPL-3.0-or-later |
-| `packages/oaa_usb/` | The Android Open Accessory protocol, desktop side: an Android tablet on a cable with no USB debugging. Vendors libusb and builds it on macOS and Linux only. | GPL-3.0-or-later; libusb LGPL-2.1-or-later |
+| `packages/oaa_usb/` | The Android Open Accessory protocol, desktop side: an Android tablet on a cable with no USB debugging. Vendors libusb and builds it for the three desktops; on Windows it opens a device only through UsbDk, which the Windows installer offers. | GPL-3.0-or-later; libusb LGPL-2.1-or-later |
 | `lib/` | The application. | GPL-3.0-or-later |
 | `cli/` | The `oaa` command-line analyser. No Flutter binding. | GPL-3.0-or-later |
 | `plugin/` | Headless VST3 / AU / AAX. Measures the DAW's audio, streams it to the app. Contains `host/`, the fake DAW that drives it. The AAX is a release-archive artefact only until it is PACE-signed — see `plugin/AGENTS.md` § AAX. | **AGPL-3.0-or-later** |
@@ -864,8 +864,11 @@ a phase and was wrong.
   `packages/oaa_usb/third_party/libusb/` with its `COPYING`. **LGPL-2.1**, the
   one vendored library that is not permissive; it is compatible with the GPL
   the application is under, and it ships as its own dynamic library, so it can
-  be replaced as the LGPL asks. Built for macOS and Linux only — see
-  `packages/oaa_usb/AGENTS.md` for why not Windows yet.
+  be replaced as the LGPL asks. On Windows it needs **UsbDk** (Apache-2.0), a
+  kernel filter driver the Windows installer fetches pinned by hash and installs
+  behind a ticked row — see `packages/oaa_usb/AGENTS.md` and
+  `packaging/AGENTS.md`. It is the one third-party driver anything here
+  installs.
 - **Engine:** `miniaudio` (capture), `pffft` (FFT) and `dr_libs` — `dr_wav`,
   `dr_flac`, `dr_mp3` (file decoding). All vendored under
   `engine/third_party/`, all permissive, all single-header.

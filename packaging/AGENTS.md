@@ -30,8 +30,8 @@ GPL-3.0-or-later.
 | `ios/screenshots.sh` | The App Store screenshots, three of them, into `ios/screenshots/` — **committed**, see below: the Loudness tab, the Spectrum tab, and the Loudness tab in the Daylight skin. Runs the application on a 13-inch iPad simulator and drives it with the **fake DAW**: a simulator app binds the host's loopback, so `plugin/host/` plays a real track through the real plugin into the port the app listens on and every reading in the pictures is one the engine took. **Nothing is posted, at anything, and nothing is brought to the front.** It used to click at offsets read off a finished screenshot, which drifted twice and pressed the wrong controls without failing, and then posted keys after activating the Simulator, which took the focus from whoever was typing; now the tab is `--tab=<n>`, a launch option, the skin is `settings.json` written into the app's data container before the launch that photographs it, and the orientation is **checked and never set** — read off the Simulator's window bounds, because every way of turning the device from a script works only while the Simulator is frontmost. So the device is turned once by hand (Device › Orientation › Landscape Left), a booted device and a running Simulator are kept as they are, and a portrait one is refused naming the menu. One launch per picture, the fake DAW started from the top of the track each time, so the three stand at the same second of the same programme. Needs no grant at all — not Accessibility, not posting events, not Screen Recording: `System Events` is never used, the Simulator opens with `open -g` and may sit behind anything, and `simctl io screenshot` reads the framebuffer. The website no longer takes its tablet plate from here; `signal_path.sh` shoots that one, attached, beside the desktop it is a display of. |
 | `ios/screenshots/` | Written by the script above: `01-loudness.png`, `02-spectrum.png`, `03-loudness-daylight.png`, 2752 × 2064. What the App Store listing is given; `ios/app-store.md` says what each argues. |
 | `ios/app-store.md` | The listing text: name, subtitle, keywords, description, and the rest of the submission. Kept here so it moves with the build it describes; nothing reads it. |
-| `windows/oaa.iss` | The Inno Setup script: the components, the VST3 destination, the uninstaller. Compiled by the script below, never opened in the IDE — the paths it needs are staged first. |
-| `windows/make_installer.ps1` | Build, stage, `signtool`, `iscc`, `signtool` again. Replaced `make_msix.ps1`: an msix cannot write the shared VST3 directory, so it could not carry the plug-in. |
+| `windows/oaa.iss` | The Inno Setup script: the components, the VST3 destination, the USB driver row, the uninstaller. Compiled by the script below, never opened in the IDE — the paths it needs are staged first. |
+| `windows/make_installer.ps1` | Build, fetch UsbDk, stage, `signtool`, `iscc`, `signtool` again. Replaced `make_msix.ps1`: an msix cannot write the shared VST3 directory, so it could not carry the plug-in. |
 | `linux/oaa.desktop` | The desktop entry, shared by the AppImage and the flatpak. The AppImage's copy has `SingleMainWindow` renamed to `X-GNOME-SingleWindow`, because the validator on Ubuntu 22.04 — the one AppImageHub's catalog test runs — predates the standard key and rejects it. |
 | `linux/com.openaudioanalyzer.oaa.metainfo.xml` | AppStream metadata. Required by flatpak, read by GNOME Software and KDE Discover. |
 | `linux/icons/` | Generated hicolor PNGs. |
@@ -372,6 +372,18 @@ would all become wrong in the same commit.
   `OAA_NOTARY_PROFILE` above. `make_installer.ps1` takes
   `OAA_WINDOWS_CERT_BASE64` as well and writes it out, which is the form CI
   can be given.
+
+- **The Windows installer carries a kernel driver, behind a row that is ticked
+  and can be unticked.** UsbDk is what lets an Android tablet on a cable become
+  a display without USB debugging — Windows gives the tablet to its MTP driver,
+  which forwards no vendor request; see `packages/oaa_usb/AGENTS.md`. The MSI
+  is **fetched and pinned by SHA-256** in `make_installer.ps1`, never
+  committed: this repository vendors source, not other people's binaries, and a
+  changed hash fails the build rather than shipping. Installed with `msiexec
+  /quiet /norestart` and **left in place on uninstall**, because it is a shared
+  system driver with its own uninstaller that other software may rely on.
+  Moving to a newer UsbDk is a new URL, a new hash and a hand check on a
+  Windows PC with an Android tablet, in one change.
 
 - **The Mac App Store is not a target and this is not a gap.** It requires the
   app sandbox, and a sandboxed Open Audio Analyzer has its `HOME` redirected

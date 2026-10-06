@@ -159,10 +159,23 @@ Run the `.exe`. On the Select Components page:
 | --- | --- | --- |
 | Open Audio Analyzer | `C:\Program Files\Open Audio Analyzer` | ticked, and cannot be unticked |
 | VST3 plug-in | `C:\Program Files\Common Files\VST3` | ticked |
+| USB driver for Android tablets (UsbDk) | the system's driver store | ticked |
 
-The installer needs administrator rights for both of those, and it registers an
+The installer needs administrator rights for all three, and it registers an
 uninstaller under **Settings → Apps → Installed apps**, which removes the
 plug-in too.
+
+**The USB driver is what lets an Android tablet on a cable be a display with no
+USB debugging.** Windows hands a plugged-in tablet to its own file-transfer
+driver, which will not pass on the request that turns the tablet into a display;
+[UsbDk](https://github.com/daynix/UsbDk), a driver signed by Red Hat and
+licensed Apache-2.0, lets Open Audio Analyzer borrow the tablet for as long as
+it is a display and gives it back afterwards. Untick it if you would rather not
+install a driver — an iPad needs none, and an Android tablet with USB debugging
+on still works through `adb`. Uninstalling Open Audio Analyzer leaves the driver
+in place, because other software uses it too; it has its own entry in Installed
+apps, *UsbDk Runtime Libraries*. It is built for x64 Windows, which is the only
+Windows this installer is for.
 
 **Windows will warn you before it runs.** SmartScreen shows *"Windows protected
 your PC"*; click **More info → Run anyway**. Windows may also flag the download
@@ -365,15 +378,16 @@ publishing on the network. `NEARBY_WIFI_DEVICES` is deliberately not declared:
 it covers scanning and managing networks, which this application never does.
 
 **A USB cable works as well as the network, and is the thing to try when the
-Wi-Fi is slow.** On a Mac or a Linux desktop it needs nothing switched on:
-while PUBLISH is on, plug the tablet in, and Android asks whether to open Open
+Wi-Fi is slow.** On a Mac, a Linux desktop, or Windows with the installer's USB
+driver, it needs nothing switched on: while PUBLISH is on, plug the tablet in, and Android asks whether to open Open
 Audio Analyzer for the USB accessory — say yes, tick *always* if you like, and
 the tablet shows the desktop under **Over USB** in ATTACH, with Settings ›
 Publish naming the tablet. While the cable is in, the tablet is the desktop's
 accessory rather than a drive, so its files are not offered to the desktop
 until it is unplugged. A device is asked once each time it is plugged in.
 
-On Windows, or with USB debugging already on, the other route still works: with
+Without that driver on Windows, or with USB debugging already on, the other
+route still works: with
 USB debugging switched on under the tablet's Developer options and the Android
 SDK's platform tools — `adb` — on the desktop, in the SDK's usual place or on
 `ANDROID_HOME`, the desktop forwards its display port down the cable. USB

@@ -21,9 +21,27 @@ struct oaa_usb_link {
   int interface;
 };
 
+/*
+ * On Windows, only through UsbDk. An Android device that is not yet an
+ * accessory belongs to Windows' MTP driver, which forwards no vendor request,
+ * and once it is an accessory it belongs to no driver at all — so libusb's
+ * WinUSB backend can open it at neither end. UsbDk is a filter driver that
+ * lets libusb borrow a device from whatever owns it. Without it installed the
+ * option is refused, so is the context, and the application offers the other
+ * cables.
+ */
 int oaa_usb_init(void) {
   if (g_context != NULL) return 0;
-  return libusb_init_context(&g_context, NULL, 0);
+#if defined(_WIN32)
+  const struct libusb_init_option options[] = {
+      {.option = LIBUSB_OPTION_USE_USBDK},
+  };
+  int status = libusb_init_context(&g_context, options, 1);
+#else
+  int status = libusb_init_context(&g_context, NULL, 0);
+#endif
+  if (status != 0) g_context = NULL;
+  return status;
 }
 
 /*

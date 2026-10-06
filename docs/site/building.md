@@ -177,7 +177,7 @@ actually be installed.
 
 ```sh
 sh   packaging/macos/make_pkg.sh          # carries the VST3 and the AU
-pwsh packaging/windows/make_installer.ps1 # carries the VST3
+pwsh packaging/windows/make_installer.ps1 # carries the VST3 and UsbDk
 sh   packaging/linux/make_installer.sh    # carries the VST3
 sh   packaging/linux/make_appimage.sh     # application only
 sh   packaging/linux/make_flatpak.sh      # application only

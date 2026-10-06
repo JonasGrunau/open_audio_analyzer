@@ -51,7 +51,11 @@ typedef struct oaa_usb_device {
 /* Already an accessory, ready to open. */
 #define OAA_USB_ACCESSORY 2
 
-/* Starts libusb. Zero on success, a libusb error code otherwise. Idempotent. */
+/*
+ * Starts libusb. Zero on success, a libusb error code otherwise. Idempotent,
+ * and tried again after a failure. On Windows it fails unless UsbDk is
+ * installed — see oaa_usb.c.
+ */
 OAA_USB_EXPORT int oaa_usb_init(void);
 
 /*

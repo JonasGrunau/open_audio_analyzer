@@ -86,6 +86,27 @@ if (-not (Test-Path $vst3)) {
 
 New-Item -ItemType Directory -Force -Path $staging | Out-Null
 
+# --- UsbDk -----------------------------------------------------------------
+#
+# The driver behind the "USB driver for Android tablets" row. Windows gives an
+# Android tablet to its MTP driver, which forwards no vendor request, so the
+# accessory switch that makes a tablet a display over a plain cable cannot be
+# sent without a filter driver that lets libusb borrow the device — see
+# packages/oaa_usb/src/oaa_usb.c. UsbDk is that driver, Apache-2.0, signed by
+# Red Hat. Fetched rather than committed, because this repository vendors
+# source and not other people's binaries, and pinned by hash, because an
+# installer that runs whatever a URL answers today is not one to ship.
+
+$usbdkUrl = 'https://github.com/daynix/UsbDk/releases/download/v1.00-22/UsbDk_1.0.22_x64.msi'
+$usbdkSha256 = '91F6F695E1E13C656024E6D3B55620BF08D8835EF05EE0496935BA6BB62466A5'
+$usbdk = "$staging\UsbDk_x64.msi"
+Write-Host "==> $usbdkUrl"
+Invoke-WebRequest -Uri $usbdkUrl -OutFile $usbdk -UseBasicParsing
+$got = (Get-FileHash -Algorithm SHA256 $usbdk).Hash
+if ($got -ne $usbdkSha256) {
+  throw "make_installer: UsbDk is not the file that was pinned ($got)."
+}
+
 # --- Licences --------------------------------------------------------------
 #
 # Generated rather than held, so it cannot go stale against LICENSE. The
@@ -101,6 +122,8 @@ This installer places binaries under more than one licence:
 
   The application and its engine     GPL-3.0-or-later
   The VST3 plug-in                   AGPL-3.0-or-later, because it links JUCE
+  libusb, in the application         LGPL-2.1-or-later
+  The UsbDk driver, if ticked        Apache-2.0 (https://github.com/daynix/UsbDk)
   The bundled fonts                  SIL OFL 1.1
 
 Corresponding Source for every binary here is the tagged commit at
@@ -191,6 +214,7 @@ Write-Host "==> $iscc"
   "/DBundleDir=$(Resolve-Path $bundle)" `
   "/DVst3Dir=$(Resolve-Path $vst3)" `
   "/DLicenseFile=$(Resolve-Path $licence)" `
+  "/DUsbDkMsi=$(Resolve-Path $usbdk)" `
   "/DOutDir=$(Resolve-Path $out)" `
   packaging\windows\oaa.iss
 if ($LASTEXITCODE -ne 0) { throw 'iscc failed' }

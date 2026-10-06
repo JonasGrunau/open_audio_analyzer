@@ -15,6 +15,20 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   tool built on it, replaces it with the newest release and downloads only the
   parts that changed. An AppImage from 0.16.0 or earlier carries none, so moving
   off one still means downloading the new file once.
+- **An Android tablet on a Windows desktop works over USB with no USB
+  debugging.** The Windows installer has a new row, *USB driver for Android
+  tablets*, ticked by default, which installs UsbDk — a driver signed by Red Hat
+  that lets Open Audio Analyzer borrow the tablet from Windows' file-transfer
+  driver while it is a display. With it, Windows works the way a Mac and Linux
+  already did: publish, plug the tablet in, and say yes on the tablet.
+  Uninstalling Open Audio Analyzer leaves the driver installed; it has its own
+  entry in Installed apps. Without it, the cable still needs USB debugging and
+  `adb`. (#5)
+
+### 🚧 Internal
+- `packages/oaa_usb` builds libusb on Windows too, with its UsbDk and WinUSB
+  backends, and starts it only through UsbDk. `make_installer.ps1` fetches
+  UsbDk 1.0.22 from its release and refuses it unless its SHA-256 matches. (#5)
 
 ## [0.16.0] — 2026-10-05
 

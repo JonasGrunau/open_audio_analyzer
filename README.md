@@ -801,7 +801,7 @@ are on the [documentation site](https://open-audio-analyzer.com/docs/install).
 | Platform | Artefact | Plugin | |
 |---|---|:-:|---|
 | macOS 14.2+ | `Open.Audio.Analyzer-<version>-macos.pkg` | VST3 + AU | Universal — Apple silicon and Intel. |
-| Windows 10 1809+ | `Open.Audio.Analyzer-<version>-windows-x64.exe` | VST3 | Uninstaller in Installed apps. |
+| Windows 10 1809+ | `Open.Audio.Analyzer-<version>-windows-x64.exe` | VST3 | Uninstaller in Installed apps. A USB driver for Android tablets, ticked. |
 | Linux | `Open.Audio.Analyzer-<version>-linux-<arch>.tar.gz` | VST3 | `./install.sh`, no root. |
 | Linux | `Open.Audio.Analyzer-<version>-<arch>.AppImage` | — | One file, no root, GTK from the host. Updates with AppImageUpdate. |
 | Linux | `Open.Audio.Analyzer-<version>-<arch>.flatpak` | — | Sandboxed, carries its own runtime. |
@@ -1016,11 +1016,11 @@ ATTACH lists, top to bottom:
 - **Over USB** — a desktop at the other end of a cable, marked with a plug.
   While PUBLISH is on, the desktop reaches an **iPad** through `usbmuxd`, the
   service Finder syncs it with, and asks an **Android** tablet to become its USB
-  accessory — on a Mac or Linux, with no USB debugging and no `adb`. Either way
-  the tablet relays the cable to its own loopback port and the display connects
-  there; see `docs/WIRE.md` § USB carriage. An Android tablet with USB debugging
-  on is also reached by `adb reverse`, which is the route on Windows, and a
-  host found over **USB tethering** is listed here too. A cable is the thing to
+  accessory — with no USB debugging and no `adb`, on Windows through the UsbDk
+  driver the installer offers. Either way the tablet relays the cable to its own
+  loopback port and the display connects there; see `docs/WIRE.md` § USB
+  carriage. An Android tablet with USB debugging on is also reached by
+  `adb reverse`, and a host found over **USB tethering** is listed here too. A cable is the thing to
   try when the room's Wi-Fi is what is slow.
 - **On this network** — every machine that is publishing, found by mDNS.
 - **Recent** — the hosts this tablet has shown before, by name, newest first,
@@ -1322,12 +1322,12 @@ position" branch described above.
   client→host frame, which the display port lacks by policy rather than by
   limitation — or the host keys assignments by address, which breaks on DHCP.
   Until then the display shows the whole preset and the viewer picks the tab.
-- **An Android tablet on a Windows desktop needs `adb` for USB.** The accessory
-  route opens the tablet through libusb, and Windows binds an accessory-mode
-  device to no driver until a WinUSB driver has been installed for it — an
-  installer step that has not been written. On Windows the cable needs USB
-  debugging and `adb`, as it did everywhere before; an iPad works on Windows
-  with Apple's own device service installed.
+- **An Android tablet on a Windows desktop needs a kernel driver for USB.**
+  Windows gives the tablet to its MTP driver, which forwards no vendor request,
+  so the accessory switch goes through UsbDk — a 2020 build, x64 and x86 only,
+  installed by the Windows installer unless its row is unticked. Without it the
+  cable needs USB debugging and `adb`. The Windows half of the accessory route
+  has not yet carried a session on real hardware; the macOS half has.
 - **Tablets are display-first.** FFI works fine on iPadOS and Android, but
   audio *input* selection differs sharply per platform. The tablet build's
   primary role is the remote display.

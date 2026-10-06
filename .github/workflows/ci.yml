@@ -231,11 +231,11 @@ jobs:
           dart test
           dart run test/reclaim_orphans.dart
 
-      # The Android accessory's libusb, compiled through its own build hook on
-      # the two desktops that build it, and loaded and scanned. On Windows the
-      # hook builds nothing and the suite holds that it says so. No runner has
-      # an Android tablet on its bus, so the accessory itself is a check by
-      # hand — see packages/oaa_usb/AGENTS.md.
+      # The Android accessory's libusb, compiled through its own build hook,
+      # loaded and scanned. On Windows it starts only with UsbDk, which no
+      # runner has, so there the suite holds that it loads and refuses for that
+      # reason alone. No runner has an Android tablet on its bus, so the
+      # accessory itself is a check by hand — see packages/oaa_usb/AGENTS.md.
       - name: USB accessory tests
         working-directory: packages/oaa_usb
         run: |

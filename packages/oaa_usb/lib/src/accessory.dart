@@ -64,16 +64,29 @@ final class AccessoryIdentity {
 /// The bus. Every call is cheap enough for the UI thread except opening a
 /// link's isolates, which is asynchronous.
 abstract final class AccessoryBus {
-  /// Whether this build carries the library at all — macOS and Linux. A
-  /// platform without it answers false rather than throwing.
+  /// Whether accessories can be opened here: macOS and Linux always, Windows
+  /// once UsbDk is installed. A platform without the library answers false
+  /// rather than throwing.
   static bool get available {
-    if (!(Platform.isMacOS || Platform.isLinux)) return false;
+    if (!(Platform.isMacOS || Platform.isLinux || Platform.isWindows)) {
+      return false;
+    }
     try {
-      return oaaUsbInit() == 0;
+      return startStatus() == 0;
     } on Object {
       return false;
     }
   }
+
+  /// libusb's answer to being started: 0, or its error code. On Windows,
+  /// [notFound] means UsbDk is not installed — see `src/oaa_usb.c`.
+  ///
+  /// Throws where the library was not built, which is what lets the suite tell
+  /// a missing driver from a missing library: [available] says false to both.
+  static int startStatus() => oaaUsbInit();
+
+  /// `LIBUSB_ERROR_NOT_FOUND`.
+  static const int notFound = -5;
 
   static List<UsbDevice> scan() {
     const capacity = 64;

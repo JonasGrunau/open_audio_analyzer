@@ -19,8 +19,9 @@
 /// appears on the bus, and never while PUBLISH is off — the same rule every
 /// other route here follows.
 ///
-/// macOS and Linux only — see `packages/oaa_usb/hook/build.dart` for why not
-/// Windows yet. [create] answers null where the library is not built.
+/// macOS and Linux always; Windows only with UsbDk installed, which the
+/// Windows installer offers — see `packages/oaa_usb/src/oaa_usb.c` for why.
+/// [create] answers null wherever accessories cannot be opened.
 library;
 
 import 'dart:async';

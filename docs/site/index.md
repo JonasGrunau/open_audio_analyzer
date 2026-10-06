@@ -110,9 +110,9 @@ display that scans one can still only watch.
 
 A tablet can also be plugged in. While PUBLISH is on, the desktop finds an iPad
 or an Android tablet on a USB cable and the tablet lists it under **Over USB**,
-marked with a plug — with nothing switched on on either, on a Mac or Linux. An
-Android tablet with USB debugging on also works through `adb`, which is the
-route on Windows. Every host a
+marked with a plug — with nothing switched on on either. On Windows an Android
+tablet needs the USB driver the installer offers, ticked by default; with USB
+debugging on it also works through `adb`. Every host a
 tablet has shown is listed under **Recent**, so an address is typed once. While
 it is attached a display keeps its screen on, and OPTIONS on its bar sets how
 often it redraws.
